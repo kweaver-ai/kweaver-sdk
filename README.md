@@ -1,320 +1,215 @@
 # KWeaver SDK
 
-ADP (AI Data Platform) Python SDK -- 面向 AI Agent 的知识网络构建与查询工具集。
+让 AI 智能体（Claude Code、GPT、自定义 Agent 等）通过 Skill 访问 KWeaver / ADP 平台的知识网络与 Decision Agent。
 
-## 安装
+## 这个项目解决什么问题
+
+KWeaver (ADP) 平台提供了知识网络构建、语义搜索、Decision Agent 对话等能力，但这些能力藏在复杂的 REST API 背后。本 SDK 将它们封装为 **6 个 Skill**，每个 Skill 是一个 `run(**kwargs) -> dict` 的简单调用，智能体无需了解底层 API 细节即可完成操作。
+
+## 前置条件
+
+1. **Python >= 3.10**
+2. **ADP 平台账号** — 需要 `base_url` 和 `token`（Bearer Token）
+3. 安装 SDK：
 
 ```bash
 pip install -e .
 ```
 
-需要 Python >= 3.10，依赖 `httpx` 和 `pydantic`。
+## 接入步骤
 
-## 快速开始
+### 第 1 步：配置环境变量
+
+在 `~/.env.secrets` 或你的环境中设置：
+
+```bash
+export ADP_BASE_URL="https://your-adp-instance.com"
+export ADP_TOKEN="Bearer ory_at_xxxxx"
+export ADP_BUSINESS_DOMAIN="bd_public"   # 可选，按需设置
+```
+
+### 第 2 步：初始化 Client
 
 ```python
+import os
 from kweaver import ADPClient
 
 client = ADPClient(
-    base_url="https://your-adp-instance.com",
-    token="Bearer ory_at_xxx",           # ADP Bearer Token
-    business_domain="bd_public",          # 业务域（可选）
+    base_url=os.environ["ADP_BASE_URL"],
+    token=os.environ["ADP_TOKEN"],
+    business_domain=os.environ.get("ADP_BUSINESS_DOMAIN"),
 )
 ```
 
-## Skills
+### 第 3 步：使用 Skill
 
-SDK 提供 6 个 Skill，覆盖从数据库连接到 Agent 对话的完整流程：
+所有 Skill 遵循相同模式：`Skill(client).run(**kwargs) -> dict`。
 
-### 1. ConnectDbSkill -- 连接数据库
+出错时不抛异常，而是返回 `{"error": True, "message": "..."}`，智能体可以直接将 message 展示给用户。
 
-注册外部数据库并发现表结构。
+---
 
-```python
-from kweaver.skills import ConnectDbSkill
+## 6 个 Skill
 
-skill = ConnectDbSkill(client=client)
-result = skill.run(
-    db_type="mysql",
-    host="10.0.0.1",
-    port=3306,
-    database="erp",
-    account="readonly",
-    password="***",
-)
-# result:
-# {
-#     "datasource_id": "ds_01",
-#     "tables": [
-#         {"name": "orders", "columns": [{"name": "id", "type": "bigint", "comment": "主键"}, ...]},
-#         ...
-#     ]
-# }
-```
+### 1. discover_agents — 发现平台上的 Agent
 
-### 2. BuildKnSkill -- 构建知识网络
-
-从已注册的数据源自动创建知识网络（对象类型、关系类型），并触发构建。
-
-```python
-from kweaver.skills import BuildKnSkill
-
-skill = BuildKnSkill(client=client)
-result = skill.run(
-    datasource_id="ds_01",
-    network_name="供应链知识网络",
-    tables=["orders", "products", "suppliers"],       # 可选，不传则使用全部表
-    relations=[                                        # 可选，定义表间关系
-        {
-            "name": "订单包含产品",
-            "from_table": "orders",
-            "from_field": "product_id",
-            "to_table": "products",
-            "to_field": "id",
-        },
-    ],
-)
-# result:
-# {
-#     "kn_id": "kn_abc",
-#     "kn_name": "供应链知识网络",
-#     "object_types": [{"name": "orders", "id": "ot_01", "field_count": 8}, ...],
-#     "relation_types": [{"name": "订单包含产品", "from": "orders", "to": "products"}],
-#     "status": "completed"
-# }
-```
-
-### 3. LoadKnContextSkill -- 加载知识网络上下文
-
-发现并浏览知识网络的 schema 和实例数据，适合为 LLM 提供上下文。
-
-```python
-from kweaver.skills import LoadKnContextSkill
-
-skill = LoadKnContextSkill(client=client)
-
-# 模式 1: overview -- 列出所有知识网络
-result = skill.run(mode="overview")
-# {"knowledge_networks": [{"id": "kn_01", "name": "供应链", "object_type_count": 5, ...}]}
-
-# 模式 2: schema -- 获取知识网络的完整 schema
-result = skill.run(
-    mode="schema",
-    kn_id="kn_01",                  # 或 kn_name="供应链"
-    include_properties=True,         # 包含属性定义（默认 True）
-    include_samples=True,            # 包含示例数据（默认 False）
-    sample_size=3,
-)
-# {
-#     "kn_name": "供应链",
-#     "object_types": [
-#         {"name": "orders", "properties": [...], "sample_data": [...]},
-#         ...
-#     ],
-#     "relation_types": [{"name": "订单包含产品", "source": "orders", "target": "products"}]
-# }
-
-# 模式 3: instances -- 浏览对象类型的实例数据
-result = skill.run(
-    mode="instances",
-    kn_id="kn_01",
-    object_type="orders",            # 对象类型名称或 ID
-    limit=20,
-)
-# {"data": [{...}, ...], "total_count": 1200, "has_more": true, "object_type_schema": {...}}
-```
-
-### 4. QueryKnSkill -- 查询知识网络
-
-语义搜索、实例查询和子图查询。
-
-```python
-from kweaver.skills import QueryKnSkill
-
-skill = QueryKnSkill(client=client)
-
-# 模式 1: search -- 语义搜索
-result = skill.run(mode="search", kn_id="kn_01", query="华东地区库存不足的产品")
-# {"data": [{"concept_type": "...", "concept_name": "...", ...}], "summary": "找到 5 个相关概念"}
-
-# 模式 2: instances -- 条件查询
-result = skill.run(
-    mode="instances",
-    kn_id="kn_01",
-    object_type="products",
-    conditions={"field": "stock", "operation": "lt", "value": 100},
-    limit=50,
-)
-# {"data": [{...}], "summary": "查询到 23 条记录"}
-
-# 模式 3: subgraph -- 子图查询
-result = skill.run(
-    mode="subgraph",
-    kn_id="kn_01",
-    start_object="orders",
-    start_condition={"field": "status", "operation": "eq", "value": "pending"},
-    path=["products", "suppliers"],
-)
-```
-
-### 5. DiscoverAgentsSkill -- 发现 Agent
-
-列出平台上的 Decision Agent 及其详情。
+> "有哪些 Agent？" / "供应链助手是做什么的？"
 
 ```python
 from kweaver.skills import DiscoverAgentsSkill
+skill = DiscoverAgentsSkill(client)
 
-skill = DiscoverAgentsSkill(client=client)
-
-# 模式 1: list -- 列出 Agent
+# 列出已发布的 Agent
 result = skill.run(mode="list")
-# {"agents": [{"id": "...", "name": "供应链助手", "description": "...", "status": "published", ...}]}
+result = skill.run(mode="list", keyword="供应链")
+# -> {"agents": [{"id": "...", "name": "供应链助手", "description": "...", "status": "published", ...}]}
 
-result = skill.run(mode="list", keyword="供应链", status="published")
-
-# 模式 2: detail -- Agent 详情
-result = skill.run(mode="detail", agent_id="agent_01")
-# 或按名称查找
+# 查看某个 Agent 的详情
 result = skill.run(mode="detail", agent_name="供应链助手")
-# {
-#     "agent": {
-#         "name": "供应链助手",
-#         "description": "...",
-#         "knowledge_networks": [{"id": "kn_01", "name": "供应链"}],
-#         "prompts": {"system_prompt_preview": "..."},
-#         "capabilities": [...],
-#     }
-# }
+# -> {"agent": {"name": "供应链助手", "knowledge_networks": [...], "capabilities": [...], ...}}
 ```
 
-### 6. ChatAgentSkill -- 与 Agent 对话
+### 2. chat_agent — 与 Agent 对话
 
-向 Decision Agent 发送消息并获取回复。
+> "问一下供应链助手，华东仓库库存情况如何？"
 
 ```python
 from kweaver.skills import ChatAgentSkill
+skill = ChatAgentSkill(client)
 
-skill = ChatAgentSkill(client=client)
-
-# 模式 1: ask -- 发送消息（自动创建会话）
-result = skill.run(
-    mode="ask",
-    agent_id="agent_01",             # 或 agent_name="供应链助手"
-    question="华东仓库库存情况如何？",
-)
-# {
-#     "answer": "华东仓库当前库存充足，共有1200件...",
-#     "conversation_id": "",          # 首次对话由后端分配
+# 首次提问（自动创建会话）
+result = skill.run(mode="ask", agent_name="供应链助手", question="华东仓库库存情况如何？")
+# -> {
+#     "answer": "华东仓库当前库存充足...",
+#     "conversation_id": "conv_xxx",
 #     "references": [{"source": "库存表", "content": "1200件", "score": 0.95}]
 # }
 
-# 多轮对话：传入 conversation_id 保持上下文
+# 多轮对话 — 传入上一轮返回的 conversation_id
 result = skill.run(
-    mode="ask",
-    agent_id="agent_01",
+    mode="ask", agent_name="供应链助手",
     question="和上个月相比呢？",
     conversation_id=result["conversation_id"],
 )
+```
 
-# 流式输出
+也支持 `agent_id=` 直接传 ID，以及 `stream=True` 流式。
+
+### 3. load_kn_context — 浏览知识网络结构与数据
+
+> "有哪些知识网络？" / "erp_prod 里有什么表？" / "看看 products 的数据"
+
+```python
+from kweaver.skills import LoadKnContextSkill
+skill = LoadKnContextSkill(client)
+
+# 列出所有知识网络
+result = skill.run(mode="overview")
+# -> {"knowledge_networks": [{"id": "kn_01", "name": "erp_prod", "object_type_count": 5, ...}]}
+
+# 查看 schema（对象类型 + 关系类型 + 属性）
+result = skill.run(mode="schema", kn_name="erp_prod")
+result = skill.run(mode="schema", kn_name="erp_prod", include_samples=True, sample_size=3)
+# -> {"kn_name": "erp_prod", "object_types": [...], "relation_types": [...]}
+
+# 浏览某个对象类型的实例数据
+result = skill.run(mode="instances", kn_name="erp_prod", object_type="products", limit=10)
+# -> {"data": [{...}], "total_count": 1200, "has_more": true, "object_type_schema": {...}}
+```
+
+### 4. query_kn — 查询知识网络
+
+> "查一下高库存的产品" / "status=active 的订单有哪些？"
+
+```python
+from kweaver.skills import QueryKnSkill
+skill = QueryKnSkill(client)
+
+# 语义搜索 — 不确定查什么时用
+result = skill.run(kn_id="<id>", mode="search", query="高库存的产品")
+
+# 精确查询 — 按条件过滤某类对象
 result = skill.run(
-    mode="ask",
-    agent_id="agent_01",
-    question="总结一下",
-    stream=True,
+    kn_id="<id>", mode="instances", object_type="products",
+    conditions={"field": "status", "operation": "eq", "value": "active"},
+    limit=20,
+)
+
+# 子图查询 — 沿关系路径关联查询
+result = skill.run(
+    kn_id="<id>", mode="subgraph",
+    start_object="products",
+    start_condition={"field": "category", "operation": "eq", "value": "电子"},
+    path=["inventory", "suppliers"],
 )
 ```
 
-## 直接使用 SDK 资源
+### 5. connect_db — 连接数据库
 
-除了 Skill，也可以直接调用底层资源 API：
+> "帮我把这个 MySQL 接进来"
 
 ```python
-# 知识网络
-kns = client.knowledge_networks.list()
-kn = client.knowledge_networks.get("kn_01")
+from kweaver.skills import ConnectDbSkill
+skill = ConnectDbSkill(client)
 
-# 对象类型 & 关系类型
-ots = client.object_types.list("kn_01")
-rts = client.relation_types.list("kn_01")
-
-# 查询
-result = client.query.semantic_search(kn_id="kn_01", query="库存不足")
-result = client.query.instances("kn_01", "ot_01", limit=10)
-
-# Agent
-agents = client.agents.list(status="published")
-agent = client.agents.get("agent_01")
-
-# 对话
-conv = client.conversations.create("agent_01")
-reply = client.conversations.send_message(
-    conv.id, "你好", agent_id="agent_01",
+result = skill.run(
+    db_type="mysql",       # mysql | postgresql | oracle | sqlserver | clickhouse | ...
+    host="10.0.1.100",
+    port=3306,
+    database="erp_prod",
+    account="readonly",
+    password="xxx",
 )
+# -> {"datasource_id": "ds_01", "tables": [{"name": "orders", "columns": [...]}, ...]}
 ```
 
-## 错误处理
+### 6. build_kn — 构建知识网络
 
-所有 Skill 自动捕获错误并返回 `{"error": True, "message": "..."}` 格式。
-
-直接使用资源 API 时，会抛出具体异常：
+> "把这几张表建成知识网络"
 
 ```python
-from kweaver import ADPError, AuthenticationError, NotFoundError, ServerError
+from kweaver.skills import BuildKnSkill
+skill = BuildKnSkill(client)
 
-try:
-    agent = client.agents.get("not_exist")
-except NotFoundError:
-    print("Agent 不存在")
-except AuthenticationError:
-    print("Token 已过期")
-except ServerError as e:
-    print(f"服务端异常: {e.message} (trace: {e.trace_id})")
-except ADPError as e:
-    print(f"其他错误: {e.message}")
+result = skill.run(
+    datasource_id="<connect_db 返回的 datasource_id>",
+    network_name="供应链",
+    tables=["orders", "products", "suppliers"],     # 可选，不传则全部纳入
+    relations=[{                                     # 可选，定义表间关系
+        "name": "订单包含产品",
+        "from_table": "orders", "from_field": "product_id",
+        "to_table": "products", "to_field": "id",
+    }],
+)
+# -> {"kn_id": "kn_abc", "kn_name": "供应链", "object_types": [...], "status": "completed"}
 ```
 
-## 测试
+构建可能需要数十秒到数分钟，Skill 内部会自动等待完成。
+
+---
+
+## 典型流程
+
+| 场景 | Skill 调用顺序 |
+|---|---|
+| 探索已有知识网络 | `load_kn_context(overview)` → `load_kn_context(schema)` → `query_kn` |
+| 与 Agent 对话 | `discover_agents(list)` → `chat_agent(ask)` → `chat_agent(ask, conversation_id=...)` |
+| 从零构建知识网络 | `connect_db` → `build_kn` → `load_kn_context(schema)` → `query_kn` |
+
+## 在 Claude Code 中使用
+
+本项目已内置 Claude Code Skill（`.claude/skills/kweaver/SKILL.md`）。当项目目录加入 Claude Code 工作区后，用户说"有哪些知识网络"、"跟 Agent 聊一下"等意图时，Claude Code 会自动调用对应的 Skill。
+
+无需额外配置，只需确保环境变量 `ADP_BASE_URL` 和 `ADP_TOKEN` 已设置。
+
+## 开发与测试
 
 ```bash
-# 单元测试 + 集成测试（默认）
+# 单元测试 + 集成测试
 pytest
 
-# E2E 测试（需要配置 ~/.env.secrets）
+# E2E 测试（需要 ADP 环境）
 pytest tests/e2e/ --run-destructive
-
-# E2E 所需环境变量（写入 ~/.env.secrets）:
-# export ADP_BASE_URL="https://your-adp-instance.com"
-# export ADP_USERNAME="user@example.com"      # 自动刷新 Token
-# export ADP_PASSWORD="your_password"
-# export ADP_BUSINESS_DOMAIN="bd_public"
 ```
 
-E2E 测试会自动通过 Playwright 登录 ADP 获取新 Token，无需手动更新。
-
-## 项目结构
-
-```
-src/kweaver/
-  _client.py              # ADPClient 入口
-  _http.py                # HTTP 传输层
-  _auth.py                # Token / OAuth2 认证
-  _errors.py              # 异常类型
-  types.py                # Pydantic 数据模型
-  resources/              # 底层资源 API
-    agents.py             #   Agent 列表、详情
-    conversations.py      #   对话（chat/completion）
-    knowledge_networks.py #   知识网络 CRUD
-    object_types.py       #   对象类型
-    relation_types.py     #   关系类型
-    datasources.py        #   数据源
-    dataviews.py          #   数据视图
-    query.py              #   查询（语义搜索、实例、子图）
-  skills/                 # 高层 Skill（面向 AI Agent）
-    connect_db.py         #   ConnectDbSkill
-    build_kn.py           #   BuildKnSkill
-    load_kn_context.py    #   LoadKnContextSkill
-    query_kn.py           #   QueryKnSkill
-    discover_agents.py    #   DiscoverAgentsSkill
-    chat_agent.py         #   ChatAgentSkill
-```
+E2E 测试支持自动登录刷新 Token — 在 `~/.env.secrets` 中配置 `ADP_USERNAME` 和 `ADP_PASSWORD` 即可，无需手动更新 Token。

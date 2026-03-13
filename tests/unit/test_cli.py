@@ -602,3 +602,49 @@ def test_kn_create_with_tables_filter(runner):
         result = runner.invoke(cli, ["kn", "create", "ds1", "--name", "filtered", "--tables", "users"])
         assert result.exit_code == 0
         assert client.object_types.create.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Query subgraph
+# ---------------------------------------------------------------------------
+
+
+def test_query_subgraph(runner):
+    with patch("kweaver.cli.query.make_client") as mock_make:
+        client = _mock_client()
+        mock_ot = MagicMock(); mock_ot.id = "ot1"; mock_ot.name = "users"
+        client.object_types.list.return_value = [mock_ot]
+        mock_rt1 = MagicMock(); mock_rt1.id = "rt1"; mock_rt1.name = "has_order"
+        mock_rt1.source_ot_id = "ot1"; mock_rt1.target_ot_id = "ot2"
+        mock_rt2 = MagicMock(); mock_rt2.id = "rt2"; mock_rt2.name = "belongs_to"
+        mock_rt2.source_ot_id = "ot2"; mock_rt2.target_ot_id = "ot3"
+        client.relation_types.list.return_value = [mock_rt1, mock_rt2]
+        mock_result = MagicMock()
+        mock_result.model_dump.return_value = {"entries": [{"id": "n1"}]}
+        client.query.subgraph.return_value = mock_result
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "query", "subgraph", "kn1",
+            "--start-type", "users",
+            "--start-condition", '{"field":"id","operation":"eq","value":"1"}',
+            "--path", "has_order,belongs_to",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "entries" in data
+
+
+def test_query_subgraph_rt_not_found(runner):
+    with patch("kweaver.cli.query.make_client") as mock_make:
+        client = _mock_client()
+        mock_ot = MagicMock(); mock_ot.id = "ot1"; mock_ot.name = "users"
+        client.object_types.list.return_value = [mock_ot]
+        client.relation_types.list.return_value = []
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "query", "subgraph", "kn1",
+            "--start-type", "users",
+            "--start-condition", '{"field":"id","operation":"eq","value":"1"}',
+            "--path", "nonexistent_rt",
+        ])
+        assert result.exit_code != 0

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from kweaver.cli._helpers import make_client, pp
+from kweaver.cli._helpers import handle_errors, make_client, pp
 
 
 @click.group("agent")
@@ -49,3 +49,24 @@ def chat(agent_id: str, message: str, conversation_id: str | None) -> None:
         click.echo("\nReferences:")
         for ref in msg.references:
             click.echo(f"  - [{ref.score:.2f}] {ref.source}: {ref.content[:100]}")
+
+
+@agent_group.command("sessions")
+@click.argument("agent_id")
+@handle_errors
+def sessions(agent_id: str) -> None:
+    """List all conversations for an agent."""
+    client = make_client()
+    convs = client.conversations.list(agent_id=agent_id)
+    pp([c.model_dump() for c in convs])
+
+
+@agent_group.command("history")
+@click.argument("conversation_id")
+@click.option("--limit", default=None, type=int, help="Max messages to return.")
+@handle_errors
+def history(conversation_id: str, limit: int | None) -> None:
+    """Show message history for a conversation."""
+    client = make_client()
+    messages = client.conversations.list_messages(conversation_id, limit=limit)
+    pp([m.model_dump() for m in messages])

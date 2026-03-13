@@ -648,3 +648,46 @@ def test_query_subgraph_rt_not_found(runner):
             "--path", "nonexistent_rt",
         ])
         assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Agent sessions + history
+# ---------------------------------------------------------------------------
+
+
+def test_agent_sessions(runner):
+    with patch("kweaver.cli.agent.make_client") as mock_make:
+        client = _mock_client()
+        mock_conv = MagicMock()
+        mock_conv.model_dump.return_value = {"id": "conv1", "agent_id": "a1", "title": "Test session"}
+        client.conversations.list.return_value = [mock_conv]
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["agent", "sessions", "a1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["id"] == "conv1"
+        client.conversations.list.assert_called_once_with(agent_id="a1")
+
+
+def test_agent_history(runner):
+    with patch("kweaver.cli.agent.make_client") as mock_make:
+        client = _mock_client()
+        mock_msg = MagicMock()
+        mock_msg.model_dump.return_value = {"id": "msg1", "role": "user", "content": "hello"}
+        client.conversations.list_messages.return_value = [mock_msg]
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["agent", "history", "conv1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["id"] == "msg1"
+        client.conversations.list_messages.assert_called_once_with("conv1", limit=None)
+
+
+def test_agent_history_with_limit(runner):
+    with patch("kweaver.cli.agent.make_client") as mock_make:
+        client = _mock_client()
+        client.conversations.list_messages.return_value = []
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["agent", "history", "conv1", "--limit", "10"])
+        assert result.exit_code == 0
+        client.conversations.list_messages.assert_called_once_with("conv1", limit=10)

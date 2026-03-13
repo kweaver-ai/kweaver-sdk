@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from kweaver._auth import AuthProvider, TokenAuth
+from kweaver._auth import AuthProvider, ConfigAuth, TokenAuth
 from kweaver._http import HttpClient
 from kweaver.resources.agents import AgentsResource
 from kweaver.resources.conversations import ConversationsResource
@@ -14,6 +14,7 @@ from kweaver.resources.datasources import DataSourcesResource
 from kweaver.resources.dataviews import DataViewsResource
 from kweaver.resources.knowledge_networks import KnowledgeNetworksResource
 from kweaver.resources.object_types import ObjectTypesResource
+from kweaver.resources.action_types import ActionTypesResource
 from kweaver.resources.query import QueryResource
 from kweaver.resources.relation_types import RelationTypesResource
 
@@ -27,7 +28,7 @@ class ADPClient:
 
     def __init__(
         self,
-        base_url: str,
+        base_url: str | None = None,
         *,
         token: str | None = None,
         auth: AuthProvider | None = None,
@@ -42,6 +43,15 @@ class ADPClient:
             if token is None:
                 raise ValueError("Either 'token' or 'auth' must be provided")
             auth = TokenAuth(token)
+
+        # ConfigAuth carries its own base_url
+        if base_url is None:
+            if isinstance(auth, ConfigAuth):
+                base_url = auth.base_url
+            else:
+                raise ValueError(
+                    "base_url is required (unless using ConfigAuth)"
+                )
 
         self._http = HttpClient(
             base_url=base_url,
@@ -62,6 +72,7 @@ class ADPClient:
         self.query = QueryResource(self._http)
         self.agents = AgentsResource(self._http)
         self.conversations = ConversationsResource(self._http)
+        self.action_types = ActionTypesResource(self._http)
 
     def close(self) -> None:
         self._http.close()

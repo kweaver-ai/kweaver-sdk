@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kweaver-sdk"
-version = "0.3.0"
+version = "0.5.0"
 description = "ADP Python SDK — Agent-oriented skills for knowledge network construction and querying"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,10 +14,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cli = [
+    "click>=8.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "click>=8.0",
 ]
+
+[project.scripts]
+kweaver = "kweaver.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kweaver"]

@@ -266,3 +266,49 @@ class MessageChunk(BaseModel):
     delta: str
     finished: bool = False
     references: list[Reference] = []
+
+
+# ── Action types ──────────────────────────────────────────────────────
+
+
+class ActionType(BaseModel):
+    id: str
+    name: str
+    kn_id: str = ""
+    description: str | None = None
+    input_params: list[dict[str, Any]] = []
+    output_params: list[dict[str, Any]] = []
+
+
+class ActionExecution(BaseModel):
+    execution_id: str
+    kn_id: str
+    action_type_id: str
+    status: str = "pending"  # pending, running, completed, failed, cancelled
+    result: dict[str, Any] | None = None
+    _poll_fn: Callable[[], "ActionExecution"] | None = None
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    def set_poll_fn(self, fn: Callable[[], "ActionExecution"]) -> None:
+        self._poll_fn = fn
+
+    def poll(self) -> "ActionExecution":
+        if self._poll_fn is None:
+            raise RuntimeError("ActionExecution not connected to a client")
+        return self._poll_fn()
+
+    def wait(self, timeout: float = 300, poll_interval: float = 2.0) -> "ActionExecution":
+        deadline = time.time() + timeout
+        while True:
+            updated = self.poll()
+            if updated.status in ("completed", "failed", "cancelled"):
+                return updated
+            if time.time() + poll_interval > deadline:
+                raise TimeoutError(
+                    f"Action execution {self.execution_id} did not complete within {timeout}s"
+                )
+            time.sleep(poll_interval)
+
+    def cancel(self) -> None:
+        raise NotImplementedError("Use action_types.cancel() directly")

@@ -352,42 +352,114 @@ Skill ──→ CLI ──→ SDK ──→ HTTP     (Skill 通过 CLI 命令操
 Skill ──────────→ SDK ──→ HTTP     (Skill 也可直接调 SDK)
 ```
 
-### 5.2 目录结构
+### 5.2 目录变更
+
+`[已有]` = 不改动，`[改]` = 修改已有文件，`[新]` = 新增文件/目录。
 
 ```
 kweaver-sdk/
+├── pyproject.toml                          [改] 新增 [project.scripts], [project.optional-dependencies].cli
 ├── src/kweaver/
-│   ├── __init__.py              # 公开 API
-│   ├── _client.py               # ADPClient (新增 .action_types)
-│   ├── _auth.py                 # TokenAuth, PasswordAuth, OAuth2Auth,
-│   │                            # OAuth2BrowserAuth(新), ConfigAuth(新)
-│   ├── _http.py                 # HTTP 传输
-│   ├── _errors.py               # 错误层级
-│   ├── _crypto.py               # RSA 加密
-│   ├── types.py                 # Pydantic 模型 (新增 ActionType, ActionExecution)
-│   ├── config/                  # [新增] 多平台配置 — 被 CLI 和 ConfigAuth 使用
-│   │   ├── __init__.py
-│   │   └── store.py
-│   ├── mcp/                     # [新增] MCP 客户端/服务端
-│   │   ├── __init__.py
-│   │   ├── client.py
-│   │   └── server.py           # 可选
-│   ├── resources/               # SDK 层
-│   │   ├── ...                  # 已有 8 个 resource
-│   │   └── action_types.py     # [新增]
-│   ├── cli/                     # [新增] CLI 层 — 只调用 resources/
-│   │   ├── __init__.py
-│   │   ├── main.py
-│   │   ├── auth.py
-│   │   ├── kn.py
-│   │   ├── query.py
-│   │   ├── action.py
-│   │   ├── agent.py
-│   │   └── call.py
-│   └── skills/                  # Skill 层（最上层）— 可调用 cli/ 或 resources/
-│       ├── ...                  # 已有 6 个 skill
-│       └── execute_action.py   # [新增]
+│   ├── __init__.py                         [改] 导出 ConfigAuth, OAuth2BrowserAuth
+│   ├── _client.py                          [改] 新增 .action_types 属性
+│   ├── _auth.py                            [改] 新增 OAuth2BrowserAuth, ConfigAuth 两个类
+│   ├── _http.py                            [已有]
+│   ├── _errors.py                          [已有]
+│   ├── _crypto.py                          [已有]
+│   ├── types.py                            [改] 新增 ActionType, ActionExecution 模型
+│   │
+│   ├── config/                             [新] 凭据持久化，被 _auth.py 和 cli/ 共同使用
+│   │   ├── __init__.py                     [新]
+│   │   └── store.py                        [新] PlatformStore — ~/.kweaver/ 读写
+│   │
+│   ├── mcp/                                [新] Context-Loader MCP 客户端
+│   │   ├── __init__.py                     [新]
+│   │   ├── client.py                       [新] MCPClient (JSON-RPC 2.0)
+│   │   └── server.py                       [新] 可选，MCP Server 模式
+│   │
+│   ├── resources/
+│   │   ├── __init__.py                     [已有]
+│   │   ├── datasources.py                  [已有]
+│   │   ├── dataviews.py                    [已有]
+│   │   ├── knowledge_networks.py           [改] 新增 update(), export()
+│   │   ├── object_types.py                 [已有]
+│   │   ├── relation_types.py               [已有]
+│   │   ├── query.py                        [改] 新增 object_type_properties()
+│   │   ├── agents.py                       [已有]
+│   │   ├── conversations.py                [已有]
+│   │   └── action_types.py                 [新] ActionTypesResource
+│   │
+│   ├── cli/                                [新] CLI 层 — 只调用 SDK，不引用 skills/
+│   │   ├── __init__.py                     [新]
+│   │   ├── main.py                         [新] click/typer 入口
+│   │   ├── auth.py                         [新] kweaver auth login/status/use/logout
+│   │   ├── kn.py                           [新] kweaver kn list/get/build/export
+│   │   ├── query.py                        [新] kweaver query instances/subgraph/search
+│   │   ├── action.py                       [新] kweaver action execute/logs/cancel
+│   │   ├── agent.py                        [新] kweaver agent list/chat
+│   │   └── call.py                         [新] kweaver call <url>
+│   │
+│   └── skills/                             Skill 层（最上层）— 可调用 cli/ 或 resources/
+│       ├── __init__.py                     [改] 导出 ExecuteActionSkill
+│       ├── _base.py                        [已有]
+│       ├── connect_db.py                   [已有]
+│       ├── build_kn.py                     [已有]
+│       ├── load_kn_context.py              [已有]
+│       ├── query_kn.py                     [已有]
+│       ├── discover_agents.py              [已有]
+│       ├── chat_agent.py                   [已有]
+│       └── execute_action.py               [新] ExecuteActionSkill
+│
+└── tests/
+    ├── conftest.py                         [已有]
+    ├── unit/
+    │   ├── test_auth.py                    [改] 新增 ConfigAuth, OAuth2BrowserAuth 测试
+    │   ├── test_datasources.py             [已有]
+    │   ├── test_dataviews.py               [已有]
+    │   ├── test_knowledge_networks.py      [改] 新增 update/export 测试
+    │   ├── test_object_types.py            [已有]
+    │   ├── test_relation_types.py          [已有]
+    │   ├── test_query.py                   [改] 新增 object_type_properties 测试
+    │   ├── test_agents.py                  [已有]
+    │   ├── test_conversations.py           [已有]
+    │   ├── test_errors.py                  [已有]
+    │   ├── test_action_types.py            [新] ActionTypesResource 单元测试
+    │   ├── test_config.py                  [新] PlatformStore 单元测试
+    │   └── test_mcp.py                     [新] MCPClient 单元测试
+    ├── integration/
+    │   ├── test_connect_db.py              [已有]
+    │   ├── test_build_kn.py                [已有]
+    │   ├── test_load_kn_context.py         [已有]
+    │   ├── test_query_kn.py                [已有]
+    │   ├── test_discover_agents.py         [已有]
+    │   └── test_chat_agent.py              [已有]
+    ├── cli/                                [新] CLI 命令测试
+    │   ├── test_auth_commands.py           [新]
+    │   ├── test_kn_commands.py             [新]
+    │   └── test_query_commands.py          [新]
+    └── e2e/
+        ├── conftest.py                     [已有]
+        ├── test_agents_e2e.py              [已有]
+        ├── test_build_e2e.py               [已有]
+        ├── test_context_loader_e2e.py      [已有]
+        ├── test_datasource_e2e.py          [已有]
+        ├── test_full_flow_e2e.py           [已有]
+        ├── test_query_e2e.py               [已有]
+        └── test_action_e2e.py              [新] Action 执行 E2E 测试
 ```
+
+**变更统计：**
+
+| 类别 | 新增文件 | 修改文件 | 不变文件 |
+|------|:-------:|:-------:|:-------:|
+| src/kweaver/ 核心 | 0 | 4 (`__init__`, `_client`, `_auth`, `types`) | 3 |
+| src/kweaver/config/ | 2 | — | — |
+| src/kweaver/mcp/ | 3 | — | — |
+| src/kweaver/resources/ | 1 (`action_types`) | 2 (`knowledge_networks`, `query`) | 7 |
+| src/kweaver/cli/ | 8 | — | — |
+| src/kweaver/skills/ | 1 (`execute_action`) | 1 (`__init__`) | 7 |
+| tests/ | 7 | 3 | 16 |
+| **合计** | **22** | **10** | **33** |
 
 ---
 

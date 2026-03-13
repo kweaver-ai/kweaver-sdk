@@ -131,3 +131,17 @@ class QueryResource:
             json=body,
         )
         return SubgraphResult(entries=data.get("entries", []))
+
+    def object_type_properties(
+        self,
+        kn_id: str,
+        ot_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Query object type property definitions and statistics."""
+        data = self._http.post(
+            f"/api/ontology-query/v1/knowledge-networks/{kn_id}/object-types/{ot_id}/properties",
+            json=body or {},
+            headers={"X-HTTP-Method-Override": "GET"},
+        )
+        return data or {}

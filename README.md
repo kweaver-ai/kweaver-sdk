@@ -4,7 +4,7 @@
 
 ## 这个项目解决什么问题
 
-KWeaver (ADP) 平台提供了知识网络构建、语义搜索、Decision Agent 对话等能力，但这些能力藏在复杂的 REST API 背后。本 SDK 将它们封装为 **6 个 Skill**，每个 Skill 是一个 `run(**kwargs) -> dict` 的简单调用，智能体无需了解底层 API 细节即可完成操作。
+KWeaver (ADP) 平台提供了知识网络构建、语义搜索、Decision Agent 对话等能力，但这些能力藏在复杂的 REST API 背后。本 SDK 将它们封装为 **7 个 Skill**，每个 Skill 是一个 `run(**kwargs) -> dict` 的简单调用，智能体无需了解底层 API 细节即可完成操作。
 
 ## 前置条件
 
@@ -92,7 +92,7 @@ client = ADPClient(base_url=base_url, auth=TokenAuth(token), business_domain="bd
 
 ---
 
-## 6 个 Skill
+## 7 个 Skill
 
 ### 1. discover_agents — 发现平台上的 Agent
 
@@ -206,7 +206,31 @@ result = skill.run(
 # -> {"datasource_id": "ds_01", "tables": [{"name": "orders", "columns": [...]}, ...]}
 ```
 
-### 6. build_kn — 构建知识网络
+### 6. execute_action — 执行知识网络中的 Action
+
+> "执行一下库存盘点" / "跑那个数据同步 Action"
+
+```python
+from kweaver.skills import ExecuteActionSkill
+skill = ExecuteActionSkill(client)
+
+# 按名称执行（自动查找 action_type_id）
+result = skill.run(kn_name="erp_prod", action_name="库存盘点")
+# -> {"execution_id": "exec_xxx", "status": "completed", "result": {...}}
+
+# 按 ID 执行，传入参数
+result = skill.run(
+    kn_id="<id>", action_type_id="<at_id>",
+    params={"warehouse": "华东"},
+    timeout=600,
+)
+
+# 异步执行（不等待完成）
+result = skill.run(kn_id="<id>", action_type_id="<at_id>", wait=False)
+# -> {"execution_id": "exec_xxx", "status": "pending"}
+```
+
+### 7. build_kn — 构建知识网络
 
 > "把这几张表建成知识网络"
 
@@ -238,6 +262,7 @@ result = skill.run(
 | 探索已有知识网络 | `load_kn_context(overview)` → `load_kn_context(schema)` → `query_kn` |
 | 与 Agent 对话 | `discover_agents(list)` → `chat_agent(ask)` → `chat_agent(ask, conversation_id=...)` |
 | 从零构建知识网络 | `connect_db` → `build_kn` → `load_kn_context(schema)` → `query_kn` |
+| 执行 Action | `load_kn_context(schema)` → `execute_action(kn_name, action_name)` |
 
 ## CLI 命令行
 
@@ -246,6 +271,8 @@ result = skill.run(
 ```bash
 # 认证
 kweaver auth login https://your-adp-instance.com   # 浏览器登录（与 kweaverc 共享凭据）
+kweaver auth login https://xxx.com --alias prod    # 登录并设置别名
+kweaver auth logout                                 # 登出当前平台
 kweaver auth status                                 # 查看当前认证状态
 kweaver auth list                                   # 已保存的平台
 kweaver auth use prod                               # 切换平台（别名或 URL）
@@ -253,11 +280,17 @@ kweaver auth use prod                               # 切换平台（别名或 U
 # 知识网络
 kweaver kn list
 kweaver kn get <kn-id>
+kweaver kn export <kn-id>
 kweaver kn build <kn-id>
 
 # 查询
 kweaver query search <kn-id> "高库存的产品"
 kweaver query instances <kn-id> <ot-id> --condition '{"field":"status","op":"eq","value":"active"}'
+
+# Action
+kweaver action query <kn-id> <action-type-id>
+kweaver action execute <kn-id> <action-type-id> --params '{"warehouse":"华东"}'
+kweaver action logs <kn-id>
 
 # Agent
 kweaver agent list

@@ -64,6 +64,14 @@ class KnowledgeNetworksResource:
         )
         return _parse_kn(data)
 
+    def export(self, id: str) -> dict[str, Any]:
+        """Export full knowledge network definition (object types, relations, properties)."""
+        data = self._http.get(
+            f"/api/ontology-manager/v1/knowledge-networks/{id}",
+            params={"mode": "export"},
+        )
+        return data or {}
+
     def delete(self, id: str) -> None:
         self._http.delete(f"/api/ontology-manager/v1/knowledge-networks/{id}")
 

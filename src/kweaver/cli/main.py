@@ -1,0 +1,34 @@
+"""KWeaver CLI entry point."""
+
+from __future__ import annotations
+
+import click
+
+from kweaver.cli.auth import auth_group
+from kweaver.cli.kn import kn_group
+from kweaver.cli.query import query_group
+from kweaver.cli.action import action_group
+from kweaver.cli.agent import agent_group
+from kweaver.cli.call import call_cmd
+
+
+@click.group()
+@click.version_option(package_name="kweaver-sdk")
+def cli() -> None:
+    """KWeaver CLI — manage ADP knowledge networks, agents, and more."""
+
+
+cli.add_command(auth_group, "auth")
+cli.add_command(kn_group, "kn")
+cli.add_command(query_group, "query")
+cli.add_command(action_group, "action")
+cli.add_command(agent_group, "agent")
+cli.add_command(call_cmd, "call")
+
+
+def main() -> None:
+    cli()
+
+
+if __name__ == "__main__":
+    main()

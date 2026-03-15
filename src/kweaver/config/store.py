@@ -166,3 +166,83 @@ class PlatformStore:
 
     def save_token(self, url: str, data: dict[str, Any]) -> None:
         _write_json(self._platform_dir(url) / "token.json", data)
+
+    # -- Context Loader config --
+
+    def load_context_loader_config(self, url: str | None = None) -> dict[str, Any]:
+        """Load context-loader.json for a platform. Compatible with kweaverc format."""
+        url = url or self.get_active()
+        if not url:
+            return {}
+        return _read_json(self._platform_dir(url) / "context-loader.json")
+
+    def save_context_loader_config(self, url: str, config: dict[str, Any]) -> None:
+        """Save context-loader.json for a platform."""
+        _write_json(self._platform_dir(url) / "context-loader.json", config)
+
+    def add_context_loader_entry(self, url: str, name: str, kn_id: str) -> None:
+        """Add or update a named context-loader entry for a platform."""
+        config = self.load_context_loader_config(url) or {}
+        configs: list[dict[str, Any]] = config.get("configs", [])
+        idx = next((i for i, c in enumerate(configs) if c.get("name") == name), -1)
+        entry = {"name": name, "knId": kn_id}
+        if idx >= 0:
+            configs[idx] = entry
+        else:
+            configs.append(entry)
+        current = config.get("current") or name
+        has_current = any(c.get("name") == current for c in configs)
+        self.save_context_loader_config(url, {
+            "configs": configs,
+            "current": current if has_current else name,
+        })
+
+    def set_current_context_loader(self, url: str, name: str) -> None:
+        """Set the active context-loader entry by name."""
+        config = self.load_context_loader_config(url)
+        if not config or not config.get("configs"):
+            raise RuntimeError(
+                "Context-loader is not configured. Run: kweaver context-loader config set --kn-id <id>"
+            )
+        if not any(c.get("name") == name for c in config["configs"]):
+            raise RuntimeError(
+                f"No context-loader config named '{name}'. Use 'config list' to see available configs."
+            )
+        config["current"] = name
+        self.save_context_loader_config(url, config)
+
+    def remove_context_loader_entry(self, url: str, name: str) -> None:
+        """Remove a named context-loader entry."""
+        config = self.load_context_loader_config(url)
+        if not config:
+            return
+        new_configs = [c for c in config.get("configs", []) if c.get("name") != name]
+        if not new_configs:
+            p = self._platform_dir(url) / "context-loader.json"
+            if p.exists():
+                p.unlink()
+            return
+        new_current = config.get("current", "")
+        if new_current == name:
+            new_current = new_configs[0]["name"]
+        self.save_context_loader_config(url, {"configs": new_configs, "current": new_current})
+
+    def get_current_context_loader_kn(
+        self, url: str | None = None
+    ) -> tuple[str, str] | None:
+        """Return (mcp_url, kn_id) for the active context-loader entry, or None."""
+        from kweaver.resources.context_loader import _build_mcp_url
+        url = url or self.get_active()
+        if not url:
+            return None
+        config = self.load_context_loader_config(url)
+        if not config:
+            return None
+        current_name = config.get("current", "")
+        entry = next(
+            (c for c in config.get("configs", []) if c.get("name") == current_name),
+            None,
+        )
+        if not entry or not entry.get("knId"):
+            return None
+        return _build_mcp_url(url), entry["knId"]

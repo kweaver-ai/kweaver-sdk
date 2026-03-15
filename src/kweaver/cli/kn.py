@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import click
@@ -38,12 +39,73 @@ def kn_group() -> None:
 
 @kn_group.command("list")
 @click.option("--name", default=None, help="Filter by name.")
+@click.option("--name-pattern", default=None, help="Filter by name pattern (substring).")
+@click.option("--tag", default=None, multiple=True, help="Filter by tag (repeatable).")
+@click.option("--sort", default=None, help="Sort field.")
+@click.option("--direction", default=None, type=click.Choice(["asc", "desc"]), help="Sort direction.")
+@click.option("--offset", default=None, type=int, help="Pagination offset.")
+@click.option("--limit", default=None, type=int, help="Max items to return.")
 @handle_errors
-def list_kns(name: str | None) -> None:
+def list_kns(
+    name: str | None,
+    name_pattern: str | None,
+    tag: tuple[str, ...],
+    sort: str | None,
+    direction: str | None,
+    offset: int | None,
+    limit: int | None,
+) -> None:
     """List knowledge networks."""
     client = make_client()
     kns = client.knowledge_networks.list(name=name)
-    pp([kn.model_dump() for kn in kns])
+    result = [kn.model_dump() for kn in kns]
+    if name_pattern:
+        result = [r for r in result if name_pattern.lower() in (r.get("name") or "").lower()]
+    if tag:
+        tag_set = set(tag)
+        result = [r for r in result if tag_set.intersection(r.get("tags", []))]
+    if sort:
+        result = sorted(result, key=lambda r: r.get(sort, ""), reverse=(direction == "desc"))
+    if offset is not None:
+        result = result[offset:]
+    if limit is not None:
+        result = result[:limit]
+    pp(result)
+
+
+@kn_group.command("stats")
+@click.argument("kn_id")
+@handle_errors
+def stats_kn(kn_id: str) -> None:
+    """Show statistics for a knowledge network."""
+    client = make_client()
+    kn = client.knowledge_networks.get(kn_id)
+    if kn.statistics:
+        pp(kn.statistics.model_dump())
+    else:
+        pp({})
+
+
+@kn_group.command("update")
+@click.argument("kn_id")
+@click.option("--name", default=None, help="New name.")
+@click.option("--description", default=None, help="New description.")
+@click.option("--tag", multiple=True, help="Tags (repeatable, replaces all tags).")
+@handle_errors
+def update_kn(kn_id: str, name: str | None, description: str | None, tag: tuple[str, ...]) -> None:
+    """Update knowledge network metadata."""
+    kwargs: dict[str, Any] = {}
+    if name is not None:
+        kwargs["name"] = name
+    if description is not None:
+        kwargs["description"] = description
+    if tag:
+        kwargs["tags"] = list(tag)
+    if not kwargs:
+        error_exit("No update fields provided. Use --name, --description, or --tag.")
+    client = make_client()
+    kn = client.knowledge_networks.update(kn_id, **kwargs)
+    pp(kn.model_dump())
 
 
 @kn_group.command("get")
@@ -150,3 +212,84 @@ def create_kn(
         "kn_id": kn.id, "kn_name": kn.name,
         "object_types": ot_results, "status": status_str,
     })
+
+
+# ── action-log subgroup ───────────────────────────────────────────────────────
+
+@kn_group.group("action-log")
+def action_log_group() -> None:
+    """Manage action execution logs."""
+
+
+@action_log_group.command("list")
+@click.argument("kn_id")
+@click.option("--offset", default=0, type=int, help="Pagination offset.")
+@click.option("--limit", default=20, type=int, help="Max items to return.")
+@click.option("--sort", default="create_time", help="Sort field.")
+@click.option("--direction", default="desc", type=click.Choice(["asc", "desc"]), help="Sort direction.")
+@handle_errors
+def action_log_list(kn_id: str, offset: int, limit: int, sort: str, direction: str) -> None:
+    """List action execution logs for a knowledge network."""
+    client = make_client()
+    logs = client.action_types.list_logs(kn_id, offset=offset, limit=limit, sort=sort, direction=direction)
+    pp(logs)
+
+
+@action_log_group.command("get")
+@click.argument("kn_id")
+@click.argument("log_id")
+@handle_errors
+def action_log_get(kn_id: str, log_id: str) -> None:
+    """Get a single action execution log."""
+    client = make_client()
+    log = client.action_types.get_log(kn_id, log_id)
+    pp(log)
+
+
+@action_log_group.command("cancel")
+@click.argument("kn_id")
+@click.argument("log_id")
+@click.option("--yes", "-y", is_flag=True, default=False, help="Skip confirmation.")
+@handle_errors
+def action_log_cancel(kn_id: str, log_id: str, yes: bool) -> None:
+    """Cancel a running action execution log."""
+    if not yes:
+        click.confirm(f"Cancel action log {log_id}?", abort=True)
+    client = make_client()
+    client.action_types.cancel(kn_id, log_id)
+    click.echo(f"Cancelled action log: {log_id}")
+
+
+# ── action-execution subgroup ─────────────────────────────────────────────────
+
+@kn_group.group("action-execution")
+def action_execution_group() -> None:
+    """Query action execution status."""
+
+
+@action_execution_group.command("get")
+@click.argument("kn_id")
+@click.argument("execution_id")
+@click.option("--wait/--no-wait", default=False, help="Poll until terminal status.")
+@click.option("--timeout", default=300, type=int, help="Wait timeout in seconds.")
+@handle_errors
+def action_execution_get(kn_id: str, execution_id: str, wait: bool, timeout: int) -> None:
+    """Get status of an action execution."""
+    client = make_client()
+
+    if not wait:
+        data = client.action_types.get_execution(kn_id, execution_id)
+        pp(data)
+        return
+
+    _TERMINAL = {"success", "failed", "cancelled", "completed"}
+    deadline = time.time() + timeout
+    while True:
+        data = client.action_types.get_execution(kn_id, execution_id)
+        status = (data.get("status") or "").lower()
+        if status in _TERMINAL:
+            pp(data)
+            return
+        if time.time() >= deadline:
+            error_exit(f"Execution did not complete within {timeout}s")
+        time.sleep(2)

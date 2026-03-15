@@ -14,15 +14,23 @@ def agent_group() -> None:
 
 @agent_group.command("list")
 @click.option("--keyword", default=None, help="Filter by keyword.")
+@click.option("--size", default=48, type=int, help="Page size (default: 48).")
+@click.option("--pagination-marker", default=None, help="Pagination marker for next page.")
+@click.option("--category-id", default=None, help="Filter by category ID.")
+@click.option("--status", default=None, help="Filter by status (e.g. published, draft).")
 @handle_errors
-def list_agents(keyword: str | None) -> None:
+def list_agents(
+    keyword: str | None,
+    size: int,
+    pagination_marker: str | None,
+    category_id: str | None,
+    status: str | None,
+) -> None:
     """List published agents."""
     client = make_client()
-    agents = client.agents.list()
-    if keyword:
-        keyword_lower = keyword.lower()
-        agents = [a for a in agents if keyword_lower in (a.name or "").lower()
-                  or keyword_lower in (a.description or "").lower()]
+    agents = client.agents.list(keyword=keyword, status=status, size=size)
+    if category_id:
+        agents = [a for a in agents if category_id in getattr(a, "category_ids", [])]
     pp([a.model_dump() for a in agents])
 
 

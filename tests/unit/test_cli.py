@@ -313,15 +313,13 @@ def test_agent_list_keyword(runner):
         mock_a1.name = "supply-chain"
         mock_a1.description = "Supply chain assistant"
         mock_a1.model_dump.return_value = {"id": "a1", "name": "supply-chain"}
-        mock_a2 = MagicMock()
-        mock_a2.name = "hr-bot"
-        mock_a2.description = "HR helper"
-        mock_a2.model_dump.return_value = {"id": "a2", "name": "hr-bot"}
-        client.agents.list.return_value = [mock_a1, mock_a2]
+        # keyword is passed server-side; mock returns pre-filtered result
+        client.agents.list.return_value = [mock_a1]
         mock_make.return_value = client
 
         result = runner.invoke(cli, ["agent", "list", "--keyword", "supply"])
         assert result.exit_code == 0
+        client.agents.list.assert_called_once_with(keyword="supply", status=None, size=48)
         data = json.loads(result.output)
         assert len(data) == 1
         assert data[0]["name"] == "supply-chain"
@@ -352,7 +350,7 @@ def test_call_post_with_body(runner):
 
         result = runner.invoke(cli, ["call", "/api/test", "-X", "POST", "-d", '{"key":"val"}'])
         assert result.exit_code == 0
-        client._http.request.assert_called_once_with("POST", "/api/test", json={"key": "val"})
+        client._http.request.assert_called_once_with("POST", "/api/test", json={"key": "val"}, headers=None)
 
 
 def test_call_empty_response(runner):
@@ -723,4 +721,245 @@ def test_action_execute_by_name_not_found(runner):
         client.query.kn_search.return_value = mock_search
         mock_make.return_value = client
         result = runner.invoke(cli, ["action", "execute", "kn1", "--action-name", "nonexistent"])
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# auth delete
+# ---------------------------------------------------------------------------
+
+
+def test_auth_delete_with_yes(runner):
+    with patch("kweaver.cli.auth.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.resolve.return_value = "https://example.com"
+        result = runner.invoke(cli, ["auth", "delete", "https://example.com", "--yes"])
+        assert result.exit_code == 0
+        store.delete.assert_called_once_with("https://example.com")
+        assert "Deleted" in result.output
+
+
+def test_auth_delete_aborted(runner):
+    with patch("kweaver.cli.auth.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.resolve.return_value = "https://example.com"
+        result = runner.invoke(cli, ["auth", "delete", "https://example.com"], input="n\n")
+        assert result.exit_code != 0
+        store.delete.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# token
+# ---------------------------------------------------------------------------
+
+
+def test_token_prints_access_token(runner):
+    with patch("kweaver.cli.token.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.get_active.return_value = "https://example.com"
+        store.load_token.return_value = {"accessToken": "tok-abc123"}
+        result = runner.invoke(cli, ["token"])
+        assert result.exit_code == 0
+        assert "tok-abc123" in result.output
+
+
+def test_token_no_platform(runner):
+    with patch("kweaver.cli.token.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.get_active.return_value = None
+        result = runner.invoke(cli, ["token"])
+        assert result.exit_code != 0
+
+
+def test_token_no_token_stored(runner):
+    with patch("kweaver.cli.token.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.get_active.return_value = "https://example.com"
+        store.load_token.return_value = {}
+        result = runner.invoke(cli, ["token"])
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# kn stats, update
+# ---------------------------------------------------------------------------
+
+
+def test_kn_stats(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_kn = MagicMock()
+        mock_stats = MagicMock()
+        mock_stats.model_dump.return_value = {
+            "object_types_total": 3,
+            "relation_types_total": 1,
+            "action_types_total": 0,
+            "concept_groups_total": 0,
+        }
+        mock_kn.statistics = mock_stats
+        client.knowledge_networks.get.return_value = mock_kn
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["kn", "stats", "kn1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["object_types_total"] == 3
+
+
+def test_kn_update(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_kn = MagicMock()
+        mock_kn.model_dump.return_value = {"id": "kn1", "name": "new-name"}
+        client.knowledge_networks.update.return_value = mock_kn
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["kn", "update", "kn1", "--name", "new-name"])
+        assert result.exit_code == 0
+        client.knowledge_networks.update.assert_called_once_with("kn1", name="new-name")
+
+
+def test_kn_list_with_pagination(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_kn = MagicMock()
+        mock_kn.model_dump.return_value = {"id": "kn1", "name": "alpha", "tags": ["demo"]}
+        client.knowledge_networks.list.return_value = [mock_kn]
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["kn", "list", "--limit", "5", "--offset", "0"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["id"] == "kn1"
+
+
+# ---------------------------------------------------------------------------
+# kn action-log cancel
+# ---------------------------------------------------------------------------
+
+
+def test_kn_action_log_cancel_with_yes(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["kn", "action-log", "cancel", "kn1", "log1", "--yes"])
+        assert result.exit_code == 0
+        client.action_types.cancel.assert_called_once_with("kn1", "log1")
+        assert "Cancelled" in result.output
+
+
+# ---------------------------------------------------------------------------
+# agent list with pagination
+# ---------------------------------------------------------------------------
+
+
+def test_agent_list_with_size(runner):
+    with patch("kweaver.cli.agent.make_client") as mock_make:
+        client = _mock_client()
+        mock_agent = MagicMock()
+        mock_agent.model_dump.return_value = {"id": "a1", "name": "MyAgent"}
+        client.agents.list.return_value = [mock_agent]
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["agent", "list", "--size", "10"])
+        assert result.exit_code == 0
+        client.agents.list.assert_called_once_with(keyword=None, status=None, size=10)
+
+
+# ---------------------------------------------------------------------------
+# call -H/--header, --verbose, -bd
+# ---------------------------------------------------------------------------
+
+
+def test_call_with_header(runner):
+    with patch("kweaver.cli.call.make_client") as mock_make:
+        client = _mock_client()
+        client._http.request.return_value = {"ok": True}
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "call", "/api/test",
+            "-H", "X-Custom: value",
+        ])
+        assert result.exit_code == 0
+        call_kwargs = client._http.request.call_args
+        headers = call_kwargs[1]["headers"]
+        assert headers.get("X-Custom") == "value"
+
+
+def test_call_with_biz_domain(runner):
+    with patch("kweaver.cli.call.make_client") as mock_make:
+        client = _mock_client()
+        client._http.request.return_value = {"ok": True}
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "call", "/api/test",
+            "-bd", "my_domain",
+        ])
+        assert result.exit_code == 0
+        headers = client._http.request.call_args[1]["headers"]
+        assert headers.get("x-business-domain") == "my_domain"
+
+
+def test_call_verbose_prints_to_stderr(runner):
+    with patch("kweaver.cli.call.make_client") as mock_make:
+        client = _mock_client()
+        client._http.request.return_value = {"ok": True}
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "call", "/api/test", "--verbose",
+        ], catch_exceptions=False)
+        assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# context-loader config set/list/show/use/remove
+# ---------------------------------------------------------------------------
+
+
+def test_context_loader_config_set(runner):
+    with patch("kweaver.cli.context_loader.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.get_active.return_value = "https://example.com"
+        result = runner.invoke(cli, [
+            "context-loader", "config", "set",
+            "--kn-id", "kn_abc",
+            "--name", "myconfig",
+        ])
+        assert result.exit_code == 0
+        store.add_context_loader_entry.assert_called_once_with(
+            "https://example.com", "myconfig", "kn_abc"
+        )
+
+
+def test_context_loader_config_list(runner):
+    with patch("kweaver.cli.context_loader.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.get_active.return_value = "https://example.com"
+        store.load_context_loader_config.return_value = {
+            "configs": [{"name": "myconfig", "knId": "kn_abc"}],
+            "current": "myconfig",
+        }
+        result = runner.invoke(cli, ["context-loader", "config", "list"])
+        assert result.exit_code == 0
+        assert "myconfig" in result.output
+        assert "kn_abc" in result.output
+
+
+def test_context_loader_config_show(runner):
+    with patch("kweaver.cli.context_loader.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.get_active.return_value = "https://example.com"
+        store.get_current_context_loader_kn.return_value = (
+            "https://example.com/api/agent-retrieval/v1/mcp",
+            "kn_abc",
+        )
+        result = runner.invoke(cli, ["context-loader", "config", "show"])
+        assert result.exit_code == 0
+        assert "kn_abc" in result.output
+
+
+def test_context_loader_config_set_no_active_platform(runner):
+    with patch("kweaver.cli.context_loader.PlatformStore") as MockStore:
+        store = MockStore.return_value
+        store.get_active.return_value = None
+        result = runner.invoke(cli, [
+            "context-loader", "config", "set",
+            "--kn-id", "kn_abc",
+        ])
         assert result.exit_code != 0

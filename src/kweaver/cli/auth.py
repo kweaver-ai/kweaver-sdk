@@ -91,3 +91,16 @@ def use(platform: str) -> None:
     store = PlatformStore()
     url = store.use(platform)
     click.echo(f"Active platform set to: {url}")
+
+
+@auth_group.command("delete")
+@click.argument("platform")
+@click.option("--yes", "-y", is_flag=True, default=False, help="Skip confirmation.")
+def delete(platform: str, yes: bool) -> None:
+    """Delete a saved platform and its credentials."""
+    store = PlatformStore()
+    url = store.resolve(platform)
+    if not yes:
+        click.confirm(f"Delete platform {url}?", abort=True)
+    store.delete(url)
+    click.echo(f"Deleted platform: {url}")

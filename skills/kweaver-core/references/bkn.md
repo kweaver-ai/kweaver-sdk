@@ -1,5 +1,8 @@
 # 知识网络管理与查询
 
+> **命令名说明：** TypeScript CLI 使用 `kweaver bkn …`，Python CLI 使用 `kweaver kn …`。
+> 本文档以 TypeScript CLI 为主（`bkn`）；Python 用户将所有 `bkn` 替换为 `kn` 即可。
+
 管理知识网络（KN），以及通过 ontology-query 查询对象、子图、属性和行动。
 
 ## 命令总览
@@ -136,6 +139,8 @@ kweaver query subgraph <kn-id> --start <ot-id> \
 - 用户有模糊的业务问题：`kweaver query search <kn-id> "..."`
 
 ## 典型编排
+
+（Python 用户：`bkn create` → `kn create`，`bkn build` → `kn build`，依此类推）
 
 1. **从零构建**: `ds connect` -> `bkn create` -> `bkn build` -> `bkn export` -> `query search`
 2. **探索已有**: `bkn list` -> `bkn export <id>` -> `query instances` / `query search`

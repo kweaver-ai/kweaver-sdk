@@ -70,6 +70,11 @@ export interface ConfigureOptions {
  * ```
  */
 export function configure(opts: ConfigureOptions): void {
+  // Reset all state first so a failed re-configure never leaves a stale client.
+  _client = null;
+  _defaultBknId = null;
+  _defaultAgentId = null;
+
   const { bknId, agentId, businessDomain, config, baseUrl, accessToken } = opts;
 
   if (config) {
@@ -201,10 +206,16 @@ export async function bkns(
  * Only needed after write-side changes (added datasource, modified object/relation
  * types). Pure read-only usage (search, chat) does not require weaver().
  *
+ * @param opts.wait     If true, poll until completed and return the final BuildStatus.
+ * @param opts.timeout  Max wait time in **milliseconds** (default 300_000 = 5 min).
+ *                      Note: Python SDK uses seconds; multiply by 1000 when porting.
+ * @param opts.interval Poll interval in **milliseconds** (default 2_000).
+ *
  * @example
  * ```typescript
- * await kweaver.weaver({ wait: true });   // block until done
- * const job = await kweaver.weaver();     // fire-and-forget
+ * await kweaver.weaver({ wait: true });              // block until done
+ * await kweaver.weaver({ wait: true, timeout: 60_000 }); // 60-second timeout
+ * await kweaver.weaver();                            // fire-and-forget (returns void)
  * ```
  */
 export async function weaver(

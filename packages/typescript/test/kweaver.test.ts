@@ -96,6 +96,35 @@ test("getClient throws before configure", () => {
   assert.doesNotThrow(() => kweaver.getClient());
 });
 
+test("failed re-configure clears previous client and defaults", () => {
+  // First configure succeeds, sets a live client.
+  kweaver.configure({ baseUrl: BASE, accessToken: TOKEN, bknId: "bkn-old" });
+  const firstClient = kweaver.getClient();
+  assert.ok(firstClient, "first configure should succeed");
+
+  // Second configure fails validation — old client must NOT survive.
+  const origUrl = process.env.KWEAVER_BASE_URL;
+  const origTok = process.env.KWEAVER_TOKEN;
+  delete process.env.KWEAVER_BASE_URL;
+  delete process.env.KWEAVER_TOKEN;
+  try {
+    assert.throws(
+      () => kweaver.configure({}),
+      /baseUrl/
+    );
+  } finally {
+    if (origUrl !== undefined) process.env.KWEAVER_BASE_URL = origUrl;
+    if (origTok !== undefined) process.env.KWEAVER_TOKEN = origTok;
+  }
+
+  // After the failed reconfigure, getClient() must throw — not return the old client.
+  assert.throws(
+    () => kweaver.getClient(),
+    /configure/,
+    "getClient must throw after a failed re-configure"
+  );
+});
+
 // ── search ────────────────────────────────────────────────────────────────────
 
 test("search calls semanticSearch and returns result", async () => {
@@ -241,6 +270,18 @@ test("bkns returns list of knowledge networks", async () => {
 });
 
 // ── weaver ────────────────────────────────────────────────────────────────────
+
+test("weaver without wait returns void (not a job handle)", async () => {
+  kweaver.configure({ baseUrl: BASE, accessToken: TOKEN, bknId: "bkn-1" });
+
+  await withFetch(
+    async () => new Response("", { status: 200 }),
+    async () => {
+      const result = await kweaver.weaver();
+      assert.strictEqual(result, undefined, "fire-and-forget weaver() must return void");
+    }
+  );
+});
 
 test("weaver (fire-and-forget) triggers build without waiting", async () => {
   kweaver.configure({ baseUrl: BASE, accessToken: TOKEN, bknId: "bkn-1" });

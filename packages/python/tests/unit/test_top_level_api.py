@@ -58,6 +58,42 @@ class TestConfigure:
         with pytest.raises(ValueError, match="Provide token="):
             kweaver.configure("https://example.com")
 
+    def test_failed_reconfigure_clears_previous_client(self):
+        """A failed configure() must not leave the old client active."""
+        kweaver.configure("https://example.com", token="tok1", bkn_id="kn-old")
+        assert kweaver._default_client is not None
+        with pytest.raises(ValueError):
+            kweaver.configure("https://example.com")  # no auth → raises
+        assert kweaver._default_client is None, "stale client must be cleared on failure"
+        assert kweaver._default_bkn_id is None
+
+    def test_business_domain_passed_through(self, monkeypatch):
+        """configure(business_domain=) must reach KWeaverClient."""
+        created_with = {}
+        original_init = kweaver.KWeaverClient.__init__
+
+        def spy_init(self_inner, **kwargs):
+            created_with.update(kwargs)
+            original_init(self_inner, **kwargs)
+
+        monkeypatch.setattr(kweaver.KWeaverClient, "__init__", spy_init)
+        kweaver.configure("https://example.com", token="tok", business_domain="bd_custom")
+        assert created_with.get("business_domain") == "bd_custom"
+
+    def test_business_domain_reads_env_var(self, monkeypatch):
+        """configure() must fall back to KWEAVER_BUSINESS_DOMAIN env var."""
+        monkeypatch.setenv("KWEAVER_BUSINESS_DOMAIN", "bd_from_env")
+        created_with = {}
+        original_init = kweaver.KWeaverClient.__init__
+
+        def spy_init(self_inner, **kwargs):
+            created_with.update(kwargs)
+            original_init(self_inner, **kwargs)
+
+        monkeypatch.setattr(kweaver.KWeaverClient, "__init__", spy_init)
+        kweaver.configure("https://example.com", token="tok")
+        assert created_with.get("business_domain") == "bd_from_env"
+
     def test_no_url_raises_when_token_provided(self):
         """url must be provided when using token auth without env var."""
         import os

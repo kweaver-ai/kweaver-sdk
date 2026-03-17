@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import importlib.metadata
+
 import pytest
 from click.testing import CliRunner
 
 from kweaver.cli.main import cli
+
+_VERSION = importlib.metadata.version("kweaver-sdk")
 
 
 @pytest.fixture
@@ -35,7 +39,7 @@ def test_cli_help(runner):
 def test_cli_version(runner):
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
-    assert "0.6.0" in result.output
+    assert _VERSION in result.output
 
 
 # ---------------------------------------------------------------------------

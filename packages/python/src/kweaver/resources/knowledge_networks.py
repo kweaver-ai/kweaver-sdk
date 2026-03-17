@@ -127,9 +127,12 @@ class KnowledgeNetworksResource:
                     )
                 except KWeaverError as exc2:
                     if exc2.status_code == 404:
-                        logger.warning("No build endpoint available, skipping build")
-                    else:
-                        raise
+                        raise RuntimeError(
+                            f"No build endpoint available for BKN {id}. "
+                            "Both agent-retrieval and ontology-manager returned 404. "
+                            "This deployment may not support index rebuilds."
+                        ) from exc2
+                    raise
             else:
                 raise
         job = BuildJob(kn_id=id)

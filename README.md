@@ -52,10 +52,13 @@ pip install kweaver-sdk
 ```
 
 ```python
-from kweaver import KWeaverClient, ConfigAuth
+import kweaver
 
-client = KWeaverClient(auth=ConfigAuth(), business_domain="bd_public")
-kns = client.knowledge_networks.list()
+kweaver.configure(config=True, bkn_id="your-bkn-id", agent_id="your-agent-id")
+
+results = kweaver.search("What risks exist in the supply chain?")
+reply   = kweaver.chat("Summarise the top 3 risks")
+print(reply.content)
 ```
 
 ## Overview
@@ -80,6 +83,32 @@ Or use environment variables: `KWEAVER_BASE_URL`, `KWEAVER_BUSINESS_DOMAIN`, `KW
 
 ## TypeScript SDK Usage
 
+### Simple API (recommended)
+
+```typescript
+import kweaver from "kweaver-sdk/kweaver";
+
+// Uses saved credentials from `kweaver auth login`
+kweaver.configure({ config: true, bknId: "your-bkn-id", agentId: "your-agent-id" });
+
+// Search the BKN
+const results = await kweaver.search("What risks exist in the supply chain?");
+for (const concept of results.concepts) console.log(concept.concept_name);
+
+// Chat with an agent
+const reply = await kweaver.chat("Summarise the top 3 risks");
+console.log(reply.text);
+
+// After adding datasources or modifying object types, rebuild the BKN index
+await kweaver.weaver({ wait: true });
+
+// List available BKNs and agents
+const bknList   = await kweaver.bkns();
+const agentList = await kweaver.agents();
+```
+
+### Full client API (advanced)
+
 ```typescript
 import { KWeaverClient } from "kweaver-sdk";
 
@@ -87,8 +116,8 @@ const client = new KWeaverClient();   // reads ~/.kweaver/ credentials
 
 // Knowledge networks
 const kns = await client.knowledgeNetworks.list({ limit: 10 });
-const ots = await client.knowledgeNetworks.listObjectTypes("kn-id");
-const rts = await client.knowledgeNetworks.listRelationTypes("kn-id");
+const ots = await client.knowledgeNetworks.listObjectTypes("bkn-id");
+const rts = await client.knowledgeNetworks.listRelationTypes("bkn-id");
 
 // Agent chat (single-shot)
 const reply = await client.agents.chat("agent-id", "Hello");
@@ -100,35 +129,61 @@ await client.agents.stream("agent-id", "Hello", {
 });
 
 // BKN engine — instance queries, subgraph, action execution
-const instances = await client.bkn.queryInstances("kn-id", "ot-id", { limit: 20 });
-const graph     = await client.bkn.querySubgraph("kn-id", { /* path spec */ });
-await client.bkn.executeAction("kn-id", "at-id", { /* params */ });
-const logs      = await client.bkn.listActionLogs("kn-id");
+const instances = await client.bkn.queryInstances("bkn-id", "ot-id", { limit: 20 });
+const graph     = await client.bkn.querySubgraph("bkn-id", { /* path spec */ });
+await client.bkn.executeAction("bkn-id", "at-id", { /* params */ });
+const logs      = await client.bkn.listActionLogs("bkn-id");
 
 // Context Loader (semantic search over a knowledge network)
-const cl      = client.contextLoader(mcpUrl, "kn-id");
+const cl      = client.contextLoader(mcpUrl, "bkn-id");
 const results = await cl.search({ query: "hypertension treatment" });
 ```
 
 ## Python SDK Usage
+
+### Simple API (recommended)
+
+```python
+import kweaver
+
+# Uses saved credentials from `kweaver auth login`
+kweaver.configure(config=True, bkn_id="your-bkn-id", agent_id="your-agent-id")
+
+# Search the BKN
+results = kweaver.search("What risks exist in the supply chain?")
+for concept in results.concepts:
+    print(concept.concept_name)
+
+# Chat with an agent
+reply = kweaver.chat("Summarise the top 3 risks")
+print(reply.content)
+
+# After adding datasources or modifying object types, rebuild the BKN index
+kweaver.weaver(wait=True)
+
+# List available BKNs and agents
+for bkn in kweaver.bkns():
+    print(bkn.id, bkn.name)
+```
+
+### Full client API (advanced)
 
 ```python
 from kweaver import KWeaverClient, ConfigAuth
 
 client = KWeaverClient(auth=ConfigAuth())   # reads ~/.kweaver/ credentials
 
-# Knowledge networks
-kns = client.knowledge_networks.list()
-ots = client.object_types.list("kn-id")
+# BKNs
+bkns = client.knowledge_networks.list()
+ots  = client.object_types.list("bkn-id")
 
 # Agent chat
-conv = client.conversations.create("agent-id")
-msg  = conv.send("Hello")
-print(msg.text)
+msg = client.conversations.send_message("", "Hello", agent_id="agent-id")
+print(msg.content)
 
-# BKN engine
-instances = client.query.instances("kn-id", "ot-id", limit=20)
-result    = client.action_types.execute("kn-id", "at-id", params={})
+# BKN engine — instance queries and action execution
+instances = client.query.instances("bkn-id", "ot-id", limit=20)
+result    = client.action_types.execute("bkn-id", "at-id", params={})
 ```
 
 ## CLI Quick Reference

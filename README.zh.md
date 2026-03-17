@@ -52,10 +52,13 @@ pip install kweaver-sdk
 ```
 
 ```python
-from kweaver import KWeaverClient, ConfigAuth
+import kweaver
 
-client = KWeaverClient(auth=ConfigAuth(), business_domain="bd_public")
-kns = client.knowledge_networks.list()
+kweaver.configure(config=True, bkn_id="your-bkn-id", agent_id="your-agent-id")
+
+results = kweaver.search("供应链有哪些风险？")
+reply   = kweaver.chat("总结前三大风险")
+print(reply.content)
 ```
 
 ## 定位
@@ -80,6 +83,32 @@ kweaver auth login https://your-kweaver-instance.com --alias prod
 
 ## TypeScript SDK 用法
 
+### 简洁 API（推荐）
+
+```typescript
+import kweaver from "kweaver-sdk/kweaver";
+
+// 使用 `kweaver auth login` 保存的凭据，零配置
+kweaver.configure({ config: true, bknId: "your-bkn-id", agentId: "your-agent-id" });
+
+// 搜索 BKN
+const results = await kweaver.search("供应链有哪些关键风险？");
+for (const concept of results.concepts) console.log(concept.concept_name);
+
+// 与 Agent 对话
+const reply = await kweaver.chat("总结前三大风险");
+console.log(reply.text);
+
+// 接入数据源或修改对象类后，重建 BKN 索引
+await kweaver.weaver({ wait: true });
+
+// 查看所有 BKN 和 Agent
+const bknList   = await kweaver.bkns();
+const agentList = await kweaver.agents();
+```
+
+### 底层客户端（高级用法）
+
 ```typescript
 import { KWeaverClient } from "kweaver-sdk";
 
@@ -87,8 +116,8 @@ const client = new KWeaverClient();   // 读取 ~/.kweaver/ 凭据
 
 // 知识网络
 const kns = await client.knowledgeNetworks.list({ limit: 10 });
-const ots = await client.knowledgeNetworks.listObjectTypes("kn-id");
-const rts = await client.knowledgeNetworks.listRelationTypes("kn-id");
+const ots = await client.knowledgeNetworks.listObjectTypes("bkn-id");
+const rts = await client.knowledgeNetworks.listRelationTypes("bkn-id");
 
 // Agent 对话
 const reply = await client.agents.chat("agent-id", "你好");
@@ -100,13 +129,60 @@ await client.agents.stream("agent-id", "你好", {
 });
 
 // BKN 引擎：实例查询、子图、Action 执行
-const instances = await client.bkn.queryInstances("kn-id", "ot-id", { limit: 20 });
-const graph     = await client.bkn.querySubgraph("kn-id", { ... });
-await client.bkn.executeAction("kn-id", "at-id", { ... });
+const instances = await client.bkn.queryInstances("bkn-id", "ot-id", { limit: 20 });
+const graph     = await client.bkn.querySubgraph("bkn-id", { ... });
+await client.bkn.executeAction("bkn-id", "at-id", { ... });
 
 // Context Loader
-const cl      = client.contextLoader(mcpUrl, "kn-id");
+const cl      = client.contextLoader(mcpUrl, "bkn-id");
 const results = await cl.search({ query: "高血压 治疗" });
+```
+
+## Python SDK 用法
+
+### 简洁 API（推荐）
+
+```python
+import kweaver
+
+# 使用 `kweaver auth login` 保存的凭据，零配置
+kweaver.configure(config=True, bkn_id="your-bkn-id", agent_id="your-agent-id")
+
+# 搜索 BKN
+results = kweaver.search("供应链有哪些关键风险？")
+for concept in results.concepts:
+    print(concept.concept_name)
+
+# 与 Agent 对话
+reply = kweaver.chat("总结前三大风险")
+print(reply.content)
+
+# 接入数据源或修改对象类后，重建 BKN 索引
+kweaver.weaver(wait=True)
+
+# 查看所有 BKN 和 Agent
+for bkn in kweaver.bkns():
+    print(bkn.id, bkn.name)
+```
+
+### 底层客户端（高级用法）
+
+```python
+from kweaver import KWeaverClient, ConfigAuth
+
+client = KWeaverClient(auth=ConfigAuth())   # 读取 ~/.kweaver/ 凭据
+
+# BKN
+bkns = client.knowledge_networks.list()
+ots  = client.object_types.list("bkn-id")
+
+# Agent 对话
+msg = client.conversations.send_message("", "你好", agent_id="agent-id")
+print(msg.content)
+
+# BKN 引擎：实例查询、Action 执行
+instances = client.query.instances("bkn-id", "ot-id", limit=20)
+result    = client.action_types.execute("bkn-id", "at-id", params={})
 ```
 
 ## 命令速查

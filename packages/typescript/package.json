@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./kweaver": {
+      "import": "./dist/kweaver.js",
+      "types": "./dist/kweaver.d.ts"
     }
   },
   "bin": {

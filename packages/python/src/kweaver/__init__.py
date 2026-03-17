@@ -80,7 +80,9 @@ def configure(
         token: Bearer token for TokenAuth.
         username: Username for PasswordAuth (requires password).
         password: Password for PasswordAuth (requires username).
-        config: If True, use credentials from the local config file.
+        config: If True, use credentials from the local config file (~/.kweaver/).
+            When config=True, url is ignored — the base URL comes from the saved
+            platform config, preventing accidental cross-environment credential leaks.
         bkn_id: Default BKN ID used by search() and weaver().
         agent_id: Default agent ID used by chat().
 
@@ -93,14 +95,17 @@ def configure(
 
     if token:
         auth = TokenAuth(token)
+        _default_client = KWeaverClient(base_url=url, auth=auth)
     elif username and password:
         auth = PasswordAuth(base_url=url, username=username, password=password)
+        _default_client = KWeaverClient(base_url=url, auth=auth)
     elif config:
+        # ConfigAuth carries its own base_url from ~/.kweaver/ — do not pass url
+        # to avoid sending credentials to the wrong environment.
         auth = ConfigAuth()
+        _default_client = KWeaverClient(auth=auth)
     else:
         raise ValueError("Provide token=, username+password=, or config=True")
-
-    _default_client = KWeaverClient(base_url=url, auth=auth)
     _default_bkn_id = bkn_id
     _default_agent_id = agent_id
 
@@ -267,5 +272,8 @@ def weaver(
         )
     job = client.knowledge_networks.build(resolved_bkn_id)
     if wait:
-        job.wait(timeout=timeout)
+        status = job.wait(timeout=timeout)
+        if status.state == "failed":
+            detail = status.state_detail or "no detail"
+            raise RuntimeError(f"BKN build failed for {resolved_bkn_id}: {detail}")
     return job

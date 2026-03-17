@@ -237,6 +237,26 @@ class TestWeaver:
         with pytest.raises(RuntimeError, match="kweaver.configure()"):
             kweaver.weaver()
 
+    def test_weaver_wait_raises_on_failed_build(self):
+        call_count = {"n": 0}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            path = req.url.path
+            if "/full_build_ontology" in path and req.method == "POST":
+                return httpx.Response(200, json={"state": "running"})
+            if "/full_ontology_building_status" in path:
+                call_count["n"] += 1
+                return httpx.Response(200, json={"state": "failed", "state_detail": "index error"})
+            return httpx.Response(404, json={})
+
+        kweaver.configure("https://mock", token="tok", bkn_id="kn1")
+        kweaver._default_client._http._client = httpx.Client(
+            base_url="https://mock",
+            transport=httpx.MockTransport(handler),
+        )
+        with pytest.raises(RuntimeError, match="BKN build failed"):
+            kweaver.weaver(wait=True, timeout=10)
+
     def test_weaver_wait_blocks_until_complete(self):
         call_count = {"n": 0}
 

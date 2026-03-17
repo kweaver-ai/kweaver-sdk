@@ -119,8 +119,11 @@ export class KnowledgeNetworksResource {
         );
       } catch (err2: unknown) {
         if (is404(err2)) {
-          // No build endpoint available on this deployment — skip silently
-          return;
+          throw new Error(
+            `No build endpoint available for BKN ${bknId}. ` +
+            `Both agent-retrieval and ontology-manager returned 404. ` +
+            `This deployment may not support index rebuilds.`
+          );
         }
         throw err2;
       }

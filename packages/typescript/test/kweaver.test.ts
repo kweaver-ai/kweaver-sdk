@@ -414,14 +414,17 @@ test("weaver wait=true uses ontology-manager job status when agent-retrieval sta
   );
 });
 
-test("weaver succeeds silently when both build endpoints 404 (no-build deployment)", async () => {
+test("weaver throws when both build endpoints 404 (no-build deployment)", async () => {
   kweaver.configure({ baseUrl: BASE, accessToken: TOKEN, bknId: "bkn-1" });
 
   await withFetch(
     async () => new Response("not found", { status: 404 }),
     async () => {
-      // Should not throw
-      await assert.doesNotReject(() => kweaver.weaver());
+      await assert.rejects(
+        () => kweaver.weaver(),
+        /No build endpoint available/,
+        "must not silently succeed when no build endpoint exists"
+      );
     }
   );
 });

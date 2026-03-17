@@ -122,6 +122,10 @@ export {
   validateInstanceIdentities,
 } from "./api/context-loader.js";
 
+// ── Module-level simple API (cognee-style) ────────────────────────────────────
+export type { ConfigureOptions } from "./kweaver.js";
+export { configure, search, agents, chat, bkns, weaver, getClient } from "./kweaver.js";
+
 // ── High-level client ─────────────────────────────────────────────────────────
 export type { KWeaverClientOptions, ClientContext } from "./client.js";
 export { KWeaverClient } from "./client.js";

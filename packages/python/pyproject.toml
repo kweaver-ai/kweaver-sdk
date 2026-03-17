@@ -31,7 +31,7 @@ packages = ["src/kweaver"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 markers = [
     "e2e: end-to-end tests against a live KWeaver instance",
     "destructive: tests that mutate KWeaver state (create/build/delete KN)",

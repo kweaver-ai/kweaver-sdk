@@ -147,8 +147,8 @@ class HttpClient:
     def put(self, path: str, *, json: Any = None, headers: dict[str, str] | None = None) -> Any:
         return self.request("PUT", path, json=json, headers=headers)
 
-    def delete(self, path: str, *, headers: dict[str, str] | None = None) -> Any:
-        return self.request("DELETE", path, headers=headers)
+    def delete(self, path: str, *, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Any:
+        return self.request("DELETE", path, params=params, headers=headers)
 
     def stream_post(
         self,
@@ -180,6 +180,42 @@ class HttpClient:
                     yield _json.loads(line)
                 except Exception:
                     continue
+
+    def upload(
+        self,
+        path: str,
+        *,
+        file_path: str,
+        field_name: str = "file",
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        """Upload a file via multipart/form-data."""
+        import os
+
+        merged_headers = self._build_headers(headers)
+        filename = os.path.basename(file_path)
+        self._log("POST(upload)", path, {"file": filename})
+
+        with open(file_path, "rb") as f:
+            files = {field_name: (filename, f)}
+            resp = self._client.post(
+                path,
+                files=files,
+                headers=merged_headers,
+                timeout=timeout,
+            )
+
+        if resp.status_code >= 400:
+            logger.warning(
+                "HTTP %d POST(upload) %s -> %s",
+                resp.status_code, path, resp.text[:500],
+            )
+        raise_for_status(resp)
+
+        if resp.status_code == 204 or not resp.content:
+            return None
+        return resp.json()
 
     def close(self) -> None:
         self._client.close()

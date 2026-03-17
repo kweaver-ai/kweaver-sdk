@@ -313,3 +313,52 @@ class ActionExecution(BaseModel):
 
     def cancel(self) -> None:
         raise NotImplementedError("Use action_types.cancel() directly")
+
+
+# ── Dataflow types ──────────────────────────────────────────────────
+
+
+class S3File(BaseModel):
+    id: str
+    bucket: str = ""
+    key: str = ""
+    name: str = ""
+    size: int = 0
+    last_modified: str | None = None
+    download_url: str | None = None
+
+
+class DataflowRunResult(BaseModel):
+    total: int = 0
+    results: list[dict[str, Any]] = []
+    progress: dict[str, Any] | None = None
+
+
+class DataflowJob(BaseModel):
+    dag_id: str
+    status: str = "init"  # init, running, success, failed, canceled
+    run_id: str | None = None
+    progress: dict[str, Any] | None = None
+    _poll_fn: Callable[[], "DataflowJob"] | None = None
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    def set_poll_fn(self, fn: Callable[[], "DataflowJob"]) -> None:
+        self._poll_fn = fn
+
+    def poll(self) -> "DataflowJob":
+        if self._poll_fn is None:
+            raise RuntimeError("DataflowJob not connected to a client")
+        return self._poll_fn()
+
+    def wait(self, timeout: float = 600, poll_interval: float = 3.0) -> "DataflowJob":
+        deadline = time.time() + timeout
+        while True:
+            updated = self.poll()
+            if updated.status in ("success", "failed", "canceled"):
+                return updated
+            if time.time() + poll_interval > deadline:
+                raise TimeoutError(
+                    f"Dataflow {self.dag_id} did not complete within {timeout}s"
+                )
+            time.sleep(poll_interval)

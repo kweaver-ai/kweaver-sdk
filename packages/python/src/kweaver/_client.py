@@ -16,6 +16,7 @@ from kweaver.resources.knowledge_networks import KnowledgeNetworksResource
 from kweaver.resources.object_types import ObjectTypesResource
 from kweaver.resources.action_types import ActionTypesResource
 from kweaver.resources.query import QueryResource
+from kweaver.resources.dataflow import DataflowResource
 from kweaver.resources.relation_types import RelationTypesResource
 
 
@@ -73,6 +74,7 @@ class KWeaverClient:
         self.agents = AgentsResource(self._http)
         self.conversations = ConversationsResource(self._http)
         self.action_types = ActionTypesResource(self._http)
+        self.dataflow = DataflowResource(self._http)
 
     def close(self) -> None:
         self._http.close()

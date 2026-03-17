@@ -28,12 +28,12 @@ export class KnowledgeNetworksResource {
   }
 
   async create(opts: { name: string; description?: string; tags?: string[] }): Promise<unknown> {
-    const raw = await createKnowledgeNetwork({ ...this.ctx.base(), ...opts });
+    const raw = await createKnowledgeNetwork({ ...this.ctx.base(), body: JSON.stringify(opts) });
     return JSON.parse(raw) as unknown;
   }
 
   async update(knId: string, opts: { name: string; description?: string; tags?: string[] }): Promise<unknown> {
-    const raw = await updateKnowledgeNetwork({ ...this.ctx.base(), knId, ...opts });
+    const raw = await updateKnowledgeNetwork({ ...this.ctx.base(), knId, body: JSON.stringify(opts) });
     return JSON.parse(raw) as unknown;
   }
 

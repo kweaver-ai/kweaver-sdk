@@ -16,27 +16,27 @@ export class BknResource {
   constructor(private readonly ctx: ClientContext) {}
 
   async queryInstances(knId: string, otId: string, body: Record<string, unknown>): Promise<unknown> {
-    const raw = await objectTypeQuery({ ...this.ctx.base(), knId, otId, body });
+    const raw = await objectTypeQuery({ ...this.ctx.base(), knId, otId, body: JSON.stringify(body) });
     return JSON.parse(raw) as unknown;
   }
 
   async queryProperties(knId: string, otId: string, body: Record<string, unknown>): Promise<unknown> {
-    const raw = await objectTypeProperties({ ...this.ctx.base(), knId, otId, body });
+    const raw = await objectTypeProperties({ ...this.ctx.base(), knId, otId, body: JSON.stringify(body) });
     return JSON.parse(raw) as unknown;
   }
 
   async querySubgraph(knId: string, body: Record<string, unknown>): Promise<unknown> {
-    const raw = await subgraph({ ...this.ctx.base(), knId, body });
+    const raw = await subgraph({ ...this.ctx.base(), knId, body: JSON.stringify(body) });
     return JSON.parse(raw) as unknown;
   }
 
   async queryAction(knId: string, atId: string, body: Record<string, unknown>): Promise<unknown> {
-    const raw = await actionTypeQuery({ ...this.ctx.base(), knId, atId, body });
+    const raw = await actionTypeQuery({ ...this.ctx.base(), knId, atId, body: JSON.stringify(body) });
     return JSON.parse(raw) as unknown;
   }
 
   async executeAction(knId: string, atId: string, body: Record<string, unknown>): Promise<unknown> {
-    const raw = await actionTypeExecute({ ...this.ctx.base(), knId, atId, body });
+    const raw = await actionTypeExecute({ ...this.ctx.base(), knId, atId, body: JSON.stringify(body) });
     return JSON.parse(raw) as unknown;
   }
 

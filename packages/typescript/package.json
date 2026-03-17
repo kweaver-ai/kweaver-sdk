@@ -1,6 +1,6 @@
 {
   "name": "kweaver-sdk",
-  "version": "0.1.4",
+  "version": "0.4.0",
   "description": "KWeaver TypeScript SDK — CLI tool and programmatic API for knowledge networks and Decision Agents.",
   "type": "module",
   "main": "./dist/index.js",

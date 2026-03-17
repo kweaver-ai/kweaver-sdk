@@ -26,6 +26,7 @@ import {
   parseKnDeleteArgs,
   parseKnObjectTypeQueryArgs,
   parseKnActionTypeExecuteArgs,
+  parseKnSearchArgs,
   formatSimpleKnList,
 } from "../src/commands/bkn.js";
 import {
@@ -1159,6 +1160,47 @@ test("parseAgentHistoryArgs parses positional conversation_id", () => {
 test("parseAgentHistoryArgs parses --limit", () => {
   const opts = parseAgentHistoryArgs(["conv-abc", "--limit", "20"]);
   assert.equal(opts.limit, 20);
+});
+
+// ── parseKnSearchArgs ─────────────────────────────────────────────────────────
+
+test("parseKnSearchArgs parses kn-id and query with defaults", () => {
+  const opts = parseKnSearchArgs(["kn_medical", "高血压", "治疗"]);
+  assert.equal(opts.knId, "kn_medical");
+  assert.equal(opts.query, "高血压 治疗");
+  assert.equal(opts.maxConcepts, 10);
+  assert.equal(opts.mode, "keyword_vector_retrieval");
+  assert.equal(opts.pretty, false);
+});
+
+test("parseKnSearchArgs parses --max-concepts --mode --pretty -bd", () => {
+  const opts = parseKnSearchArgs([
+    "kn_medical", "感冒", "--max-concepts", "5", "--mode", "vector", "--pretty", "-bd", "bd_test",
+  ]);
+  assert.equal(opts.knId, "kn_medical");
+  assert.equal(opts.query, "感冒");
+  assert.equal(opts.maxConcepts, 5);
+  assert.equal(opts.mode, "vector");
+  assert.equal(opts.pretty, true);
+  assert.equal(opts.businessDomain, "bd_test");
+});
+
+test("parseKnSearchArgs requires kn-id and query", () => {
+  assert.throws(() => parseKnSearchArgs([]), /Usage/);
+  assert.throws(() => parseKnSearchArgs(["kn_medical"]), /Usage/);
+});
+
+test("parseKnSearchArgs throws on unknown flag", () => {
+  assert.throws(() => parseKnSearchArgs(["kn1", "q", "--unknown"]), /Unknown flag/);
+});
+
+test("parseKnSearchArgs --help throws isHelp error", () => {
+  try {
+    parseKnSearchArgs(["--help"]);
+    assert.fail("should have thrown");
+  } catch (err) {
+    assert.equal((err as { isHelp?: boolean }).isHelp, true);
+  }
 });
 
 test("ensureValidToken returns env token when KWEAVER_TOKEN and KWEAVER_BASE_URL are set", async () => {

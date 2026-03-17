@@ -22,6 +22,7 @@ import {
   actionLogGet,
   actionLogCancel,
 } from "../api/ontology-query.js";
+import { semanticSearch } from "../api/semantic-search.js";
 import { formatCallOutput } from "./call.js";
 
 export interface KnListOptions {
@@ -586,6 +587,7 @@ Subcommands:
   delete <kn-id>       Delete a knowledge network
   export <kn-id>       Export knowledge network (alias for get --export)
   stats <kn-id>        Get statistics (alias for get --stats)
+  search <kn-id> <query> [options]   Semantic search within a knowledge network
   object-type list <kn-id>   List object types (schema)
   object-type query <kn-id> <ot-id> ['<json>']   Query object instances (ontology-query; supports --limit/--search-after)
   object-type properties <kn-id> <ot-id> '<json>'   Query object properties
@@ -635,6 +637,10 @@ export async function runKnCommand(args: string[]): Promise<number> {
 
   if (subcommand === "stats") {
     return runKnGetCommand([...(rest[0] ? [rest[0]] : []), "--stats", ...rest.slice(1)]);
+  }
+
+  if (subcommand === "search") {
+    return runKnSearchCommand(rest);
   }
 
   if (subcommand === "object-type") {
@@ -1485,6 +1491,96 @@ async function runKnDeleteCommand(args: string[]): Promise<number> {
       knId: options.knId,
       businessDomain: options.businessDomain,
     });
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
+}
+
+// ── search ──────────────────────────────────────────────────────────────────
+
+const KN_SEARCH_HELP = `kweaver bkn search <kn-id> <query> [--max-concepts <n>] [--mode <mode>] [--pretty] [-bd value]
+
+Semantic search within a knowledge network via agent-retrieval API.
+Returns matched concepts (object types, relation types, action types).
+
+Options:
+  --max-concepts <n>   Max concepts to return (default: 10)
+  --mode <mode>        Search mode (default: keyword_vector_retrieval)
+  --pretty             Pretty-print JSON output
+  -bd, --biz-domain    Override x-business-domain`;
+
+export function parseKnSearchArgs(args: string[]): {
+  knId: string;
+  query: string;
+  maxConcepts: number;
+  mode: string;
+  pretty: boolean;
+  businessDomain: string;
+} {
+  let knId = "";
+  let query = "";
+  let maxConcepts = 10;
+  let mode = "keyword_vector_retrieval";
+  let pretty = false;
+  let businessDomain = process.env.KWEAVER_BUSINESS_DOMAIN ?? "bd_public";
+
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === "--max-concepts") {
+      maxConcepts = Number(args[++i]);
+    } else if (arg === "--mode") {
+      mode = args[++i]!;
+    } else if (arg === "--pretty") {
+      pretty = true;
+    } else if (arg === "-bd" || arg === "--biz-domain") {
+      businessDomain = args[++i]!;
+    } else if (arg === "--help" || arg === "-h") {
+      throw Object.assign(new Error("help"), { isHelp: true });
+    } else if (arg.startsWith("-")) {
+      throw new Error(`Unknown flag: ${arg}`);
+    } else {
+      positional.push(arg);
+    }
+  }
+
+  knId = positional[0] ?? "";
+  query = positional.slice(1).join(" ");
+
+  if (!knId || !query) {
+    throw new Error("Usage: kweaver bkn search <kn-id> <query> [options]");
+  }
+
+  return { knId, query, maxConcepts, mode, pretty, businessDomain };
+}
+
+async function runKnSearchCommand(args: string[]): Promise<number> {
+  let options: ReturnType<typeof parseKnSearchArgs>;
+  try {
+    options = parseKnSearchArgs(args);
+  } catch (error) {
+    if (error instanceof Error && (error as { isHelp?: boolean }).isHelp) {
+      console.log(KN_SEARCH_HELP);
+      return 0;
+    }
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+
+  try {
+    const token = await ensureValidToken();
+    const result = await semanticSearch({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      knId: options.knId,
+      query: options.query,
+      businessDomain: options.businessDomain,
+      maxConcepts: options.maxConcepts,
+      mode: options.mode,
+    });
+    console.log(formatCallOutput(result, options.pretty));
     return 0;
   } catch (error) {
     console.error(formatHttpError(error));

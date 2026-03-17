@@ -23,6 +23,7 @@ Usage:
   kweaver agent list [options]
   kweaver bkn list [options]
   kweaver bkn get <kn-id> [options]
+  kweaver bkn search <kn-id> <query> [options]
   kweaver bkn create [options]
   kweaver bkn update <kn-id> [options]
   kweaver bkn delete <kn-id>

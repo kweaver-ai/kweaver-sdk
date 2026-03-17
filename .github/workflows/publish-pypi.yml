@@ -39,8 +39,11 @@ jobs:
           enable-cache: true
           cache-dependency-glob: packages/python/uv.lock
 
-      - name: Install build dependencies
+      - name: Install dependencies
         run: uv sync --group dev
+
+      - name: Run tests
+        run: uv run pytest
 
       - name: Build distributions
         run: uv build

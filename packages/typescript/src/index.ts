@@ -96,6 +96,10 @@ export { listAgents } from "./api/agent-list.js";
 export type { ListConversationsOptions, ListMessagesOptions } from "./api/conversations.js";
 export { listConversations, listMessages } from "./api/conversations.js";
 
+// ── Semantic search ───────────────────────────────────────────────────────────
+export type { SemanticSearchOptions } from "./api/semantic-search.js";
+export { semanticSearch } from "./api/semantic-search.js";
+
 // ── Context loader ────────────────────────────────────────────────────────────
 export type {
   ContextLoaderCallOptions,

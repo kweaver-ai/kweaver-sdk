@@ -1,12 +1,12 @@
 """E2E test configuration for KWeaver SDK against a real KWeaver environment.
 
-Follows the Alfred testing pattern:
-  - pytest CLI options for environment selection
-  - Environment registry for multiple KWeaver deployments
-  - Session-scoped fixtures for expensive setup (client, datasource)
-  - Destructive marker for state-mutating tests (build/delete KN)
-  - Factory fixtures for common operations
-  - Automatic token refresh via Playwright browser login
+Auth is read from ~/.kweaver/ (saved by `kweaver auth login`), the same
+path the SDK's ConfigAuth and the CLI use.  This means e2e tests exercise
+the real credential path users take — no separate secrets file needed for
+auth.
+
+Non-auth test config (database connection strings, etc.) is still loaded
+from environment variables or ~/.env.secrets as a convenience.
 """
 
 from __future__ import annotations
@@ -19,13 +19,15 @@ import pytest
 
 from click.testing import CliRunner
 
-from kweaver import KWeaverClient, PasswordAuth
+from kweaver import KWeaverClient
+from kweaver._auth import ConfigAuth
 
 # ---------------------------------------------------------------------------
-# Auto-load secrets from ~/.env.secrets (same pattern as Alfred)
+# Auto-load non-auth test config from ~/.env.secrets
 # ---------------------------------------------------------------------------
 
 _SECRETS_PATH = Path.home() / ".env.secrets"
+
 
 def _load_env_secrets() -> None:
     """Source KEY=VALUE lines from ~/.env.secrets into os.environ.
@@ -45,33 +47,11 @@ def _load_env_secrets() -> None:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        # Don't override — explicit env vars take precedence
         if key not in os.environ:
             os.environ[key] = value
 
+
 _load_env_secrets()
-
-
-# ---------------------------------------------------------------------------
-# Default environment registry
-# ---------------------------------------------------------------------------
-
-E2E_ENV: dict[str, dict[str, str]] = {
-    "dev": {
-        "base_url": os.getenv("KWEAVER_BASE_URL", ""),
-        "token": os.getenv("KWEAVER_TOKEN", ""),
-        "account_id": os.getenv("KWEAVER_ACCOUNT_ID", "test"),
-        "business_domain": os.getenv("KWEAVER_BUSINESS_DOMAIN", ""),
-        # Database credentials for datasource tests
-        "db_type": os.getenv("KWEAVER_TEST_DB_TYPE", "mysql"),
-        "db_host": os.getenv("KWEAVER_TEST_DB_HOST", ""),
-        "db_port": os.getenv("KWEAVER_TEST_DB_PORT", "3306"),
-        "db_name": os.getenv("KWEAVER_TEST_DB_NAME", ""),
-        "db_user": os.getenv("KWEAVER_TEST_DB_USER", ""),
-        "db_pass": os.getenv("KWEAVER_TEST_DB_PASS", ""),
-        "db_schema": os.getenv("KWEAVER_TEST_DB_SCHEMA", ""),
-    },
-}
 
 
 # ---------------------------------------------------------------------------
@@ -80,21 +60,6 @@ E2E_ENV: dict[str, dict[str, str]] = {
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption(
-        "--e2e-env",
-        default="dev",
-        help="E2E environment name from registry (default: dev)",
-    )
-    parser.addoption(
-        "--e2e-base-url",
-        default=None,
-        help="Override KWeaver base URL",
-    )
-    parser.addoption(
-        "--e2e-token",
-        default=None,
-        help="Override KWeaver bearer token",
-    )
     parser.addoption(
         "--run-destructive",
         action="store_true",
@@ -127,65 +92,41 @@ def pytest_collection_modifyitems(
 
 
 @pytest.fixture(scope="session")
-def e2e_env(request: pytest.FixtureRequest) -> dict[str, str]:
-    """Resolve and validate the E2E environment config.
+def e2e_env() -> dict[str, str]:
+    """Non-auth test config (database connections, business_domain, etc.).
 
-    Returns a dict with connection parameters.
-    Skips the entire session if the environment is not available.
+    Auth credentials come from ~/.kweaver/ via ConfigAuth, NOT from here.
     """
-    env_name = request.config.getoption("--e2e-env")
-    env_cfg = E2E_ENV.get(env_name, E2E_ENV["dev"]).copy()
-
-    # CLI overrides take precedence
-    base_url_override = request.config.getoption("--e2e-base-url")
-    if base_url_override:
-        env_cfg["base_url"] = base_url_override
-
-    token_override = request.config.getoption("--e2e-token")
-    if token_override:
-        env_cfg["token"] = token_override
-
-    if not env_cfg.get("base_url"):
-        pytest.skip("E2E environment not available: KWEAVER_BASE_URL not set")
-
-    # Auto-refresh token if credentials are available
-    username = os.getenv("KWEAVER_USERNAME", "")
-    password = os.getenv("KWEAVER_PASSWORD", "")
-    if username and password:
-        try:
-            auth = PasswordAuth(env_cfg["base_url"], username, password)
-            fresh_token = auth.refresh()
-            env_cfg["token"] = f"Bearer {fresh_token}"
-            env_cfg["_auth"] = auth
-        except Exception as exc:
-            # Fall back to static token if auto-login fails
-            if not env_cfg.get("token"):
-                pytest.skip(f"Token refresh failed and no static KWEAVER_TOKEN: {exc}")
-    elif not env_cfg.get("token"):
-        pytest.skip("E2E environment not available: KWEAVER_TOKEN not set and no KWEAVER_USERNAME/KWEAVER_PASSWORD")
-
-    return env_cfg
+    return {
+        "business_domain": os.getenv("KWEAVER_BUSINESS_DOMAIN", ""),
+        # Database credentials for datasource tests
+        "db_type": os.getenv("KWEAVER_TEST_DB_TYPE", "mysql"),
+        "db_host": os.getenv("KWEAVER_TEST_DB_HOST", ""),
+        "db_port": os.getenv("KWEAVER_TEST_DB_PORT", "3306"),
+        "db_name": os.getenv("KWEAVER_TEST_DB_NAME", ""),
+        "db_user": os.getenv("KWEAVER_TEST_DB_USER", ""),
+        "db_pass": os.getenv("KWEAVER_TEST_DB_PASS", ""),
+        "db_schema": os.getenv("KWEAVER_TEST_DB_SCHEMA", ""),
+    }
 
 
 @pytest.fixture(scope="session")
 def kweaver_client(e2e_env: dict[str, str]) -> KWeaverClient:
-    """Session-scoped KWeaverClient connected to the E2E environment."""
-    # Prefer PasswordAuth (auto-refresh) over static token
-    auth = e2e_env.get("_auth")
-    if auth:
-        client = KWeaverClient(
-            base_url=e2e_env["base_url"],
-            auth=auth,
-            account_id=e2e_env.get("account_id", "test"),
-            business_domain=e2e_env.get("business_domain") or None,
-        )
-    else:
-        client = KWeaverClient(
-            base_url=e2e_env["base_url"],
-            token=e2e_env["token"],
-            account_id=e2e_env.get("account_id", "test"),
-            business_domain=e2e_env.get("business_domain") or None,
-        )
+    """Session-scoped KWeaverClient using ConfigAuth (~/.kweaver/).
+
+    Requires `kweaver auth login` to have been run beforehand.
+    """
+    try:
+        auth = ConfigAuth()
+        # Verify credentials are present before proceeding
+        _ = auth.base_url
+    except RuntimeError as exc:
+        pytest.skip(f"No saved credentials: {exc}. Run `kweaver auth login` first.")
+
+    client = KWeaverClient(
+        auth=auth,
+        business_domain=e2e_env.get("business_domain") or None,
+    )
     yield client
     client.close()
 
@@ -264,13 +205,6 @@ def create_knowledge_network(kweaver_client: KWeaverClient):
 
 
 @pytest.fixture(scope="session")
-def cli_runner(e2e_env: dict[str, str]) -> CliRunner:
-    """CliRunner with auth env vars set."""
-    env = {}
-    if e2e_env.get("base_url"):
-        env["KWEAVER_BASE_URL"] = e2e_env["base_url"]
-    if e2e_env.get("token"):
-        env["KWEAVER_TOKEN"] = e2e_env["token"]
-    if e2e_env.get("business_domain"):
-        env["KWEAVER_BUSINESS_DOMAIN"] = e2e_env["business_domain"]
-    return CliRunner(env=env)
+def cli_runner() -> CliRunner:
+    """CliRunner — CLI reads ~/.kweaver/ directly, no env vars needed for auth."""
+    return CliRunner()

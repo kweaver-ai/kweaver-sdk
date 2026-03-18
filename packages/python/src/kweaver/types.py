@@ -177,6 +177,7 @@ class KnSearchResult(BaseModel):
     relation_types: list[dict[str, Any]] | None = None
     action_types: list[dict[str, Any]] | None = None
     nodes: list[dict[str, Any]] | None = None
+    raw: str | None = None
 
 
 class InstanceResult(BaseModel):

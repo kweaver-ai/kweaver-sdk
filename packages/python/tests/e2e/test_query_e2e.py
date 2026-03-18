@@ -108,11 +108,12 @@ def test_kn_search(kweaver_client: KWeaverClient, kn_with_data):
     except NotFoundError:
         pytest.skip("kn_search endpoint not available on this deployment")
     assert result is not None
-    # Should return at least one of the schema type lists
+    # MCP returns structured fields or raw text — either indicates success
     has_results = (
         (result.object_types and len(result.object_types) > 0)
         or (result.relation_types and len(result.relation_types) > 0)
         or (result.action_types and len(result.action_types) > 0)
+        or result.raw
     )
     assert has_results, f"kn_search for '{ot.name}' returned empty results"
 

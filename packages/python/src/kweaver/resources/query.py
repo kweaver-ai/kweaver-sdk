@@ -66,6 +66,7 @@ class QueryResource:
             relation_types=data.get("relation_types"),
             action_types=data.get("action_types"),
             nodes=data.get("nodes"),
+            raw=data.get("raw"),
         )
 
     def instances(

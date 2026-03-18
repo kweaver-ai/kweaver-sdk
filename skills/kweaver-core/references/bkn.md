@@ -1,151 +1,133 @@
-# 知识网络管理与查询
+# 知识网络管理
 
-管理知识网络（KN），以及通过 ontology-query 查询对象、子图、属性和行动。
+管理知识网络（KN）及其 Schema：对象类、关系类、行动类。TS CLI 通过 `bkn` 命令组实现。
 
 ## 命令总览
 
-### 管理（ontology-manager）
+### 管理
 
 | 命令 | 说明 |
 |------|------|
 | `kweaver bkn list [options]` | 列出知识网络 |
 | `kweaver bkn get <kn-id> [options]` | 查看网络详情 |
-| `kweaver bkn stats <kn-id>` | 查看网络统计 |
-| `kweaver bkn export <kn-id>` | 导出网络定义 |
+| `kweaver bkn export <kn-id>` | 导出网络定义（alias: get --export） |
+| `kweaver bkn stats <kn-id>` | 查看统计（alias: get --stats） |
 | `kweaver bkn create [options]` | 创建网络 |
 | `kweaver bkn update <kn-id> [options]` | 更新网络 |
-| `kweaver bkn delete <kn-id> [--yes]` | 删除网络（默认需确认） |
+| `kweaver bkn delete <kn-id>` | 删除网络 |
 
-### Schema 管理（ontology-manager）
+### 语义搜索
+
+| 命令 | 说明 |
+|------|------|
+| `kweaver bkn search <kn-id> <query>` | 语义搜索（agent-retrieval API） |
+
+### Schema 与查询
 
 | 命令 | 说明 |
 |------|------|
 | `kweaver bkn object-type list <kn-id>` | 列出对象类 |
-| `kweaver bkn object-type get <kn-id> <ot-id>` | 查看对象类详情 |
-| `kweaver bkn object-type create <kn-id> --name <name> --dataview-id <dv-id> --primary-key <pk> --display-key <dk> [--property '<json>']...` | 创建对象类 |
-| `kweaver bkn object-type update <kn-id> <ot-id> [--name <name>] [--display-key <dk>]` | 更新对象类 |
-| `kweaver bkn object-type delete <kn-id> <ot-ids> [--yes]` | 删除对象类 |
-| `kweaver bkn object-type properties <kn-id> <ot-id> '<json>'` | 查询实例属性值（需传 `_instance_identities` 和 `properties`） |
-| `kweaver bkn relation-type list <kn-id>` | 列出关系类 |
-| `kweaver bkn relation-type get <kn-id> <rt-id>` | 查看关系类详情 |
-| `kweaver bkn relation-type create <kn-id> --name <name> --source <ot-id> --target <ot-id> [--mapping src:tgt]...` | 创建关系类 |
-| `kweaver bkn relation-type update <kn-id> <rt-id> [--name <name>]` | 更新关系类 |
-| `kweaver bkn relation-type delete <kn-id> <rt-ids> [--yes]` | 删除关系类 |
-| `kweaver bkn action-type list <kn-id>` | 列出行动类 |
-
-### 查询（ontology-query 只读）
-
-| 命令 | 说明 |
-|------|------|
-| `kweaver bkn object-type query <kn-id> <ot-id> ['<json>'] [--limit n]` | 对象实例查询 |
+| `kweaver bkn object-type query <kn-id> <ot-id> ['<json>']` | 对象实例查询 |
 | `kweaver bkn object-type properties <kn-id> <ot-id> '<json>'` | 对象属性查询 |
+| `kweaver bkn relation-type list <kn-id>` | 列出关系类 |
 | `kweaver bkn subgraph <kn-id> '<json>'` | 子图查询 |
+| `kweaver bkn action-type list <kn-id>` | 列出行动类 |
 | `kweaver bkn action-type query <kn-id> <at-id> '<json>'` | 行动信息查询 |
-
-### Action（有副作用）
-
-| 命令 | 说明 |
-|------|------|
-| `kweaver bkn action-type execute <kn-id> <at-id> '<json>' [--wait]` | 执行行动 |
+| `kweaver bkn action-type execute <kn-id> <at-id> '<json>'` | 执行行动（有副作用） |
 | `kweaver bkn action-execution get <kn-id> <execution-id>` | 获取执行状态 |
-| `kweaver bkn action-log list/get/cancel ...` | 执行日志 |
+| `kweaver bkn action-log list/get/cancel <kn-id> ...` | 执行日志 |
 
-### Python 独有：数据源与高层查询
+## 参数说明
 
-| 命令 | 说明 |
+### bkn list
+
+| 参数 | 说明 |
 |------|------|
-| `kweaver ds connect/list/get/tables` | 数据源管理 |
-| `kweaver query search <kn-id> "<query>"` | 语义搜索 |
-| `kweaver query instances <kn-id> <ot-id>` | 对象实例 |
-| `kweaver query subgraph <kn-id> --start-type ... --path ...` | 子图查询 |
+| `--offset N` | 偏移，默认 0 |
+| `--limit N` | 条数，默认 50 |
+| `--sort` | 排序字段，默认 update_time |
+| `--direction asc|desc` | 排序方向，默认 desc |
+| `--name-pattern` | 按名称过滤 |
+| `--tag` | 按标签过滤 |
+| `--detail` | 包含 detail 字段 |
+| `--verbose, -v` | 完整 JSON |
+| `-bd` | 业务域 |
 
-### 通用 API 调用
+### bkn get
+
+| 参数 | 说明 |
+|------|------|
+| `--stats` | 包含统计 |
+| `--export` | 导出模式（含子类型） |
+| `-bd` | 业务域 |
+
+### bkn create
+
+| 参数 | 说明 |
+|------|------|
+| `--name` | 名称（必填，除非用 --body-file） |
+| `--comment` | 备注 |
+| `--tags t1,t2` | 逗号分隔标签 |
+| `--icon` | 图标 |
+| `--color` | 颜色 |
+| `--branch` | 分支，默认 main |
+| `--base-branch` | 基础分支 |
+| `--body-file <path>` | 从文件读取完整 JSON（不能与上述 flags 同用） |
+| `--import-mode normal|ignore|overwrite` | 导入模式，默认 normal |
+| `--validate-dependency true|false` | 校验依赖，默认 true |
+| `-bd` | 业务域 |
+
+### bkn delete
+
+| 参数 | 说明 |
+|------|------|
+| `--yes, -y` | 跳过确认 |
+| `-bd` | 业务域 |
+
+## 用法示例
 
 ```bash
-kweaver call /api/ontology-manager/v1/knowledge-networks
-kweaver call <path> -X POST -d '<json>' -H "Name: Value" -bd <domain>
-```
-
-## CLI 用法详解
-
-### 连接数据库
-
-```bash
-kweaver ds connect --type mysql --host 10.0.1.100 --port 3306 \
-  --database erp_prod --account readonly --password xxx
-# -> 返回 datasource_id 和 tables 列表
-```
-
-### 创建并构建知识网络
-
-```bash
-# 创建知识网络
-kweaver bkn create --name erp_prod --ds-id <datasource-id> \
-  --tables products,inventory \
-  --relations '[{"name":"产品_库存","from_table":"products","to_table":"inventory","from_field":"material_number","to_field":"material_code"}]'
-# -> 返回 kn_id
-
-# 触发构建
-kweaver bkn build <kn-id>
-# -> 等待构建完成，返回状态
-```
-
-### 查看结构与数据
-
-```bash
-# 列出所有知识网络
+# 列出
 kweaver bkn list
+kweaver bkn list --name-pattern erp --limit 20
 
-# 按名称筛选
-kweaver bkn list --name erp
-
-# 查看网络详情
+# 查看与导出
 kweaver bkn get <kn-id>
-
-# 导出 Schema（对象类型、关系类型、属性）
+kweaver bkn get <kn-id> --stats
 kweaver bkn export <kn-id>
-```
 
-### 查询知识网络
+# 创建（元数据）
+kweaver bkn create --name my_kn --comment "测试网络" --tags demo
+kweaver bkn create --body-file kn-def.json
 
-```bash
+# 更新与删除
+kweaver bkn update <kn-id> --name new_name
+kweaver bkn delete <kn-id> --yes
+
 # 语义搜索
-kweaver query search <kn-id> "高库存的产品"
+kweaver bkn search <kn-id> "高库存的产品" --max-concepts 20 --pretty
 
-# 精确查询对象实例
-kweaver query instances <kn-id> <ot-id> \
-  --condition '{"field":"status","operation":"eq","value":"active"}' --limit 20
-
-# 子图查询
-kweaver query subgraph <kn-id> --start <ot-id> \
-  --condition '{"field":"category","operation":"eq","value":"电子"}' \
-  --path inventory,suppliers
+# Schema 与查询
+kweaver bkn object-type list <kn-id>
+kweaver bkn relation-type list <kn-id>
+kweaver bkn object-type query <kn-id> <ot-id> '{"limit":50,"condition":{"operation":"and","sub_conditions":[]}}'
+kweaver bkn subgraph <kn-id> '{"relation_type_paths":[]}'
 ```
-
-## Condition 语法
-
-```json
-// 单条件
-{"field": "name", "operation": "like", "value": "高血压"}
-
-// 组合条件
-{"operation": "and", "sub_conditions": [
-  {"field": "name", "operation": "like", "value": "高血压"},
-  {"field": "severity", "operation": "eq", "value": "重度"}
-]}
-```
-
-操作符：`eq`、`neq`、`gt`、`gte`、`lt`、`lte`、`in`、`not_in`、`like`、`not_like`、`exist`、`not_exist`、`match`。
-
-## 默认策略
-
-- 用户说"看看有哪些知识网络"：`kweaver bkn list`
-- 用户说"查某个知识网络的结构"：`kweaver bkn export <id>`
-- 用户说"查对象实例"：`kweaver query instances <kn-id> <ot-id>`
-- 用户有模糊的业务问题：`kweaver query search <kn-id> "..."`
 
 ## 典型编排
 
-1. **从零构建**: `ds connect` -> `bkn create` -> `bkn build` -> `bkn export` -> `query search`
-2. **探索已有**: `bkn list` -> `bkn export <id>` -> `query instances` / `query search`
-3. **直接查询**: 已知 kn_id 时直接 `query search` 或 `query instances`
+1. **探索已有**：`bkn list` -> `bkn export <id>` -> `bkn search` / `bkn object-type query` / `bkn subgraph`
+2. **创建与更新**：`bkn create --name ...` 或 `bkn create --body-file ...`，再 `bkn update` 调整
+3. **直接查询**：已知 kn-id 时直接 `bkn search`、`bkn object-type query`、`bkn subgraph`
+
+## 端到端：探索与查询
+
+```
+bkn list -> bkn export -> bkn search / bkn object-type query / bkn subgraph
+```
+
+1. **列出**：`kweaver bkn list` 或 `kweaver bkn list --name-pattern erp` → 获取 `kn-id`
+2. **导出 Schema**：`kweaver bkn export <kn-id>` → 获取 `ot-id`、`rt-id`
+3. **语义搜索**：`kweaver bkn search <kn-id> "高库存的产品"`
+4. **对象实例**：`kweaver bkn object-type query <kn-id> <ot-id> '{"limit":50,"condition":{"operation":"and","sub_conditions":[]}}'`
+5. **子图**：`kweaver bkn subgraph <kn-id> '<json>'`，JSON 见 [json-formats.md#subgraph](json-formats.md#subgraph)

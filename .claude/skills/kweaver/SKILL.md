@@ -59,10 +59,13 @@ CLI 按以下顺序尝试认证（无需用户干预）：
 
 需要具体命令形态、参数或编排时，读取以下 reference 文件：
 
-- **BKN 管理/查询、Condition 语法、典型编排** → `skills/kweaver-core/references/bkn.md`
-- **Agent 对话、多轮会话、历史记录** → `skills/kweaver-core/references/agent.md`
-- **Action 执行、约束、日志** → `skills/kweaver-core/references/action.md`
-- **完整命令示例、端到端流程** → `skills/kweaver-core/references/examples.md`
+- **BKN 管理/查询、search、object-type、subgraph、action-type、端到端** → `skills/kweaver-core/references/bkn.md`
+- **查询（bkn search / object-type query / subgraph）、端到端** → `skills/kweaver-core/references/query.md`
+- **Agent 对话、多轮会话、历史记录、端到端** → `skills/kweaver-core/references/agent.md`
+- **Action 执行（bkn action-type / action-log）、约束、端到端** → `skills/kweaver-core/references/action.md`
+- **Context Loader 分层检索、JSON 入参** → `skills/kweaver-core/references/context-loader.md`
+- **通用 API 调用（call 完整 URL）、端到端** → `skills/kweaver-core/references/call.md`
+- **JSON 格式（Condition、object-type query、subgraph、action-type、context-loader）** → `skills/kweaver-core/references/json-formats.md`
 
 ---
 

@@ -42,7 +42,7 @@ CLI 按以下顺序尝试认证（无需用户干预）：
 |--------|------|
 | `auth` | 认证管理（login/status/list/use/delete/logout） |
 | `bkn` | 知识网络管理与查询（list/get/create/update/delete/export/stats；object-type CRUD/properties、relation-type CRUD、subgraph、action-type、action-log） |
-| `agent` | Agent 管理与对话（list、get、chat、sessions、history） |
+| `agent` | Agent 管理与对话（list、chat、sessions、history） |
 | `context-loader` | 分层检索（config、kn-search、query-object-instance、query-instance-subgraph、get-logic-properties、get-action-info） |
 | `call` | 通用 API 调用（GET/POST，自动注入认证） |
 | `token` | 打印当前 access token |
@@ -53,10 +53,17 @@ CLI 按以下顺序尝试认证（无需用户干预）：
 
 需要具体命令形态、参数或编排时，读取本 skill 目录下的 reference 文件：
 
-- **BKN 管理/查询、Condition 语法、典型编排** → `references/bkn.md`
-- **Agent 对话、多轮会话、历史记录** → `references/agent.md`
-- **Action 执行、约束、日志** → `references/action.md`
-- **完整命令示例、端到端流程** → `references/examples.md`
+| 主题 | 文档 |
+|------|------|
+| 认证与多平台 | `references/auth.md` |
+| 知识网络管理 | `references/bkn.md` |
+| 查询（语义/实例/子图） | `references/query.md` |
+| Context Loader | `references/context-loader.md` |
+| Agent 对话 | `references/agent.md` |
+| Action 执行 | `references/action.md` |
+| 通用 API 调用 | `references/call.md` |
+| 数据源（TS CLI 不提供 ds 命令） | `references/datasource.md` |
+| **JSON 格式说明** | `references/json-formats.md` |
 
 ---
 

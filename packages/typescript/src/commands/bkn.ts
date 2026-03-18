@@ -888,7 +888,7 @@ async function runKnSubgraphCommand(args: string[]): Promise<number> {
     if (error instanceof Error && error.message === "help") {
       console.log(`kweaver bkn subgraph <kn-id> '<json>' [--pretty] [-bd value]
 
-Query subgraph via ontology-query API. JSON body format see ref/ontology/ontology-query.yaml.`);
+Query subgraph via ontology-query API. JSON body format see references/json-formats.md#subgraph.`);
       return 0;
     }
     throw error;

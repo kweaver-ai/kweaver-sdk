@@ -435,7 +435,7 @@ async function runQueryObjectInstance(
 ): Promise<number> {
   const body = parseJsonArg(args) as { ot_id: string; limit?: number; condition: ConditionSpec };
   if (!body.ot_id || !body.condition) {
-    console.error("JSON must include ot_id and condition. See ref/contextloader/examples.md");
+    console.error("JSON must include ot_id and condition. See references/json-formats.md#context-loader");
     return 1;
   }
   const result = await queryObjectInstance(options, {
@@ -454,7 +454,7 @@ async function runQueryInstanceSubgraph(
 ): Promise<number> {
   const body = parseJsonArg(args) as { relation_type_paths: RelationTypePath[] };
   if (!Array.isArray(body.relation_type_paths)) {
-    console.error("JSON must include relation_type_paths array. See ref/contextloader/examples.md");
+    console.error("JSON must include relation_type_paths array. See references/json-formats.md#context-loader");
     return 1;
   }
   const result = await queryInstanceSubgraph(options, body);
@@ -476,7 +476,7 @@ async function runGetLogicProperties(
   };
   if (!body.ot_id || !body.query || !body._instance_identities || !body.properties) {
     console.error(
-      "JSON must include ot_id, query, _instance_identities, properties. See ref/contextloader/examples.md"
+      "JSON must include ot_id, query, _instance_identities, properties. See references/json-formats.md#context-loader"
     );
     return 1;
   }
@@ -492,7 +492,7 @@ async function runGetActionInfo(
 ): Promise<number> {
   const body = parseJsonArg(args) as { at_id: string; _instance_identity: Record<string, string> };
   if (!body.at_id || !body._instance_identity) {
-    console.error("JSON must include at_id and _instance_identity. See ref/contextloader/examples.md");
+    console.error("JSON must include at_id and _instance_identity. See references/json-formats.md#context-loader");
     return 1;
   }
   const result = await getActionInfo(options, body);

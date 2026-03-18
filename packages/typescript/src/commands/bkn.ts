@@ -10,6 +10,16 @@ import {
   listObjectTypes,
   listRelationTypes,
   listActionTypes,
+  getObjectType,
+  createObjectTypes,
+  updateObjectType,
+  deleteObjectTypes,
+  getRelationType,
+  createRelationTypes,
+  updateRelationType,
+  deleteRelationTypes,
+  buildKnowledgeNetwork,
+  getBuildStatus,
 } from "../api/knowledge-networks.js";
 import {
   objectTypeQuery,
@@ -23,6 +33,8 @@ import {
   actionLogCancel,
 } from "../api/ontology-query.js";
 import { semanticSearch } from "../api/semantic-search.js";
+import { listTablesWithColumns } from "../api/datasources.js";
+import { createDataView } from "../api/dataviews.js";
 import { formatCallOutput } from "./call.js";
 
 export interface KnListOptions {
@@ -582,16 +594,26 @@ const KN_HELP = `kweaver bkn
 Subcommands:
   list [options]       List business knowledge networks
   get <kn-id> [options]   Get knowledge network detail (use --stats or --export)
-  create [options]     Create a knowledge network
+  create [options]     Create a knowledge network (empty or from --body-file)
+  create-from-ds <ds-id> --name X [--tables a,b] [--build]   Create KN from datasource
   update <kn-id> [options]  Update a knowledge network
   delete <kn-id>       Delete a knowledge network
+  build <kn-id> [--wait|--no-wait] [--timeout n]   Trigger full build
   export <kn-id>       Export knowledge network (alias for get --export)
   stats <kn-id>        Get statistics (alias for get --stats)
   search <kn-id> <query> [options]   Semantic search within a knowledge network
   object-type list <kn-id>   List object types (schema)
+  object-type get <kn-id> <ot-id>   Get object type details
+  object-type create <kn-id> [options]   Create object type (--name --dataview-id --primary-key --display-key)
+  object-type update <kn-id> <ot-id> [options]   Update object type
+  object-type delete <kn-id> <ot-ids> [-y]   Delete object type(s)
   object-type query <kn-id> <ot-id> ['<json>']   Query object instances (ontology-query; supports --limit/--search-after)
   object-type properties <kn-id> <ot-id> '<json>'   Query object properties
   relation-type list <kn-id>   List relation types (schema)
+  relation-type get <kn-id> <rt-id>   Get relation type details
+  relation-type create <kn-id> [options]   Create relation type (--name --source --target [--mapping src:tgt])
+  relation-type update <kn-id> <rt-id> [options]   Update relation type
+  relation-type delete <kn-id> <rt-ids> [-y]   Delete relation type(s)
   subgraph <kn-id> '<json>'   Query subgraph
   action-type list <kn-id>   List action types (schema)
   action-type query <kn-id> <at-id> '<json>'   Query action info
@@ -623,12 +645,20 @@ export async function runKnCommand(args: string[]): Promise<number> {
     return runKnCreateCommand(rest);
   }
 
+  if (subcommand === "create-from-ds") {
+    return runKnCreateFromDsCommand(rest);
+  }
+
   if (subcommand === "update") {
     return runKnUpdateCommand(rest);
   }
 
   if (subcommand === "delete") {
     return runKnDeleteCommand(rest);
+  }
+
+  if (subcommand === "build") {
+    return runKnBuildCommand(rest);
   }
 
   if (subcommand === "export") {
@@ -669,6 +699,171 @@ export async function runKnCommand(args: string[]): Promise<number> {
 
   console.error(`Unknown bkn subcommand: ${subcommand}`);
   return 1;
+}
+
+/** Parse object-type create args: --name --dataview-id --primary-key --display-key [--property '<json>' ...] */
+function parseObjectTypeCreateArgs(args: string[]): {
+  knId: string;
+  body: string;
+  businessDomain: string;
+  branch: string;
+  pretty: boolean;
+} {
+  let name = "";
+  let dataviewId = "";
+  let primaryKey = "";
+  let displayKey = "";
+  let businessDomain = "bd_public";
+  let branch = "main";
+  let pretty = true;
+  const properties: string[] = [];
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--name" && args[i + 1]) {
+      name = args[++i];
+      continue;
+    }
+    if (arg === "--dataview-id" && args[i + 1]) {
+      dataviewId = args[++i];
+      continue;
+    }
+    if (arg === "--primary-key" && args[i + 1]) {
+      primaryKey = args[++i];
+      continue;
+    }
+    if (arg === "--display-key" && args[i + 1]) {
+      displayKey = args[++i];
+      continue;
+    }
+    if (arg === "--property" && args[i + 1]) {
+      properties.push(args[++i]);
+      continue;
+    }
+    if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (arg === "--branch" && args[i + 1]) {
+      branch = args[++i];
+      continue;
+    }
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+    if (!arg.startsWith("-")) positional.push(arg);
+  }
+
+  const knId = positional[0];
+  if (!knId || !name || !dataviewId || !primaryKey || !displayKey) {
+    throw new Error(
+      "Usage: kweaver bkn object-type create <kn-id> --name X --dataview-id Y --primary-key Z --display-key W"
+    );
+  }
+
+  const entry: Record<string, unknown> = {
+    name,
+    data_source: { type: "data_view", id: dataviewId },
+    primary_keys: [primaryKey],
+    display_key: displayKey,
+  };
+  if (properties.length > 0) {
+    entry.data_properties = properties.map((p) => JSON.parse(p));
+  } else {
+    const autoProps = new Set([primaryKey, displayKey]);
+    entry.data_properties = Array.from(autoProps).map((n) => ({
+      name: n,
+      display_name: n,
+      type: "string",
+    }));
+  }
+  const body = JSON.stringify({ entries: [entry], branch });
+
+  return { knId, body, businessDomain, branch, pretty };
+}
+
+/** Parse object-type update args: --name X [--display-key Y] */
+function parseObjectTypeUpdateArgs(args: string[]): {
+  knId: string;
+  otId: string;
+  body: string;
+  businessDomain: string;
+  pretty: boolean;
+} {
+  let name: string | undefined;
+  let displayKey: string | undefined;
+  let businessDomain = "bd_public";
+  let pretty = true;
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--name" && args[i + 1]) {
+      name = args[++i];
+      continue;
+    }
+    if (arg === "--display-key" && args[i + 1]) {
+      displayKey = args[++i];
+      continue;
+    }
+    if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+    if (!arg.startsWith("-")) positional.push(arg);
+  }
+
+  const [knId, otId] = positional;
+  if (!knId || !otId) {
+    throw new Error("Usage: kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y]");
+  }
+  const payload: Record<string, string> = {};
+  if (name !== undefined) payload.name = name;
+  if (displayKey !== undefined) payload.display_key = displayKey;
+  if (Object.keys(payload).length === 0) {
+    throw new Error("No update fields. Use --name or --display-key.");
+  }
+  return { knId, otId, body: JSON.stringify(payload), businessDomain, pretty };
+}
+
+/** Parse object-type delete args: <kn-id> <ot-ids> [-y] */
+function parseObjectTypeDeleteArgs(args: string[]): {
+  knId: string;
+  otIds: string;
+  businessDomain: string;
+  yes: boolean;
+} {
+  let businessDomain = "bd_public";
+  let yes = false;
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--yes" || arg === "-y") {
+      yes = true;
+      continue;
+    }
+    if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (!arg.startsWith("-")) positional.push(arg);
+  }
+
+  const [knId, otIds] = positional;
+  if (!knId || !otIds) {
+    throw new Error("Usage: kweaver bkn object-type delete <kn-id> <ot-ids> [-y]");
+  }
+  return { knId, otIds, businessDomain, yes };
 }
 
 /** Parse common flags for ontology-query subcommands; returns { filteredArgs, pretty, businessDomain } */
@@ -764,19 +959,136 @@ export function parseKnActionTypeExecuteArgs(args: string[]): KnActionTypeExecut
   };
 }
 
+const PK_CANDIDATES = new Set(["id", "pk", "key"]);
+const PK_TYPES = new Set(["integer", "unsigned integer", "string", "varchar", "bigint", "int"]);
+const DISPLAY_HINTS = ["name", "title", "label", "display_name", "description"];
+
+function detectPrimaryKey(table: { name: string; columns: Array<{ name: string; type: string }> }): string {
+  for (const col of table.columns) {
+    if (PK_CANDIDATES.has(col.name.toLowerCase()) && PK_TYPES.has(col.type.toLowerCase())) {
+      return col.name;
+    }
+  }
+  for (const col of table.columns) {
+    if (PK_TYPES.has(col.type.toLowerCase())) {
+      return col.name;
+    }
+  }
+  return table.columns[0]?.name ?? "id";
+}
+
+function detectDisplayKey(
+  table: { name: string; columns: Array<{ name: string; type: string }> },
+  primaryKey: string
+): string {
+  for (const col of table.columns) {
+    if (DISPLAY_HINTS.some((h) => col.name.toLowerCase().includes(h))) {
+      return col.name;
+    }
+  }
+  return primaryKey;
+}
+
+function confirmYes(prompt: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`${prompt} [y/N] `, (answer) => {
+      rl.close();
+      const trimmed = answer.trim().toLowerCase();
+      resolve(trimmed === "y" || trimmed === "yes");
+    });
+  });
+}
+
 async function runKnObjectTypeCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
   if (!action || action === "--help" || action === "-h") {
     console.log(`kweaver bkn object-type list <kn-id> [--pretty] [-bd value]
+kweaver bkn object-type get <kn-id> <ot-id> [--pretty] [-bd value]
+kweaver bkn object-type create <kn-id> --name X --dataview-id Y --primary-key Z --display-key W [--property '<json>' ...]
+kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y]
+kweaver bkn object-type delete <kn-id> <ot-ids> [-y]
 kweaver bkn object-type query <kn-id> <ot-id> ['<json>'] [--limit <n>] [--search-after '<json-array>'] [--pretty] [-bd value]
 kweaver bkn object-type properties <kn-id> <ot-id> '<json>' [--pretty] [-bd value]
 
 list: List object types (schema) from ontology-manager.
+get: Get single object type details.
+create/update/delete: Schema CRUD (create requires dataview-id).
 query/properties: Query via ontology-query API. For query, --limit and --search-after are merged into the JSON body.`);
     return 0;
   }
 
   try {
+    if (action === "get") {
+      const parsed = parseOntologyQueryFlags(rest);
+      const [knId, otId] = parsed.filteredArgs;
+      if (!knId || !otId) {
+        console.error("Usage: kweaver bkn object-type get <kn-id> <ot-id> [options]");
+        return 1;
+      }
+      const token = await ensureValidToken();
+      const body = await getObjectType({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId,
+        otId,
+        businessDomain: parsed.businessDomain,
+      });
+      console.log(formatCallOutput(body, parsed.pretty));
+      return 0;
+    }
+
+    if (action === "create") {
+      const opts = parseObjectTypeCreateArgs(rest);
+      const token = await ensureValidToken();
+      const body = await createObjectTypes({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId: opts.knId,
+        body: opts.body,
+        businessDomain: opts.businessDomain,
+        branch: opts.branch,
+      });
+      console.log(formatCallOutput(body, opts.pretty));
+      return 0;
+    }
+
+    if (action === "update") {
+      const opts = parseObjectTypeUpdateArgs(rest);
+      const token = await ensureValidToken();
+      const body = await updateObjectType({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId: opts.knId,
+        otId: opts.otId,
+        body: opts.body,
+        businessDomain: opts.businessDomain,
+      });
+      console.log(formatCallOutput(body, opts.pretty));
+      return 0;
+    }
+
+    if (action === "delete") {
+      const opts = parseObjectTypeDeleteArgs(rest);
+      if (!opts.yes) {
+        const confirmed = await confirmYes(`Delete object type(s) ${opts.otIds}?`);
+        if (!confirmed) {
+          console.error("Aborted.");
+          return 1;
+        }
+      }
+      const token = await ensureValidToken();
+      await deleteObjectTypes({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId: opts.knId,
+        otIds: opts.otIds,
+        businessDomain: opts.businessDomain,
+      });
+      console.log(`Deleted ${opts.otIds}`);
+      return 0;
+    }
+
     if (action === "list") {
       const parsed = parseOntologyQueryFlags(rest);
       const [knId] = parsed.filteredArgs;
@@ -831,7 +1143,7 @@ query/properties: Query via ontology-query API. For query, --limit and --search-
       return 0;
     }
 
-    console.error(`Unknown object-type action: ${action}. Use list, query, or properties.`);
+    console.error(`Unknown object-type action: ${action}. Use list, get, create, update, delete, query, or properties.`);
     return 1;
   } catch (error) {
     console.error(formatHttpError(error));
@@ -839,36 +1151,263 @@ query/properties: Query via ontology-query API. For query, --limit and --search-
   }
 }
 
+/** Parse relation-type create args: --name --source --target [--mapping src:tgt ...] */
+function parseRelationTypeCreateArgs(args: string[]): {
+  knId: string;
+  body: string;
+  businessDomain: string;
+  branch: string;
+  pretty: boolean;
+} {
+  let name = "";
+  let source = "";
+  let target = "";
+  let businessDomain = "bd_public";
+  let branch = "main";
+  let pretty = true;
+  const mappings: Array<[string, string]> = [];
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--name" && args[i + 1]) {
+      name = args[++i];
+      continue;
+    }
+    if (arg === "--source" && args[i + 1]) {
+      source = args[++i];
+      continue;
+    }
+    if (arg === "--target" && args[i + 1]) {
+      target = args[++i];
+      continue;
+    }
+    if (arg === "--mapping" && args[i + 1]) {
+      const m = args[++i];
+      if (!m.includes(":")) {
+        throw new Error(`Invalid mapping format '${m}'. Expected source_prop:target_prop.`);
+      }
+      const [s, t] = m.split(":", 2);
+      mappings.push([s, t]);
+      continue;
+    }
+    if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (arg === "--branch" && args[i + 1]) {
+      branch = args[++i];
+      continue;
+    }
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+    if (!arg.startsWith("-")) positional.push(arg);
+  }
+
+  const knId = positional[0];
+  if (!knId || !name || !source || !target) {
+    throw new Error(
+      "Usage: kweaver bkn relation-type create <kn-id> --name X --source <ot-id> --target <ot-id> [--mapping src:tgt ...]"
+    );
+  }
+
+  const entry: Record<string, unknown> = {
+    name,
+    source_object_type_id: source,
+    target_object_type_id: target,
+    type: "direct",
+    mapping_rules: mappings.map(([s, t]) => ({
+      source_property: { name: s },
+      target_property: { name: t },
+    })),
+  };
+  const body = JSON.stringify({ entries: [entry], branch });
+
+  return { knId, body, businessDomain, branch, pretty };
+}
+
+/** Parse relation-type update args: [--name X] */
+function parseRelationTypeUpdateArgs(args: string[]): {
+  knId: string;
+  rtId: string;
+  body: string;
+  businessDomain: string;
+  pretty: boolean;
+} {
+  let name: string | undefined;
+  let businessDomain = "bd_public";
+  let pretty = true;
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--name" && args[i + 1]) {
+      name = args[++i];
+      continue;
+    }
+    if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+    if (!arg.startsWith("-")) positional.push(arg);
+  }
+
+  const [knId, rtId] = positional;
+  if (!knId || !rtId) {
+    throw new Error("Usage: kweaver bkn relation-type update <kn-id> <rt-id> [--name X]");
+  }
+  if (name === undefined) {
+    throw new Error("No update fields. Use --name.");
+  }
+  return { knId, rtId, body: JSON.stringify({ name }), businessDomain, pretty };
+}
+
+/** Parse relation-type delete args: <kn-id> <rt-ids> [-y] */
+function parseRelationTypeDeleteArgs(args: string[]): {
+  knId: string;
+  rtIds: string;
+  businessDomain: string;
+  yes: boolean;
+} {
+  let businessDomain = "bd_public";
+  let yes = false;
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--yes" || arg === "-y") {
+      yes = true;
+      continue;
+    }
+    if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (!arg.startsWith("-")) positional.push(arg);
+  }
+
+  const [knId, rtIds] = positional;
+  if (!knId || !rtIds) {
+    throw new Error("Usage: kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]");
+  }
+  return { knId, rtIds, businessDomain, yes };
+}
+
 async function runKnRelationTypeCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
   if (!action || action === "--help" || action === "-h") {
     console.log(`kweaver bkn relation-type list <kn-id> [--pretty] [-bd value]
+kweaver bkn relation-type get <kn-id> <rt-id> [--pretty] [-bd value]
+kweaver bkn relation-type create <kn-id> --name X --source <ot-id> --target <ot-id> [--mapping src:tgt ...]
+kweaver bkn relation-type update <kn-id> <rt-id> [--name X]
+kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]
 
-List relation types (schema) from ontology-manager.`);
+list: List relation types (schema) from ontology-manager.
+get: Get single relation type details.
+create/update/delete: Schema CRUD.`);
     return 0;
-  }
-
-  if (action !== "list") {
-    console.error(`Unknown relation-type action: ${action}. Use list.`);
-    return 1;
   }
 
   try {
-    const parsed = parseOntologyQueryFlags(rest);
-    const [knId] = parsed.filteredArgs;
-    if (!knId) {
-      console.error("Usage: kweaver bkn relation-type list <kn-id> [options]");
-      return 1;
+    if (action === "get") {
+      const parsed = parseOntologyQueryFlags(rest);
+      const [knId, rtId] = parsed.filteredArgs;
+      if (!knId || !rtId) {
+        console.error("Usage: kweaver bkn relation-type get <kn-id> <rt-id> [options]");
+        return 1;
+      }
+      const token = await ensureValidToken();
+      const body = await getRelationType({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId,
+        rtId,
+        businessDomain: parsed.businessDomain,
+      });
+      console.log(formatCallOutput(body, parsed.pretty));
+      return 0;
     }
-    const token = await ensureValidToken();
-    const body = await listRelationTypes({
-      baseUrl: token.baseUrl,
-      accessToken: token.accessToken,
-      knId,
-      businessDomain: parsed.businessDomain,
-    });
-    console.log(formatCallOutput(body, parsed.pretty));
-    return 0;
+
+    if (action === "create") {
+      const opts = parseRelationTypeCreateArgs(rest);
+      const token = await ensureValidToken();
+      const body = await createRelationTypes({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId: opts.knId,
+        body: opts.body,
+        businessDomain: opts.businessDomain,
+        branch: opts.branch,
+      });
+      console.log(formatCallOutput(body, opts.pretty));
+      return 0;
+    }
+
+    if (action === "update") {
+      const opts = parseRelationTypeUpdateArgs(rest);
+      const token = await ensureValidToken();
+      const body = await updateRelationType({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId: opts.knId,
+        rtId: opts.rtId,
+        body: opts.body,
+        businessDomain: opts.businessDomain,
+      });
+      console.log(formatCallOutput(body, opts.pretty));
+      return 0;
+    }
+
+    if (action === "delete") {
+      const opts = parseRelationTypeDeleteArgs(rest);
+      if (!opts.yes) {
+        const confirmed = await confirmYes(`Delete relation type(s) ${opts.rtIds}?`);
+        if (!confirmed) {
+          console.error("Aborted.");
+          return 1;
+        }
+      }
+      const token = await ensureValidToken();
+      await deleteRelationTypes({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId: opts.knId,
+        rtIds: opts.rtIds,
+        businessDomain: opts.businessDomain,
+      });
+      console.log(`Deleted ${opts.rtIds}`);
+      return 0;
+    }
+
+    if (action === "list") {
+      const parsed = parseOntologyQueryFlags(rest);
+      const [knId] = parsed.filteredArgs;
+      if (!knId) {
+        console.error("Usage: kweaver bkn relation-type list <kn-id> [options]");
+        return 1;
+      }
+      const token = await ensureValidToken();
+      const body = await listRelationTypes({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId,
+        businessDomain: parsed.businessDomain,
+      });
+      console.log(formatCallOutput(body, parsed.pretty));
+      return 0;
+    }
+
+    console.error(`Unknown relation-type action: ${action}. Use list, get, create, update, or delete.`);
+    return 1;
   } catch (error) {
     console.error(formatHttpError(error));
     return 1;
@@ -1418,6 +1957,206 @@ async function runKnCreateCommand(args: string[]): Promise<number> {
   }
 }
 
+const KN_CREATE_FROM_DS_HELP = `kweaver bkn create-from-ds <ds-id> --name X [options]
+
+Create a knowledge network from a datasource (dataviews + object types + optional build).
+
+Options:
+  --name <s>       Knowledge network name (required)
+  --tables <a,b>   Comma-separated table names (default: all)
+  --build (default)  Build after creation
+  --no-build       Skip build after creation
+  --timeout <n>    Build timeout in seconds (default: 300)
+  -bd, --biz-domain  Business domain (default: bd_public)
+  --pretty         Pretty-print output (default)`;
+
+function parseKnCreateFromDsArgs(args: string[]): {
+  dsId: string;
+  name: string;
+  tables: string[];
+  build: boolean;
+  timeout: number;
+  businessDomain: string;
+  pretty: boolean;
+} {
+  let dsId = "";
+  let name = "";
+  let tablesStr = "";
+  let build = true;
+  let timeout = 300;
+  let businessDomain = "bd_public";
+  let pretty = true;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--name" && args[i + 1]) {
+      name = args[++i];
+      continue;
+    }
+    if (arg === "--tables" && args[i + 1]) {
+      tablesStr = args[++i];
+      continue;
+    }
+    if (arg === "--build") {
+      build = true;
+      continue;
+    }
+    if (arg === "--no-build") {
+      build = false;
+      continue;
+    }
+    if (arg === "--timeout" && args[i + 1]) {
+      timeout = parseInt(args[++i], 10);
+      if (Number.isNaN(timeout) || timeout < 1) timeout = 300;
+      continue;
+    }
+    if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+    if (!arg.startsWith("-") && !dsId) {
+      dsId = arg;
+    }
+  }
+
+  const tables = tablesStr ? tablesStr.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  if (!dsId || !name) {
+    throw new Error("Usage: kweaver bkn create-from-ds <ds-id> --name X [options]");
+  }
+  return { dsId, name, tables, build, timeout, businessDomain, pretty };
+}
+
+async function runKnCreateFromDsCommand(args: string[]): Promise<number> {
+  let options: ReturnType<typeof parseKnCreateFromDsArgs>;
+  try {
+    options = parseKnCreateFromDsArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(KN_CREATE_FROM_DS_HELP);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  try {
+    const token = await ensureValidToken();
+    const base = {
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      businessDomain: options.businessDomain,
+    };
+
+    const tablesBody = await listTablesWithColumns({ ...base, id: options.dsId });
+    const allTables = JSON.parse(tablesBody) as Array<{
+      name: string;
+      columns: Array<{ name: string; type: string }>;
+    }>;
+
+    const targetTables = options.tables.length > 0
+      ? allTables.filter((t) => options.tables.includes(t.name))
+      : allTables;
+
+    if (targetTables.length === 0) {
+      console.error("No tables available");
+      return 1;
+    }
+
+    const viewMap: Record<string, string> = {};
+    for (const t of targetTables) {
+      const dvId = await createDataView({
+        ...base,
+        name: t.name,
+        datasourceId: options.dsId,
+        table: t.name,
+        fields: t.columns.map((c) => ({ name: c.name, type: c.type })),
+      });
+      viewMap[t.name] = dvId;
+    }
+
+    const knBody = JSON.stringify({
+      name: options.name,
+      branch: "main",
+      base_branch: "",
+    });
+    const knResponse = await createKnowledgeNetwork({
+      ...base,
+      body: knBody,
+    });
+    const knParsed = JSON.parse(knResponse) as Record<string, unknown> | Array<Record<string, unknown>>;
+    const knItem = Array.isArray(knParsed) ? knParsed[0] : knParsed;
+    const knId = String(knItem?.id ?? "");
+
+    const otResults: Array<{ name: string; id: string; field_count: number }> = [];
+    for (const t of targetTables) {
+      const pk = detectPrimaryKey(t);
+      const dk = detectDisplayKey(t, pk);
+      const entry = {
+        name: t.name,
+        data_source: { type: "data_view", id: viewMap[t.name] },
+        primary_keys: [pk],
+        display_key: dk,
+        data_properties: [pk, dk].filter((x, i, a) => a.indexOf(x) === i).map((n) => ({
+          name: n,
+          display_name: n,
+          type: "string",
+        })),
+      };
+      const otBody = JSON.stringify({ entries: [entry], branch: "main" });
+      const otResponse = await createObjectTypes({
+        ...base,
+        knId,
+        body: otBody,
+      });
+      const otParsed = JSON.parse(otResponse) as { entries?: Array<{ id?: string; name?: string }> };
+      const otItem = otParsed.entries?.[0];
+      otResults.push({
+        name: t.name,
+        id: otItem?.id ?? "",
+        field_count: t.columns.length,
+      });
+    }
+
+    let statusStr = "skipped";
+    if (options.build) {
+      console.error("Building ...");
+      await buildKnowledgeNetwork({ ...base, knId });
+      const deadline = Date.now() + options.timeout * 1000;
+      const TERMINAL = ["completed", "failed", "success"];
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const statusBody = await getBuildStatus({ ...base, knId });
+        const statusParsed = JSON.parse(statusBody) as
+          | Array<{ state?: string }>
+          | { entries?: Array<{ state?: string }> };
+        const jobs = Array.isArray(statusParsed) ? statusParsed : (statusParsed.entries ?? []);
+        const state = (jobs[0]?.state ?? "running").toLowerCase();
+        if (TERMINAL.includes(state)) {
+          statusStr = state;
+          break;
+        }
+      }
+    }
+
+    const output = {
+      kn_id: knId,
+      kn_name: options.name,
+      object_types: otResults,
+      status: statusStr,
+    };
+    console.log(JSON.stringify(output, null, options.pretty ? 2 : 0));
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
+}
+
 async function runKnUpdateCommand(args: string[]): Promise<number> {
   let options: KnUpdateOptions;
   try {
@@ -1492,6 +2231,126 @@ async function runKnDeleteCommand(args: string[]): Promise<number> {
       businessDomain: options.businessDomain,
     });
     return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
+}
+
+const KN_BUILD_HELP = `kweaver bkn build <kn-id> [options]
+
+Trigger a full build for a knowledge network.
+
+Options:
+  --wait (default)     Poll until build completes
+  --no-wait            Return immediately after triggering
+  --timeout <seconds>  Max wait time when --wait (default: 300)
+  -bd, --biz-domain    Business domain (default: bd_public)`;
+
+export function parseKnBuildArgs(args: string[]): {
+  knId: string;
+  wait: boolean;
+  timeout: number;
+  businessDomain: string;
+} {
+  let knId = "";
+  let wait = true;
+  let timeout = 300;
+  let businessDomain = "bd_public";
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--wait") {
+      wait = true;
+      continue;
+    }
+    if (arg === "--no-wait") {
+      wait = false;
+      continue;
+    }
+    if (arg === "--timeout" && args[i + 1]) {
+      timeout = parseInt(args[i + 1], 10);
+      if (Number.isNaN(timeout) || timeout < 1) timeout = 300;
+      i += 1;
+      continue;
+    }
+    if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (!arg.startsWith("-") && !knId) {
+      knId = arg;
+    }
+  }
+
+  if (!knId) {
+    throw new Error("Missing kn-id. Usage: kweaver bkn build <kn-id> [options]");
+  }
+  return { knId, wait, timeout, businessDomain };
+}
+
+async function runKnBuildCommand(args: string[]): Promise<number> {
+  let options: ReturnType<typeof parseKnBuildArgs>;
+  try {
+    options = parseKnBuildArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(KN_BUILD_HELP);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  const TERMINAL_STATES = ["completed", "failed", "success"];
+
+  try {
+    const token = await ensureValidToken();
+    await buildKnowledgeNetwork({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      knId: options.knId,
+      businessDomain: options.businessDomain,
+    });
+    console.error(`Build started for ${options.knId}`);
+
+    if (!options.wait) {
+      console.error("Build triggered (not waiting).");
+      return 0;
+    }
+
+    console.error("Waiting for build to complete ...");
+    const deadline = Date.now() + options.timeout * 1000;
+
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const body = await getBuildStatus({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId: options.knId,
+        businessDomain: options.businessDomain,
+      });
+      const parsed = JSON.parse(body) as
+        | Array<{ state?: string; state_detail?: string }>
+        | { entries?: Array<{ state?: string; state_detail?: string }>; data?: Array<{ state?: string; state_detail?: string }> };
+      const jobs = Array.isArray(parsed) ? parsed : (parsed.entries ?? parsed.data ?? []);
+      const job = jobs[0];
+      const state = (job?.state ?? "running").toLowerCase();
+      const detail = job?.state_detail;
+
+      if (TERMINAL_STATES.includes(state)) {
+        console.log(state);
+        if (detail) {
+          console.log(`Detail: ${detail}`);
+        }
+        return state === "failed" ? 1 : 0;
+      }
+    }
+
+    console.error(`Build did not complete within ${options.timeout}s`);
+    return 1;
   } catch (error) {
     console.error(formatHttpError(error));
     return 1;

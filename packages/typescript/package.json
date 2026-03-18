@@ -28,6 +28,7 @@
     "start": "node ./dist/cli.js",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/**/*.test.ts",
+    "test:e2e": "node --import tsx --test test/e2e/**/*.test.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

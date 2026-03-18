@@ -7,6 +7,7 @@
 | 命令 | 说明 |
 |------|------|
 | `kweaver agent list [options]` | 列出已发布 Agent |
+| `kweaver agent get <agent-id>` | 获取单个 Agent 详情 |
 | `kweaver agent chat <agent-id> -m "<message>"` | 发送单轮消息 |
 | `kweaver agent sessions <agent-id>` | 列出与某个 Agent 的历史会话 |
 | `kweaver agent history <conversation-id>` | 查看某次会话的完整消息记录 |
@@ -14,6 +15,7 @@
 ## 何时使用
 
 - 用户说"有哪些 Agent"：`agent list`
+- 用户说"查看某个 Agent 详情"：`agent get`
 - 用户说"跟 Agent 对话"：`agent chat`
 - 用户说"看看历史会话"：`agent sessions` / `agent history`
 
@@ -31,6 +33,14 @@
 | `--is-to-square` | 是否 to-square |
 | `--verbose, -v` | 完整 JSON |
 | `-bd` | 业务域 |
+
+### agent get
+
+| 参数 | 说明 |
+|------|------|
+| `--verbose, -v` | 完整 JSON |
+| `-bd` | 业务域 |
+| `--pretty` | 格式化 JSON（默认） |
 
 ### agent chat
 
@@ -57,6 +67,10 @@
 # 列出
 kweaver agent list
 kweaver agent list --name "供应链" --limit 20
+
+# 获取单个 Agent 详情
+kweaver agent get <agent-id>
+kweaver agent get <agent-id> --verbose
 
 # 首轮对话
 kweaver agent chat <agent-id> -m "华东仓库库存情况如何？"

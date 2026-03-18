@@ -1,6 +1,6 @@
 import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
 import { runAgentChatCommand } from "./agent-chat.js";
-import { listAgents } from "../api/agent-list.js";
+import { listAgents, getAgent } from "../api/agent-list.js";
 import { listConversations, listMessages } from "../api/conversations.js";
 import { formatCallOutput } from "./call.js";
 
@@ -302,6 +302,7 @@ Subcommands:
        [--verbose]                   Print request details to stderr
        [-bd|--biz-domain value]      Override x-business-domain (default: bd_public)
   list [options]                    List published agents
+  get <agent_id> [--verbose]         Get agent details
   sessions <agent_id>                List all conversations for an agent
        [--limit n] [-bd domain] [--pretty]
   history <conversation_id>          Show message history for a conversation
@@ -335,6 +336,21 @@ Options:
       return Promise.resolve(0);
     }
     return runAgentChatCommand(rest);
+  }
+
+  if (subcommand === "get") {
+    if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
+      console.log(`kweaver agent get <agent_id> [options]
+
+Get agent details from the agent-factory API.
+
+Options:
+  --verbose, -v             Show full JSON response
+  -bd, --biz-domain <value>  Business domain (default: bd_public)
+  --pretty                   Pretty-print JSON output (default)`);
+      return Promise.resolve(0);
+    }
+    return runAgentGetCommand(rest);
   }
 
   if (subcommand === "list") {
@@ -390,6 +406,112 @@ Options:
 
   console.error(`Unknown agent subcommand: ${subcommand}`);
   return Promise.resolve(1);
+}
+
+export interface AgentGetOptions {
+  agentId: string;
+  businessDomain: string;
+  pretty: boolean;
+  verbose: boolean;
+}
+
+export function parseAgentGetArgs(args: string[]): AgentGetOptions {
+  const agentId = args[0];
+  if (!agentId || agentId.startsWith("-")) {
+    throw new Error("Missing agent_id. Usage: kweaver agent get <agent_id> [options]");
+  }
+
+  let businessDomain = "bd_public";
+  let pretty = true;
+  let verbose = false;
+
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === "--help" || arg === "-h") {
+      throw new Error("help");
+    }
+
+    if (arg === "-bd" || arg === "--biz-domain") {
+      businessDomain = args[i + 1] ?? "bd_public";
+      if (!businessDomain || businessDomain.startsWith("-")) {
+        throw new Error("Missing value for biz-domain flag");
+      }
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+
+    if (arg === "--verbose" || arg === "-v") {
+      verbose = true;
+      continue;
+    }
+
+    throw new Error(`Unsupported agent get argument: ${arg}`);
+  }
+
+  return { agentId, businessDomain, pretty, verbose };
+}
+
+function formatSimpleAgentGet(text: string, pretty: boolean): string {
+  const parsed = JSON.parse(text) as Record<string, unknown>;
+  const config = (parsed.config as Record<string, unknown>) ?? {};
+  const ds = (config.data_source as Record<string, unknown>) ?? {};
+  const kg = (ds.kg as Array<Record<string, unknown>>) ?? [];
+  const knIds = (parsed.kn_ids as string[]) ?? kg.map((k) => String(k.kg_id ?? "")).filter(Boolean);
+  const simplified = {
+    id: parsed.id,
+    name: parsed.name,
+    description: parsed.profile ?? parsed.description ?? "",
+    status: parsed.status,
+    kn_ids: knIds,
+  };
+  return JSON.stringify(simplified, null, pretty ? 2 : 0);
+}
+
+async function runAgentGetCommand(args: string[]): Promise<number> {
+  let options: AgentGetOptions;
+  try {
+    options = parseAgentGetArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver agent get <agent_id> [options]
+
+Get agent details from the agent-factory API.
+
+Options:
+  --verbose, -v             Show full JSON response
+  -bd, --biz-domain <value>  Business domain (default: bd_public)
+  --pretty                   Pretty-print JSON output (default)`);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  try {
+    const token = await ensureValidToken();
+    const body = await getAgent({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      agentId: options.agentId,
+      businessDomain: options.businessDomain,
+    });
+
+    if (body) {
+      console.log(
+        options.verbose ? formatCallOutput(body, options.pretty) : formatSimpleAgentGet(body, options.pretty)
+      );
+    }
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
 }
 
 async function runAgentListCommand(args: string[]): Promise<number> {

@@ -41,8 +41,9 @@ CLI 按以下顺序尝试认证（无需用户干预）：
 | 命令组 | 说明 |
 |--------|------|
 | `auth` | 认证管理（login/status/list/use/delete/logout） |
-| `bkn` | 知识网络管理与查询（list/get/create/update/delete/export/stats；object-type CRUD/properties、relation-type CRUD、subgraph、action-type、action-log） |
-| `agent` | Agent 管理与对话（list、chat、sessions、history） |
+| `bkn` | 知识网络管理与查询（list/get/create/create-from-ds/update/delete/export/stats/build；object-type CRUD/properties、relation-type CRUD、subgraph、action-type、action-log） |
+| `agent` | Agent 管理与对话（list、get、chat、sessions、history） |
+| `ds` | 数据源管理（list/get/delete/tables/connect） |
 | `context-loader` | 分层检索（config、kn-search、query-object-instance、query-instance-subgraph、get-logic-properties、get-action-info） |
 | `call` | 通用 API 调用（GET/POST，自动注入认证） |
 | `token` | 打印当前 access token |
@@ -62,7 +63,7 @@ CLI 按以下顺序尝试认证（无需用户干预）：
 | Agent 对话 | `references/agent.md` |
 | Action 执行 | `references/action.md` |
 | 通用 API 调用 | `references/call.md` |
-| 数据源（TS CLI 不提供 ds 命令） | `references/datasource.md` |
+| 数据源管理 | `references/datasource.md` |
 | **JSON 格式说明** | `references/json-formats.md` |
 
 ---

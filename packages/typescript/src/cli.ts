@@ -3,6 +3,7 @@ import { runAuthCommand } from "./commands/auth.js";
 import { runKnCommand } from "./commands/bkn.js";
 import { runCallCommand } from "./commands/call.js";
 import { runContextLoaderCommand } from "./commands/context-loader.js";
+import { runDsCommand } from "./commands/ds.js";
 import { runTokenCommand } from "./commands/token.js";
 
 function printHelp(): void {
@@ -21,6 +22,10 @@ Usage:
   kweaver call <url> [-X METHOD] [-H "Name: value"] [-d BODY] [--pretty] [--verbose] [-bd value]
   kweaver agent chat <agent_id> [-m "message"] [--version value] [--conversation-id id] [--stream] [--no-stream] [--verbose] [-bd value]
   kweaver agent list [options]
+  kweaver agent get <agent_id> [options]
+  kweaver ds list [options]
+  kweaver ds get <id>
+  kweaver ds connect <db_type> <host> <port> <database> --account X --password Y
   kweaver bkn list [options]
   kweaver bkn get <kn-id> [options]
   kweaver bkn search <kn-id> <query> [options]
@@ -34,6 +39,7 @@ Commands:
   auth           Login, list, inspect, and switch saved platform auth profiles
   token          Print the current access token, refreshing it first if needed
   call           Call an API with curl-style flags and auto-injected token headers
+  ds             Manage datasources (list, get, delete, tables, connect)
   agent          Chat with a KWeaver agent (agent chat <id>), list published agents (agent list)
   bkn           Business knowledge network (list/get/create/update/delete/export/stats; object-type, subgraph, action-type, action-log)
   context-loader Call context-loader MCP (tools, resources, prompts; kn-search, query-*, etc.)
@@ -54,6 +60,10 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "call" || command === "curl") {
     return runCallCommand(rest);
+  }
+
+  if (command === "ds") {
+    return runDsCommand(rest);
   }
 
   if (command === "token") {

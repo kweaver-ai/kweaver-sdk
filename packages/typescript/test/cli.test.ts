@@ -27,12 +27,15 @@ import {
   parseKnObjectTypeQueryArgs,
   parseKnActionTypeExecuteArgs,
   parseKnSearchArgs,
+  parseKnBuildArgs,
   formatSimpleKnList,
 } from "../src/commands/bkn.js";
+import { parseDsListArgs } from "../src/commands/ds.js";
 import {
   parseAgentListArgs,
   parseAgentSessionsArgs,
   parseAgentHistoryArgs,
+  parseAgentGetArgs,
   formatSimpleAgentList,
 } from "../src/commands/agent.js";
 import { parseTokenArgs } from "../src/commands/token.js";
@@ -1001,6 +1004,97 @@ test("run bkn action-log --help shows list get cancel", async () => {
   }
 });
 
+test("run bkn build --help shows build options", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["bkn", "build", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("bkn build"));
+    assert.ok(help.includes("--wait"));
+    assert.ok(help.includes("--no-wait"));
+    assert.ok(help.includes("--timeout"));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test("run bkn object-type create --help shows create usage", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["bkn", "object-type", "create", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("object-type create"));
+    assert.ok(help.includes("--name"));
+    assert.ok(help.includes("--dataview-id"));
+    assert.ok(help.includes("--primary-key"));
+    assert.ok(help.includes("--display-key"));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test("run bkn relation-type create --help shows create usage", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["bkn", "relation-type", "create", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("relation-type create"));
+    assert.ok(help.includes("--name"));
+    assert.ok(help.includes("--source"));
+    assert.ok(help.includes("--target"));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test("run agent get --help shows get options", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["agent", "get", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("agent get"));
+    assert.ok(help.includes("<agent_id>"));
+    assert.ok(help.includes("--verbose"));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test("run ds --help shows ds subcommands", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["ds", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("list"));
+    assert.ok(help.includes("get"));
+    assert.ok(help.includes("delete"));
+    assert.ok(help.includes("tables"));
+    assert.ok(help.includes("connect"));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
 test("run agent list --help shows list options", async () => {
   const lines: string[] = [];
   const originalLog = console.log;
@@ -1160,6 +1254,60 @@ test("parseAgentHistoryArgs parses positional conversation_id", () => {
 test("parseAgentHistoryArgs parses --limit", () => {
   const opts = parseAgentHistoryArgs(["conv-abc", "--limit", "20"]);
   assert.equal(opts.limit, 20);
+});
+
+test("parseAgentGetArgs parses agent_id and options", () => {
+  const opts = parseAgentGetArgs(["agent-123", "--verbose", "-bd", "bd_enterprise"]);
+  assert.equal(opts.agentId, "agent-123");
+  assert.equal(opts.verbose, true);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+  assert.equal(opts.pretty, true);
+});
+
+test("parseAgentGetArgs requires agent_id", () => {
+  assert.throws(() => parseAgentGetArgs([]), /Missing agent_id/);
+});
+
+test("parseAgentGetArgs throws on unknown flag", () => {
+  assert.throws(
+    () => parseAgentGetArgs(["agent-123", "--unknown"]),
+    /Unsupported agent get argument/
+  );
+});
+
+test("parseKnBuildArgs parses kn-id with defaults", () => {
+  const opts = parseKnBuildArgs(["kn-123"]);
+  assert.equal(opts.knId, "kn-123");
+  assert.equal(opts.wait, true);
+  assert.equal(opts.timeout, 300);
+  assert.equal(opts.businessDomain, "bd_public");
+});
+
+test("parseKnBuildArgs parses --no-wait and --timeout", () => {
+  const opts = parseKnBuildArgs(["kn-456", "--no-wait", "--timeout", "60", "-bd", "bd_enterprise"]);
+  assert.equal(opts.knId, "kn-456");
+  assert.equal(opts.wait, false);
+  assert.equal(opts.timeout, 60);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseKnBuildArgs requires kn-id", () => {
+  assert.throws(() => parseKnBuildArgs([]), /Missing kn-id/);
+});
+
+test("parseDsListArgs parses flags with defaults", () => {
+  const opts = parseDsListArgs([]);
+  assert.equal(opts.keyword, undefined);
+  assert.equal(opts.type, undefined);
+  assert.equal(opts.businessDomain, "bd_public");
+  assert.equal(opts.pretty, true);
+});
+
+test("parseDsListArgs parses --keyword --type -bd", () => {
+  const opts = parseDsListArgs(["--keyword", "mysql", "--type", "mysql", "-bd", "bd_enterprise"]);
+  assert.equal(opts.keyword, "mysql");
+  assert.equal(opts.type, "mysql");
+  assert.equal(opts.businessDomain, "bd_enterprise");
 });
 
 // ── parseKnSearchArgs ─────────────────────────────────────────────────────────

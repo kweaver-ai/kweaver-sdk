@@ -46,10 +46,45 @@ export async function listAgents(options: ListAgentsOptions): Promise<string> {
       token: accessToken,
       "x-business-domain": businessDomain,
       "x-language": "zh-CN",
-      "x-requested-with": "XMLHttpRequest",
-      "content-type": "application/json",
     },
     body,
+  });
+
+  const responseBody = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, responseBody);
+  }
+  return responseBody;
+}
+
+export interface GetAgentOptions {
+  baseUrl: string;
+  accessToken: string;
+  agentId: string;
+  businessDomain?: string;
+}
+
+export async function getAgent(options: GetAgentOptions): Promise<string> {
+  const {
+    baseUrl,
+    accessToken,
+    agentId,
+    businessDomain = "bd_public",
+  } = options;
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/agent-factory/v3/agent/${encodeURIComponent(agentId)}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      accept: "application/json, text/plain, */*",
+      "accept-language": "zh-CN",
+      authorization: `Bearer ${accessToken}`,
+      token: accessToken,
+      "x-business-domain": businessDomain,
+      "x-language": "zh-CN",
+    },
   });
 
   const responseBody = await response.text();

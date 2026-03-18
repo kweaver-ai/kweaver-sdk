@@ -795,7 +795,7 @@ def test_auth_delete_aborted(runner):
 
 
 def test_token_prints_access_token(runner):
-    with patch("kweaver.cli.token.PlatformStore") as MockStore:
+    with patch("kweaver.cli.token_cmd.PlatformStore") as MockStore:
         store = MockStore.return_value
         store.get_active.return_value = "https://example.com"
         store.load_token.return_value = {"accessToken": "tok-abc123"}
@@ -805,7 +805,7 @@ def test_token_prints_access_token(runner):
 
 
 def test_token_no_platform(runner):
-    with patch("kweaver.cli.token.PlatformStore") as MockStore:
+    with patch("kweaver.cli.token_cmd.PlatformStore") as MockStore:
         store = MockStore.return_value
         store.get_active.return_value = None
         result = runner.invoke(cli, ["token"])
@@ -813,7 +813,7 @@ def test_token_no_platform(runner):
 
 
 def test_token_no_token_stored(runner):
-    with patch("kweaver.cli.token.PlatformStore") as MockStore:
+    with patch("kweaver.cli.token_cmd.PlatformStore") as MockStore:
         store = MockStore.return_value
         store.get_active.return_value = "https://example.com"
         store.load_token.return_value = {}

@@ -12,7 +12,7 @@ from kweaver.cli.action import action_group
 from kweaver.cli.agent import agent_group
 from kweaver.cli.call import call_cmd
 from kweaver.cli.context_loader import context_loader_group
-from kweaver.cli.token import token_cmd
+from kweaver.cli.token_cmd import token_cmd
 
 
 @click.group()

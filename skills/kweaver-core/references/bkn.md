@@ -16,12 +16,21 @@
 | `kweaver bkn update <kn-id> [options]` | 更新网络 |
 | `kweaver bkn delete <kn-id> [--yes]` | 删除网络（默认需确认） |
 
-### Schema 列表（ontology-manager）
+### Schema 管理（ontology-manager）
 
 | 命令 | 说明 |
 |------|------|
 | `kweaver bkn object-type list <kn-id>` | 列出对象类 |
+| `kweaver bkn object-type get <kn-id> <ot-id>` | 查看对象类详情 |
+| `kweaver bkn object-type create <kn-id> --name <name> --dataview-id <dv-id> --primary-key <pk> --display-key <dk> [--property '<json>']...` | 创建对象类 |
+| `kweaver bkn object-type update <kn-id> <ot-id> [--name <name>] [--display-key <dk>]` | 更新对象类 |
+| `kweaver bkn object-type delete <kn-id> <ot-ids> [--yes]` | 删除对象类 |
+| `kweaver bkn object-type properties <kn-id> <ot-id> '<json>'` | 查询实例属性值（需传 `_instance_identities` 和 `properties`） |
 | `kweaver bkn relation-type list <kn-id>` | 列出关系类 |
+| `kweaver bkn relation-type get <kn-id> <rt-id>` | 查看关系类详情 |
+| `kweaver bkn relation-type create <kn-id> --name <name> --source <ot-id> --target <ot-id> [--mapping src:tgt]...` | 创建关系类 |
+| `kweaver bkn relation-type update <kn-id> <rt-id> [--name <name>]` | 更新关系类 |
+| `kweaver bkn relation-type delete <kn-id> <rt-ids> [--yes]` | 删除关系类 |
 | `kweaver bkn action-type list <kn-id>` | 列出行动类 |
 
 ### 查询（ontology-query 只读）

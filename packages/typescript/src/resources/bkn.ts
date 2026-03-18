@@ -125,4 +125,31 @@ export class BknResource {
     const raw = await actionLogCancel({ ...this.ctx.base(), knId, logId });
     return JSON.parse(raw) as unknown;
   }
+
+  /**
+   * Search KN schema — finds matching object types, relation types, and action types.
+   * Uses MCP protocol via the context-loader (public endpoint).
+   */
+  async knSearch(
+    knId: string,
+    query: string,
+    opts: { onlySchema?: boolean } = {}
+  ): Promise<{
+    object_types?: unknown[];
+    relation_types?: unknown[];
+    action_types?: unknown[];
+    nodes?: unknown[];
+  }> {
+    const { ContextLoaderResource } = await import("./context-loader.js");
+    const { baseUrl } = this.ctx.base();
+    const mcpUrl = `${baseUrl}/api/agent-retrieval/v1/mcp`;
+    const cl = new ContextLoaderResource(this.ctx, mcpUrl, knId);
+    const result = await cl.search({ query, only_schema: opts.onlySchema ?? false });
+    return result as {
+      object_types?: unknown[];
+      relation_types?: unknown[];
+      action_types?: unknown[];
+      nodes?: unknown[];
+    };
+  }
 }

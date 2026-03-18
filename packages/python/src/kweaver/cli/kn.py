@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -245,6 +246,102 @@ def object_type_list(kn_id: str) -> None:
     pp([ot.model_dump() for ot in ots])
 
 
+@object_type_group.command("get")
+@click.argument("kn_id")
+@click.argument("ot_id")
+@handle_errors
+def object_type_get(kn_id: str, ot_id: str) -> None:
+    """Get object type details."""
+    client = make_client()
+    ot = client.object_types.get(kn_id, ot_id)
+    pp(ot.model_dump())
+
+
+@object_type_group.command("create")
+@click.argument("kn_id")
+@click.option("--name", required=True, help="Object type name.")
+@click.option("--dataview-id", required=True, help="Dataview ID.")
+@click.option("--primary-key", required=True, help="Primary key column name.")
+@click.option("--display-key", required=True, help="Display key column name.")
+@click.option("--property", "properties", multiple=True, help="Property JSON (repeatable).")
+@handle_errors
+def object_type_create(
+    kn_id: str,
+    name: str,
+    dataview_id: str,
+    primary_key: str,
+    display_key: str,
+    properties: tuple[str, ...],
+) -> None:
+    """Create an object type."""
+    from kweaver.types import Property
+
+    parsed_props: list[Property] | None = None
+    if properties:
+        parsed_props = [Property(**json.loads(p)) for p in properties]
+    client = make_client()
+    ot = client.object_types.create(
+        kn_id,
+        name=name,
+        dataview_id=dataview_id,
+        primary_key=primary_key,
+        display_key=display_key,
+        properties=parsed_props,
+    )
+    pp(ot.model_dump())
+
+
+@object_type_group.command("update")
+@click.argument("kn_id")
+@click.argument("ot_id")
+@click.option("--name", default=None, help="New name.")
+@click.option("--display-key", default=None, help="New display key.")
+@handle_errors
+def object_type_update(kn_id: str, ot_id: str, name: str | None, display_key: str | None) -> None:
+    """Update an object type."""
+    kwargs: dict[str, Any] = {}
+    if name is not None:
+        kwargs["name"] = name
+    if display_key is not None:
+        kwargs["display_key"] = display_key
+    if not kwargs:
+        error_exit("No update fields provided. Use --name or --display-key.")
+    client = make_client()
+    ot = client.object_types.update(kn_id, ot_id, **kwargs)
+    pp(ot.model_dump())
+
+
+@object_type_group.command("delete")
+@click.argument("kn_id")
+@click.argument("ot_ids")
+@click.option("--yes", "-y", is_flag=True, default=False, help="Skip confirmation.")
+@handle_errors
+def object_type_delete(kn_id: str, ot_ids: str, yes: bool) -> None:
+    """Delete object type(s)."""
+    if not yes:
+        click.confirm(f"Delete object type(s) {ot_ids}?", abort=True)
+    client = make_client()
+    client.object_types.delete(kn_id, ot_ids)
+    click.echo(f"Deleted {ot_ids}")
+
+
+@object_type_group.command("properties")
+@click.argument("kn_id")
+@click.argument("ot_id")
+@click.argument("body_json", default=None, required=False)
+@handle_errors
+def object_type_properties(kn_id: str, ot_id: str, body_json: str | None) -> None:
+    """Query instance property values.
+
+    Requires a JSON body with _instance_identities and properties list.
+    Example: '{"_instance_identities": [{"id": "123"}], "properties": ["name"]}'
+    """
+    body = json.loads(body_json) if body_json else None
+    client = make_client()
+    data = client.query.object_type_properties(kn_id, ot_id, body=body)
+    pp(data)
+
+
 @kn_group.group("relation-type")
 def relation_type_group() -> None:
     """Relation type (schema) commands."""
@@ -258,6 +355,74 @@ def relation_type_list(kn_id: str) -> None:
     client = make_client()
     rts = client.relation_types.list(kn_id)
     pp([rt.model_dump() for rt in rts])
+
+
+@relation_type_group.command("get")
+@click.argument("kn_id")
+@click.argument("rt_id")
+@handle_errors
+def relation_type_get(kn_id: str, rt_id: str) -> None:
+    """Get relation type details."""
+    client = make_client()
+    rt = client.relation_types.get(kn_id, rt_id)
+    pp(rt.model_dump())
+
+
+@relation_type_group.command("create")
+@click.argument("kn_id")
+@click.option("--name", required=True, help="Relation type name.")
+@click.option("--source", required=True, help="Source object type ID.")
+@click.option("--target", required=True, help="Target object type ID.")
+@click.option("--mapping", multiple=True, help="Property mapping source_prop:target_prop (repeatable).")
+@handle_errors
+def relation_type_create(
+    kn_id: str, name: str, source: str, target: str, mapping: tuple[str, ...],
+) -> None:
+    """Create a relation type."""
+    mappings: list[tuple[str, str]] | None = None
+    if mapping:
+        mappings = []
+        for m in mapping:
+            if ":" not in m:
+                error_exit(f"Invalid mapping format '{m}'. Expected source_prop:target_prop.")
+            src, tgt = m.split(":", 1)
+            mappings.append((src, tgt))
+    client = make_client()
+    rt = client.relation_types.create(
+        kn_id, name=name, source_ot_id=source, target_ot_id=target, mappings=mappings,
+    )
+    pp(rt.model_dump())
+
+
+@relation_type_group.command("update")
+@click.argument("kn_id")
+@click.argument("rt_id")
+@click.option("--name", default=None, help="New name.")
+@handle_errors
+def relation_type_update(kn_id: str, rt_id: str, name: str | None) -> None:
+    """Update a relation type."""
+    kwargs: dict[str, Any] = {}
+    if name is not None:
+        kwargs["name"] = name
+    if not kwargs:
+        error_exit("No update fields provided. Use --name.")
+    client = make_client()
+    rt = client.relation_types.update(kn_id, rt_id, **kwargs)
+    pp(rt.model_dump())
+
+
+@relation_type_group.command("delete")
+@click.argument("kn_id")
+@click.argument("rt_ids")
+@click.option("--yes", "-y", is_flag=True, default=False, help="Skip confirmation.")
+@handle_errors
+def relation_type_delete(kn_id: str, rt_ids: str, yes: bool) -> None:
+    """Delete relation type(s)."""
+    if not yes:
+        click.confirm(f"Delete relation type(s) {rt_ids}?", abort=True)
+    client = make_client()
+    client.relation_types.delete(kn_id, rt_ids)
+    click.echo(f"Deleted {rt_ids}")
 
 
 @kn_group.group("action-type")

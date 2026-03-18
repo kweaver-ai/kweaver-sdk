@@ -98,3 +98,49 @@ def test_instances_iter():
     client = make_client(handler)
     pages = list(client.query.instances_iter("kn_01", "ot_01", limit=1))
     assert len(pages) == 3
+
+
+def test_kn_search(capture: RequestCapture):
+    from unittest.mock import patch, MagicMock
+
+    mock_cl = MagicMock()
+    mock_cl.kn_search.return_value = {
+        "object_types": [{"id": "ot_01", "name": "产品"}],
+        "relation_types": [],
+        "action_types": [],
+    }
+
+    with patch("kweaver.resources.context_loader.ContextLoaderResource", return_value=mock_cl):
+        client = make_client(lambda req: httpx.Response(200, json={}), capture)
+        result = client.query.kn_search("kn_01", "产品")
+        assert result.object_types is not None
+        assert len(result.object_types) == 1
+        mock_cl.kn_search.assert_called_once_with("产品", only_schema=False)
+
+
+def test_kn_search_only_schema(capture: RequestCapture):
+    from unittest.mock import patch, MagicMock
+
+    mock_cl = MagicMock()
+    mock_cl.kn_search.return_value = {
+        "object_types": [],
+        "relation_types": [],
+        "action_types": [],
+    }
+
+    with patch("kweaver.resources.context_loader.ContextLoaderResource", return_value=mock_cl):
+        client = make_client(lambda req: httpx.Response(200, json={}), capture)
+        client.query.kn_search("kn_01", "产品", only_schema=True)
+        mock_cl.kn_search.assert_called_once_with("产品", only_schema=True)
+
+
+def test_object_type_properties(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "properties": [{"name": "id", "type": "integer"}],
+        })
+
+    client = make_client(handler, capture)
+    result = client.query.object_type_properties("kn_01", "ot_01")
+    assert "properties" in result
+    assert capture.last_headers()["x-http-method-override"] == "GET"

@@ -85,6 +85,11 @@ class ObjectTypesResource:
         data = self._http.get(
             f"{_PREFIX}/knowledge-networks/{kn_id}/object-types/{ot_id}"
         )
+        # API may wrap single result in {"entries": [...]}
+        if isinstance(data, dict) and "entries" in data:
+            entries = data["entries"]
+            if isinstance(entries, list) and entries:
+                data = entries[0]
         return _parse_object_type(data, kn_id)
 
     def update(self, kn_id: str, ot_id: str, **kwargs: Any) -> ObjectType:

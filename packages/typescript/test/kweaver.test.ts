@@ -290,7 +290,7 @@ test("weaver (fire-and-forget) triggers build without waiting", async () => {
   await withFetch(
     async (input) => {
       const url = typeof input === "string" ? input : (input as Request).url;
-      if (url.includes("full_build_ontology")) {
+      if (url.includes("ontology-manager/v1/knowledge-networks") && url.includes("/jobs")) {
         buildCalled = true;
         return new Response("", { status: 200 });
       }
@@ -308,15 +308,17 @@ test("weaver wait=true polls until completed", async () => {
   let pollCount = 0;
 
   await withFetch(
-    async (input) => {
+    async (input, init) => {
       const url = typeof input === "string" ? input : (input as Request).url;
-      if (url.includes("full_build_ontology")) {
-        return new Response("", { status: 200 });
-      }
-      if (url.includes("full_ontology_building_status")) {
+      const method = init?.method ?? "GET";
+      if (url.includes("ontology-manager/v1/knowledge-networks") && url.includes("/jobs")) {
+        if (method === "POST") {
+          return new Response("", { status: 200 });
+        }
+        // GET — status poll
         pollCount++;
         const state = pollCount >= 2 ? "completed" : "running";
-        return new Response(JSON.stringify({ state }), { status: 200 });
+        return new Response(JSON.stringify([{ state }]), { status: 200 });
       }
       return new Response("", { status: 200 });
     },
@@ -332,14 +334,16 @@ test("weaver wait=true throws on failed build", async () => {
   kweaver.configure({ baseUrl: BASE, accessToken: TOKEN, bknId: "bkn-1" });
 
   await withFetch(
-    async (input) => {
+    async (input, init) => {
       const url = typeof input === "string" ? input : (input as Request).url;
-      if (url.includes("full_build_ontology")) {
-        return new Response("", { status: 200 });
-      }
-      if (url.includes("full_ontology_building_status")) {
+      const method = init?.method ?? "GET";
+      if (url.includes("ontology-manager/v1/knowledge-networks") && url.includes("/jobs")) {
+        if (method === "POST") {
+          return new Response("", { status: 200 });
+        }
+        // GET — status poll
         return new Response(
-          JSON.stringify({ state: "failed", state_detail: "OOM error" }),
+          JSON.stringify([{ state: "failed", state_detail: "OOM error" }]),
           { status: 200 }
         );
       }
@@ -362,59 +366,32 @@ test("weaver throws when no bknId configured or provided", async () => {
   );
 });
 
-// ── weaver fallback (ontology-manager) ────────────────────────────────────────
+// ── weaver public endpoint ────────────────────────────────────────────────────
 
-test("weaver falls back to ontology-manager when agent-retrieval build 404s", async () => {
+test("weaver uses public ontology-manager endpoint for build", async () => {
   kweaver.configure({ baseUrl: BASE, accessToken: TOKEN, bknId: "bkn-1" });
-  let fallbackCalled = false;
+  let capturedUrl = "";
 
   await withFetch(
     async (input) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      if (url.includes("full_build_ontology")) {
-        return new Response("not found", { status: 404 });
-      }
-      if (url.includes("ontology-manager/in/v1/knowledge-networks")) {
-        fallbackCalled = true;
-        return new Response("", { status: 200 });
-      }
+      capturedUrl = typeof input === "string" ? input : (input as Request).url;
       return new Response("", { status: 200 });
     },
     async () => {
       await kweaver.weaver();
-      assert.ok(fallbackCalled, "should have called ontology-manager fallback");
+      assert.ok(
+        capturedUrl.includes("ontology-manager/v1/knowledge-networks/bkn-1/jobs"),
+        "should use public ontology-manager endpoint"
+      );
+      assert.ok(
+        !capturedUrl.includes("/in/"),
+        "should not use internal /in/ endpoint"
+      );
     }
   );
 });
 
-test("weaver wait=true uses ontology-manager job status when agent-retrieval status 404s", async () => {
-  kweaver.configure({ baseUrl: BASE, accessToken: TOKEN, bknId: "bkn-1" });
-  let statusFallbackCalled = false;
-
-  await withFetch(
-    async (input) => {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      if (url.includes("full_build_ontology")) {
-        return new Response("", { status: 200 });
-      }
-      if (url.includes("full_ontology_building_status")) {
-        return new Response("not found", { status: 404 });
-      }
-      if (url.includes("ontology-manager/in/v1/knowledge-networks")) {
-        statusFallbackCalled = true;
-        return new Response(JSON.stringify([{ state: "completed" }]), { status: 200 });
-      }
-      return new Response("", { status: 200 });
-    },
-    async () => {
-      const result = await kweaver.weaver({ wait: true, interval: 1 });
-      assert.equal((result as { state: string })?.state, "completed");
-      assert.ok(statusFallbackCalled, "should have polled ontology-manager for status");
-    }
-  );
-});
-
-test("weaver throws when both build endpoints 404 (no-build deployment)", async () => {
+test("weaver propagates errors from public endpoint", async () => {
   kweaver.configure({ baseUrl: BASE, accessToken: TOKEN, bknId: "bkn-1" });
 
   await withFetch(
@@ -422,8 +399,8 @@ test("weaver throws when both build endpoints 404 (no-build deployment)", async 
     async () => {
       await assert.rejects(
         () => kweaver.weaver(),
-        /No build endpoint available/,
-        "must not silently succeed when no build endpoint exists"
+        (err: Error) => err !== undefined,
+        "must throw when build endpoint returns error"
       );
     }
   );

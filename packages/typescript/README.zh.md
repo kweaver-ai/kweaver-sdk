@@ -101,13 +101,13 @@ const results = await cl.search({ query: "高血压 治疗" });
 kweaver auth login/status/list/use/delete/logout
 kweaver token
 kweaver bkn list/get/stats/export/create/update/delete
-kweaver bkn object-type list/query/properties
-kweaver bkn relation-type list
+kweaver bkn object-type list/get/create/update/delete/query/properties
+kweaver bkn relation-type list/get/create/update/delete
 kweaver bkn action-type list/query/execute
 kweaver bkn subgraph
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
-kweaver agent list/chat/sessions/history
+kweaver agent list/get/chat/sessions/history
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]

@@ -58,15 +58,14 @@ def test_list_knowledge_networks():
 
 
 def test_build_returns_build_job(capture: RequestCapture):
-    call_count = 0
-
     def handler(req: httpx.Request) -> httpx.Response:
-        nonlocal call_count
-        call_count += 1
-        if "full_build_ontology" in str(req.url):
+        url = str(req.url)
+        if "/jobs" in url and req.method == "POST":
             return httpx.Response(200, json={})
-        if "full_ontology_building_status" in str(req.url):
-            return httpx.Response(200, json={"state": "completed"})
+        if "/jobs" in url and req.method == "GET":
+            return httpx.Response(200, json={
+                "entries": [{"state": "completed"}],
+            })
         return httpx.Response(200, json={})
 
     client = make_client(handler, capture)

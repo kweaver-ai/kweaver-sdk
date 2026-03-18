@@ -7,6 +7,7 @@
 | 命令 | 说明 |
 |------|------|
 | `kweaver agent list [--keyword <text>] [--offset N] [--limit N]` | 列出已发布 Agent |
+| `kweaver agent get <agent-id> [--verbose]` | 查看 Agent 详情（名称、描述、状态、绑定 KN） |
 | `kweaver agent chat <agent-id> -m "<message>" [--conversation-id <id>]` | 发送单轮消息 |
 | `kweaver agent sessions <agent-id>` | 列出与某个 Agent 的历史会话 |
 | `kweaver agent history <conversation-id> [--limit N]` | 查看某次会话的完整消息记录 |
@@ -24,6 +25,16 @@ kweaver agent list --keyword "供应链"
 
 # 分页
 kweaver agent list --offset 0 --limit 20
+```
+
+### 查看 Agent 详情
+
+```bash
+# 查看 Agent 基本信息
+kweaver agent get <agent-id>
+
+# 查看完整信息（含 system_prompt、capabilities、model 配置）
+kweaver agent get <agent-id> --verbose
 ```
 
 ### 首轮对话
@@ -59,12 +70,13 @@ kweaver agent history <conversation-id> --limit 50
 ## 默认策略
 
 1. 先用 `kweaver agent list` 查看可用 Agent
-2. 首轮：`kweaver agent chat <agent-id> -m "..."` （不传 conversation-id）
-3. 从返回中记录 `conversation_id`，默认不向用户展示
-4. 续聊：`kweaver agent chat <agent-id> -m "..." --conversation-id <id>`
+2. 用 `kweaver agent get <id>` 查看 Agent 详情和绑定的知识网络
+3. 首轮：`kweaver agent chat <agent-id> -m "..."` （不传 conversation-id）
+4. 从返回中记录 `conversation_id`，默认不向用户展示
+5. 续聊：`kweaver agent chat <agent-id> -m "..." --conversation-id <id>`
 
 ## 典型编排
 
-1. **发现 Agent**: `agent list` -> `agent chat <id> -m "..."`
+1. **发现 Agent**: `agent list` -> `agent get <id>` -> `agent chat <id> -m "..."`
 2. **多轮对话**: `agent chat` (首轮) -> `agent chat --conversation-id` (续聊)
 3. **回顾历史**: `agent sessions <id>` -> `agent history <conversation-id>`

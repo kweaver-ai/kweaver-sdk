@@ -43,6 +43,27 @@ def list_agents(
         pp(simplified)
 
 
+@agent_group.command("get")
+@click.argument("agent_id")
+@click.option("--verbose", "-v", is_flag=True, help="Show full JSON response.")
+@handle_errors
+def get_agent(agent_id: str, verbose: bool) -> None:
+    """Get agent details."""
+    client = make_client()
+    agent = client.agents.get(agent_id)
+    if verbose:
+        pp(agent.model_dump())
+    else:
+        simplified = {
+            "id": agent.id,
+            "name": agent.name,
+            "description": agent.description or "",
+            "status": agent.status,
+            "kn_ids": agent.kn_ids,
+        }
+        pp(simplified)
+
+
 @agent_group.command("chat")
 @click.argument("agent_id")
 @click.option("-m", "--message", required=True, help="Message to send.")

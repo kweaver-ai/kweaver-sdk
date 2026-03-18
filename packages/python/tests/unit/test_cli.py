@@ -1004,6 +1004,311 @@ def test_context_loader_config_show(runner):
         assert "kn_abc" in result.output
 
 
+# ---------------------------------------------------------------------------
+# Object-type CRUD subcommands
+# ---------------------------------------------------------------------------
+
+
+def test_object_type_get(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_ot = MagicMock()
+        mock_ot.model_dump.return_value = {
+            "id": "ot1", "name": "products", "kn_id": "kn1",
+            "primary_keys": ["id"], "display_key": "name",
+        }
+        client.object_types.get.return_value = mock_ot
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["bkn", "object-type", "get", "kn1", "ot1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["id"] == "ot1"
+        client.object_types.get.assert_called_once_with("kn1", "ot1")
+
+
+def test_object_type_create(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_ot = MagicMock()
+        mock_ot.model_dump.return_value = {"id": "ot1", "name": "products"}
+        client.object_types.create.return_value = mock_ot
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "object-type", "create", "kn1",
+            "--name", "products",
+            "--dataview-id", "dv1",
+            "--primary-key", "id",
+            "--display-key", "name",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["name"] == "products"
+        client.object_types.create.assert_called_once_with(
+            "kn1", name="products", dataview_id="dv1",
+            primary_key="id", display_key="name", properties=None,
+        )
+
+
+def test_object_type_create_with_properties(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_ot = MagicMock()
+        mock_ot.model_dump.return_value = {"id": "ot1", "name": "products"}
+        client.object_types.create.return_value = mock_ot
+        mock_make.return_value = client
+        prop_json = '{"name":"age","type":"integer","indexed":true}'
+        result = runner.invoke(cli, [
+            "bkn", "object-type", "create", "kn1",
+            "--name", "products",
+            "--dataview-id", "dv1",
+            "--primary-key", "id",
+            "--display-key", "name",
+            "--property", prop_json,
+        ])
+        assert result.exit_code == 0
+        call_kwargs = client.object_types.create.call_args[1]
+        assert len(call_kwargs["properties"]) == 1
+        assert call_kwargs["properties"][0].name == "age"
+
+
+def test_object_type_update(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_ot = MagicMock()
+        mock_ot.model_dump.return_value = {"id": "ot1", "name": "new-name"}
+        client.object_types.update.return_value = mock_ot
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "object-type", "update", "kn1", "ot1",
+            "--name", "new-name",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["name"] == "new-name"
+        client.object_types.update.assert_called_once_with("kn1", "ot1", name="new-name")
+
+
+def test_object_type_update_no_fields(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "object-type", "update", "kn1", "ot1",
+        ])
+        assert result.exit_code != 0
+        client.object_types.update.assert_not_called()
+
+
+def test_object_type_delete(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "object-type", "delete", "kn1", "ot1", "--yes",
+        ])
+        assert result.exit_code == 0
+        client.object_types.delete.assert_called_once_with("kn1", "ot1")
+        assert "Deleted" in result.output
+
+
+def test_object_type_delete_aborted(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "object-type", "delete", "kn1", "ot1",
+        ], input="n\n")
+        assert result.exit_code != 0
+        client.object_types.delete.assert_not_called()
+
+
+def test_relation_type_get(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_rt = MagicMock()
+        mock_rt.model_dump.return_value = {
+            "id": "rt1", "name": "has_order", "kn_id": "kn1",
+            "source_ot_id": "ot1", "target_ot_id": "ot2",
+        }
+        client.relation_types.get.return_value = mock_rt
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["bkn", "relation-type", "get", "kn1", "rt1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["id"] == "rt1"
+        client.relation_types.get.assert_called_once_with("kn1", "rt1")
+
+
+def test_relation_type_create(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_rt = MagicMock()
+        mock_rt.model_dump.return_value = {"id": "rt1", "name": "has_order"}
+        client.relation_types.create.return_value = mock_rt
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "create", "kn1",
+            "--name", "has_order",
+            "--source", "ot1",
+            "--target", "ot2",
+            "--mapping", "user_id:id",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["name"] == "has_order"
+        call_kwargs = client.relation_types.create.call_args[1]
+        assert call_kwargs["source_ot_id"] == "ot1"
+        assert call_kwargs["target_ot_id"] == "ot2"
+        assert call_kwargs["mappings"] == [("user_id", "id")]
+
+
+def test_relation_type_create_no_mapping(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_rt = MagicMock()
+        mock_rt.model_dump.return_value = {"id": "rt1", "name": "linked_to"}
+        client.relation_types.create.return_value = mock_rt
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "create", "kn1",
+            "--name", "linked_to",
+            "--source", "ot1",
+            "--target", "ot2",
+        ])
+        assert result.exit_code == 0
+        call_kwargs = client.relation_types.create.call_args[1]
+        assert call_kwargs["mappings"] is None
+
+
+def test_relation_type_create_invalid_mapping(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "create", "kn1",
+            "--name", "bad",
+            "--source", "ot1",
+            "--target", "ot2",
+            "--mapping", "no_colon_here",
+        ])
+        assert result.exit_code != 0
+
+
+def test_relation_type_update(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_rt = MagicMock()
+        mock_rt.model_dump.return_value = {"id": "rt1", "name": "new-name"}
+        client.relation_types.update.return_value = mock_rt
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "update", "kn1", "rt1",
+            "--name", "new-name",
+        ])
+        assert result.exit_code == 0
+        client.relation_types.update.assert_called_once_with("kn1", "rt1", name="new-name")
+
+
+def test_relation_type_update_no_fields(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "update", "kn1", "rt1",
+        ])
+        assert result.exit_code != 0
+        client.relation_types.update.assert_not_called()
+
+
+def test_relation_type_delete(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "delete", "kn1", "rt1", "--yes",
+        ])
+        assert result.exit_code == 0
+        client.relation_types.delete.assert_called_once_with("kn1", "rt1")
+        assert "Deleted" in result.output
+
+
+def test_relation_type_delete_aborted(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "delete", "kn1", "rt1",
+        ], input="n\n")
+        assert result.exit_code != 0
+        client.relation_types.delete.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# agent get
+# ---------------------------------------------------------------------------
+
+
+def test_agent_get(runner):
+    with patch("kweaver.cli.agent.make_client") as mock_make:
+        client = _mock_client()
+        mock_agent = MagicMock()
+        mock_agent.id = "a1"
+        mock_agent.name = "assistant"
+        mock_agent.description = "test agent"
+        mock_agent.status = "published"
+        mock_agent.kn_ids = ["kn1"]
+        mock_agent.model_dump.return_value = {
+            "id": "a1", "name": "assistant", "description": "test agent",
+            "status": "published", "kn_ids": ["kn1"],
+        }
+        client.agents.get.return_value = mock_agent
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["agent", "get", "a1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["id"] == "a1"
+        assert data["name"] == "assistant"
+        client.agents.get.assert_called_once_with("a1")
+
+
+def test_agent_get_verbose(runner):
+    with patch("kweaver.cli.agent.make_client") as mock_make:
+        client = _mock_client()
+        mock_agent = MagicMock()
+        mock_agent.model_dump.return_value = {
+            "id": "a1", "name": "assistant", "system_prompt": "你是专家",
+            "capabilities": ["search"], "model_config_data": {"name": "gpt"},
+        }
+        client.agents.get.return_value = mock_agent
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["agent", "get", "a1", "--verbose"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "system_prompt" in data
+
+
+# ---------------------------------------------------------------------------
+# object-type properties
+# ---------------------------------------------------------------------------
+
+
+def test_object_type_properties(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        client.query.object_type_properties.return_value = {
+            "properties": [
+                {"name": "id", "type": "integer"},
+                {"name": "name", "type": "varchar"},
+            ],
+        }
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["bkn", "object-type", "properties", "kn1", "ot1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "properties" in data
+        client.query.object_type_properties.assert_called_once_with("kn1", "ot1", body=None)
+
+
 def test_context_loader_config_set_no_active_platform(runner):
     with patch("kweaver.cli.context_loader.PlatformStore") as MockStore:
         store = MockStore.return_value

@@ -167,6 +167,85 @@ test("client.agents.chat resolves agent info then sends chat request", async () 
   }
 });
 
+// ── bkn.knSearch (MCP-based) ──────────────────────────────────────────────────
+
+/**
+ * Mock fetch that handles the MCP JSON-RPC protocol:
+ *   1. initialize → returns session id
+ *   2. notifications/initialized → ack
+ *   3. tools/call kn_search → returns result
+ */
+function makeMcpFetch(toolResult: unknown, captured?: { toolArgs?: unknown }) {
+  let sessionInitialized = false;
+  return async (input: string | URL | Request, init?: RequestInit) => {
+    const body = init?.body ? JSON.parse(init.body as string) : {};
+    const method = body.method as string;
+
+    if (method === "initialize") {
+      sessionInitialized = true;
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { protocolVersion: "2024-11-05", capabilities: {} } }),
+        { status: 200, headers: { "MCP-Session-Id": "test-session-123" } }
+      );
+    }
+
+    if (method === "notifications/initialized") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0" }), { status: 200 });
+    }
+
+    if (method === "tools/call") {
+      if (captured) captured.toolArgs = body.params?.arguments;
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { content: [{ type: "text", text: JSON.stringify(toolResult) }] },
+        }),
+        { status: 200 }
+      );
+    }
+
+    return new Response("", { status: 200 });
+  };
+}
+
+test("client.bkn.knSearch sends correct request via MCP and parses response", async () => {
+  const orig = globalThis.fetch;
+  const captured: { toolArgs?: unknown } = {};
+  const mockResult = {
+    object_types: [{ id: "ot_01", name: "Products" }],
+    relation_types: [],
+    action_types: [],
+  };
+  globalThis.fetch = makeMcpFetch(mockResult, captured) as typeof fetch;
+
+  try {
+    const client = makeClient();
+    const result = await client.bkn.knSearch("kn_01", "产品");
+    const args = captured.toolArgs as Record<string, unknown>;
+    assert.equal(args.query, "产品");
+    assert.equal(result.object_types?.length, 1);
+    assert.equal((result.object_types![0] as { name: string }).name, "Products");
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
+test("client.bkn.knSearch passes only_schema when set", async () => {
+  const orig = globalThis.fetch;
+  const captured: { toolArgs?: unknown } = {};
+  globalThis.fetch = makeMcpFetch({ object_types: [], relation_types: [], action_types: [] }, captured) as typeof fetch;
+
+  try {
+    const client = makeClient();
+    await client.bkn.knSearch("kn_01", "test", { onlySchema: true });
+    const args = captured.toolArgs as Record<string, unknown>;
+    assert.equal(args.only_schema, true);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
 // ── contextLoader factory ─────────────────────────────────────────────────────
 
 test("client.contextLoader returns a ContextLoaderResource", () => {

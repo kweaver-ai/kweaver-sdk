@@ -41,8 +41,8 @@ CLI 按以下顺序尝试认证（无需用户干预）：
 | 命令组 | 说明 |
 |--------|------|
 | `auth` | 认证管理（login/status/list/use/delete/logout） |
-| `bkn` | 知识网络管理与查询（list/get/create/update/delete/export/stats；object-type、subgraph、action-type、action-log） |
-| `agent` | Agent 对话（list、chat、sessions、history） |
+| `bkn` | 知识网络管理与查询（list/get/create/update/delete/export/stats；object-type CRUD/properties、relation-type CRUD、subgraph、action-type、action-log） |
+| `agent` | Agent 管理与对话（list、get、chat、sessions、history） |
 | `context-loader` | 分层检索（config、kn-search、query-object-instance、query-instance-subgraph、get-logic-properties、get-action-info） |
 | `call` | 通用 API 调用（GET/POST，自动注入认证） |
 | `token` | 打印当前 access token |

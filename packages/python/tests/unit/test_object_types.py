@@ -114,3 +114,45 @@ def test_create_without_properties_sends_empty(capture: RequestCapture):
     prop_names = {p["name"] for p in body["entries"][0]["data_properties"]}
     assert "id" in prop_names
     assert "name" in prop_names
+
+
+def test_get_object_type(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_OT_RESPONSE)
+
+    client = make_client(handler, capture)
+    ot = client.object_types.get("kn_01", "ot_01")
+    assert ot.id == "ot_01"
+    assert ot.name == "产品"
+    assert "/knowledge-networks/kn_01/object-types/ot_01" in capture.last_url()
+
+
+def test_update_object_type(capture: RequestCapture):
+    updated = {**_OT_RESPONSE, "name": "新产品"}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=updated)
+
+    client = make_client(handler, capture)
+    ot = client.object_types.update("kn_01", "ot_01", name="新产品")
+    assert ot.name == "新产品"
+    body = capture.last_body()
+    assert body["name"] == "新产品"
+
+
+def test_delete_object_type(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    client = make_client(handler, capture)
+    client.object_types.delete("kn_01", "ot_01")
+    assert "/object-types/ot_01" in capture.last_url()
+
+
+def test_delete_multiple_object_types(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    client = make_client(handler, capture)
+    client.object_types.delete("kn_01", ["ot_01", "ot_02"])
+    assert "/object-types/ot_01,ot_02" in capture.last_url()

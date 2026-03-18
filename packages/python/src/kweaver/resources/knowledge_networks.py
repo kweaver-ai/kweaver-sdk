@@ -112,61 +112,28 @@ class KnowledgeNetworksResource:
         self._http.delete(f"/api/ontology-manager/v1/knowledge-networks/{id}")
 
     def build(self, id: str) -> BuildJob:
-        try:
-            self._http.post(
-                "/api/agent-retrieval/in/v1/kn/full_build_ontology",
-                json={"kn_id": id},
-            )
-        except KWeaverError as exc:
-            if exc.status_code == 404:
-                # Fallback: call ontology-manager directly
-                try:
-                    self._http.post(
-                        f"/api/ontology-manager/in/v1/knowledge-networks/{id}/jobs",
-                        json={"name": f"sdk_build_{id[:8]}", "job_type": "full"},
-                    )
-                except KWeaverError as exc2:
-                    if exc2.status_code == 404:
-                        raise RuntimeError(
-                            f"No build endpoint available for BKN {id}. "
-                            "Both agent-retrieval and ontology-manager returned 404. "
-                            "This deployment may not support index rebuilds."
-                        ) from exc2
-                    raise
-            else:
-                raise
+        """Trigger a full build via the public ontology-manager endpoint."""
+        self._http.post(
+            f"/api/ontology-manager/v1/knowledge-networks/{id}/jobs",
+            json={"name": f"sdk_build_{id[:8]}", "job_type": "full"},
+        )
         job = BuildJob(kn_id=id)
         job.set_poll_fn(lambda: self.build_status(id))
         return job
 
     def build_status(self, id: str) -> BuildStatus:
-        try:
-            data = self._http.get(
-                "/api/agent-retrieval/in/v1/kn/full_ontology_building_status",
-                params={"kn_id": id},
-            )
-        except KWeaverError as exc:
-            if exc.status_code == 404:
-                # Fallback: check ontology-manager jobs
-                try:
-                    data = self._http.get(
-                        f"/api/ontology-manager/in/v1/knowledge-networks/{id}/jobs",
-                        params={"limit": 1, "direction": "desc"},
-                    )
-                except KWeaverError as exc2:
-                    if exc2.status_code == 404:
-                        return BuildStatus(state="completed")
-                    raise
-                jobs = data if isinstance(data, list) else (data.get("entries") or data.get("data") or [])
-                if jobs:
-                    state = jobs[0].get("state", "running")
-                    return BuildStatus(state=state)
-                return BuildStatus(state="completed")
-            raise
-        return BuildStatus(
-            state=data.get("state", "running"),
-            state_detail=data.get("state_detail"),
+        """Check build status via the public ontology-manager endpoint."""
+        data = self._http.get(
+            f"/api/ontology-manager/v1/knowledge-networks/{id}/jobs",
+            params={"limit": 1, "direction": "desc"},
         )
+        jobs = data if isinstance(data, list) else (data.get("entries") or data.get("data") or [])
+        if jobs:
+            return BuildStatus(
+                state=jobs[0].get("state", "running"),
+                state_detail=jobs[0].get("state_detail"),
+            )
+        return BuildStatus(state="completed")
 
 
 def _parse_kn(d: Any) -> KnowledgeNetwork:

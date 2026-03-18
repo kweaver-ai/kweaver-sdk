@@ -276,13 +276,13 @@ class TestWeaver:
 
     def test_weaver_triggers_build(self):
         build_response = {"state": "running"}
-        _configure({"/full_build_ontology": build_response}, bkn_id="kn1")
+        _configure({"/jobs": build_response}, bkn_id="kn1")
         job = kweaver.weaver()
         assert job.kn_id == "kn1"
 
     def test_weaver_with_explicit_bkn_id(self):
         build_response = {"state": "running"}
-        _configure({"/full_build_ontology": build_response})
+        _configure({"/jobs": build_response})
         job = kweaver.weaver(bkn_id="kn_other")
         assert job.kn_id == "kn_other"
 
@@ -300,11 +300,13 @@ class TestWeaver:
 
         def handler(req: httpx.Request) -> httpx.Response:
             path = req.url.path
-            if "/full_build_ontology" in path and req.method == "POST":
+            if "/jobs" in path and req.method == "POST":
                 return httpx.Response(200, json={"state": "running"})
-            if "/full_ontology_building_status" in path:
+            if "/jobs" in path and req.method == "GET":
                 call_count["n"] += 1
-                return httpx.Response(200, json={"state": "failed", "state_detail": "index error"})
+                return httpx.Response(200, json={
+                    "entries": [{"state": "failed", "state_detail": "index error"}],
+                })
             return httpx.Response(404, json={})
 
         kweaver.configure("https://mock", token="tok", bkn_id="kn1")
@@ -316,7 +318,7 @@ class TestWeaver:
             kweaver.weaver(wait=True, timeout=10)
 
     def test_weaver_throws_when_no_build_endpoint(self):
-        """Both build endpoints returning 404 must raise, not silently succeed."""
+        """Build endpoint returning 404 must raise, not silently succeed."""
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(404, json={"error": "not found"})
 
@@ -325,7 +327,8 @@ class TestWeaver:
             base_url="https://mock",
             transport=httpx.MockTransport(handler),
         )
-        with pytest.raises(RuntimeError, match="No build endpoint available"):
+        from kweaver._errors import NotFoundError
+        with pytest.raises(NotFoundError):
             kweaver.weaver()
 
     def test_weaver_wait_blocks_until_complete(self):
@@ -333,12 +336,14 @@ class TestWeaver:
 
         def handler(req: httpx.Request) -> httpx.Response:
             path = req.url.path
-            if "/full_build_ontology" in path and req.method == "POST":
+            if "/jobs" in path and req.method == "POST":
                 return httpx.Response(200, json={"state": "running"})
-            if "/full_ontology_building_status" in path:
+            if "/jobs" in path and req.method == "GET":
                 call_count["n"] += 1
                 state = "completed" if call_count["n"] >= 2 else "running"
-                return httpx.Response(200, json={"state": state})
+                return httpx.Response(200, json={
+                    "entries": [{"state": state}],
+                })
             return httpx.Response(404, json={})
 
         kweaver.configure("https://mock", token="tok", bkn_id="kn1")

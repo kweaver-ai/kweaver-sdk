@@ -54,17 +54,19 @@ class QueryResource:
         *,
         only_schema: bool = False,
     ) -> KnSearchResult:
-        body: dict[str, Any] = {"kn_id": kn_id, "query": query}
-        if only_schema:
-            body["only_schema"] = True
-        data = self._http.post(
-            "/api/agent-retrieval/in/v1/kn/kn_search", json=body
-        )
+        """Search KN schema via MCP — returns object_types, relation_types, action_types."""
+        from kweaver.resources.context_loader import ContextLoaderResource
+
+        base_url = str(self._http._client.base_url).rstrip("/")
+        token = self._http._auth.auth_headers().get("Authorization", "").removeprefix("Bearer ").strip()
+        cl = ContextLoaderResource(base_url, token, kn_id=kn_id)
+        data = cl.kn_search(query, only_schema=only_schema)
         return KnSearchResult(
             object_types=data.get("object_types"),
             relation_types=data.get("relation_types"),
             action_types=data.get("action_types"),
             nodes=data.get("nodes"),
+            raw=data.get("raw"),
         )
 
     def instances(
@@ -122,13 +124,14 @@ class QueryResource:
         kn_id: str,
         paths: list[SubgraphPath],
     ) -> SubgraphResult:
-        body: dict[str, Any] = {
-            "kn_id": kn_id,
-            "paths": [p.model_dump() for p in paths],
-        }
-        data = self._http.post(
-            "/api/agent-retrieval/in/v1/kn/query_instance_subgraph",
-            json=body,
+        """Query instance subgraph via MCP."""
+        from kweaver.resources.context_loader import ContextLoaderResource
+
+        base_url = str(self._http._client.base_url).rstrip("/")
+        token = self._http._auth.auth_headers().get("Authorization", "").removeprefix("Bearer ").strip()
+        cl = ContextLoaderResource(base_url, token, kn_id=kn_id)
+        data = cl.query_instance_subgraph(
+            [p.model_dump() for p in paths],
         )
         return SubgraphResult(entries=data.get("entries", []))
 
@@ -138,7 +141,14 @@ class QueryResource:
         ot_id: str,
         body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Query object type property definitions and statistics."""
+        """Query instance property values for an object type.
+
+        Args:
+            kn_id: Knowledge network ID.
+            ot_id: Object type ID.
+            body: Request body with ``_instance_identities`` (list of identity dicts)
+                  and ``properties`` (list of property names to return).
+        """
         data = self._http.post(
             f"/api/ontology-query/v1/knowledge-networks/{kn_id}/object-types/{ot_id}/properties",
             json=body or {},

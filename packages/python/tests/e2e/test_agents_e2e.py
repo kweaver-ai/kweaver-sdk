@@ -84,3 +84,28 @@ def test_conversation_flow(kweaver_client: KWeaverClient):
     pytest.fail(
         f"All {len(agents)} published agents failed: {error_details}"
     )
+
+
+def test_cli_agent_get(kweaver_client: KWeaverClient, any_agent, cli_runner):
+    """CLI agent get should return agent details."""
+    from kweaver.cli.main import cli
+    import json
+
+    result = cli_runner.invoke(cli, ["agent", "get", any_agent.id])
+    assert result.exit_code == 0, f"agent get failed: {result.output}"
+    data = json.loads(result.output)
+    assert data["id"] == any_agent.id
+    assert data["name"] == any_agent.name
+
+
+def test_cli_agent_get_verbose(kweaver_client: KWeaverClient, any_agent, cli_runner):
+    """CLI agent get --verbose should return full details."""
+    from kweaver.cli.main import cli
+    import json
+
+    result = cli_runner.invoke(cli, ["agent", "get", any_agent.id, "--verbose"])
+    assert result.exit_code == 0, f"agent get --verbose failed: {result.output}"
+    data = json.loads(result.output)
+    assert data["id"] == any_agent.id
+    # verbose output should have more fields
+    assert "status" in data

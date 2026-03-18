@@ -340,6 +340,74 @@ def relation_type_list(kn_id: str) -> None:
     pp([rt.model_dump() for rt in rts])
 
 
+@relation_type_group.command("get")
+@click.argument("kn_id")
+@click.argument("rt_id")
+@handle_errors
+def relation_type_get(kn_id: str, rt_id: str) -> None:
+    """Get relation type details."""
+    client = make_client()
+    rt = client.relation_types.get(kn_id, rt_id)
+    pp(rt.model_dump())
+
+
+@relation_type_group.command("create")
+@click.argument("kn_id")
+@click.option("--name", required=True, help="Relation type name.")
+@click.option("--source", required=True, help="Source object type ID.")
+@click.option("--target", required=True, help="Target object type ID.")
+@click.option("--mapping", multiple=True, help="Property mapping source_prop:target_prop (repeatable).")
+@handle_errors
+def relation_type_create(
+    kn_id: str, name: str, source: str, target: str, mapping: tuple[str, ...],
+) -> None:
+    """Create a relation type."""
+    mappings: list[tuple[str, str]] | None = None
+    if mapping:
+        mappings = []
+        for m in mapping:
+            if ":" not in m:
+                error_exit(f"Invalid mapping format '{m}'. Expected source_prop:target_prop.")
+            src, tgt = m.split(":", 1)
+            mappings.append((src, tgt))
+    client = make_client()
+    rt = client.relation_types.create(
+        kn_id, name=name, source_ot_id=source, target_ot_id=target, mappings=mappings,
+    )
+    pp(rt.model_dump())
+
+
+@relation_type_group.command("update")
+@click.argument("kn_id")
+@click.argument("rt_id")
+@click.option("--name", default=None, help="New name.")
+@handle_errors
+def relation_type_update(kn_id: str, rt_id: str, name: str | None) -> None:
+    """Update a relation type."""
+    kwargs: dict[str, Any] = {}
+    if name is not None:
+        kwargs["name"] = name
+    if not kwargs:
+        error_exit("No update fields provided. Use --name.")
+    client = make_client()
+    rt = client.relation_types.update(kn_id, rt_id, **kwargs)
+    pp(rt.model_dump())
+
+
+@relation_type_group.command("delete")
+@click.argument("kn_id")
+@click.argument("rt_ids")
+@click.option("--yes", "-y", is_flag=True, default=False, help="Skip confirmation.")
+@handle_errors
+def relation_type_delete(kn_id: str, rt_ids: str, yes: bool) -> None:
+    """Delete relation type(s)."""
+    if not yes:
+        click.confirm(f"Delete relation type(s) {rt_ids}?", abort=True)
+    client = make_client()
+    client.relation_types.delete(kn_id, rt_ids)
+    click.echo(f"Deleted {rt_ids}")
+
+
 @kn_group.group("action-type")
 def action_type_group() -> None:
     """Action type (schema) commands."""

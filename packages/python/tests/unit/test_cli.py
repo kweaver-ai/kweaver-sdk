@@ -1122,6 +1122,127 @@ def test_object_type_delete_aborted(runner):
         client.object_types.delete.assert_not_called()
 
 
+def test_relation_type_get(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_rt = MagicMock()
+        mock_rt.model_dump.return_value = {
+            "id": "rt1", "name": "has_order", "kn_id": "kn1",
+            "source_ot_id": "ot1", "target_ot_id": "ot2",
+        }
+        client.relation_types.get.return_value = mock_rt
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["bkn", "relation-type", "get", "kn1", "rt1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["id"] == "rt1"
+        client.relation_types.get.assert_called_once_with("kn1", "rt1")
+
+
+def test_relation_type_create(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_rt = MagicMock()
+        mock_rt.model_dump.return_value = {"id": "rt1", "name": "has_order"}
+        client.relation_types.create.return_value = mock_rt
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "create", "kn1",
+            "--name", "has_order",
+            "--source", "ot1",
+            "--target", "ot2",
+            "--mapping", "user_id:id",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["name"] == "has_order"
+        call_kwargs = client.relation_types.create.call_args[1]
+        assert call_kwargs["source_ot_id"] == "ot1"
+        assert call_kwargs["target_ot_id"] == "ot2"
+        assert call_kwargs["mappings"] == [("user_id", "id")]
+
+
+def test_relation_type_create_no_mapping(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_rt = MagicMock()
+        mock_rt.model_dump.return_value = {"id": "rt1", "name": "linked_to"}
+        client.relation_types.create.return_value = mock_rt
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "create", "kn1",
+            "--name", "linked_to",
+            "--source", "ot1",
+            "--target", "ot2",
+        ])
+        assert result.exit_code == 0
+        call_kwargs = client.relation_types.create.call_args[1]
+        assert call_kwargs["mappings"] is None
+
+
+def test_relation_type_create_invalid_mapping(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "create", "kn1",
+            "--name", "bad",
+            "--source", "ot1",
+            "--target", "ot2",
+            "--mapping", "no_colon_here",
+        ])
+        assert result.exit_code != 0
+
+
+def test_relation_type_update(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_rt = MagicMock()
+        mock_rt.model_dump.return_value = {"id": "rt1", "name": "new-name"}
+        client.relation_types.update.return_value = mock_rt
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "update", "kn1", "rt1",
+            "--name", "new-name",
+        ])
+        assert result.exit_code == 0
+        client.relation_types.update.assert_called_once_with("kn1", "rt1", name="new-name")
+
+
+def test_relation_type_update_no_fields(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "update", "kn1", "rt1",
+        ])
+        assert result.exit_code != 0
+        client.relation_types.update.assert_not_called()
+
+
+def test_relation_type_delete(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "delete", "kn1", "rt1", "--yes",
+        ])
+        assert result.exit_code == 0
+        client.relation_types.delete.assert_called_once_with("kn1", "rt1")
+        assert "Deleted" in result.output
+
+
+def test_relation_type_delete_aborted(runner):
+    with patch("kweaver.cli.kn.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, [
+            "bkn", "relation-type", "delete", "kn1", "rt1",
+        ], input="n\n")
+        assert result.exit_code != 0
+        client.relation_types.delete.assert_not_called()
+
+
 def test_context_loader_config_set_no_active_platform(runner):
     with patch("kweaver.cli.context_loader.PlatformStore") as MockStore:
         store = MockStore.return_value

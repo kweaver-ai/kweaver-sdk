@@ -1,4 +1,4 @@
-"""E2E: knowledge network build flow (datasource → dataview → KN → build).
+"""L3: Knowledge network build flow (datasource -> dataview -> KN -> build).
 
 These tests create and delete knowledge networks, so they are marked as
 destructive and require ``--run-destructive`` to run.
@@ -78,7 +78,7 @@ def test_build_knowledge_network(
     create_knowledge_network,
     kweaver_client: KWeaverClient,
 ):
-    """Full build: datasource → dataview → KN → object type."""
+    """Full build: datasource -> dataview -> KN -> object type."""
     # 1. Datasource and table discovery
     ds = create_datasource(name="e2e_build_test")
     tables = kweaver_client.datasources.list_tables(ds.id)

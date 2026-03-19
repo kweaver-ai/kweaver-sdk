@@ -1,13 +1,16 @@
-"""E2E: agent listing, detail, and conversation.
+"""L6: Agent listing, detail, and conversation.
 
 Tests against the real agent-factory and agent-app services.
 """
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from kweaver import KWeaverClient
+from kweaver.cli.main import cli
 
 pytestmark = pytest.mark.e2e
 
@@ -88,9 +91,6 @@ def test_conversation_flow(kweaver_client: KWeaverClient):
 
 def test_cli_agent_get(kweaver_client: KWeaverClient, any_agent, cli_runner):
     """CLI agent get should return agent details."""
-    from kweaver.cli.main import cli
-    import json
-
     result = cli_runner.invoke(cli, ["agent", "get", any_agent.id])
     assert result.exit_code == 0, f"agent get failed: {result.output}"
     data = json.loads(result.output)
@@ -100,9 +100,6 @@ def test_cli_agent_get(kweaver_client: KWeaverClient, any_agent, cli_runner):
 
 def test_cli_agent_get_verbose(kweaver_client: KWeaverClient, any_agent, cli_runner):
     """CLI agent get --verbose should return full details."""
-    from kweaver.cli.main import cli
-    import json
-
     result = cli_runner.invoke(cli, ["agent", "get", any_agent.id, "--verbose"])
     assert result.exit_code == 0, f"agent get --verbose failed: {result.output}"
     data = json.loads(result.output)

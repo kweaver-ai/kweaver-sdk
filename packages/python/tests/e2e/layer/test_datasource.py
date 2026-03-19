@@ -1,4 +1,4 @@
-"""E2E: datasource connection, discovery, and CRUD."""
+"""L1: Datasource — connection, discovery, and CRUD."""
 
 from __future__ import annotations
 

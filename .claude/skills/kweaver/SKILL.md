@@ -3,10 +3,10 @@ name: kweaver
 description: >-
   操作 KWeaver 知识网络与 Decision Agent — 构建知识网络、查询 Schema/实例、
   语义搜索、执行 Action、Agent CRUD 与对话。
-  操作 Vega 数据平台 — 查询 Catalog/资源/模型、DSL/PromQL 查询、健康巡检。
+  操作 Vega 可观测平台 — 查询 Catalog/资源/连接器类型、健康巡检。
   当用户提到"知识网络"、"知识图谱"、"查询对象类"、
   "执行 Action"、"有哪些 Agent"、"创建 Agent"、"跟 Agent 对话"、
-  "数据源"、"Catalog"、"Vega"、"指标模型"、"DSL 查询"、
+  "数据源"、"Catalog"、"Vega"、
   "健康检查"、"巡检"等意图时自动使用。
 allowed-tools: Bash(npx tsx packages/typescript/src/cli.ts *)
 argument-hint: [自然语言指令]
@@ -34,8 +34,8 @@ alias kweaver="npx tsx packages/typescript/src/cli.ts"
 
 ### 认证优先级
 
-1. `~/.kweaver/` 凭据（`kweaver auth login` 写入）→ 自动刷新（推荐）
-2. `KWEAVER_TOKEN` + `KWEAVER_BASE_URL` 环境变量 → 静态 Token
+1. `KWEAVER_TOKEN` + `KWEAVER_BASE_URL` 环境变量 → 静态 Token（如存在则优先使用，**不会**自动刷新）
+2. `~/.kweaver/` 凭据（`kweaver auth login` 写入）→ 自动刷新（推荐）
 
 ### SDK 自动刷新
 
@@ -51,6 +51,7 @@ const client = await KWeaverClient.connect();  // 自动检测过期 + refresh
 | `bkn` | BKN 知识网络管理、Schema、查询、Action | `references/bkn.md` |
 | `agent` | Agent CRUD、发布、对话 | `references/agent.md` |
 | `ds` | 数据源管理 | `references/ds.md` |
+| `vega` | Vega 可观测平台（catalogs、resources、connector-types、health） | `references/vega.md` |
 | `context-loader` | MCP 分层检索 | `references/context-loader.md` |
 | `call` | 通用 API 调用 | `references/call.md` |
 

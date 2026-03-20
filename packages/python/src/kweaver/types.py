@@ -97,6 +97,93 @@ class RelationType(BaseModel):
     mapping_type: str = "direct"
 
 
+# ── BKN Phase 1 entity types ───────────────────────────────────────────
+
+
+class ConceptGroup(BaseModel):
+    id: str
+    name: str
+    kn_id: str
+    branch: str = "main"
+    object_type_ids: list[str] = []
+    creator: str | None = None
+    updater: str | None = None
+    create_time: str | None = None
+    update_time: str | None = None
+
+
+class Job(BaseModel):
+    id: str
+    kn_id: str
+    type: str
+    status: str  # pending | running | completed | failed
+    progress: float | None = None
+    creator: str | None = None
+    create_time: str | None = None
+    update_time: str | None = None
+
+
+class Task(BaseModel):
+    """Sub-task of a Job (BKN background task unit)."""
+
+    id: str
+    job_id: str
+    name: str
+    status: str
+    error: str | None = None
+    create_time: str | None = None
+    update_time: str | None = None
+
+
+class DataPropertyDetail(BaseModel):
+    name: str
+    display_name: str | None = None
+    type: str
+    indexed: bool = False
+    full_text: bool = False
+    vector: bool = False
+    required: bool = False
+    default_value: Any = None
+    enum_values: list[str] | None = None
+    mapped_field: str | None = None
+
+
+class MappingRule(BaseModel):
+    source_field: str
+    target_field: str
+    operator: str | None = None
+
+
+class ActionSource(BaseModel):
+    type: str
+    url: str | None = None
+    method: str | None = None
+
+
+class ActionParam(BaseModel):
+    name: str
+    type: str
+    required: bool = False
+    default: Any = None
+    description: str | None = None
+
+
+class ServiceHealth(BaseModel):
+    service: str
+    status: str
+    version: str | None = None
+    go_version: str | None = None
+    arch: str | None = None
+
+
+class BKNInspectReport(BaseModel):
+    kn: KnowledgeNetwork
+    health: list[ServiceHealth] = []
+    stats: KNStatistics = Field(default_factory=KNStatistics)
+    object_type_summary: list[dict[str, Any]] = []
+    active_jobs: list[Job] = []
+
+
 # ── Parameter types (user-constructed input) ────────────────────────────
 
 

@@ -71,6 +71,19 @@ def handle_errors(fn):
     return wrapper
 
 
+def resolve_kn_id(kn_id: str | None) -> str:
+    """Resolve kn_id from argument or context. Raises click.UsageError if neither available."""
+    if kn_id:
+        return kn_id
+    from kweaver.cli.use import _read_context
+    ctx = _read_context()
+    if ctx.get("kn_id"):
+        return ctx["kn_id"]
+    raise click.UsageError(
+        "kn_id required. Provide as argument or set context with: kweaver use <kn_id>"
+    )
+
+
 def output(data: Any, *, format: str = "md") -> None:
     """Output data in the requested format."""
     if format == "json":

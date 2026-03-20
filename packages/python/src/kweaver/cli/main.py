@@ -13,6 +13,7 @@ from kweaver.cli.agent import agent_group
 from kweaver.cli.call import call_cmd
 from kweaver.cli.context_loader import context_loader_group
 from kweaver.cli.token import token_cmd
+from kweaver.cli.use import use_cmd
 
 
 @click.group()
@@ -42,6 +43,7 @@ cli.add_command(agent_group, "agent")
 cli.add_command(call_cmd, "call")
 cli.add_command(context_loader_group, "context-loader")
 cli.add_command(token_cmd, "token")
+cli.add_command(use_cmd, "use")
 
 
 def main() -> None:

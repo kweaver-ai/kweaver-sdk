@@ -720,12 +720,13 @@ class KnowledgeNetworksResource:
 
 ```python
 class BKNInspectReport(BaseModel):
+    model_config = {"extra": "ignore"}
     kn: KnowledgeNetwork
-    health: list[ServiceHealth]          # bkn-backend + ontology-query
-    stats: KNStatistics                  # OT/RT/AT/CG counts
-    object_type_summary: list[dict]      # [{id, name, instance_count, indexed, last_sync}]
-    active_jobs: list[Job]               # running/pending jobs
-    active_schedules: list[ActionSchedule]  # enabled schedules (full=True only)
+    health: list[ServiceHealth] = []     # bkn-backend + ontology-query
+    stats: KNStatistics = Field(default_factory=KNStatistics)
+    object_type_summary: list[dict[str, Any]] = []
+    active_jobs: list[Job] = []          # running/pending jobs
+    # active_schedules: Phase 2（ActionSchedulesResource 实现后追加）
 ```
 
 ### CLI

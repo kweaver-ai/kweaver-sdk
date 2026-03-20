@@ -272,16 +272,23 @@ class VegaHealthReport(BaseModel):
     offline_count: int = 0
 
 class VegaPlatformStats(BaseModel):
-    catalogs_total: int = 0
-    resources_by_category: dict[str, int] = {}
-    models: dict[str, int] = {}        # {metric: 5, event: 3, trace: 2, ...}
-    tasks_summary: dict[str, int] = {}  # {running: 2, pending: 1, ...}
+    model_config = {"extra": "ignore"}
+    catalog_count: int = 0
+    resource_count: int = 0
+    metric_model_count: int = 0
+    event_model_count: int = 0
+    trace_model_count: int = 0
+    data_view_count: int = 0
+    data_dict_count: int = 0
+    objective_model_count: int = 0
 
 class VegaInspectReport(BaseModel):
-    server_info: VegaServerInfo
-    catalog_health: VegaHealthReport
-    resource_summary: dict[str, int] = {}
+    model_config = {"extra": "ignore"}
+    server_info: VegaServerInfo | None = None    # None 表示 health 调用失败
+    catalog_health: VegaHealthReport = Field(default_factory=VegaHealthReport)
+    platform_stats: VegaPlatformStats | None = None
     active_tasks: list[VegaDiscoverTask] = []
+    errors: list[str] = []                       # 聚合过程中的错误信息
 ```
 
 ### TypeScript（接口）
@@ -591,7 +598,7 @@ info = client.vega.health()
 
 # 平台统计 — 组合操作：调用 catalogs、resources、models、tasks 的 list
 stats = client.vega.stats()
-# → VegaPlatformStats(catalogs_total=6, resources_by_category={table: 42, ...}, ...)
+# → VegaPlatformStats(catalog_count=6, metric_model_count=5, ...)
 
 # 聚合诊断 — 组合操作：health + stats + 活跃任务
 # 内部并行化。子调用失败时返回部分结果。
@@ -1244,7 +1251,7 @@ class TestVegaHealth:
     def test_stats(self, vega_client):
         stats = vega_client.stats()
         assert isinstance(stats, VegaPlatformStats)
-        assert stats.catalogs_total >= 0
+        assert stats.catalog_count >= 0
 
     def test_inspect(self, vega_client):
         report = vega_client.inspect()

@@ -12,6 +12,7 @@ from kweaver._middleware import Middleware
 from kweaver._middleware.debug import DebugMiddleware
 from kweaver._middleware.dry_run import DryRunMiddleware
 from kweaver.resources.agents import AgentsResource
+from kweaver.resources.concept_groups import ConceptGroupsResource
 from kweaver.resources.conversations import ConversationsResource
 from kweaver.resources.datasources import DataSourcesResource
 from kweaver.resources.dataviews import DataViewsResource
@@ -19,6 +20,7 @@ from kweaver.resources.knowledge_networks import KnowledgeNetworksResource
 from kweaver.resources.object_types import ObjectTypesResource
 from kweaver.resources.action_types import ActionTypesResource
 from kweaver.resources.query import QueryResource
+from kweaver.resources.jobs import JobsResource
 from kweaver.resources.relation_types import RelationTypesResource
 
 
@@ -85,6 +87,8 @@ class KWeaverClient:
         self.agents = AgentsResource(self._http)
         self.conversations = ConversationsResource(self._http)
         self.action_types = ActionTypesResource(self._http)
+        self.jobs = JobsResource(self._http)
+        self.concept_groups = ConceptGroupsResource(self._http)
 
     def close(self) -> None:
         self._http.close()

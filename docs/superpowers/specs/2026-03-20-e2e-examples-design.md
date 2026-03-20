@@ -77,8 +77,8 @@ Note: `bkn.queryInstances`, `bkn.queryProperties`, `bkn.querySubgraph` all take 
 **Bonus section — Context Loader (MCP):**
 
 5. `client.contextLoader(mcpUrl, knId)` — initialize Context Loader
-6. `cl.knSearch({ query })` — schema-level search via MCP (Layer 1)
-7. `cl.queryObjectInstance({ otId, conditions })` — instance query via MCP (Layer 2)
+6. `cl.schemaSearch({ query })` — schema-level search via MCP (Layer 1)
+7. `cl.queryInstances({ otId, conditions })` — instance query via MCP (Layer 2)
 
 This section shows the same query capabilities through the MCP protocol interface, demonstrating that external AI agents can access the same data via Context Loader.
 
@@ -117,7 +117,7 @@ Note: Datasource and DataView operations use low-level API functions (not resour
 3. `listTablesWithColumns(opts)` — inspect table structure (from `api/datasources`)
 4. `createDataView(opts)` — create DataView mapping (from `api/dataviews`)
 5. `knowledgeNetworks.create({ name, description })` — create new BKN (Client API)
-6. Create object type linked to DataView (via low-level API, e.g. `createObjectType` from `api/ontology-crud`)
+6. Create object type linked to DataView (via low-level API, e.g. `createObjectTypes` from `api/knowledge-networks`)
 7. `knowledgeNetworks.buildAndWait(bknId)` — build index and wait (Client API)
 8. `bkn.semanticSearch(bknId, "business question")` — search the new graph (Client API)
 9. Cleanup: delete all created resources

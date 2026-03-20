@@ -318,7 +318,7 @@ def test_inspect_returns_report():
     assert isinstance(report, VegaInspectReport)
     assert isinstance(report.server_info, VegaServerInfo)
     assert report.server_info.server_name == "vega-backend"
-    assert report.catalog_health.healthy == 1
+    assert report.catalog_health.healthy_count == 1
     assert report.active_tasks == []
 
 

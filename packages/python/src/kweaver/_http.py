@@ -58,6 +58,11 @@ class HttpClient:
         self._log_requests = log_requests
         self._middlewares = middlewares or []
 
+        # Build middleware chain once (H3 perf fix)
+        self._handler = self._do_request
+        for mw in reversed(self._middlewares):
+            self._handler = mw.wrap(self._handler)
+
         client_kwargs: dict[str, Any] = {
             "base_url": base_url,
             "timeout": timeout,
@@ -103,11 +108,7 @@ class HttpClient:
             kwargs={"json": json, "params": params, "headers": headers, "retry": retry, "timeout": timeout},
         )
 
-        handler = self._do_request
-        for mw in reversed(self._middlewares):
-            handler = mw.wrap(handler)
-
-        return handler(ctx)
+        return self._handler(ctx)
 
     def _do_request(self, ctx: Any) -> Any:
         """Execute the HTTP request with retry logic — the innermost handler in the middleware chain."""
@@ -125,15 +126,22 @@ class HttpClient:
         last_exc: Exception | None = None
         attempts = _MAX_RETRIES if retry else 1
 
+        # Build httpx kwargs conditionally to avoid sending json=None (M7 fix)
+        req_kwargs: dict[str, Any] = {}
+        if json is not None:
+            req_kwargs["json"] = json
+        if params is not None:
+            req_kwargs["params"] = params
+        if timeout is not None:
+            req_kwargs["timeout"] = timeout
+
         for attempt in range(attempts):
             try:
                 resp = self._client.request(
                     method,
                     path,
-                    json=json,
-                    params=params,
                     headers=merged_headers,
-                    timeout=timeout,
+                    **req_kwargs,
                 )
             except httpx.HTTPError as exc:
                 last_exc = exc

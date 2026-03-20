@@ -638,10 +638,11 @@ class VegaPromqlResult(BaseModel):
 class VegaHealthReport(BaseModel):
     model_config = {"extra": "ignore"}
 
-    healthy: int = 0
-    unhealthy: int = 0
-    unknown: int = 0
-    catalogs: list[dict[str, Any]] = []
+    catalogs: list[VegaCatalog] = []
+    healthy_count: int = 0
+    degraded_count: int = 0
+    unhealthy_count: int = 0
+    offline_count: int = 0
 
 
 class VegaPlatformStats(BaseModel):

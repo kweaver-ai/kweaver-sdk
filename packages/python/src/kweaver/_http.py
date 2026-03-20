@@ -49,12 +49,14 @@ class HttpClient:
         timeout: float = 30.0,
         transport: httpx.BaseTransport | None = None,
         log_requests: bool = False,
+        middlewares: list | None = None,
     ) -> None:
         self._auth = auth
         self._account_id = account_id
         self._account_type = account_type
         self._business_domain = business_domain
         self._log_requests = log_requests
+        self._middlewares = middlewares or []
 
         client_kwargs: dict[str, Any] = {
             "base_url": base_url,
@@ -93,6 +95,30 @@ class HttpClient:
         retry: bool = True,
         timeout: float | None = None,
     ) -> Any:
+        from kweaver._middleware import RequestContext
+
+        ctx = RequestContext(
+            method=method,
+            path=path,
+            kwargs={"json": json, "params": params, "headers": headers, "retry": retry, "timeout": timeout},
+        )
+
+        handler = self._do_request
+        for mw in reversed(self._middlewares):
+            handler = mw.wrap(handler)
+
+        return handler(ctx)
+
+    def _do_request(self, ctx: Any) -> Any:
+        """Execute the HTTP request with retry logic — the innermost handler in the middleware chain."""
+        method = ctx.method
+        path = ctx.path
+        json = ctx.kwargs.get("json")
+        params = ctx.kwargs.get("params")
+        headers = ctx.kwargs.get("headers")
+        retry = ctx.kwargs.get("retry", True)
+        timeout = ctx.kwargs.get("timeout")
+
         merged_headers = self._build_headers(headers)
         self._log(method, path, json)
 
@@ -150,6 +176,7 @@ class HttpClient:
     def delete(self, path: str, *, headers: dict[str, str] | None = None) -> Any:
         return self.request("DELETE", path, headers=headers)
 
+    # TODO: route stream_post through middleware chain
     def stream_post(
         self,
         path: str,

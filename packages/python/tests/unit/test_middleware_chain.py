@@ -46,3 +46,48 @@ def test_request_context_fields():
     assert ctx.method == "POST"
     assert ctx.path == "/api/test"
     assert ctx.kwargs["json"] == {"a": 1}
+
+
+from unittest.mock import patch
+
+import httpx
+from kweaver._auth import TokenAuth
+from kweaver._http import HttpClient
+from kweaver._middleware.dry_run import DryRunMiddleware
+from kweaver._errors import DryRunIntercepted
+import pytest
+
+
+def _make_http_client(handler, middlewares=None):
+    transport = httpx.MockTransport(handler)
+    return HttpClient(
+        base_url="https://mock",
+        auth=TokenAuth("tok"),
+        transport=transport,
+        middlewares=middlewares,
+    )
+
+
+def test_http_client_with_dry_run_middleware():
+    """DryRunMiddleware should intercept POST via HttpClient."""
+    def handler(req):
+        return httpx.Response(200, json={"created": True})
+
+    client = _make_http_client(handler, middlewares=[DryRunMiddleware()])
+
+    # GET should pass
+    result = client.get("/api/test")
+    assert result == {"created": True}
+
+    # POST should raise
+    with pytest.raises(DryRunIntercepted):
+        client.post("/api/test", json={"name": "foo"})
+
+
+def test_http_client_no_middleware():
+    """Without middleware, HttpClient works as before."""
+    def handler(req):
+        return httpx.Response(200, json={"ok": True})
+
+    client = _make_http_client(handler)
+    assert client.get("/api/test") == {"ok": True}

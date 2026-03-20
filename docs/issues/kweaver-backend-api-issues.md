@@ -55,7 +55,7 @@ message = body.get("message") or body.get("Description") or body.get("detail") o
 
 ### 现象
 
-SDK 在 18+ 处用同样的防御代码：
+SDK 在 **27 处**用同样的防御代码：
 
 ```python
 entries = data.get("entries", data.get("data", [])) if isinstance(data, dict) else data
@@ -205,3 +205,80 @@ Create OT 时，如果 `data_properties` 未传或缺少 `mapped_field`：
 2. 自动生成 `mapped_field`（name → name 直接映射）
 3. 类型归一化在服务端完成（服务端知道支持哪些类型）
 4. 如果 dataview 也找不到，返回 **400 明确告知缺少必填字段**，不要延迟到 build
+
+---
+
+## 5. OAuth2 标准流程签发的 Token 被 API 网关拒绝
+
+### 现象
+
+通过标准 OAuth2 Authorization Code 流程（`/oauth2/auth` → `/oauth2/token`）获取的 `access_token`，调用业务 API 时返回 401：
+
+```
+GET /api/ontology-manager/v1/knowledge-networks
+Authorization: Bearer ory_at_XXX
+→ 401: {"error_code": "Public.Unauthorized", "description": "认证失败", "error_details": "oauth info is not active"}
+```
+
+而通过浏览器登录流程（`/api/dip-hub/v1/login` → 提取 `dip.oauth2_token` cookie）获取的 token 调用同一 API 正常。
+
+### 对比实验
+
+| 获取方式 | Token 前缀 | API 调用结果 |
+|---------|-----------|-------------|
+| OAuth2 Authorization Code（`/oauth2/token`） | `ory_at_...` | 401 — "oauth info is not active" |
+| 浏览器 Cookie（`dip.oauth2_token`） | `ory_at_...` | 200 — 正常 |
+
+两个 token 格式相同（都是 `ory_at_` 前缀，由同一个 Ory Hydra 实例签发），但只有通过浏览器 cookie 方式获取的才被 API 网关认可。
+
+### 已排除的因素
+
+- curl 直接调用，排除 SDK 代码问题
+- Token 在换取后立即使用，未过期（`expires_in=3600`）
+- 重新注册 OAuth2 Client 后重试，结果相同
+
+### SDK 中的证据
+
+SDK 有两条认证路径，实现上都是正确的：
+
+```python
+# 路径 A：PasswordAuth（能用）— _auth.py:86-88
+# 通过 Playwright 浏览器登录，提取 dip.oauth2_token cookie
+for cookie in context.cookies():
+    if cookie["name"] == "dip.oauth2_token":
+        token = cookie["value"]
+
+# 路径 B：OAuth2BrowserAuth（401）— _auth.py:402-414
+# 标准 OAuth2 Authorization Code 流程，/oauth2/token 换 token
+resp = httpx.post(f"{self._base_url}/oauth2/token", data={
+    "grant_type": "authorization_code",
+    "code": code,
+    "redirect_uri": redirect_uri,
+})
+```
+
+### 根因推测
+
+API 网关的 token 校验不走标准 Ory OAuth2 token introspection（`POST /oauth2/introspect`），而是依赖浏览器登录流程写入的某个服务端 session 状态。通过标准 OAuth2 流程拿到的 `access_token` 虽然由同一个 Ory 实例签发且格式有效，但在 API 网关侧没有对应的 active session 记录。
+
+### 影响
+
+- **CLI 认证只能走 Playwright 浏览器模拟**（`PasswordAuth`），依赖 headless Chromium，安装成本高（>200MB）
+- **无法在无头服务器 / CI 环境中使用标准 OAuth2 认证**
+- **第三方集成无法通过标准 OAuth2 接入** — 标准 SDK 开发者拿到的 token 无法使用
+
+### 建议
+
+API 网关的 token 校验应走标准 Ory token introspection（`POST /oauth2/introspect`），而非绑定 dip-hub 登录 session。这样任何标准 OAuth2 客户端签发的 token 都能被业务 API 识别。
+
+---
+
+## 代码引用索引
+
+| 问题 | 关键代码位置 |
+|------|------------|
+| #1 错误格式 | `_errors.py:122`（3 种 error_code）、`_errors.py:125`（4 种 message） |
+| #2 响应信封 | `query.py:98`（"datas"）、`conversations.py:175`（5 种 key）、27 处 fallback |
+| #3 幂等 | `knowledge_networks.py:39`、`object_types.py:79`（双语）、`datasources.py:90`（仅中文）、`dataviews.py:110`（UUID 重试） |
+| #4 data_properties | `object_types.py:50`（注释）、`object_types.py:62`（`except Exception: pass`）、`object_types.py:126-145`（18 条 TYPE_MAP） |
+| #5 OAuth2 token | `_auth.py:86-88`（cookie 路径）、`_auth.py:402-414`（标准 OAuth2 路径） |

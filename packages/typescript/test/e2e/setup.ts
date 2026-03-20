@@ -34,6 +34,12 @@ function loadEnvSecrets(): void {
 
 loadEnvSecrets();
 
+// Remove stale KWEAVER_TOKEN from env so CLI commands fall back to
+// ~/.kweaver/ config which supports auto-refresh via ensureValidToken().
+// KWEAVER_BASE_URL is kept — it's used by shouldSkipE2e() to detect
+// whether an e2e environment is configured at all.
+delete process.env.KWEAVER_TOKEN;
+
 export function getE2eEnv(): {
   baseUrl: string;
   token: string;

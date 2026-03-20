@@ -180,9 +180,13 @@ def _parse_agent(d: Any) -> Agent:
         if isinstance(kn_entry, list):
             kn_ids.extend(e.get("id", "") for e in kn_entry if e.get("id"))
 
-    # Map agent-factory status to simplified status
-    raw_status = d.get("status", "unpublished")
+    # Map agent-factory status to simplified status.
+    # The published list endpoint omits the "status" field entirely —
+    # if published_at or version exists, treat as published.
+    raw_status = d.get("status")
     if raw_status in ("published", "published_edited"):
+        status = "published"
+    elif raw_status is None and (d.get("published_at") or d.get("version")):
         status = "published"
     else:
         status = "draft"

@@ -28,10 +28,18 @@ def test_list_agents_published(kweaver_client: KWeaverClient):
 
 @pytest.fixture(scope="module")
 def any_agent(kweaver_client: KWeaverClient):
-    """Find any agent for tests (published or not)."""
+    """Find first agent the current user can access (get without 403)."""
+    from kweaver._errors import AuthorizationError
+
     agents = kweaver_client.agents.list()
     assert agents, "No agents found — cannot proceed"
-    return agents[0]
+    for a in agents:
+        try:
+            kweaver_client.agents.get(a.id)
+            return a
+        except AuthorizationError:
+            continue
+    pytest.skip("No accessible agents (all returned 403)")
 
 
 def test_get_agent(kweaver_client: KWeaverClient, any_agent):

@@ -12,9 +12,6 @@ import assert from "node:assert/strict";
 import { runCli, shouldSkipE2e, shouldRunDestructive } from "./setup.js";
 import { KWeaverClient } from "../../src/index.js";
 
-// Remove stale KWEAVER_TOKEN so CLI falls back to ~/.kweaver/ config
-delete process.env.KWEAVER_TOKEN;
-
 const skip = !shouldRunDestructive() || shouldSkipE2e();
 const TEST_PREFIX = `sdk_e2e_${Date.now()}`;
 

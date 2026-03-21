@@ -1,5 +1,6 @@
 import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
 import { fetchAgentInfo, sendChatRequest } from "../api/agent-chat.js";
+import { resolveBusinessDomain } from "../config/store.js";
 
 export interface ChatArgs {
   agentId: string;
@@ -61,7 +62,7 @@ export function parseChatArgs(args: string[]): ChatArgs {
   let conversationId: string | undefined;
   let stream: boolean | undefined;
   let verbose = false;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -139,6 +140,7 @@ export function parseChatArgs(args: string[]): ChatArgs {
     throw new Error("Missing agent_id. Usage: kweaver agent chat <agent_id> [-m \"message\"]");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { agentId, version, message, conversationId, stream, verbose, businessDomain };
 }
 

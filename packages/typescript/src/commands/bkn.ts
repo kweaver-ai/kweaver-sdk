@@ -39,6 +39,7 @@ import { listTablesWithColumns } from "../api/datasources.js";
 import { createDataView } from "../api/dataviews.js";
 import { downloadBkn, uploadBkn } from "../api/bkn-backend.js";
 import { formatCallOutput } from "./call.js";
+import { resolveBusinessDomain } from "../config/store.js";
 
 export interface KnListOptions {
   offset: number;
@@ -77,7 +78,7 @@ export function parseKnListArgs(args: string[]): KnListOptions {
   let limit = 50;
   let sort = "update_time";
   let direction: "asc" | "desc" = "desc";
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let detail = false;
   let pretty = true;
   let verbose = false;
@@ -161,6 +162,7 @@ export function parseKnListArgs(args: string[]): KnListOptions {
     throw new Error(`Unsupported kn list argument: ${arg}`);
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { offset, limit, sort, direction, businessDomain, detail, pretty, verbose, name_pattern, tag };
 }
 
@@ -176,7 +178,7 @@ export function parseKnGetArgs(args: string[]): KnGetOptions {
   let knId = "";
   let stats = false;
   let exportMode = false;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
 
   for (let i = 0; i < args.length; i += 1) {
@@ -222,6 +224,7 @@ export function parseKnGetArgs(args: string[]): KnGetOptions {
     throw new Error("Missing kn-id. Usage: kweaver bkn get <kn-id> [options]");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, stats, export: exportMode, businessDomain, pretty };
 }
 
@@ -247,7 +250,7 @@ export function parseKnCreateArgs(args: string[]): KnCreateOptions {
   let bodyFile: string | undefined;
   let import_mode: "normal" | "ignore" | "overwrite" | undefined;
   let validate_dependency: boolean | undefined;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
 
   const flags: Record<string, string> = {};
@@ -331,6 +334,7 @@ export function parseKnCreateArgs(args: string[]): KnCreateOptions {
     body = JSON.stringify(payload);
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { body, import_mode, validate_dependency, businessDomain, pretty };
 }
 
@@ -344,7 +348,7 @@ export interface KnUpdateOptions {
 export function parseKnUpdateArgs(args: string[]): KnUpdateOptions {
   let knId = "";
   let bodyFile: string | undefined;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
 
   const flags: Record<string, string> = {};
@@ -420,6 +424,7 @@ export function parseKnUpdateArgs(args: string[]): KnUpdateOptions {
     body = JSON.stringify(payload);
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, body, businessDomain, pretty };
 }
 
@@ -431,7 +436,7 @@ export interface KnDeleteOptions {
 
 export function parseKnDeleteArgs(args: string[]): KnDeleteOptions {
   let knId = "";
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let yes = false;
 
   for (let i = 0; i < args.length; i += 1) {
@@ -467,6 +472,7 @@ export function parseKnDeleteArgs(args: string[]): KnDeleteOptions {
     throw new Error("Missing kn-id. Usage: kweaver bkn delete <kn-id>");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, businessDomain, yes };
 }
 
@@ -480,7 +486,7 @@ export interface KnPushOptions {
 export function parseKnPushArgs(args: string[]): KnPushOptions {
   let directory = "";
   let branch = "main";
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
 
   for (let i = 0; i < args.length; i += 1) {
@@ -525,6 +531,7 @@ export function parseKnPushArgs(args: string[]): KnPushOptions {
     throw new Error("Missing directory. Usage: kweaver bkn push <directory> [--branch main] [-bd value]");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { directory, branch, businessDomain, pretty };
 }
 
@@ -539,7 +546,7 @@ export function parseKnPullArgs(args: string[]): KnPullOptions {
   let knId = "";
   let directory = "";
   let branch = "main";
-  let businessDomain = "bd_public";
+  let businessDomain = "";
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -584,6 +591,7 @@ export function parseKnPullArgs(args: string[]): KnPullOptions {
     throw new Error("Missing kn-id. Usage: kweaver bkn pull <kn-id> [<directory>] [--branch main] [-bd value]");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, directory: directory || knId, branch, businessDomain };
 }
 
@@ -627,7 +635,7 @@ function parseSearchAfterArray(text: string): unknown[] {
 
 export function parseKnObjectTypeQueryArgs(args: string[]): KnObjectTypeQueryOptions {
   let pretty = true;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let limit: number | undefined;
   let searchAfter: unknown[] | undefined;
   const positionalArgs: string[] = [];
@@ -700,6 +708,7 @@ export function parseKnObjectTypeQueryArgs(args: string[]): KnObjectTypeQueryOpt
     throw new Error("Missing limit. Provide it in body JSON or via --limit <n>.");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return {
     knId,
     otId,
@@ -843,7 +852,7 @@ function parseObjectTypeCreateArgs(args: string[]): {
   let dataviewId = "";
   let primaryKey = "";
   let displayKey = "";
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let branch = "main";
   let pretty = true;
   const properties: string[] = [];
@@ -912,6 +921,7 @@ function parseObjectTypeCreateArgs(args: string[]): {
   }
   const body = JSON.stringify({ entries: [entry], branch });
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, body, businessDomain, branch, pretty };
 }
 
@@ -925,7 +935,7 @@ function parseObjectTypeUpdateArgs(args: string[]): {
 } {
   let name: string | undefined;
   let displayKey: string | undefined;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
   const positional: string[] = [];
 
@@ -961,6 +971,7 @@ function parseObjectTypeUpdateArgs(args: string[]): {
   if (Object.keys(payload).length === 0) {
     throw new Error("No update fields. Use --name or --display-key.");
   }
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, otId, body: JSON.stringify(payload), businessDomain, pretty };
 }
 
@@ -971,7 +982,7 @@ function parseObjectTypeDeleteArgs(args: string[]): {
   businessDomain: string;
   yes: boolean;
 } {
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let yes = false;
   const positional: string[] = [];
 
@@ -993,6 +1004,7 @@ function parseObjectTypeDeleteArgs(args: string[]): {
   if (!knId || !otIds) {
     throw new Error("Usage: kweaver bkn object-type delete <kn-id> <ot-ids> [-y]");
   }
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, otIds, businessDomain, yes };
 }
 
@@ -1003,7 +1015,7 @@ function parseOntologyQueryFlags(args: string[]): {
   businessDomain: string;
 } {
   let pretty = true;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   const filteredArgs: string[] = [];
 
   for (let i = 0; i < args.length; i += 1) {
@@ -1022,6 +1034,7 @@ function parseOntologyQueryFlags(args: string[]): {
     }
     filteredArgs.push(arg);
   }
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { filteredArgs, pretty, businessDomain };
 }
 
@@ -1037,7 +1050,7 @@ export interface KnActionTypeExecuteOptions {
 
 export function parseKnActionTypeExecuteArgs(args: string[]): KnActionTypeExecuteOptions {
   let pretty = true;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let wait = true;
   let timeout = 300;
   const positional: string[] = [];
@@ -1078,6 +1091,7 @@ export function parseKnActionTypeExecuteArgs(args: string[]): KnActionTypeExecut
     throw new Error("Missing kn-id, at-id, or body. Usage: kweaver bkn action-type execute <kn-id> <at-id> '<json>' [options]");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return {
     knId,
     atId,
@@ -1301,7 +1315,7 @@ function parseRelationTypeCreateArgs(args: string[]): {
   let name = "";
   let source = "";
   let target = "";
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let branch = "main";
   let pretty = true;
   const mappings: Array<[string, string]> = [];
@@ -1365,6 +1379,7 @@ function parseRelationTypeCreateArgs(args: string[]): {
   };
   const body = JSON.stringify({ entries: [entry], branch });
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, body, businessDomain, branch, pretty };
 }
 
@@ -1377,7 +1392,7 @@ function parseRelationTypeUpdateArgs(args: string[]): {
   pretty: boolean;
 } {
   let name: string | undefined;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
   const positional: string[] = [];
 
@@ -1406,6 +1421,7 @@ function parseRelationTypeUpdateArgs(args: string[]): {
   if (name === undefined) {
     throw new Error("No update fields. Use --name.");
   }
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, rtId, body: JSON.stringify({ name }), businessDomain, pretty };
 }
 
@@ -1416,7 +1432,7 @@ function parseRelationTypeDeleteArgs(args: string[]): {
   businessDomain: string;
   yes: boolean;
 } {
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let yes = false;
   const positional: string[] = [];
 
@@ -1438,6 +1454,7 @@ function parseRelationTypeDeleteArgs(args: string[]): {
   if (!knId || !rtIds) {
     throw new Error("Usage: kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]");
   }
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, rtIds, businessDomain, yes };
 }
 
@@ -1823,7 +1840,7 @@ Options for list: --limit, --need-total, --action-type-id, --status, --trigger-t
   }
 
   let pretty = true;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let limit: number | undefined;
   let needTotal: boolean | undefined;
   let actionTypeId: string | undefined;
@@ -1878,6 +1895,8 @@ Options for list: --limit, --need-total, --action-type-id, --status, --trigger-t
     }
     filteredArgs.push(arg);
   }
+
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
 
   try {
     const token = await ensureValidToken();
@@ -2141,7 +2160,7 @@ function parseKnCreateFromDsArgs(args: string[]): {
   let tablesStr = "";
   let build = true;
   let timeout = 300;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
 
   for (let i = 0; i < args.length; i += 1) {
@@ -2185,6 +2204,7 @@ function parseKnCreateFromDsArgs(args: string[]): {
   if (!dsId || !name) {
     throw new Error("Usage: kweaver bkn create-from-ds <ds-id> --name X [options]");
   }
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { dsId, name, tables, build, timeout, businessDomain, pretty };
 }
 
@@ -2413,7 +2433,7 @@ export function parseKnBuildArgs(args: string[]): {
   let knId = "";
   let wait = true;
   let timeout = 300;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -2445,6 +2465,7 @@ export function parseKnBuildArgs(args: string[]): {
   if (!knId) {
     throw new Error("Missing kn-id. Usage: kweaver bkn build <kn-id> [options]");
   }
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, wait, timeout, businessDomain };
 }
 
@@ -2667,7 +2688,7 @@ export function parseKnSearchArgs(args: string[]): {
   let maxConcepts = 10;
   let mode = "keyword_vector_retrieval";
   let pretty = false;
-  let businessDomain = process.env.KWEAVER_BUSINESS_DOMAIN ?? "bd_public";
+  let businessDomain = process.env.KWEAVER_BUSINESS_DOMAIN ?? "";
 
   const positional: string[] = [];
   for (let i = 0; i < args.length; i++) {
@@ -2696,6 +2717,7 @@ export function parseKnSearchArgs(args: string[]): {
     throw new Error("Usage: kweaver bkn search <kn-id> <query> [options]");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, query, maxConcepts, mode, pretty, businessDomain };
 }
 

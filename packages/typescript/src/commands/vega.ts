@@ -16,6 +16,7 @@ import {
   listVegaDiscoverTasks,
 } from "../api/vega.js";
 import { formatCallOutput } from "./call.js";
+import { resolveBusinessDomain } from "../config/store.js";
 
 // ---------------------------------------------------------------------------
 // Help
@@ -55,7 +56,7 @@ function parseCommonFlags(args: string[]): {
   businessDomain: string;
   pretty: boolean;
 } {
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
   const remaining: string[] = [];
 
@@ -72,6 +73,7 @@ function parseCommonFlags(args: string[]): {
     remaining.push(arg);
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { remaining, businessDomain, pretty };
 }
 

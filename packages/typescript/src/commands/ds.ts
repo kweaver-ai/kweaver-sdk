@@ -10,6 +10,7 @@ import {
   listTablesWithColumns,
 } from "../api/datasources.js";
 import { formatCallOutput } from "./call.js";
+import { resolveBusinessDomain } from "../config/store.js";
 
 function confirmYes(prompt: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -79,7 +80,7 @@ export function parseDsListArgs(args: string[]): {
 } {
   let keyword: string | undefined;
   let type: string | undefined;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
 
   for (let i = 0; i < args.length; i += 1) {
@@ -102,6 +103,7 @@ export function parseDsListArgs(args: string[]): {
       continue;
     }
   }
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { keyword, type, businessDomain, pretty };
 }
 

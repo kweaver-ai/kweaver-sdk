@@ -1,5 +1,6 @@
 import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
 import { HttpError } from "../utils/http.js";
+import { resolveBusinessDomain } from "../config/store.js";
 
 export interface CallInvocation {
   url: string;
@@ -18,7 +19,7 @@ export function parseCallArgs(args: string[]): CallInvocation {
   let url: string | undefined;
   let pretty = true;
   let verbose = false;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -91,6 +92,7 @@ export function parseCallArgs(args: string[]): CallInvocation {
     throw new Error("Missing request URL");
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { url, method, headers, body, pretty, verbose, businessDomain };
 }
 

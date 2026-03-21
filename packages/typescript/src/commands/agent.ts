@@ -7,6 +7,7 @@ import {
 } from "../api/agent-list.js";
 import { listConversations, listMessages } from "../api/conversations.js";
 import { formatCallOutput } from "./call.js";
+import { resolveBusinessDomain } from "../config/store.js";
 
 export interface AgentListOptions {
   name: string;
@@ -87,7 +88,7 @@ export function parseAgentListArgs(args: string[]): AgentListOptions {
   let category_id = "";
   let custom_space_id = "";
   let is_to_square = 1;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
   let verbose = false;
 
@@ -163,6 +164,7 @@ export function parseAgentListArgs(args: string[]): AgentListOptions {
     throw new Error(`Unsupported agent list argument: ${arg}`);
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return {
     name,
     offset,
@@ -189,7 +191,7 @@ export function parseAgentSessionsArgs(args: string[]): AgentSessionsOptions {
     throw new Error("Missing agent_id");
   }
 
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let limit: number | undefined;
   let pretty = true;
 
@@ -229,6 +231,7 @@ export function parseAgentSessionsArgs(args: string[]): AgentSessionsOptions {
     throw new Error(`Unsupported agent sessions argument: ${arg}`);
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { agentId, businessDomain, limit, pretty };
 }
 
@@ -245,7 +248,7 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
     throw new Error("Missing conversation_id");
   }
 
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let limit: number | undefined;
   let pretty = true;
 
@@ -285,6 +288,7 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
     throw new Error(`Unsupported agent history argument: ${arg}`);
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { conversationId, businessDomain, limit, pretty };
 }
 
@@ -447,7 +451,7 @@ export function parseAgentGetArgs(args: string[]): AgentGetOptions {
     throw new Error("Missing agent_id. Usage: kweaver agent get <agent_id> [options]");
   }
 
-  let businessDomain = "bd_public";
+  let businessDomain = "";
   let pretty = true;
   let verbose = false;
 
@@ -480,6 +484,7 @@ export function parseAgentGetArgs(args: string[]): AgentGetOptions {
     throw new Error(`Unsupported agent get argument: ${arg}`);
   }
 
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { agentId, businessDomain, pretty, verbose };
 }
 
@@ -697,7 +702,7 @@ async function runAgentCreateCommand(args: string[]): Promise<number> {
   let systemPrompt = "";
   let llmId = "";
   let llmMaxTokens = 4096;
-  let businessDomain = "bd_public";
+  let businessDomain = "";
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -728,6 +733,8 @@ Optional:
     if (arg === "--llm-max-tokens") { llmMaxTokens = parseInt(args[++i] ?? "4096", 10); continue; }
     if (arg === "-bd" || arg === "--biz-domain") { businessDomain = args[++i] ?? "bd_public"; continue; }
   }
+
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
 
   if (!name) { console.error("--name is required"); return 1; }
   if (!profile) { console.error("--profile is required"); return 1; }

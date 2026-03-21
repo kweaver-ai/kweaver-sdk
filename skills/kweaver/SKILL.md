@@ -73,5 +73,4 @@ kweaver <command> [subcommand] [options]
 - **不要自行猜测 business_domain 值**。首次使用时运行 `kweaver config show` 确认当前 business domain。如果返回 `bd_public (default)` 但命令结果为空，可能需要用 `kweaver config set-bd <uuid>` 设置正确的值（从平台 UI 的请求头中获取 `X-Business-Domain`）
 - Action 执行有副作用，执行前向用户确认
 - **禁止运行 `kweaver auth status` 做预检**。直接执行目标命令，CLI 会自动处理认证和 token 刷新
-- Token 1 小时过期，CLI 自动刷新；遇到 401 会自动重试一次，无需手动干预
-- 仅当 refresh token 也失效（自动重试仍报 401）时，才提示用户 `kweaver auth login`
+- Token 1 小时过期，**不支持自动刷新**。过期后需要用户重新运行 `kweaver auth login <url>`。遇到 401 错误时提示用户重新登录，**禁止自动重试 `auth login`**

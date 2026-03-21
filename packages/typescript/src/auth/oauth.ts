@@ -17,9 +17,10 @@ export async function playwrightLogin(
   baseUrl: string,
   options?: { username?: string; password?: string },
 ): Promise<TokenConfig> {
-  let chromium: typeof import("playwright").chromium;
+  let chromium: any;
   try {
-    const pw = await import("playwright");
+    const modName = "playwright";
+    const pw = await import(/* webpackIgnore: true */ modName);
     chromium = pw.chromium;
   } catch {
     throw new Error(

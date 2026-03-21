@@ -27,9 +27,13 @@ export async function vegaHealth(options: VegaHealthOptions): Promise<string> {
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/health`;
 
-  const response = await fetch(url, {
+  // Vega backend has no dedicated /health endpoint.
+  // Probe the catalogs list as a lightweight reachability check.
+  const url = new URL(`${base}${VEGA_BASE}/catalogs`);
+  url.searchParams.set("limit", "1");
+
+  const response = await fetch(url.toString(), {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -38,7 +42,8 @@ export async function vegaHealth(options: VegaHealthOptions): Promise<string> {
   if (!response.ok) {
     throw new HttpError(response.status, response.statusText, body);
   }
-  return body;
+
+  return JSON.stringify({ status: "healthy", probe: "catalogs", statusCode: response.status });
 }
 
 export interface ListVegaCatalogsOptions {

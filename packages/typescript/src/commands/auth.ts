@@ -66,6 +66,16 @@ export async function runAuthCommand(args: string[]): Promise<number> {
   const target = args[0];
   const rest = args.slice(1);
 
+  if (!target || target === "--help" || target === "-h") {
+    console.log(`kweaver auth <platform-url>  Login to a platform (OAuth browser flow)
+kweaver auth status [url]    Show current auth status
+kweaver auth list            List saved platforms
+kweaver auth use <url>       Switch active platform
+kweaver auth logout [url]    Logout (revoke session)
+kweaver auth delete <url>    Delete saved credentials`);
+    return 0;
+  }
+
   if (target === "login") {
     const url = rest[0];
     if (!url) {

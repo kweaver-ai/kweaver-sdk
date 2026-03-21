@@ -275,9 +275,7 @@ function waitForAuthorizationCode(
       const state = callbackUrl.searchParams.get("state");
       if (state !== expectedState) {
         response.statusCode = 400;
-        response.end("State mismatch");
-        server.close();
-        reject(new Error("State mismatch in OAuth callback"));
+        response.end("State mismatch — waiting for correct callback, please use the new authorization URL");
         return;
       }
 

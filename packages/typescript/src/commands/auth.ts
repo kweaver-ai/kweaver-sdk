@@ -13,6 +13,7 @@ import {
 import type { CallbackSession, ClientConfig, TokenConfig } from "../config/store.js";
 import {
   callLogoutEndpoint,
+  ensureValidToken,
   formatHttpError,
   getStoredAuthSummary,
   login,
@@ -48,7 +49,15 @@ export function formatAuthStatusSummary(input: {
   }
 
   if (input.token?.expiresAt) {
-    lines.push(`Token expires at: ${input.token.expiresAt}`);
+    const expiry = new Date(input.token.expiresAt);
+    const now = new Date();
+    const remainingMs = expiry.getTime() - now.getTime();
+    if (remainingMs > 0) {
+      const remainingMin = Math.ceil(remainingMs / 60_000);
+      lines.push(`Token status: active (expires in ${remainingMin} min, auto-refresh enabled)`);
+    } else {
+      lines.push(`Token status: expired (will auto-refresh on next command)`);
+    }
   }
 
   if (input.callback?.receivedAt) {
@@ -142,6 +151,14 @@ kweaver auth delete <url>    Delete saved credentials`);
     const resolvedTarget = args[1] ? resolvePlatformIdentifier(args[1]) : undefined;
     const statusTarget =
       resolvedTarget && /^https?:\/\//.test(resolvedTarget) ? normalizeBaseUrl(resolvedTarget) : resolvedTarget ?? undefined;
+
+    // Try to refresh token before displaying status, so agent never sees stale expiry
+    try {
+      await ensureValidToken();
+    } catch {
+      // Refresh may fail (no token, network error) — continue to show whatever we have
+    }
+
     const { client, token, callback } = getStoredAuthSummary(statusTarget);
 
     if (!client) {

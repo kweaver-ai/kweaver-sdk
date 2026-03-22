@@ -55,6 +55,14 @@ Commands:
 export async function run(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
 
+  if (command === "--version" || command === "-V" || command === "version") {
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const pkg = require("../package.json") as { version: string };
+    console.log(pkg.version);
+    return 0;
+  }
+
   if (argv.length === 0 || !command || command === "--help" || command === "-h" || command === "help") {
     printHelp();
     return 0;

@@ -34,7 +34,7 @@ kweaver bkn object-type get <kn_id> <ot_id>                # -v 显示完整 dat
 kweaver bkn object-type create <kn_id> --name <n> --dataview-id <dv> --primary-key <pk> --display-key <dk> [--property '<json>' ...]
 kweaver bkn object-type update <kn_id> <ot_id> [--name <n>] [--display-key <dk>]
 kweaver bkn object-type delete <kn_id> <ot_ids> [--yes/-y]
-kweaver bkn object-type query <kn_id> <ot_id> ['<json>']   # 查询实例（支持 --limit/--search-after）
+kweaver bkn object-type query <kn_id> <ot_id> ['<json>']   # 查询实例（默认 limit=30，支持 --limit/--search-after）
 kweaver bkn object-type properties <kn_id> <ot_id> '<json>' # 查询实例属性
 ```
 
@@ -45,11 +45,11 @@ kweaver bkn object-type properties <kn_id> <ot_id> '<json>' # 查询实例属性
 ### 语法
 
 ```jsonc
-// 单条件
-{"limit": 50, "condition": {"field": "quantity", "operation": ">", "value": 4000}}
+// 单条件（limit 默认 30，可省略）
+{"limit": 30, "condition": {"field": "quantity", "operation": ">", "value": 4000}}
 
 // 多条件组合（AND）
-{"limit": 50, "condition": {
+{"limit": 30, "condition": {
   "operation": "and",
   "sub_conditions": [
     {"field": "quantity", "operation": ">", "value": 4000},
@@ -58,7 +58,7 @@ kweaver bkn object-type properties <kn_id> <ot_id> '<json>' # 查询实例属性
 }}
 
 // OR 组合
-{"limit": 50, "condition": {
+{"limit": 30, "condition": {
   "operation": "or",
   "sub_conditions": [
     {"field": "category", "operation": "==", "value": "A"},

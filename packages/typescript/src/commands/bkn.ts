@@ -1124,7 +1124,8 @@ kweaver bkn object-type properties <kn-id> <ot-id> '<json>' [--pretty] [-bd valu
 list: List object types (schema) from ontology-manager.
 get: Get single object type details.
 create/update/delete: Schema CRUD (create requires dataview-id).
-query/properties: Query via ontology-query API. For query, --limit and --search-after are merged into the JSON body.
+query: Query via ontology-query API. Default limit is 30 if not specified. Use --search-after for pagination.
+properties: Query instance properties by primary key.
 
 properties JSON format: {"_instance_identities":[{"<primary-key>":"<value>"}],"properties":["prop1","prop2"]}`);
     return 0;

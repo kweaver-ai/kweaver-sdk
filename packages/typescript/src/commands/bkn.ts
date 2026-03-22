@@ -3,8 +3,7 @@ import { execSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadNetwork, allObjects, allRelations, allActions, generateChecksum, validateNetwork } from "@kweaver-ai/bkn";
-import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
-import { HttpError } from "../utils/http.js";
+import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import {
   listKnowledgeNetworks,
   getKnowledgeNetwork,
@@ -793,24 +792,15 @@ export async function runKnCommand(args: string[]): Promise<number> {
   };
 
   try {
-    const code = await dispatch();
-    if (code === -1) {
-      console.error(`Unknown bkn subcommand: ${subcommand}`);
-      return 1;
-    }
-    return code;
-  } catch (error) {
-    // Auto-retry on 401: force-refresh the token and re-run the subcommand.
-    // The subcommand will call ensureValidToken() again and pick up the fresh token.
-    if (error instanceof HttpError && error.status === 401) {
-      try {
-        await ensureValidToken({ forceRefresh: true });
-        return await dispatch();
-      } catch (retryError) {
-        console.error(formatHttpError(retryError));
+    return await with401RefreshRetry(async () => {
+      const code = await dispatch();
+      if (code === -1) {
+        console.error(`Unknown bkn subcommand: ${subcommand}`);
         return 1;
       }
-    }
+      return code;
+    });
+  } catch (error) {
     console.error(formatHttpError(error));
     return 1;
   }

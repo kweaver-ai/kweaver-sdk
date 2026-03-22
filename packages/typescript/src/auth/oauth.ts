@@ -1,6 +1,7 @@
 import {
   type TokenConfig,
   getCurrentPlatform,
+  loadClientConfig,
   loadTokenConfig,
   saveTokenConfig,
   setCurrentPlatform,
@@ -8,6 +9,9 @@ import {
 import { HttpError, NetworkRequestError } from "../utils/http.js";
 
 const TOKEN_TTL_SECONDS = 3600;
+
+/** Seconds before access token expiry to trigger refresh (matches Python ConfigAuth). */
+const REFRESH_THRESHOLD_SEC = 60;
 
 export function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -101,6 +105,109 @@ export async function playwrightLogin(
   }
 }
 
+function tokenNeedsRefresh(token: TokenConfig): boolean {
+  if (!token.expiresAt) {
+    return false;
+  }
+  const expiresAtMs = Date.parse(token.expiresAt);
+  if (Number.isNaN(expiresAtMs)) {
+    return false;
+  }
+  const thresholdMs = REFRESH_THRESHOLD_SEC * 1000;
+  return expiresAtMs - thresholdMs <= Date.now();
+}
+
+/**
+ * Exchange refresh_token for a new access token (OAuth2 password grant style, same as Python ConfigAuth).
+ * Persists the new token to ~/.kweaver/ and returns it.
+ */
+export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfig> {
+  const baseUrl = normalizeBaseUrl(token.baseUrl);
+  const refreshToken = token.refreshToken?.trim();
+  if (!refreshToken) {
+    throw new Error(
+      `Token expired and no refresh_token available for ${baseUrl}. Run \`kweaver auth login ${baseUrl}\` again.`,
+    );
+  }
+
+  const client = loadClientConfig(baseUrl);
+  const clientId = client?.clientId?.trim() ?? "";
+  const clientSecret = client?.clientSecret?.trim() ?? "";
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      `Token refresh requires OAuth client credentials (client.json). Run \`kweaver auth login ${baseUrl}\` again.`,
+    );
+  }
+
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const url = `${baseUrl}/oauth2/token`;
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: body.toString(),
+    });
+  } catch (cause) {
+    const hint =
+      cause instanceof Error ? cause.message : String(cause);
+    throw new NetworkRequestError(
+      "POST",
+      url,
+      hint,
+      "Check network connectivity and that the platform exposes /oauth2/token.",
+    );
+  }
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, text);
+  }
+
+  let data: {
+    access_token: string;
+    token_type?: string;
+    expires_in?: number;
+    scope?: string;
+    refresh_token?: string;
+    id_token?: string;
+  };
+  try {
+    data = JSON.parse(text) as typeof data;
+  } catch {
+    throw new Error(`Invalid JSON from ${url} during token refresh.`);
+  }
+
+  if (typeof data.access_token !== "string") {
+    throw new Error(`Token refresh response missing access_token from ${url}.`);
+  }
+
+  const now = new Date();
+  const expiresIn = typeof data.expires_in === "number" ? data.expires_in : 3600;
+  const newToken: TokenConfig = {
+    baseUrl,
+    accessToken: data.access_token,
+    tokenType: data.token_type ?? "Bearer",
+    scope: data.scope ?? token.scope ?? "",
+    expiresIn,
+    expiresAt: new Date(now.getTime() + expiresIn * 1000).toISOString(),
+    refreshToken: data.refresh_token ?? refreshToken,
+    idToken: data.id_token ?? token.idToken ?? "",
+    obtainedAt: now.toISOString(),
+  };
+  saveTokenConfig(newToken);
+  return newToken;
+}
+
 export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promise<TokenConfig> {
   const envToken = process.env.KWEAVER_TOKEN;
   const envBaseUrl = process.env.KWEAVER_BASE_URL;
@@ -120,24 +227,26 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
     throw new Error("No active platform selected. Run `kweaver auth login <platform-url>` first.");
   }
 
-  if (opts?.forceRefresh) {
-    throw new Error(
-      `Token refresh is not supported. Run \`kweaver auth login ${currentPlatform}\` again.`
-    );
-  }
-
-  const token = loadTokenConfig(currentPlatform);
+  let token = loadTokenConfig(currentPlatform);
   if (!token) {
     throw new Error(
-      `No saved token for ${currentPlatform}. Run \`kweaver auth login ${currentPlatform}\` first.`
+      `No saved token for ${currentPlatform}. Run \`kweaver auth login ${currentPlatform}\` first.`,
     );
   }
 
-  if (token.expiresAt) {
-    const expiresAtMs = Date.parse(token.expiresAt);
-    if (!Number.isNaN(expiresAtMs) && expiresAtMs - 60_000 <= Date.now()) {
+  if (opts?.forceRefresh) {
+    return refreshAccessToken(token);
+  }
+
+  if (tokenNeedsRefresh(token)) {
+    try {
+      return await refreshAccessToken(token);
+    } catch (err) {
       throw new Error(
-        `Access token expired. Run \`kweaver auth login ${currentPlatform}\` again.`
+        `Access token expired or near expiry and refresh failed for ${currentPlatform}.\n` +
+          (err instanceof Error ? `${err.message}\n` : "") +
+          `Run \`kweaver auth login ${currentPlatform}\` again.`,
+        { cause: err },
       );
     }
   }
@@ -145,6 +254,44 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
   return token;
 }
 
+/**
+ * Run an operation; on HTTP 401, refresh the access token once and retry.
+ * Does not call `ensureValidToken` first — use for CLI routers so `--help` works without login.
+ */
+export async function with401RefreshRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 401) {
+      const currentPlatform = getCurrentPlatform();
+      if (!currentPlatform) {
+        throw error;
+      }
+      const platformUrl = normalizeBaseUrl(currentPlatform);
+      const latest = loadTokenConfig(platformUrl);
+      if (!latest) {
+        throw error;
+      }
+      try {
+        await refreshAccessToken(latest);
+      } catch (retryErr) {
+        const oauthHint = formatOAuthErrorBody(retryErr instanceof HttpError ? retryErr.body : "");
+        const extra = oauthHint ? `\n\n${oauthHint}` : "";
+        throw new Error(
+          `Authentication failed (401). Token refresh did not succeed for ${platformUrl}.${extra}\n` +
+            `Run \`kweaver auth login ${platformUrl}\` again.`,
+          { cause: retryErr },
+        );
+      }
+      return await fn();
+    }
+    throw error;
+  }
+}
+
+/**
+ * Load a valid token, run `fn(token)`, and on 401 refresh once and retry with the new token.
+ */
 export async function withTokenRetry<T>(
   fn: (token: TokenConfig) => Promise<T>,
 ): Promise<T> {
@@ -153,11 +300,20 @@ export async function withTokenRetry<T>(
     return await fn(token);
   } catch (error) {
     if (error instanceof HttpError && error.status === 401) {
-      const platform = token.baseUrl;
-      throw new Error(
-        `Authentication failed (401). Token may be expired or revoked.\n` +
-        `Run \`kweaver auth login ${platform}\` again.`
-      );
+      const platformUrl = normalizeBaseUrl(token.baseUrl);
+      const latest = loadTokenConfig(platformUrl) ?? token;
+      try {
+        const refreshed = await refreshAccessToken(latest);
+        return await fn(refreshed);
+      } catch (retryErr) {
+        const oauthHint = formatOAuthErrorBody(retryErr instanceof HttpError ? retryErr.body : "");
+        const extra = oauthHint ? `\n\n${oauthHint}` : "";
+        throw new Error(
+          `Authentication failed (401). Token refresh did not succeed for ${platformUrl}.${extra}\n` +
+            `Run \`kweaver auth login ${platformUrl}\` again.`,
+          { cause: retryErr },
+        );
+      }
     }
     throw error;
   }

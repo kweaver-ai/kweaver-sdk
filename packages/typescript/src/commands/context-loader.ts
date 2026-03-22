@@ -1,5 +1,4 @@
-import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
-import { HttpError } from "../utils/http.js";
+import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import type { ConditionSpec, RelationTypePath } from "../api/context-loader.js";
 import {
   knSearch,
@@ -118,22 +117,15 @@ Examples:
   };
 
   try {
-    const code = await dispatch();
-    if (code === -1) {
-      console.error(`Unknown context-loader subcommand: ${subcommand}`);
-      return 1;
-    }
-    return code;
-  } catch (error) {
-    if (error instanceof HttpError && error.status === 401) {
-      try {
-        await ensureValidToken({ forceRefresh: true });
-        return await dispatch();
-      } catch (retryError) {
-        console.error(formatHttpError(retryError));
+    return await with401RefreshRetry(async () => {
+      const code = await dispatch();
+      if (code === -1) {
+        console.error(`Unknown context-loader subcommand: ${subcommand}`);
         return 1;
       }
-    }
+      return code;
+    });
+  } catch (error) {
     console.error(formatHttpError(error));
     return 1;
   }

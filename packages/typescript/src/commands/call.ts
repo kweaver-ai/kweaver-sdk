@@ -1,4 +1,4 @@
-import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
+import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { HttpError } from "../utils/http.js";
 import { resolveBusinessDomain } from "../config/store.js";
 
@@ -208,17 +208,8 @@ Options:
   };
 
   try {
-    return await execute();
+    return await with401RefreshRetry(async () => execute());
   } catch (error) {
-    if (error instanceof HttpError && error.status === 401) {
-      try {
-        await ensureValidToken({ forceRefresh: true });
-        return await execute();
-      } catch (retryError) {
-        console.error(formatHttpError(retryError));
-        return 1;
-      }
-    }
     console.error(formatHttpError(error));
     return 1;
   }

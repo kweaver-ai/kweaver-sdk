@@ -23,6 +23,19 @@ export interface TokenConfig {
   obtainedAt: string;
 }
 
+/** OAuth2 client registration (per platform), used for refresh_token grant. */
+export interface ClientConfig {
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri?: string;
+  logoutRedirectUri?: string;
+  scope?: string;
+  lang?: string;
+  product?: string;
+  xForwardedPrefix?: string;
+}
+
 /** Single context-loader entry (named kn_id). */
 export interface ContextLoaderEntry {
   name: string;
@@ -276,6 +289,21 @@ export function saveTokenConfig(config: TokenConfig): void {
   ensureStoreReady();
   ensurePlatformDir(config.baseUrl);
   writeJsonFile(getPlatformFile(config.baseUrl, "token.json"), config);
+}
+
+export function loadClientConfig(baseUrl?: string): ClientConfig | null {
+  ensureStoreReady();
+  const targetBaseUrl = baseUrl ?? getCurrentPlatform();
+  if (!targetBaseUrl) {
+    return null;
+  }
+  return readJsonFile<ClientConfig>(getPlatformFile(targetBaseUrl, "client.json"));
+}
+
+export function saveClientConfig(baseUrl: string, config: ClientConfig): void {
+  ensureStoreReady();
+  ensurePlatformDir(baseUrl);
+  writeJsonFile(getPlatformFile(baseUrl, "client.json"), { ...config, baseUrl });
 }
 
 /** Legacy format (pre-refactor). */

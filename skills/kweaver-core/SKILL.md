@@ -90,3 +90,10 @@ kweaver <command> [subcommand] [options]
    ```
 3. **尽量使用 `condition` 过滤**，缩小返回集：按编号、名称、状态等精确或模糊过滤，避免全表扫描
 4. **优先使用 `==`、`like`、`in` 操作符**（SQL 视图兼容）。`match`/`contain` 仅 OpenSearch 索引支持，SQL 视图下会报错
+5. **自动裁剪**：当查询结果超过 100KB 时，CLI 会自动裁剪 `datas` 数组并附加 `_truncated` 字段。如果返回中包含 `_truncated`，按其中的 `hint` 提示执行下一轮查询：
+   ```json
+   {"_truncated": {"returned": 176, "total_fetched": 200, "remaining": 24,
+     "next_search_after": ["v1","v2","v3"],
+     "hint": "Pass --search-after '[...]' --limit 176 to fetch the next page."}}
+   ```
+   直接使用 `next_search_after` 的值作为下一次查询的 `--search-after` 参数即可

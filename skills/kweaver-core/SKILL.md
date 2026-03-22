@@ -79,7 +79,7 @@ kweaver <command> [subcommand] [options]
 
 **所有 `object-type query` 调用必须遵守以下规则，否则返回数据过大会导致 JSON 截断和解析失败：**
 
-1. **limit 必须 ≤ 30**。CLI 默认 limit=30，**禁止**传入更大的值（如 50、100）。**BOM（物料清单）尤其注意：单条记录字段多、一个产品可能有多个 BOM 版本，建议 limit ≤ 10，并用 condition 过滤到具体版本号**。其他宽表（工单、PR、PO）建议 limit ≤ 20
+1. **limit 不要超过 30**。CLI 默认 limit=30。字段多的宽表建议 limit 10~20，按实际单条记录大小调整
 2. **需要更多数据时使用 `search_after` 分页**，不要加大 limit：
    ```
    # 第一页
@@ -90,4 +90,3 @@ kweaver <command> [subcommand] [options]
    ```
 3. **尽量使用 `condition` 过滤**，缩小返回集：按编号、名称、状态等精确或模糊过滤，避免全表扫描
 4. **优先使用 `==`、`like`、`in` 操作符**（SQL 视图兼容）。`match`/`contain` 仅 OpenSearch 索引支持，SQL 视图下会报错
-5. **历史数据注意**：PR/PO/工单/BOM 等对象类型可能包含大量历史版本。查询时通过日期、单号、状态等条件限定当前批次，避免混入已完工的历史记录

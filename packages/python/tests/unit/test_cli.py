@@ -1077,6 +1077,16 @@ def test_object_type_update(runner):
         mock_ot = MagicMock()
         mock_ot.model_dump.return_value = {"id": "ot1", "name": "new-name"}
         client.object_types.update.return_value = mock_ot
+        # Merge flags: GET current schema then PUT merged body
+        client._http.get.return_value = {
+            "entries": [
+                {
+                    "id": "ot1",
+                    "name": "old-name",
+                    "data_properties": [],
+                }
+            ]
+        }
         mock_make.return_value = client
         result = runner.invoke(cli, [
             "bkn", "object-type", "update", "kn1", "ot1",
@@ -1085,7 +1095,12 @@ def test_object_type_update(runner):
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["name"] == "new-name"
-        client.object_types.update.assert_called_once_with("kn1", "ot1", name="new-name")
+        client._http.get.assert_called_once()
+        client.object_types.update.assert_called_once()
+        u_args, u_kwargs = client.object_types.update.call_args
+        assert u_args[:2] == ("kn1", "ot1")
+        assert u_kwargs["name"] == "new-name"
+        assert u_kwargs["data_properties"] == []
 
 
 def test_object_type_update_no_fields(runner):

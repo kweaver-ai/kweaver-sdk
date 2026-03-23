@@ -14,7 +14,7 @@ def _context_path() -> Path:
 def _read_context() -> dict:
     path = _context_path()
     if path.exists():
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     return {}
 
 

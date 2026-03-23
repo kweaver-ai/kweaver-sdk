@@ -63,7 +63,9 @@ def _apply_object_type_merge(
     for add in add_properties:
         nm = add.get("name")
         if not isinstance(nm, str) or not nm:
-            error_exit('--add-property JSON must include a non-empty string "name" field.')
+            error_exit(
+                '--add-property / --update-property JSON must include a non-empty string "name" field.'
+            )
         idx = next((i for i, p in enumerate(plist) if p.get("name") == nm), -1)
         if idx >= 0:
             plist[idx] = add
@@ -484,7 +486,13 @@ def object_type_create(
     "--add-property",
     "add_properties_raw",
     multiple=True,
-    help="Property as JSON object (repeatable). Merged into schema (GET-merge-PUT).",
+    help="Add a data property as JSON (repeatable). Same name replaces existing (update).",
+)
+@click.option(
+    "--update-property",
+    "update_properties_raw",
+    multiple=True,
+    help="Alias for --add-property: replace property by name (GET-merge-PUT).",
 )
 @click.option(
     "--remove-property",
@@ -511,6 +519,7 @@ def object_type_update(
     name: str | None,
     display_key: str | None,
     add_properties_raw: tuple[str, ...],
+    update_properties_raw: tuple[str, ...],
     remove_properties: tuple[str, ...],
     tags: str | None,
     comment: str | None,
@@ -526,13 +535,13 @@ def object_type_update(
     raw_body = body_opt if body_opt is not None else body_positional
 
     add_properties: list[dict[str, Any]] = []
-    for raw in add_properties_raw:
+    for raw in add_properties_raw + update_properties_raw:
         try:
             obj = json.loads(raw)
         except json.JSONDecodeError as e:
-            error_exit(f"Invalid --add-property JSON: {e}")
+            error_exit(f"Invalid --add-property / --update-property JSON: {e}")
         if not isinstance(obj, dict):
-            error_exit("--add-property must be a JSON object.")
+            error_exit("--add-property / --update-property must be a JSON object.")
         add_properties.append(obj)
 
     tags_list: list[str] | None = None
@@ -562,7 +571,10 @@ def object_type_update(
             error_exit("Full JSON body must be a JSON object starting with '{'.")
 
         if has_merge:
-            error_exit("Do not combine --body / third-arg JSON with --name, --add-property, and other merge flags.")
+            error_exit(
+                "Do not combine --body / third-arg JSON with --name, --add-property, --update-property, "
+                "--remove-property, and other merge flags."
+            )
 
         client = make_client()
         data = json.loads(s)
@@ -572,8 +584,8 @@ def object_type_update(
 
     if not has_merge:
         error_exit(
-            "No update fields. Use --name, --display-key, --add-property, --remove-property, "
-            "--tags, --comment, --icon, --color, or pass full JSON as third argument or --body."
+            "No update fields. Use --name, --display-key, --add-property (add), --update-property (same as add), "
+            "--remove-property (delete), --tags, --comment, --icon, --color, or full JSON as third arg or --body."
         )
 
     client = make_client()

@@ -1031,7 +1031,9 @@ export function applyObjectTypeMerge(
   for (const add of merge.addProperties) {
     const nm = add.name;
     if (typeof nm !== "string" || !nm) {
-      throw new Error("--add-property JSON must include a non-empty string \"name\" field.");
+      throw new Error(
+        "--add-property / --update-property JSON must include a non-empty string \"name\" field.",
+      );
     }
     const idx = list.findIndex((p) => p?.name === nm);
     if (idx >= 0) list[idx] = add;
@@ -1067,9 +1069,11 @@ function parseObjectTypeUpdateArgs(args: string[]): ObjectTypeUpdateParsed {
       displayKey = args[++i];
       continue;
     }
-    if (arg === "--add-property" && args[i + 1]) {
+    if ((arg === "--add-property" || arg === "--update-property") && args[i + 1]) {
       const raw = args[++i];
-      addProperties.push(parseJsonObject(raw, `--add-property must be valid JSON object: ${raw}`));
+      addProperties.push(
+        parseJsonObject(raw, `--add-property / --update-property must be valid JSON object: ${raw}`),
+      );
       continue;
     }
     if (arg === "--remove-property" && args[i + 1]) {
@@ -1110,7 +1114,7 @@ function parseObjectTypeUpdateArgs(args: string[]): ObjectTypeUpdateParsed {
   const [knId, otId, maybeBody] = positional;
   if (!knId || !otId) {
     throw new Error(
-      "Usage: kweaver bkn object-type update <kn-id> <ot-id> [ '<full-json-body>' ] [--name ...] [--add-property '<json>' ...]",
+      "Usage: kweaver bkn object-type update <kn-id> <ot-id> [ '<full-json-body>' ] [--name ...] [--add-property|--update-property '<json>' ...] [--remove-property <name> ...]",
     );
   }
 
@@ -1126,7 +1130,9 @@ function parseObjectTypeUpdateArgs(args: string[]): ObjectTypeUpdateParsed {
 
   if (maybeBody !== undefined && maybeBody.trim().startsWith("{")) {
     if (hasMergeFlags) {
-      throw new Error("Do not combine a raw JSON body with --name/--add-property and other merge flags.");
+      throw new Error(
+        "Do not combine a raw JSON body with --name/--add-property/--update-property/--remove-property and other merge flags.",
+      );
     }
     if (!businessDomain) businessDomain = resolveBusinessDomain();
     return {
@@ -1180,7 +1186,7 @@ function parseObjectTypeUpdateArgs(args: string[]): ObjectTypeUpdateParsed {
     merge.color === undefined
   ) {
     throw new Error(
-      "No update fields. Use --name, --display-key, --add-property, --remove-property, --tags, --comment, --icon, --color, or pass a full JSON object as the third argument.",
+      "No update fields. Use --name, --display-key, --add-property (new), --update-property (same as add; replaces by name), --remove-property, --tags, --comment, --icon, --color, or pass a full JSON object as the third argument.",
     );
   }
 
@@ -1363,7 +1369,7 @@ async function runKnObjectTypeCommand(args: string[]): Promise<number> {
     console.log(`kweaver bkn object-type list <kn-id> [--pretty] [-bd value]
 kweaver bkn object-type get <kn-id> <ot-id> [--pretty] [-bd value]
 kweaver bkn object-type create <kn-id> --name X --dataview-id Y --primary-key Z --display-key W [--property '<json>' ...]
-kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property '<json>' ...] [--remove-property N ...] [--tags '["a","b"]'] [--comment S] [--icon I] [--color C] [--branch main]
+kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property|--update-property '<json>' ...] [--remove-property N ...] [--tags '["a","b"]'] [--comment S] [--icon I] [--color C] [--branch main]
   kweaver bkn object-type update <kn-id> <ot-id> '<full-json-body>'
 kweaver bkn object-type delete <kn-id> <ot-ids> [-y]
 kweaver bkn object-type query <kn-id> <ot-id> ['<json>'] [--limit <n>] [--search-after '<json-array>'] [--pretty] [-bd value]
@@ -1371,7 +1377,7 @@ kweaver bkn object-type properties <kn-id> <ot-id> '<json>' [--pretty] [-bd valu
 
 list: List object types (schema) from ontology-manager.
 get: Get single object type details.
-create/update/delete: Schema CRUD (create requires dataview-id). update: merge flags (--add-property, etc.) fetch current schema then PUT; or pass full JSON as third arg.
+create/update/delete: Schema CRUD (create requires dataview-id). update: merge flags (--add-property / --update-property / --remove-property, etc.) GET-merge-PUT; or full JSON as third arg.
 query: Query via ontology-query API. Default limit is 30 if not specified. Use --search-after for pagination.
 properties: Query instance properties by primary key.
 
@@ -1535,7 +1541,7 @@ JSON: {"_instance_identities":[{"<primary-key>":"<value>"}],"properties":["prop1
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
       console.log(`kweaver bkn object-type create <kn-id> --name X --dataview-id Y --primary-key Z --display-key W [--property '<json>' ...]
-kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property '<json>' ...] [--remove-property N ...] [--tags '["a"]'] [--comment S] [--icon I] [--color C] [--branch main]
+kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property|--update-property '<json>' ...] [--remove-property N ...] [--tags '["a"]'] [--comment S] [--icon I] [--color C] [--branch main]
   kweaver bkn object-type update <kn-id> <ot-id> '<full-json-body>'
 kweaver bkn object-type delete <kn-id> <ot-ids> [-y]`);
       return 0;

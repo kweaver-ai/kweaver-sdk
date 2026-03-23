@@ -33,6 +33,10 @@ npm install -g @kweaver-ai/kweaver-sdk
 kweaver <command> [subcommand] [options]
 ```
 
+**完整子命令与参数以当前安装的 CLI 为准**：运行 `kweaver --help`（或 `-h`）查看与代码同步的用法列表；查版本用 `kweaver --version` / `-V` / `kweaver version`。
+
+**别名**：`kweaver curl` 等同于 `kweaver call`；`kweaver context` 等同于 `kweaver context-loader`。
+
 ## 使用前提
 
 **认证凭据通过 `~/.kweaver/` 管理，支持自动刷新。禁止提前检查环境变量，禁止询问用户提供密码或 Token。**
@@ -46,15 +50,15 @@ kweaver <command> [subcommand] [options]
 
 | 命令组 | 说明 | 常用命令 | 详细参考 |
 |--------|------|---------|---------|
-| `auth` | 认证管理 | `auth login <url>`, `auth status`, `auth list` | `references/auth.md` |
+| `auth` | 认证管理 | `auth login <url>`（默认 OAuth2）；无浏览器可用 `-u`/`-p` 或 `--playwright`；`auth status`, `auth list` | `references/auth.md` |
 | `token` | 打印当前 access token（自动刷新） | `token` | — |
-| `bkn` | BKN 知识网络管理、Schema、查询、Action | `bkn list`, `bkn get <id>`, `bkn search <id> <query>` | `references/bkn.md` |
+| `bkn` | BKN 知识网络管理、Schema、查询、Action | `bkn list`, `bkn object-type query …`, `bkn search …`, `bkn push`/`pull`；更多见 `kweaver --help` | `references/bkn.md` |
 | `agent` | Agent CRUD、发布、对话 | `agent list`, `agent get <id>`, `agent chat <id> -m "..."` | `references/agent.md` |
 | `ds` | 数据源管理 | `ds list`, `ds get <id>` | `references/ds.md` |
 | `vega` | Vega 可观测平台 | `vega health`, `vega catalog list`, `vega resource list` | `references/vega.md` |
 | `config` | 平台配置（business domain 等） | `config show`, `config set-bd <uuid>` | `references/config.md` |
 | `context-loader` | MCP 分层检索 | `context-loader config show`, `context-loader kn-search <query>` | `references/context-loader.md` |
-| `call` | 通用 API 调用 | `call <path> [-X POST] [-d '...']` | `references/call.md` |
+| `call` | 通用 API 调用 | `call <url> [-X POST] [-d '...']`（可用 `curl` 别名；支持 `--url`、`--data-raw` 等，见 `kweaver --help`） | `references/call.md` |
 
 **按需阅读**：需要子命令完整参数或编排示例时，读取对应的 reference 文件。
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -27,9 +28,11 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.chmod(path, 0o600)
+    if sys.platform != "win32":
+        os.chmod(path.parent, 0o700)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8", newline="\n")
+    if sys.platform != "win32":
+        os.chmod(path, 0o600)
 
 
 @dataclass

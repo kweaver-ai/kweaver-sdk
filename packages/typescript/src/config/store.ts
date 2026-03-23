@@ -91,9 +91,11 @@ function getLegacyCallbackFilePath(): string {
   return join(getConfigDirPath(), "callback.json");
 }
 
+const IS_WIN32 = process.platform === "win32";
+
 function ensureDir(path: string): void {
   if (!existsSync(path)) {
-    mkdirSync(path, { recursive: true, mode: 0o700 });
+    mkdirSync(path, { recursive: true, ...(IS_WIN32 ? {} : { mode: 0o700 }) });
   }
 }
 
@@ -112,8 +114,8 @@ function readJsonFile<T>(filePath: string): T | null {
 
 function writeJsonFile(filePath: string, value: unknown): void {
   ensureConfigDir();
-  writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(filePath, 0o600);
+  writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, IS_WIN32 ? {} : { mode: 0o600 });
+  if (!IS_WIN32) chmodSync(filePath, 0o600);
 }
 
 function encodePlatformKey(baseUrl: string): string {

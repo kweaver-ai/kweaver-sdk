@@ -2802,7 +2802,15 @@ export function packDirectoryToTar(dirPath: string): Buffer {
     encoding: "buffer",
     env: { ...process.env, COPYFILE_DISABLE: "1" },
   });
-  if (result.error) throw result.error;
+  if (result.error) {
+    if ("code" in result.error && result.error.code === "ENOENT") {
+      throw new Error(
+        "tar executable not found. On Windows, ensure tar.exe is in PATH " +
+        "(ships with Windows 10 1803+) or install GNU tar via Git for Windows / scoop.",
+      );
+    }
+    throw result.error;
+  }
   if (result.status !== 0) {
     throw new Error(`tar pack failed: ${result.stderr?.toString() ?? result.status}`);
   }
@@ -2816,6 +2824,12 @@ export function extractTarToDirectory(tarBuffer: Buffer, dirPath: string): void 
     input: tarBuffer,
   });
   if (result.error) {
+    if ("code" in result.error && result.error.code === "ENOENT") {
+      throw new Error(
+        "tar executable not found. On Windows, ensure tar.exe is in PATH " +
+        "(ships with Windows 10 1803+) or install GNU tar via Git for Windows / scoop.",
+      );
+    }
     throw result.error;
   }
   if (result.status !== 0) {

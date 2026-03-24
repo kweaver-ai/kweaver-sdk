@@ -1,7 +1,8 @@
 import { createInterface } from "node:readline";
 import { execSync, spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { loadNetwork, allObjects, allRelations, allActions, generateChecksum, validateNetwork } from "@kweaver-ai/bkn";
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import {
@@ -36,8 +37,8 @@ import {
   actionLogCancel,
 } from "../api/ontology-query.js";
 import { semanticSearch } from "../api/semantic-search.js";
-import { listTablesWithColumns } from "../api/datasources.js";
-import { createDataView } from "../api/dataviews.js";
+import { listTablesWithColumns, scanMetadata, getDatasource } from "../api/datasources.js";
+import { createDataView } from "../api/dataviews.js"; // used by runKnCreateFromDsCommand
 import { downloadBkn, uploadBkn } from "../api/bkn-backend.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -935,6 +936,7 @@ function parseObjectTypeCreateArgs(args: string[]): {
 
   const entry: Record<string, unknown> = {
     name,
+    branch,
     data_source: { type: "data_view", id: dataviewId },
     primary_keys: [primaryKey],
     display_key: displayKey,
@@ -949,7 +951,7 @@ function parseObjectTypeCreateArgs(args: string[]): {
       type: "string",
     }));
   }
-  const body = JSON.stringify({ entries: [entry], branch });
+  const body = JSON.stringify({ entries: [entry] });
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, body, businessDomain, branch, pretty };
@@ -1331,21 +1333,21 @@ export function parseKnActionTypeExecuteArgs(args: string[]): KnActionTypeExecut
   };
 }
 
-const PK_CANDIDATES = new Set(["id", "pk", "key"]);
-const PK_TYPES = new Set(["integer", "unsigned integer", "string", "varchar", "bigint", "int"]);
 const DISPLAY_HINTS = ["name", "title", "label", "display_name", "description"];
 
-function detectPrimaryKey(table: { name: string; columns: Array<{ name: string; type: string }> }): string {
-  for (const col of table.columns) {
-    if (PK_CANDIDATES.has(col.name.toLowerCase()) && PK_TYPES.has(col.type.toLowerCase())) {
-      return col.name;
+/** Detect primary key: first column (left-to-right) with all unique values in the sample. */
+function detectPrimaryKey(
+  table: { name: string; columns: Array<{ name: string; type: string }> },
+  rows?: Array<Record<string, string | null>>,
+): string {
+  if (rows && rows.length > 0) {
+    for (const col of table.columns) {
+      const values = rows.map((r) => r[col.name]);
+      const unique = new Set(values);
+      if (unique.size === rows.length) return col.name;
     }
   }
-  for (const col of table.columns) {
-    if (PK_TYPES.has(col.type.toLowerCase())) {
-      return col.name;
-    }
-  }
+  // Fallback: first column
   return table.columns[0]?.name ?? "id";
 }
 
@@ -1625,6 +1627,7 @@ function parseRelationTypeCreateArgs(args: string[]): {
 
   const entry: Record<string, unknown> = {
     name,
+    branch,
     source_object_type_id: source,
     target_object_type_id: target,
     type: "direct",
@@ -1633,7 +1636,7 @@ function parseRelationTypeCreateArgs(args: string[]): {
       target_property: { name: t },
     })),
   };
-  const body = JSON.stringify({ entries: [entry], branch });
+  const body = JSON.stringify({ entries: [entry] });
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { knId, body, businessDomain, branch, pretty };
@@ -2469,7 +2472,39 @@ function parseKnCreateFromDsArgs(args: string[]): {
   return { dsId, name, tables, build, timeout, businessDomain, pretty };
 }
 
-async function runKnCreateFromDsCommand(args: string[]): Promise<number> {
+/** Sanitize a table name into a BKN-safe ID (alphanumeric + underscore). */
+function sanitizeBknId(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]/g, "_").replace(/^(\d)/, "_$1");
+}
+
+/** Generate a BKN ObjectType YAML markdown file for a table. */
+function generateObjectTypeBkn(
+  tableName: string,
+  dvId: string,
+  pk: string,
+  dk: string,
+  columns: Array<{ name: string; type: string }>,
+): string {
+  const safeId = sanitizeBknId(tableName);
+  const header = `## ObjectType: ${safeId}\n\n**${tableName}**\n`;
+
+  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| data_view | ${dvId} | ${tableName} |\n`;
+
+  const dpHeader = `### Data Properties\n\n| Property | Display Name | Type | Primary Key | Display Key |\n|----------|-------------|------|-------------|-------------|\n`;
+  const dpRows = columns.map((c) => {
+    const isPk = c.name === pk ? "yes" : "no";
+    const isDk = c.name === dk ? "yes" : "no";
+    return `| ${c.name} | ${c.name} | string | ${isPk} | ${isDk} |`;
+  }).join("\n");
+
+  const frontmatter = `---\ntype: object_type\nid: ${safeId}\nname: ${tableName}\n---\n\n`;
+  return `${frontmatter}${header}\n${dsTable}\n${dpHeader}${dpRows}\n`;
+}
+
+async function runKnCreateFromDsCommand(
+  args: string[],
+  sampleRows?: Record<string, Array<Record<string, string | null>>>,
+): Promise<number> {
   let options: ReturnType<typeof parseKnCreateFromDsArgs>;
   try {
     options = parseKnCreateFromDsArgs(args);
@@ -2505,6 +2540,8 @@ async function runKnCreateFromDsCommand(args: string[]): Promise<number> {
       return 1;
     }
 
+    // Phase 1: Create DataViews for each table
+    console.error(`Creating data views for ${targetTables.length} table(s) ...`);
     const viewMap: Record<string, string> = {};
     for (const t of targetTables) {
       const dvId = await createDataView({
@@ -2517,6 +2554,7 @@ async function runKnCreateFromDsCommand(args: string[]): Promise<number> {
       viewMap[t.name] = dvId;
     }
 
+    // Phase 2: Create the KN record
     const knBody = JSON.stringify({
       name: options.name,
       branch: "main",
@@ -2529,23 +2567,29 @@ async function runKnCreateFromDsCommand(args: string[]): Promise<number> {
     const knParsed = JSON.parse(knResponse) as Record<string, unknown> | Array<Record<string, unknown>>;
     const knItem = Array.isArray(knParsed) ? knParsed[0] : knParsed;
     const knId = String(knItem?.id ?? "");
+    console.error(`Knowledge network created: ${knId}`);
 
+    // Phase 3: Create object types via REST API
+    console.error(`Creating ${targetTables.length} object type(s) ...`);
     const otResults: Array<{ name: string; id: string; field_count: number }> = [];
     for (const t of targetTables) {
-      const pk = detectPrimaryKey(t);
+      const pk = detectPrimaryKey(t, sampleRows?.[t.name]);
       const dk = detectDisplayKey(t, pk);
+      const uniqueProps = [pk, dk].filter((x, i, a) => a.indexOf(x) === i);
       const entry = {
         name: t.name,
+        branch: "main",
         data_source: { type: "data_view", id: viewMap[t.name] },
         primary_keys: [pk],
         display_key: dk,
-        data_properties: [pk, dk].filter((x, i, a) => a.indexOf(x) === i).map((n) => ({
-          name: n,
-          display_name: n,
+        data_properties: t.columns.map((c) => ({
+          name: c.name,
+          display_name: c.name,
           type: "string",
+          mapped_field: { name: c.name, type: c.type || "varchar" },
         })),
       };
-      const otBody = JSON.stringify({ entries: [entry], branch: "main" });
+      const otBody = JSON.stringify({ entries: [entry] });
       const otResponse = await createObjectTypes({
         ...base,
         knId,
@@ -2558,6 +2602,17 @@ async function runKnCreateFromDsCommand(args: string[]): Promise<number> {
         id: otItem?.id ?? "",
         field_count: t.columns.length,
       });
+      console.error(`  Created: ${t.name} (${t.columns.length} fields, pk=${pk}, dk=${dk})`);
+    }
+
+    if (otResults.length === 0) {
+      const errorOutput = {
+        kn_id: knId,
+        kn_name: options.name,
+        error: "No object types were created",
+      };
+      console.log(JSON.stringify(errorOutput, null, options.pretty ? 2 : 0));
+      return 1;
     }
 
     let statusStr = "skipped";
@@ -3200,16 +3255,42 @@ async function runKnCreateFromCsvCommand(args: string[]): Promise<number> {
     return importResult.code;
   }
 
+  // Phase 1.5: Scan datasource metadata so platform discovers newly imported tables
+  console.error("Scanning datasource metadata ...");
+  try {
+    const token = await ensureValidToken();
+    const dsBody = await getDatasource({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      id: options.dsId,
+      businessDomain: options.businessDomain,
+    });
+    const dsParsed = JSON.parse(dsBody) as { type?: string };
+    await scanMetadata({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      id: options.dsId,
+      dsType: dsParsed.type ?? "mysql",
+      businessDomain: options.businessDomain,
+    });
+  } catch (err) {
+    console.error(`Scan warning (continuing): ${String(err)}`);
+  }
+
   // Phase 2: Create KN from datasource
   console.error("Phase 2: Creating knowledge network ...");
-  const tables = options.tables.length > 0 ? options.tables : importResult.tables;
+  const tableNames = options.tables.length > 0 ? options.tables : importResult.tables;
+  if (tableNames.length === 0) {
+    console.error("No tables available for KN creation — aborting");
+    return 1;
+  }
   const knArgs = [
     options.dsId,
     "--name", options.name,
-    "--tables", tables.join(","),
+    "--tables", tableNames.join(","),
     options.build ? "--build" : "--no-build",
     "--timeout", String(options.timeout),
     "-bd", options.businessDomain,
   ];
-  return runKnCreateFromDsCommand(knArgs);
+  return runKnCreateFromDsCommand(knArgs, importResult.sampleRows);
 }

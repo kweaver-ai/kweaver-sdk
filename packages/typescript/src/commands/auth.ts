@@ -23,13 +23,20 @@ export async function runAuthCommand(args: string[]): Promise<number> {
   const rest = args.slice(1);
 
   if (!target || target === "--help" || target === "-h") {
-    console.log(`kweaver auth login <url>     Login to a platform (browser login)
-kweaver auth <url>           Login (shorthand)
-kweaver auth status [url]    Show current auth status
-kweaver auth list            List saved platforms
-kweaver auth use <url>       Switch active platform
-kweaver auth logout [url]    Logout (clear local token)
-kweaver auth delete <url>    Delete saved credentials`);
+    console.log(`kweaver auth login <url> [options]   Login to a platform (browser OAuth2)
+kweaver auth <url>                   Login (shorthand)
+kweaver auth status [url]            Show current auth status
+kweaver auth list                    List saved platforms
+kweaver auth use <url>               Switch active platform
+kweaver auth logout [url]            Logout (clear local token)
+kweaver auth delete <url>            Delete saved credentials
+
+Login options:
+  --client-id <id>       Use an existing OAuth2 client ID instead of registering a new one.
+                         Use the platform's web app client ID to get the same permissions
+                         as the browser. Find it in DevTools: /oauth2/auth?client_id=<id>
+  --client-secret <s>    Client secret (omit for public/PKCE clients)
+  --alias <name>         Save platform with a short alias`);
     return 0;
   }
 
@@ -49,6 +56,8 @@ kweaver auth delete <url>    Delete saved credentials`);
       const username = readOption(args, "--username") ?? readOption(args, "-u");
       const password = readOption(args, "--password") ?? readOption(args, "-p");
       const usePlaywright = args.includes("--playwright");
+      const clientId = readOption(args, "--client-id");
+      const clientSecret = readOption(args, "--client-secret");
 
       let token;
 
@@ -62,8 +71,12 @@ kweaver auth delete <url>    Delete saved credentials`);
         token = await playwrightLogin(normalizedTarget);
       } else {
         // Default: OAuth2 authorization code flow (supports refresh_token)
-        console.log("Opening browser for OAuth2 login...");
-        token = await oauth2Login(normalizedTarget);
+        if (clientId) {
+          console.log(`Opening browser for OAuth2 login (client: ${clientId})...`);
+        } else {
+          console.log("Opening browser for OAuth2 login...");
+        }
+        token = await oauth2Login(normalizedTarget, { clientId: clientId ?? undefined, clientSecret: clientSecret ?? undefined });
       }
 
       if (alias) {

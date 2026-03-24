@@ -125,7 +125,7 @@ export function buildDagBody(options: DagBodyOptions): DataflowCreateBody {
   const triggerStep = {
     id: "step-trigger",
     title: "Trigger",
-    operator: "@internal/trigger/manual",
+    operator: "@trigger/manual",
     parameters: {},
   };
 

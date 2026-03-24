@@ -22,9 +22,17 @@ export function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+/** Generate a PKCE code_verifier and code_challenge (S256). */
+async function generatePkce(): Promise<{ verifier: string; challenge: string }> {
+  const { randomBytes, createHash } = await import("node:crypto");
+  const verifier = randomBytes(48).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
+
 /**
  * OAuth2 Authorization Code login flow.
- * 1. Register client (if not already registered)
+ * 1. Register client (if not already registered), OR use a provided client ID
  * 2. Open browser to /oauth2/auth
  * 3. Receive authorization code via local HTTP callback
  * 4. Exchange code for access_token + refresh_token
@@ -32,7 +40,7 @@ export function normalizeBaseUrl(value: string): string {
  */
 export async function oauth2Login(
   baseUrl: string,
-  options?: { port?: number; scope?: string },
+  options?: { port?: number; scope?: string; clientId?: string; clientSecret?: string },
 ): Promise<TokenConfig> {
   const { createServer } = await import("node:http");
   const { randomBytes } = await import("node:crypto");
@@ -42,12 +50,31 @@ export async function oauth2Login(
   const scope = options?.scope ?? DEFAULT_SCOPE;
   const redirectUri = `http://127.0.0.1:${port}/callback`;
 
-  // Step 1: Ensure registered client
+  // Step 1: Determine client — use provided client ID or fall back to dynamic registration
   let client = loadClientConfig(base);
-  if (!client?.clientId) {
+  if (options?.clientId) {
+    // Use the platform's existing client (e.g. the web app client).
+    // Persist it so future logins reuse it without re-registering.
+    client = {
+      baseUrl: base,
+      clientId: options.clientId,
+      clientSecret: options.clientSecret ?? "",
+      redirectUri,
+      logoutRedirectUri: redirectUri.replace("/callback", "/successful-logout"),
+      scope,
+      lang: "zh-cn",
+      product: "adp",
+      xForwardedPrefix: "",
+    };
+    saveClientConfig(base, client);
+  } else if (!client?.clientId) {
     client = await registerOAuth2Client(base, redirectUri, scope);
     saveClientConfig(base, client);
   }
+
+  // Use PKCE when no client secret is available (public client / platform client).
+  const usePkce = !client.clientSecret;
+  const pkce = usePkce ? await generatePkce() : null;
 
   // Step 2: Generate CSRF state
   const state = randomBytes(12).toString("hex");
@@ -63,6 +90,10 @@ export async function oauth2Login(
     lang: "zh-cn",
     product: "adp",
   });
+  if (pkce) {
+    authParams.set("code_challenge", pkce.challenge);
+    authParams.set("code_challenge_method", "S256");
+  }
   const authUrl = `${base}/oauth2/auth?${authParams.toString()}`;
 
   // Step 4: Start local callback server, wait for code
@@ -98,16 +129,17 @@ export async function oauth2Login(
     });
 
     server.listen(port, "127.0.0.1", () => {
-      // Step 5: Open browser
+      // Step 5: Open browser and always print the URL as a fallback
       import("node:child_process").then(({ exec }) => {
         const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
         exec(`${cmd} "${authUrl}"`);
       });
+      process.stderr.write(`If the wrong browser opens, copy this URL to your correct browser:\n  ${authUrl}\n`);
     });
   });
 
   // Step 6: Exchange code for tokens
-  const token = await exchangeCodeForToken(base, code, client.clientId, client.clientSecret, redirectUri);
+  const token = await exchangeCodeForToken(base, code, client.clientId, client.clientSecret, redirectUri, pkce?.verifier);
 
   setCurrentPlatform(base);
   return token;
@@ -161,21 +193,34 @@ async function exchangeCodeForToken(
   clientId: string,
   clientSecret: string,
   redirectUri: string,
+  codeVerifier?: string,
 ): Promise<TokenConfig> {
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const params: Record<string, string> = {
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+  };
+  if (codeVerifier) {
+    params.code_verifier = codeVerifier;
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    Accept: "application/json",
+  };
+
+  if (clientSecret) {
+    // Confidential client: use HTTP Basic auth
+    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
+  } else {
+    // Public client (PKCE): send client_id in body
+    params.client_id = clientId;
+  }
 
   const response = await fetch(`${baseUrl}/oauth2/token`, {
     method: "POST",
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-    }).toString(),
+    headers,
+    body: new URLSearchParams(params).toString(),
   });
 
   const text = await response.text();

@@ -415,6 +415,8 @@ export async function resolveFiles(pattern: string): Promise<string[]> {
 export interface ImportCsvResult {
   code: number;
   tables: string[]; // successfully imported table names
+  tableColumns: Record<string, string[]>; // tableName → column names
+  sampleRows: Record<string, Array<Record<string, string | null>>>; // tableName → first 100 rows
 }
 
 export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
@@ -424,18 +426,18 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
       console.log(IMPORT_CSV_HELP);
-      return { code: 0, tables: [] };
+      return { code: 0, tables: [], tableColumns: {}, sampleRows: {} };
     }
     throw error;
   }
 
   if (!options.datasourceId) {
     console.error("Usage: kweaver ds import-csv <ds-id> --files <glob_or_list> [options]");
-    return { code: 1, tables: [] };
+    return { code: 1, tables: [], tableColumns: {}, sampleRows: {} };
   }
   if (!options.files) {
     console.error("Error: --files is required");
-    return { code: 1, tables: [] };
+    return { code: 1, tables: [], tableColumns: {}, sampleRows: {} };
   }
 
   // 1. Get credentials
@@ -446,7 +448,7 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
   const filePaths = await resolveFiles(options.files);
 
   // 3. Get datasource type
-  const dsBody = await getDatasource({ ...base, id: options.datasourceId });
+  const dsBody = await getDatasource({ ...base, id: options.datasourceId, businessDomain: options.businessDomain });
   const dsData = JSON.parse(dsBody) as Record<string, unknown>;
   const datasourceType =
     String(dsData.type ?? dsData.ds_type ?? dsData.data_type ?? "mysql");
@@ -481,9 +483,16 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
     parsed.push({ filePath, tableName, headers: csvData.headers, rows: csvData.rows });
   }
 
+  if (parsed.length === 0) {
+    console.error("All files were skipped — nothing to import");
+    return { code: 1, tables: [], tableColumns: {}, sampleRows: {} };
+  }
+
   // Phase 2: Import each file in batches
   const succeeded: string[] = [];
   const failed: string[] = [];
+  const tableColumns: Record<string, string[]> = {};
+  const sampleRows: Record<string, Array<Record<string, string | null>>> = {};
 
   for (const { tableName, headers, rows } of parsed) {
     const batches = splitBatches(rows, options.batchSize);
@@ -529,6 +538,8 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
       failed.push(tableName);
     } else {
       succeeded.push(tableName);
+      tableColumns[tableName] = headers;
+      sampleRows[tableName] = parsed.find((p) => p.tableName === tableName)?.rows.slice(0, 100) ?? [];
     }
   }
 
@@ -552,7 +563,7 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
     )
   );
 
-  return { code: failed.length > 0 ? 1 : 0, tables: succeeded };
+  return { code: failed.length > 0 ? 1 : 0, tables: succeeded, tableColumns, sampleRows };
 }
 
 export async function runDsImportCsvCommand(args: string[]): Promise<number> {

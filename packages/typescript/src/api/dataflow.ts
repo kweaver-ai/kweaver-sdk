@@ -11,6 +11,16 @@ function buildHeaders(accessToken: string, businessDomain: string): Record<strin
   };
 }
 
+function debugLog(method: string, url: string, headers: Record<string, string>, body?: string): void {
+  if (!process.env["KWEAVER_DEBUG_HTTP"]) return;
+  const masked = { ...headers };
+  if (masked.authorization) masked.authorization = masked.authorization.slice(0, 20) + "…";
+  if (masked.token) masked.token = masked.token.slice(0, 20) + "…";
+  process.stderr.write(`[debug] ${method} ${url}\n`);
+  process.stderr.write(`[debug] headers: ${JSON.stringify(masked)}\n`);
+  if (body) process.stderr.write(`[debug] body (first 300): ${body.slice(0, 300)}\n`);
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface DataflowStep {
@@ -49,14 +59,14 @@ export async function createDataflow(options: CreateDataflowOptions): Promise<st
 
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/automation/v1/data-flow/flow`;
+  const reqHeaders = { ...buildHeaders(accessToken, businessDomain), "content-type": "application/json" };
+  const reqBody = JSON.stringify(body);
+  debugLog("POST", url, reqHeaders, reqBody);
 
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      ...buildHeaders(accessToken, businessDomain),
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
+    headers: reqHeaders,
+    body: reqBody,
   });
 
   const responseBody = await response.text();

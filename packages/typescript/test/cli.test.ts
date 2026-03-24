@@ -24,7 +24,7 @@ import {
   parseKnBuildArgs,
   formatSimpleKnList,
 } from "../src/commands/bkn.js";
-import { parseDsListArgs } from "../src/commands/ds.js";
+import { parseDsListArgs, parseImportCsvArgs } from "../src/commands/ds.js";
 import {
   parseAgentListArgs,
   parseAgentSessionsArgs,
@@ -1115,6 +1115,48 @@ test("parseKnSearchArgs --help throws isHelp error", () => {
     assert.equal((err as { isHelp?: boolean }).isHelp, true);
   }
 });
+
+// ── parseImportCsvArgs ────────────────────────────────────────────────────────
+
+test("parseImportCsvArgs parses ds-id and --files with defaults", () => {
+  const opts = parseImportCsvArgs(["ds-123", "--files", "data/*.csv"]);
+  assert.equal(opts.datasourceId, "ds-123");
+  assert.equal(opts.files, "data/*.csv");
+  assert.equal(opts.tablePrefix, "");
+  assert.equal(opts.batchSize, 500);
+  assert.equal(opts.businessDomain, "bd_public");
+});
+
+test("parseImportCsvArgs parses -bd and --table-prefix", () => {
+  const opts = parseImportCsvArgs([
+    "ds-456", "--files", "x.csv", "--table-prefix", "pfx_",
+    "-bd", "bd_enterprise", "--batch-size", "100",
+  ]);
+  assert.equal(opts.datasourceId, "ds-456");
+  assert.equal(opts.files, "x.csv");
+  assert.equal(opts.tablePrefix, "pfx_");
+  assert.equal(opts.batchSize, 100);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseImportCsvArgs rejects invalid batch-size", () => {
+  assert.throws(
+    () => parseImportCsvArgs(["ds-1", "--files", "x.csv", "--batch-size", "0"]),
+    /--batch-size must be between 1 and 10000/
+  );
+  assert.throws(
+    () => parseImportCsvArgs(["ds-1", "--files", "x.csv", "--batch-size", "99999"]),
+    /--batch-size must be between 1 and 10000/
+  );
+});
+
+test("parseImportCsvArgs --help throws help error", () => {
+  assert.throws(
+    () => parseImportCsvArgs(["--help"]),
+    /help/
+  );
+});
+
 
 test("ensureValidToken returns env token when KWEAVER_TOKEN and KWEAVER_BASE_URL are set", async () => {
   process.env.KWEAVER_TOKEN = "env-token-123";

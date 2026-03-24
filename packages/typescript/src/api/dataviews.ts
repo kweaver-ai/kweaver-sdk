@@ -76,11 +76,76 @@ export async function createDataView(options: CreateDataViewOptions): Promise<st
 
   const responseBody = await response.text();
   if (!response.ok) {
+    // If DataView already exists (403 with "Existed" error code), delete and recreate
+    if (response.status === 403) {
+      try {
+        const errBody = JSON.parse(responseBody) as { error_code?: string };
+        if (errBody.error_code?.includes("Existed")) {
+          const actualId = await findDataViewByName({ baseUrl, accessToken, name, groupId: datasourceId, businessDomain });
+          if (actualId && fields.length > 0) {
+            // Delete the bare DataView (created by scanMetadata) and recreate with fields
+            await deleteDataView({ baseUrl, accessToken, id: actualId, businessDomain });
+            const retryResponse = await fetch(url, {
+              method: "POST",
+              headers: { ...buildHeaders(accessToken, businessDomain), "content-type": "application/json" },
+              body,
+            });
+            if (retryResponse.ok) {
+              const retryBody = await retryResponse.text();
+              const retryId = extractViewId(JSON.parse(retryBody));
+              return retryId ?? viewId;
+            }
+          }
+          if (actualId) return actualId;
+          return viewId;
+        }
+      } catch { /* fall through to throw */ }
+    }
     throw new HttpError(response.status, response.statusText, responseBody);
   }
 
   const createdId = extractViewId(JSON.parse(responseBody));
   return createdId ?? viewId;
+}
+
+async function findDataViewByName(options: {
+  baseUrl: string;
+  accessToken: string;
+  name: string;
+  groupId: string;
+  businessDomain: string;
+}): Promise<string | null> {
+  const base = options.baseUrl.replace(/\/+$/, "");
+  const url = new URL(`${base}/api/mdl-data-model/v1/data-views`);
+  url.searchParams.set("keyword", options.name);
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: buildHeaders(options.accessToken, options.businessDomain),
+  });
+  if (!response.ok) return null;
+
+  const body = JSON.parse(await response.text()) as {
+    entries?: Array<{ id?: string; name?: string; group_id?: string }>;
+  };
+  const match = body.entries?.find(
+    (e) => e.name === options.name && e.group_id === options.groupId,
+  );
+  return match?.id ?? null;
+}
+
+async function deleteDataView(options: {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  businessDomain: string;
+}): Promise<void> {
+  const base = options.baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/mdl-data-model/v1/data-views/${encodeURIComponent(options.id)}`;
+  await fetch(url, {
+    method: "DELETE",
+    headers: buildHeaders(options.accessToken, options.businessDomain),
+  });
 }
 
 export interface GetDataViewOptions {

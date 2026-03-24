@@ -306,7 +306,7 @@ make -C packages/typescript test
 # KWeaver CLI — 认证、BKN/知识网络、Agent、Context Loader
 npx skills add https://github.com/kweaver-ai/kweaver-sdk --skill kweaver-core
 
-# BKN 建模 — 模块化 BKN v2.0.0（对象类/关系类/行动类等）
+# BKN 建模 — 模块化 BKN v2.0.1（对象类/关系类/行动类等）
 npx skills add https://github.com/kweaver-ai/kweaver-sdk --skill create-bkn
 
 # 一条命令同时安装 kweaver-core 与 create-bkn

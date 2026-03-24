@@ -22,8 +22,8 @@
 
 ### BKN 规范
 
-- 当前权威版本：**v2.0.0**，以 <https://github.com/kweaver-ai/bkn-specification/blob/main/docs/SPECIFICATION.md> 为准
-- BKN 目录结构采用模块化组织：`network.bkn` 为根，子目录 `object_types/`、`relation_types/`、`action_types/`、`risk_types/`、`concept_groups/`
+- 当前权威版本：**v2.0.1**，以 <https://github.com/kweaver-ai/bkn-specification/blob/main/docs/SPECIFICATION.md> 为准
+- BKN 目录结构采用模块化组织：`network.bkn` 为根，子目录 `object_types/`、`relation_types/`、`action_types/`、`concept_groups/`
 - `CHECKSUM` 文件放在 BKN 目录**内部**（与 `network.bkn` 同级），可选，不影响加载
 - macOS 打包 tar 时必须设置 `COPYFILE_DISABLE=1`，防止 `._*` 元数据文件被打入 tar 导致后端解析失败
 

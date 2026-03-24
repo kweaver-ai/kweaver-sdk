@@ -254,7 +254,7 @@ Install [Agent Skills](https://skills.sh) with the [`skills` CLI](https://www.np
 # KWeaver CLI — auth, BKN/KN management, agents, Context Loader
 npx skills add https://github.com/kweaver-ai/kweaver-sdk --skill kweaver-core
 
-# BKN authoring — modular BKN v2.0.0 definitions (object/relation/action types, …)
+# BKN authoring — modular BKN v2.0.1 definitions (object/relation/action types, …)
 npx skills add https://github.com/kweaver-ai/kweaver-sdk --skill create-bkn
 
 # Install kweaver-core and create-bkn in one command

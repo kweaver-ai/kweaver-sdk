@@ -77,16 +77,19 @@ class RelationTypesResource:
             return _parse_relation_type(items[0], kn_id)
         except KWeaverError as exc:
             if "Existed" in (exc.error_code or ""):
-                existing = self.list(kn_id)
+                existing = self.list(kn_id, keyword=name)
                 for rt in existing:
                     if rt.name == name:
                         return rt
             raise
 
-    def list(self, kn_id: str, *, branch: str = "main") -> list[RelationType]:
+    def list(self, kn_id: str, *, branch: str = "main", keyword: str | None = None) -> list[RelationType]:
+        params: dict[str, Any] = {"limit": -1, "branch": branch}
+        if keyword:
+            params["keyword"] = keyword
         data = self._http.get(
             f"{_PREFIX}/knowledge-networks/{kn_id}/relation-types",
-            params={"limit": -1, "branch": branch},
+            params=params,
         )
         items = data if isinstance(data, list) else (data.get("entries") or data.get("data") or [])
         return [_parse_relation_type(d, kn_id) for d in items]

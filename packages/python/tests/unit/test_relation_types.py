@@ -99,3 +99,29 @@ def test_delete_multiple_relation_types(capture: RequestCapture):
     client = make_client(handler, capture)
     client.relation_types.delete("kn_01", ["rt_01", "rt_02"])
     assert "/relation-types/rt_01,rt_02" in capture.last_url()
+
+
+def test_create_existed_fallback_passes_keyword(capture: RequestCapture):
+    """When RT already exists, list() should filter by keyword instead of fetching all."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "POST":
+            return httpx.Response(409, json={
+                "error_code": "Existed",
+                "message": "Relation type already exists",
+            })
+        return httpx.Response(200, json={
+            "entries": [_RT_RESPONSE],
+        })
+
+    client = make_client(handler, capture)
+    rt = client.relation_types.create(
+        "kn_01", name="产品_库存",
+        source_ot_id="ot_01", target_ot_id="ot_02",
+        mappings=[("material_number", "material_code")],
+    )
+
+    assert rt.id == "rt_01"
+    get_reqs = [r for r in capture.requests if r.method == "GET" and "relation-types" in str(r.url) and "?" in str(r.url)]
+    assert get_reqs, "Expected a filtered list request"
+    url = str(get_reqs[0].url)
+    assert "keyword" in url, f"Expected keyword param in URL: {url}"

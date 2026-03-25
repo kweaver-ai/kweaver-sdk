@@ -230,6 +230,38 @@ test("executeDataflow runs full lifecycle (create → run → poll → delete) a
   }
 });
 
+test("pollDataflowResults uses exponential backoff between polls", async () => {
+  const originalFetch = globalThis.fetch;
+  const sleepDurations: number[] = [];
+  let callCount = 0;
+
+  try {
+    globalThis.fetch = async () => {
+      callCount++;
+      if (callCount < 4) {
+        return new Response(JSON.stringify({ results: [] }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({ results: [{ status: "success" }] }),
+        { status: 200 }
+      );
+    };
+
+    const result = await pollDataflowResults({
+      ...COMMON_OPTS,
+      dagId: "dag-backoff",
+      interval: 3,
+      timeout: 900,
+      _delayFn: async (ms: number) => { sleepDurations.push(ms); },
+    });
+    assert.equal(result.status, "success");
+    // Backoff: 3000, 6000, 12000 (doubling, capped at 30000)
+    assert.deepEqual(sleepDurations, [3000, 6000, 12000]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("executeDataflow cleans up DAG even on failure", async () => {
   const originalFetch = globalThis.fetch;
   const calls: string[] = [];

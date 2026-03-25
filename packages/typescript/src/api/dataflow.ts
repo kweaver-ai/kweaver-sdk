@@ -122,6 +122,8 @@ export interface PollDataflowOptions {
   interval?: number;
   /** Maximum time to wait in seconds. Default: 900 */
   timeout?: number;
+  /** Test injection: override delay function. */
+  _delayFn?: (ms: number) => Promise<void>;
 }
 
 /**
@@ -136,12 +138,14 @@ export async function pollDataflowResults(options: PollDataflowOptions): Promise
     dagId,
     interval = 3,
     timeout = 900,
+    _delayFn = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/automation/v1/dag/${encodeURIComponent(dagId)}/results`;
 
   const deadlineMs = Date.now() + timeout * 1000;
+  let currentInterval = interval;
 
   while (Date.now() < deadlineMs) {
     const response = await fetch(url, {
@@ -169,9 +173,10 @@ export async function pollDataflowResults(options: PollDataflowOptions): Promise
     }
 
     // Still running — wait before next poll
-    if (interval > 0) {
-      await new Promise((resolve) => setTimeout(resolve, interval * 1000));
+    if (currentInterval > 0) {
+      await _delayFn(currentInterval * 1000);
     }
+    currentInterval = Math.min(currentInterval * 2, 30);
   }
 
   throw new Error(`Dataflow polling timed out after ${timeout}s for DAG ${dagId}`);

@@ -114,6 +114,23 @@ test("run fails for unknown commands", async () => {
   assert.equal(await run(["missing-command"]), 1);
 });
 
+test("run dv alias dispatches to dataview command", async () => {
+  assert.equal(await run(["dv", "--help"]), 0);
+});
+
+test("help text shows dv alias", async () => {
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
+  try {
+    await run(["--help"]);
+    const text = lines.join("\n");
+    assert.ok(text.includes("dataview|dv"), "help should mention dv alias");
+  } finally {
+    console.log = orig;
+  }
+});
+
 test("run agent shows subcommand help", async () => {
   assert.equal(await run(["agent"]), 0);
 });

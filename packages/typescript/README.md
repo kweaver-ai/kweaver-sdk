@@ -94,6 +94,14 @@ const logs      = await client.bkn.listActionLogs("bkn-id");
 const dsList = await client.datasources.list();
 const tables = await client.datasources.listTables("ds-id");
 const viewId = await client.dataviews.create({ name: "v", datasourceId: "ds-id", table: "orders" });
+const views = await client.dataviews.list({ datasourceId: "ds-id" });
+const fuzzy = await client.dataviews.find("BOM", { wait: false });
+const exact = await client.dataviews.find("orders", {
+  datasourceId: "ds-id",
+  exact: true,
+  wait: true,
+});
+const dv = await client.dataviews.get(viewId);
 
 // Dataflow automation (CSV import pipeline, etc.)
 const result = await client.dataflows.execute({
@@ -118,6 +126,7 @@ kweaver token
 kweaver config show / set-bd <value>
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500]
+kweaver dataview list/find/get/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
 kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]

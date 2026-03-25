@@ -192,6 +192,8 @@ result    = client.action_types.execute("bkn-id", "at-id", params={})
 ```bash
 kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k] — 另有 status、list、use、delete、logout
 kweaver token
+kweaver ds list/get/delete/tables/connect
+kweaver dataview list/find/get/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
 kweaver bkn relation-type list/get/create/update/delete
@@ -205,7 +207,17 @@ kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 ```
 
-Python CLI 额外提供：`kweaver ds`（数据源）、`kweaver query`（语义搜索、实例、子图）、`kweaver action`（高层编排）。
+两套 CLI 顶层命令名不完全一致，下表为 **Python CLI**（`pip install kweaver-sdk[cli]`）与 **TypeScript CLI**（`npm install -g @kweaver-ai/kweaver-sdk`）的对应关系。
+
+| Python CLI | TypeScript CLI |
+|------------|----------------|
+| `kweaver query search <kn_id> <query>` | `kweaver bkn search <kn-id> <query>` |
+| `kweaver query instances <kn_id> <ot_id> …` | `kweaver bkn object-type query <kn-id> <ot-id> …` |
+| `kweaver query subgraph <kn_id> …`（用 flags 拼路径） | `kweaver bkn subgraph <kn-id> <body-json>`（JSON 体，格式不同） |
+| `kweaver query kn-search <kn_id> <query>`（REST） | `kweaver context-loader kn-search <query>`（MCP），或 SDK `client.bkn.knSearch` — 传输方式不同 |
+| `kweaver action query` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
+
+**仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver dataview`、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。
 
 ## 项目结构（Monorepo）
 

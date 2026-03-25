@@ -167,6 +167,26 @@ export { BknResource } from "./resources/bkn.js";
 export { ConversationsResource } from "./resources/conversations.js";
 export { ContextLoaderResource } from "./resources/context-loader.js";
 
+// ── Data views (mdl-data-model) ────────────────────────────────────────────────
+export type {
+  ViewField,
+  DataView,
+  CreateDataViewOptions,
+  GetDataViewOptions,
+  ListDataViewsOptions,
+  DeleteDataViewOptions,
+  FindDataViewOptions,
+} from "./api/dataviews.js";
+export {
+  parseDataView,
+  createDataView,
+  getDataView,
+  listDataViews,
+  deleteDataView,
+  findDataView,
+} from "./api/dataviews.js";
+export { DataViewsResource } from "./resources/dataviews.js";
+
 // ── HTTP utilities ────────────────────────────────────────────────────────────
 export { HttpError, NetworkRequestError, fetchTextOrThrow } from "./utils/http.js";
 

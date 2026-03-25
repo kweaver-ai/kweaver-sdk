@@ -19,7 +19,7 @@ kweaver bkn get <kn_id> [--stats] [--export]
 kweaver bkn stats <kn_id>
 kweaver bkn export <kn_id>
 kweaver bkn create [options]                         # 创建空知识网络（或 --body-file）
-kweaver bkn create-from-ds <ds_id> --name <name> [--tables <t1,t2>] [--build/--no-build] [--timeout 300]
+kweaver bkn create-from-ds <ds_id> --name <name> [--tables <t1,t2>] [--build/--no-build] [--timeout 300]  # 每张表先等待已有原子视图（keyword 搜索 + 轮询），否则再创建；单独调试见 `kweaver dataview`
 kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--table-prefix <p>] [--build/--no-build] [--timeout 300]
 kweaver bkn update <kn_id> [--name <n>] [--description <d>] [--tag <t> ...]
 kweaver bkn build <kn_id> [--wait/--no-wait] [--timeout 300]

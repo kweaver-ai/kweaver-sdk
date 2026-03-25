@@ -26,6 +26,58 @@ function extractViewId(data: unknown): string | null {
   return null;
 }
 
+/** Field metadata returned by the data-views API. */
+export interface ViewField {
+  name: string;
+  type: string;
+  display_name?: string;
+  comment?: string;
+}
+
+/** Normalized data view model (mdl-data-model). */
+export interface DataView {
+  id: string;
+  name: string;
+  query_type: string;
+  datasource_id: string;
+  fields: ViewField[];
+}
+
+export function parseDataView(raw: Record<string, unknown>): DataView {
+  const fieldsRaw = raw.fields;
+  const fields: ViewField[] = [];
+  if (Array.isArray(fieldsRaw)) {
+    for (const f of fieldsRaw) {
+      if (f && typeof f === "object") {
+        const fr = f as Record<string, unknown>;
+        fields.push({
+          name: String(fr.name ?? ""),
+          type: String(fr.type ?? "varchar"),
+          display_name: fr.display_name != null ? String(fr.display_name) : undefined,
+          comment: fr.comment != null ? String(fr.comment) : undefined,
+        });
+      }
+    }
+  }
+  return {
+    id: String(raw.id ?? ""),
+    name: String(raw.name ?? ""),
+    query_type: String(raw.query_type ?? "SQL"),
+    datasource_id: String(raw.data_source_id ?? raw.group_id ?? ""),
+    fields,
+  };
+}
+
+function extractListPayload(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    const items = obj.entries ?? obj.data;
+    if (Array.isArray(items)) return items;
+  }
+  return [];
+}
+
 export interface CreateDataViewOptions {
   baseUrl: string;
   accessToken: string;
@@ -115,37 +167,88 @@ async function findDataViewByName(options: {
   groupId: string;
   businessDomain: string;
 }): Promise<string | null> {
-  const base = options.baseUrl.replace(/\/+$/, "");
-  const url = new URL(`${base}/api/mdl-data-model/v1/data-views`);
-  url.searchParams.set("keyword", options.name);
-
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(options.accessToken, options.businessDomain),
+  const list = await listDataViews({
+    baseUrl: options.baseUrl,
+    accessToken: options.accessToken,
+    businessDomain: options.businessDomain,
+    name: options.name,
   });
-  if (!response.ok) return null;
-
-  const body = JSON.parse(await response.text()) as {
-    entries?: Array<{ id?: string; name?: string; group_id?: string }>;
-  };
-  const match = body.entries?.find(
-    (e) => e.name === options.name && e.group_id === options.groupId,
-  );
+  const match = list.find((e) => e.name === options.name && e.datasource_id === options.groupId);
   return match?.id ?? null;
 }
 
-async function deleteDataView(options: {
+export interface ListDataViewsOptions {
+  baseUrl: string;
+  accessToken: string;
+  businessDomain?: string;
+  /** Filter by data source id. */
+  datasourceId?: string;
+  /** Server-side keyword filter (fuzzy). */
+  name?: string;
+  /** View type filter (e.g. atomic, custom). */
+  type?: string;
+  /** Max items; default -1 (all). */
+  limit?: number;
+}
+
+export async function listDataViews(options: ListDataViewsOptions): Promise<DataView[]> {
+  const {
+    baseUrl,
+    accessToken,
+    businessDomain = "bd_public",
+    datasourceId,
+    name,
+    type,
+    limit = -1,
+  } = options;
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = new URL(`${base}/api/mdl-data-model/v1/data-views`);
+  url.searchParams.set("limit", String(limit));
+  if (datasourceId) url.searchParams.set("data_source_id", datasourceId);
+  if (name) url.searchParams.set("keyword", name);
+  if (type) url.searchParams.set("type", type);
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: buildHeaders(accessToken, businessDomain),
+  });
+
+  const bodyText = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, bodyText);
+  }
+
+  const parsed = JSON.parse(bodyText) as unknown;
+  const items = extractListPayload(parsed);
+  const out: DataView[] = [];
+  for (const item of items) {
+    if (item && typeof item === "object") {
+      out.push(parseDataView(item as Record<string, unknown>));
+    }
+  }
+  return out;
+}
+
+export interface DeleteDataViewOptions {
   baseUrl: string;
   accessToken: string;
   id: string;
-  businessDomain: string;
-}): Promise<void> {
-  const base = options.baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/mdl-data-model/v1/data-views/${encodeURIComponent(options.id)}`;
-  await fetch(url, {
+  businessDomain?: string;
+}
+
+export async function deleteDataView(options: DeleteDataViewOptions): Promise<void> {
+  const { baseUrl, accessToken, id, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/mdl-data-model/v1/data-views/${encodeURIComponent(id)}`;
+  const response = await fetch(url, {
     method: "DELETE",
-    headers: buildHeaders(options.accessToken, options.businessDomain),
+    headers: buildHeaders(accessToken, businessDomain),
   });
+  const bodyText = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, bodyText);
+  }
 }
 
 export interface GetDataViewOptions {
@@ -155,7 +258,7 @@ export interface GetDataViewOptions {
   businessDomain?: string;
 }
 
-export async function getDataView(options: GetDataViewOptions): Promise<string> {
+export async function getDataView(options: GetDataViewOptions): Promise<DataView> {
   const {
     baseUrl,
     accessToken,
@@ -175,5 +278,69 @@ export async function getDataView(options: GetDataViewOptions): Promise<string> 
   if (!response.ok) {
     throw new HttpError(response.status, response.statusText, body);
   }
-  return body;
+
+  let parsed: unknown = JSON.parse(body);
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    parsed = parsed[0];
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new HttpError(500, "Invalid response", body);
+  }
+  return parseDataView(parsed as Record<string, unknown>);
+}
+
+export interface FindDataViewOptions {
+  baseUrl: string;
+  accessToken: string;
+  businessDomain?: string;
+  /** View name to search for (sent as keyword to server). */
+  name: string;
+  /** Filter by data source id. */
+  datasourceId?: string;
+  /** When true, apply client-side exact name match after keyword search (default false). */
+  exact?: boolean;
+  /** When true, poll until a result appears or timeout (default false). */
+  wait?: boolean;
+  /** Total wait budget in ms (default 30000). Only used when wait is true. */
+  timeoutMs?: number;
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Find data views by name. Uses server-side keyword filtering; when `exact` is true,
+ * applies client-side `name ===` filter. Optional polling with exponential backoff.
+ */
+export async function findDataView(options: FindDataViewOptions): Promise<DataView[]> {
+  const {
+    baseUrl,
+    accessToken,
+    businessDomain = "bd_public",
+    name,
+    datasourceId,
+    exact = false,
+    wait = false,
+    timeoutMs = 30_000,
+  } = options;
+
+  const deadline = Date.now() + timeoutMs;
+  let attempt = 0;
+
+  while (true) {
+    const list = await listDataViews({
+      baseUrl,
+      accessToken,
+      businessDomain,
+      datasourceId,
+      name,
+      limit: -1,
+    });
+    const results = exact ? list.filter((v) => v.name === name) : list;
+    if (results.length > 0 || !wait || Date.now() >= deadline) return results;
+    const delayMs = Math.min(5000, 1000 * 2 ** attempt);
+    attempt += 1;
+    await sleepMs(delayMs);
+  }
 }

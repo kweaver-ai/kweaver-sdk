@@ -216,6 +216,7 @@ kweaver token
 kweaver config show / set-bd <value>
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500]
+kweaver dataview list/find/get/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
 kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]
@@ -233,7 +234,17 @@ kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 ```
 
-Python CLI also provides: `kweaver query` (semantic search, instances, subgraph), `kweaver action` (orchestration). TypeScript CLI additionally provides: `kweaver config`, `kweaver vega`, `kweaver ds import-csv`, `kweaver bkn create-from-csv`, and full agent CRUD.
+The two CLIs use different top-level command names for some features. The table below maps **Python CLI** (`pip install kweaver-sdk[cli]`) to **TypeScript CLI** (`npm install -g @kweaver-ai/kweaver-sdk`).
+
+| Python CLI | TypeScript CLI |
+|------------|----------------|
+| `kweaver query search <kn_id> <query>` | `kweaver bkn search <kn-id> <query>` |
+| `kweaver query instances <kn_id> <ot_id> …` | `kweaver bkn object-type query <kn-id> <ot-id> …` |
+| `kweaver query subgraph <kn_id> …` (flags build the path) | `kweaver bkn subgraph <kn-id> <body-json>` (JSON body; shape differs) |
+| `kweaver query kn-search <kn_id> <query>` (REST) | `kweaver context-loader kn-search <query>` (MCP context-loader), or SDK `client.bkn.knSearch` — not the same transport |
+| `kweaver action query …` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
+
+**Only on TypeScript CLI:** `kweaver config`, `kweaver vega`, `kweaver dataview`, `kweaver ds import-csv`, `kweaver bkn create-from-csv`, and full `kweaver agent` create/update/delete/publish (see `kweaver agent --help`).
 
 ## Repository Structure (Monorepo)
 

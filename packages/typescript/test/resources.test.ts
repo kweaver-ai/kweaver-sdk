@@ -109,11 +109,116 @@ test("dataviews.create returns view id", async () => {
   }
 });
 
-test("dataviews.get returns parsed object", async () => {
-  const mock = mockFetch({ id: "dv-1", name: "test-view" });
+test("dataviews.get returns DataView", async () => {
+  const mock = mockFetch({
+    id: "dv-1",
+    name: "test-view",
+    query_type: "SQL",
+    data_source_id: "ds-1",
+    fields: [],
+  });
   try {
     const result = await makeClient().dataviews.get("dv-1");
-    assert.deepEqual(result, { id: "dv-1", name: "test-view" });
+    assert.deepEqual(result, {
+      id: "dv-1",
+      name: "test-view",
+      query_type: "SQL",
+      datasource_id: "ds-1",
+      fields: [],
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("dataviews.list returns DataView[] from entries wrapper", async () => {
+  const mock = mockFetch({
+    entries: [
+      {
+        id: "dv-1",
+        name: "users",
+        query_type: "SQL",
+        data_source_id: "ds-1",
+        fields: [],
+      },
+    ],
+  });
+  try {
+    const result = await makeClient().dataviews.list({ datasourceId: "ds-1" });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].id, "dv-1");
+    assert.ok(mock.calls[0].url.includes("data_source_id=ds-1"));
+  } finally {
+    mock.restore();
+  }
+});
+
+test("dataviews.delete sends DELETE request", async () => {
+  const mock = mockFetch("", 200);
+  try {
+    await makeClient().dataviews.delete("dv-1");
+    assert.equal(mock.calls[0].method, "DELETE");
+    assert.ok(mock.calls[0].url.includes("/data-views/dv-1"));
+  } finally {
+    mock.restore();
+  }
+});
+
+test("dataviews.find exact returns match on first attempt", async () => {
+  const mock = mockFetch({
+    entries: [
+      {
+        id: "dv-1",
+        name: "users",
+        query_type: "SQL",
+        data_source_id: "ds-1",
+        fields: [],
+      },
+    ],
+  });
+  try {
+    const result = await makeClient().dataviews.find("users", {
+      datasourceId: "ds-1",
+      exact: true,
+      wait: false,
+    });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].name, "users");
+    assert.ok(mock.calls[0].url.includes("keyword=users"));
+  } finally {
+    mock.restore();
+  }
+});
+
+test("dataviews.find returns only exact matches when exact true", async () => {
+  const mock = mockFetch({
+    entries: [
+      { id: "dv-1", name: "users", query_type: "SQL", data_source_id: "ds-1", fields: [] },
+      { id: "dv-2", name: "users_archive", query_type: "SQL", data_source_id: "ds-1", fields: [] },
+    ],
+  });
+  try {
+    const result = await makeClient().dataviews.find("users", {
+      datasourceId: "ds-1",
+      exact: true,
+      wait: false,
+    });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].name, "users");
+  } finally {
+    mock.restore();
+  }
+});
+
+test("dataviews.find exact returns empty when wait false and not found", async () => {
+  const mock = mockFetch({ entries: [] });
+  try {
+    const result = await makeClient().dataviews.find("missing", {
+      datasourceId: "ds-1",
+      exact: true,
+      wait: false,
+    });
+    assert.equal(result.length, 0);
   } finally {
     mock.restore();
   }

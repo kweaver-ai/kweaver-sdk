@@ -90,6 +90,18 @@ const graph     = await client.bkn.querySubgraph("bkn-id", { /* 路径规格 */ 
 await client.bkn.executeAction("bkn-id", "at-id", { /* 参数 */ });
 const logs      = await client.bkn.listActionLogs("bkn-id");
 
+// 数据源与数据视图
+const dsList = await client.datasources.list();
+const viewId = await client.dataviews.create({ name: "v", datasourceId: "ds-id", table: "orders" });
+const views = await client.dataviews.list({ datasourceId: "ds-id" });
+const fuzzy = await client.dataviews.find("BOM", { wait: false });
+const exact = await client.dataviews.find("orders", {
+  datasourceId: "ds-id",
+  exact: true,
+  wait: true,
+});
+const dv = await client.dataviews.get(viewId);
+
 // Context Loader（通过 MCP 对 BKN 做语义搜索）
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
 const results = await cl.search({ query: "高血压 治疗" });
@@ -100,6 +112,8 @@ const results = await cl.search({ query: "高血压 治疗" });
 ```
 kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k] — 另有 status、list、use、delete、logout
 kweaver token
+kweaver ds list/get/delete/tables/connect
+kweaver dataview list/find/get/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
 kweaver bkn relation-type list/get/create/update/delete

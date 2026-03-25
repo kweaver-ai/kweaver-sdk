@@ -43,7 +43,7 @@ import {
 } from "../api/ontology-query.js";
 import { semanticSearch } from "../api/semantic-search.js";
 import { listTablesWithColumns, scanMetadata, getDatasource } from "../api/datasources.js";
-import { createDataView } from "../api/dataviews.js"; // used by runKnCreateFromDsCommand
+import { createDataView, findDataView } from "../api/dataviews.js"; // used by runKnCreateFromDsCommand
 import { downloadBkn, uploadBkn } from "../api/bkn-backend.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -2551,13 +2551,22 @@ async function runKnCreateFromDsCommand(
     console.error(`Creating data views for ${targetTables.length} table(s) ...`);
     const viewMap: Record<string, string> = {};
     for (const t of targetTables) {
-      const dvId = await createDataView({
+      const found = await findDataView({
         ...base,
         name: t.name,
         datasourceId: options.dsId,
-        table: t.name,
-        fields: t.columns.map((c) => ({ name: c.name, type: c.type })),
+        exact: true,
+        wait: true,
       });
+      const dvId =
+        found[0]?.id ??
+        (await createDataView({
+          ...base,
+          name: t.name,
+          datasourceId: options.dsId,
+          table: t.name,
+          fields: t.columns.map((c) => ({ name: c.name, type: c.type })),
+        }));
       viewMap[t.name] = dvId;
     }
 

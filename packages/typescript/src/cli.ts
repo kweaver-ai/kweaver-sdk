@@ -6,6 +6,7 @@ import { runCallCommand } from "./commands/call.js";
 import { runConfigCommand } from "./commands/config.js";
 import { runContextLoaderCommand } from "./commands/context-loader.js";
 import { runDsCommand } from "./commands/ds.js";
+import { runDataviewCommand } from "./commands/dataview.js";
 import { runTokenCommand } from "./commands/token.js";
 import { runVegaCommand } from "./commands/vega.js";
 
@@ -47,6 +48,11 @@ Usage:
   kweaver ds delete <id> [-y]
   kweaver ds tables <id> [--keyword X] [--pretty]
   kweaver ds connect <db_type> <host> <port> <database> --account X --password Y [--schema S] [--name N]
+
+  kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value] [--pretty]
+  kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value] [--pretty]
+  kweaver dataview get <id> [-bd value] [--pretty]
+  kweaver dataview delete <id> [-y] [-bd value]
 
   kweaver bkn list [options]
   kweaver bkn get <kn-id> [options]
@@ -91,6 +97,7 @@ Commands:
   call (curl)    Call an API with curl-style flags and auto-injected token headers
   agent          Agent CRUD, chat, sessions, history, publish/unpublish
   ds             Manage datasources (list, get, delete, tables, connect)
+  dataview       List, find, get, delete data views (atomic / custom)
   bkn            Knowledge network (CRUD, build, validate, export, stats, push/pull,
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
@@ -127,6 +134,10 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "ds") {
     return runDsCommand(rest);
+  }
+
+  if (command === "dataview") {
+    return runDataviewCommand(rest);
   }
 
   if (command === "token") {

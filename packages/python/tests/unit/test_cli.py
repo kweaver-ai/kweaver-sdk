@@ -32,7 +32,7 @@ def _mock_client():
 def test_cli_help(runner):
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
-    for cmd in ("auth", "bkn", "query", "action", "agent", "call", "ds"):
+    for cmd in ("auth", "bkn", "query", "action", "agent", "call", "ds", "dv"):
         assert cmd in result.output
 
 
@@ -568,6 +568,91 @@ def test_ds_connect_with_schema_and_name(runner):
         assert result.exit_code == 0
         data = _extract_json(result.output)
         assert data["datasource_id"] == "ds2"
+
+
+# ---------------------------------------------------------------------------
+# DV subcommands
+# ---------------------------------------------------------------------------
+
+
+def test_dv_list(runner):
+    with patch("kweaver.cli.dv.make_client") as mock_make:
+        client = _mock_client()
+        mock_dv = MagicMock()
+        mock_dv.model_dump.return_value = {"id": "dv1", "name": "products", "query_type": "SQL"}
+        client.dataviews.list.return_value = [mock_dv]
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["dv", "list"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["id"] == "dv1"
+
+
+def test_dv_list_with_filters(runner):
+    with patch("kweaver.cli.dv.make_client") as mock_make:
+        client = _mock_client()
+        client.dataviews.list.return_value = []
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["dv", "list", "--datasource-id", "ds1", "--name", "prod", "--type", "atomic"])
+        assert result.exit_code == 0
+        client.dataviews.list.assert_called_once_with(datasource_id="ds1", name="prod", type="atomic")
+
+
+def test_dv_get(runner):
+    with patch("kweaver.cli.dv.make_client") as mock_make:
+        client = _mock_client()
+        mock_dv = MagicMock()
+        mock_dv.model_dump.return_value = {"id": "dv1", "name": "products"}
+        client.dataviews.get.return_value = mock_dv
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["dv", "get", "dv1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["id"] == "dv1"
+
+
+def test_dv_find(runner):
+    with patch("kweaver.cli.dv.make_client") as mock_make:
+        client = _mock_client()
+        mock_dv = MagicMock()
+        mock_dv.model_dump.return_value = {"id": "dv1", "name": "products"}
+        client.dataviews.find_by_table.return_value = mock_dv
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["dv", "find", "ds1", "products"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["id"] == "dv1"
+        client.dataviews.find_by_table.assert_called_once_with("ds1", "products", wait=True, timeout=30)
+
+
+def test_dv_find_not_found(runner):
+    with patch("kweaver.cli.dv.make_client") as mock_make:
+        client = _mock_client()
+        client.dataviews.find_by_table.return_value = None
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["dv", "find", "ds1", "missing"])
+        assert result.exit_code != 0
+
+
+def test_dv_find_no_wait(runner):
+    with patch("kweaver.cli.dv.make_client") as mock_make:
+        client = _mock_client()
+        mock_dv = MagicMock()
+        mock_dv.model_dump.return_value = {"id": "dv1", "name": "products"}
+        client.dataviews.find_by_table.return_value = mock_dv
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["dv", "find", "ds1", "products", "--no-wait", "--timeout", "5"])
+        assert result.exit_code == 0
+        client.dataviews.find_by_table.assert_called_once_with("ds1", "products", wait=False, timeout=5.0)
+
+
+def test_dv_delete(runner):
+    with patch("kweaver.cli.dv.make_client") as mock_make:
+        client = _mock_client()
+        mock_make.return_value = client
+        result = runner.invoke(cli, ["dv", "delete", "dv1"], input="y\n")
+        assert result.exit_code == 0
+        client.dataviews.delete.assert_called_once_with("dv1")
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { applyTlsEnvFromSavedTokens } from "./config/tls-env.js";
 import { runAgentCommand } from "./commands/agent.js";
 import { runAuthCommand } from "./commands/auth.js";
 import { runKnCommand } from "./commands/bkn.js";
@@ -15,7 +16,7 @@ Usage:
   kweaver --version | -V
   kweaver --help | -h
 
-  kweaver auth <platform-url> [--alias name] [-u user] [-p pass] [--playwright]
+  kweaver auth <platform-url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
   kweaver auth login <platform-url>          (alias for auth <url>)
   kweaver auth status [platform-url|alias]
   kweaver auth list
@@ -99,6 +100,8 @@ Commands:
 }
 
 export async function run(argv: string[]): Promise<number> {
+  applyTlsEnvFromSavedTokens();
+
   const [command, ...rest] = argv;
 
   if (command === "--version" || command === "-V" || command === "version") {

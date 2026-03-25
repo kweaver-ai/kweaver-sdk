@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from typing import Protocol
 
 import httpx
+
+
+def _env_tls_insecure() -> bool:
+    """True when KWEAVER_TLS_INSECURE is 1 or true (dev / scripting only)."""
+    return os.environ.get("KWEAVER_TLS_INSECURE", "") in ("1", "true")
 
 
 class AuthProvider(Protocol):
@@ -214,6 +220,9 @@ class ConfigAuth:
         from datetime import datetime, timezone, timedelta
         credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
 
+        tls_skip = bool(token_data.get("tlsInsecure")) or _env_tls_insecure()
+        verify = not tls_skip
+
         resp = httpx.post(
             f"{url}/oauth2/token",
             data={
@@ -225,13 +234,14 @@ class ConfigAuth:
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "application/json",
             },
+            verify=verify,
         )
         resp.raise_for_status()
         data = resp.json()
 
         now = datetime.now(timezone.utc)
         expires_in = data.get("expires_in", 3600)
-        new_token = {
+        new_token: dict = {
             "baseUrl": url,
             "accessToken": data["access_token"],
             "tokenType": data.get("token_type", "Bearer"),
@@ -242,6 +252,8 @@ class ConfigAuth:
             "idToken": data.get("id_token", token_data.get("idToken", "")),
             "obtainedAt": now.isoformat(),
         }
+        if token_data.get("tlsInsecure"):
+            new_token["tlsInsecure"] = True
         self._store.save_token(url, new_token)
         return new_token
 
@@ -263,11 +275,13 @@ class OAuth2BrowserAuth:
         redirect_port: int = 9010,
         scope: str = "openid offline all",
         lang: str = "zh-cn",
+        tls_insecure: bool = False,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._redirect_port = redirect_port
         self._scope = scope
         self._lang = lang
+        self._tls_insecure = tls_insecure
         self._lock = threading.Lock()
 
         from kweaver.config.store import PlatformStore
@@ -358,6 +372,7 @@ class OAuth2BrowserAuth:
         redirect_uri = f"http://127.0.0.1:{self._redirect_port}/callback"
         logout_uri = f"http://127.0.0.1:{self._redirect_port}/successful-logout"
 
+        verify = not self._tls_insecure
         resp = httpx.post(
             f"{self._base_url}/oauth2/clients",
             json={
@@ -376,6 +391,7 @@ class OAuth2BrowserAuth:
                 },
             },
             headers={"Content-Type": "application/json", "Accept": "application/json"},
+            verify=verify,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -399,6 +415,7 @@ class OAuth2BrowserAuth:
 
         credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
 
+        verify = not self._tls_insecure
         resp = httpx.post(
             f"{self._base_url}/oauth2/token",
             data={
@@ -411,6 +428,7 @@ class OAuth2BrowserAuth:
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "application/json",
             },
+            verify=verify,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -428,6 +446,8 @@ class OAuth2BrowserAuth:
             "idToken": data.get("id_token", ""),
             "obtainedAt": now.isoformat(),
         }
+        if self._tls_insecure:
+            token_data["tlsInsecure"] = True
         self._store.save_token(self._base_url, token_data)
 
     def auth_headers(self) -> dict[str, str]:
@@ -465,6 +485,9 @@ class OAuth2BrowserAuth:
         client_secret = client_data["clientSecret"]
         credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
 
+        tls_skip = bool(token_data.get("tlsInsecure")) or self._tls_insecure or _env_tls_insecure()
+        verify = not tls_skip
+
         resp = httpx.post(
             f"{self._base_url}/oauth2/token",
             data={
@@ -476,13 +499,14 @@ class OAuth2BrowserAuth:
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "application/json",
             },
+            verify=verify,
         )
         resp.raise_for_status()
         data = resp.json()
 
         now = datetime.now(timezone.utc)
         expires_in = data.get("expires_in", 3600)
-        new_token = {
+        new_token: dict = {
             "baseUrl": self._base_url,
             "accessToken": data["access_token"],
             "tokenType": data.get("token_type", "Bearer"),
@@ -493,21 +517,24 @@ class OAuth2BrowserAuth:
             "idToken": data.get("id_token", token_data.get("idToken", "")),
             "obtainedAt": now.isoformat(),
         }
+        if token_data.get("tlsInsecure") or self._tls_insecure:
+            new_token["tlsInsecure"] = True
         self._store.save_token(self._base_url, new_token)
 
     def logout(self) -> None:
         """Sign out and clear local credentials."""
         token_data = self._store.load_token(self._base_url)
+        tls_skip = bool(token_data.get("tlsInsecure")) or self._tls_insecure or _env_tls_insecure()
+        verify = not tls_skip
         if token_data:
             try:
                 params = {"client_id": self._store.load_client(self._base_url).get("clientId", "")}
                 id_token = token_data.get("idToken")
                 if id_token:
                     params["id_token_hint"] = id_token
-                httpx.get(f"{self._base_url}/oauth2/signout", params=params)
+                httpx.get(f"{self._base_url}/oauth2/signout", params=params, verify=verify)
             except Exception:
                 pass
-        import os
         token_path = self._store._platform_dir(self._base_url) / "token.json"
         if token_path.exists():
             os.remove(token_path)

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kweaver._auth import ConfigAuth, OAuth2Auth, PasswordAuth, TokenAuth
+from kweaver._auth import ConfigAuth, OAuth2Auth, OAuth2BrowserAuth, PasswordAuth, TokenAuth
 
 
 # ── TokenAuth ────────────────────────────────────────────────────────────────
@@ -219,6 +219,116 @@ def test_password_auth_repr():
 def test_password_auth_refresh_interval():
     """PasswordAuth has a 240-second refresh interval."""
     assert PasswordAuth._REFRESH_INTERVAL == 240
+
+
+# ── TLS insecure ─────────────────────────────────────────────────────────────
+
+
+def test_oauth2_browser_auth_register_client_tls_insecure():
+    """OAuth2BrowserAuth passes verify=False to httpx.post when tls_insecure=True."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"client_id": "cid", "client_secret": "csec"}
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("httpx.post", return_value=mock_resp) as mock_post:
+        auth = OAuth2BrowserAuth.__new__(OAuth2BrowserAuth)
+        auth._base_url = "https://example.com"
+        auth._redirect_port = 9010
+        auth._scope = "openid offline all"
+        auth._lang = "zh-cn"
+        auth._tls_insecure = True
+        auth._lock = threading.Lock()
+        auth._store = MagicMock()
+
+        auth._register_client()
+
+        _args, kwargs = mock_post.call_args
+        assert kwargs.get("verify") is False
+
+
+def test_config_auth_refresh_tls_insecure():
+    """ConfigAuth._refresh passes verify=False when token has tlsInsecure."""
+    token_data = {
+        "accessToken": "old",
+        "refreshToken": "rt",
+        "tlsInsecure": True,
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "access_token": "new",
+        "expires_in": 3600,
+        "refresh_token": "rt2",
+    }
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("kweaver._auth.ConfigAuth.__init__", return_value=None):
+        auth = ConfigAuth.__new__(ConfigAuth)
+        store = MagicMock()
+        store.load_client.return_value = {"clientId": "c", "clientSecret": "s"}
+        auth._store = store
+        auth._platform = None
+        auth._lock = threading.Lock()
+
+    with patch("httpx.post", return_value=mock_resp) as mock_post:
+        auth._refresh("https://example.com", token_data)
+        _args, kwargs = mock_post.call_args
+        assert kwargs.get("verify") is False
+
+
+def test_config_auth_refresh_preserves_tls_insecure():
+    """ConfigAuth._refresh includes tlsInsecure in the refreshed token dict."""
+    token_data = {
+        "accessToken": "old",
+        "refreshToken": "rt",
+        "tlsInsecure": True,
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "access_token": "new",
+        "expires_in": 3600,
+    }
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("kweaver._auth.ConfigAuth.__init__", return_value=None):
+        auth = ConfigAuth.__new__(ConfigAuth)
+        store = MagicMock()
+        store.load_client.return_value = {"clientId": "c", "clientSecret": "s"}
+        auth._store = store
+        auth._platform = None
+        auth._lock = threading.Lock()
+
+    with patch("httpx.post", return_value=mock_resp):
+        result = auth._refresh("https://example.com", token_data)
+        assert result.get("tlsInsecure") is True
+
+
+def test_config_auth_refresh_no_tls_insecure_when_absent():
+    """ConfigAuth._refresh omits tlsInsecure when original token lacks it."""
+    token_data = {
+        "accessToken": "old",
+        "refreshToken": "rt",
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "access_token": "new",
+        "expires_in": 3600,
+    }
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("kweaver._auth.ConfigAuth.__init__", return_value=None):
+        auth = ConfigAuth.__new__(ConfigAuth)
+        store = MagicMock()
+        store.load_client.return_value = {"clientId": "c", "clientSecret": "s"}
+        auth._store = store
+        auth._platform = None
+        auth._lock = threading.Lock()
+
+    with patch("httpx.post", return_value=mock_resp):
+        result = auth._refresh("https://example.com", token_data)
+        assert "tlsInsecure" not in result
 
 
 # ── Thread safety ────────────────────────────────────────────────────────────

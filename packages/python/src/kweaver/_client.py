@@ -47,6 +47,7 @@ class KWeaverClient:
         debug: bool = False,
         dry_run: bool = False,
         vega_url: str | None = None,
+        tls_insecure: bool = False,
     ) -> None:
         if auth is None:
             if token is None:
@@ -68,6 +69,9 @@ class KWeaverClient:
         if dry_run:
             middlewares.append(DryRunMiddleware())
 
+        verify = not tls_insecure
+        self._tls_insecure = tls_insecure
+
         self._http = HttpClient(
             base_url=base_url,
             auth=auth,
@@ -76,6 +80,7 @@ class KWeaverClient:
             business_domain=business_domain,
             timeout=timeout,
             transport=transport,
+            verify=verify,
             log_requests=log_requests or debug,
             middlewares=middlewares,
         )
@@ -115,6 +120,7 @@ class KWeaverClient:
                 auth=self._auth_provider,
                 timeout=self._timeout,
                 transport=self._transport,
+                verify=not self._tls_insecure,
                 log_requests=self._log_requests,
                 middlewares=self._middlewares,
             )

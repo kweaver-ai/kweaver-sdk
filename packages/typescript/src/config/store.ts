@@ -21,6 +21,8 @@ export interface TokenConfig {
   refreshToken?: string;
   idToken?: string;
   obtainedAt: string;
+  /** When true, skip TLS certificate verification for this platform (saved by `kweaver auth --insecure`). */
+  tlsInsecure?: boolean;
 }
 
 /** OAuth2 client registration (per platform), used for refresh_token grant. */

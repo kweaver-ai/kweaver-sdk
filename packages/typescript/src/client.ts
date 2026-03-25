@@ -1,3 +1,4 @@
+import { applyTlsEnvFromSavedTokens } from "./config/tls-env.js";
 import {
   getCurrentPlatform,
   loadTokenConfig,
@@ -169,6 +170,8 @@ export class KWeaverClient implements ClientContext {
    * ```
    */
   static async connect(opts: KWeaverClientOptions = {}): Promise<KWeaverClient> {
+    applyTlsEnvFromSavedTokens();
+
     // Try with current token first
     let token = await ensureValidToken();
     const client = new KWeaverClient({

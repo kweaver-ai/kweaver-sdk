@@ -394,3 +394,75 @@ test("loadClientConfig and saveClientConfig round-trip", async () => {
   assert.equal(c?.clientSecret, "sec1");
   assert.equal(c?.redirectUri, "http://localhost/cb");
 });
+
+test("formatHttpError: fetch failed with TLS cause shows root cause and hint", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  const err = new TypeError("fetch failed");
+  (err as Error & { cause?: Error }).cause = new Error("self-signed certificate");
+  const msg = oauth.formatHttpError(err);
+  assert.match(msg, /self-signed certificate/);
+  assert.match(msg, /--insecure/);
+});
+
+test("formatHttpError: generic error without cause unchanged", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  const msg = oauth.formatHttpError(new Error("something else"));
+  assert.equal(msg, "something else");
+});
+
+test("refreshAccessToken: preserves tlsInsecure flag on refreshed token", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://platform.example.com";
+  store.saveClientConfig(baseUrl, { baseUrl, clientId: "c", clientSecret: "s" });
+  store.setCurrentPlatform(baseUrl);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "a",
+    tokenType: "Bearer",
+    scope: "",
+    refreshToken: "rt",
+    obtainedAt: new Date().toISOString(),
+    tlsInsecure: true,
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ access_token: "new", expires_in: 3600 }), { status: 200 });
+  try {
+    const out = await oauth.refreshAccessToken(store.loadTokenConfig(baseUrl)!);
+    assert.equal(out.tlsInsecure, true);
+    const disk = store.loadTokenConfig(baseUrl);
+    assert.equal(disk?.tlsInsecure, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("refreshAccessToken: no tlsInsecure when original token lacks it", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://platform.example.com";
+  store.saveClientConfig(baseUrl, { baseUrl, clientId: "c", clientSecret: "s" });
+  store.setCurrentPlatform(baseUrl);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "a",
+    tokenType: "Bearer",
+    scope: "",
+    refreshToken: "rt",
+    obtainedAt: new Date().toISOString(),
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ access_token: "new", expires_in: 3600 }), { status: 200 });
+  try {
+    const out = await oauth.refreshAccessToken(store.loadTokenConfig(baseUrl)!);
+    assert.equal(out.tlsInsecure, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

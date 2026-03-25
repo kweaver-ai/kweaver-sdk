@@ -22,6 +22,27 @@ export function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+/**
+ * Temporarily disable TLS certificate verification for Node `fetch` (sets
+ * NODE_TLS_REJECT_UNAUTHORIZED). Used for `--insecure` login and token refresh.
+ */
+async function runWithTlsInsecure<T>(tlsInsecure: boolean | undefined, fn: () => Promise<T>): Promise<T> {
+  if (!tlsInsecure) {
+    return fn();
+  }
+  const prev = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  try {
+    return await fn();
+  } finally {
+    if (prev === undefined) {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    } else {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = prev;
+    }
+  }
+}
+
 /** Generate a PKCE code_verifier and code_challenge (S256). */
 async function generatePkce(): Promise<{ verifier: string; challenge: string }> {
   const { randomBytes, createHash } = await import("node:crypto");
@@ -40,8 +61,16 @@ async function generatePkce(): Promise<{ verifier: string; challenge: string }> 
  */
 export async function oauth2Login(
   baseUrl: string,
-  options?: { port?: number; scope?: string; clientId?: string; clientSecret?: string },
+  options?: {
+    port?: number;
+    scope?: string;
+    clientId?: string;
+    clientSecret?: string;
+    /** Skip TLS certificate verification (self-signed / dev servers only). */
+    tlsInsecure?: boolean;
+  },
 ): Promise<TokenConfig> {
+  return runWithTlsInsecure(options?.tlsInsecure, async () => {
   const { createServer } = await import("node:http");
   const { randomBytes } = await import("node:crypto");
 
@@ -138,10 +167,19 @@ export async function oauth2Login(
   });
 
   // Step 6: Exchange code for tokens
-  const token = await exchangeCodeForToken(base, code, client.clientId, client.clientSecret, redirectUri, pkce?.verifier);
+  const token = await exchangeCodeForToken(
+    base,
+    code,
+    client.clientId,
+    client.clientSecret,
+    redirectUri,
+    pkce?.verifier,
+    options?.tlsInsecure,
+  );
 
   setCurrentPlatform(base);
   return token;
+  });
 }
 
 async function registerOAuth2Client(baseUrl: string, redirectUri: string, scope: string): Promise<ClientConfig> {
@@ -192,7 +230,8 @@ async function exchangeCodeForToken(
   clientId: string,
   clientSecret: string,
   redirectUri: string,
-  codeVerifier?: string,
+  codeVerifier: string | undefined,
+  tlsInsecure?: boolean,
 ): Promise<TokenConfig> {
   const params: Record<string, string> = {
     grant_type: "authorization_code",
@@ -248,6 +287,7 @@ async function exchangeCodeForToken(
     refreshToken: data.refresh_token ?? "",
     idToken: data.id_token ?? "",
     obtainedAt: now.toISOString(),
+    ...(tlsInsecure ? { tlsInsecure: true } : {}),
   };
   saveTokenConfig(token);
   return token;
@@ -266,8 +306,15 @@ async function exchangeCodeForToken(
  */
 export async function playwrightLogin(
   baseUrl: string,
-  options?: { username?: string; password?: string; port?: number; scope?: string },
+  options?: {
+    username?: string;
+    password?: string;
+    port?: number;
+    scope?: string;
+    tlsInsecure?: boolean;
+  },
 ): Promise<TokenConfig> {
+  return runWithTlsInsecure(options?.tlsInsecure, async () => {
   const { createServer } = await import("node:http");
   const { randomBytes } = await import("node:crypto");
 
@@ -351,7 +398,7 @@ export async function playwrightLogin(
     server.listen(port, "127.0.0.1", async () => {
       try {
         browser = await chromium.launch({ headless: hasCredentials });
-        const context = await browser.newContext();
+        const context = await browser.newContext({ ignoreHTTPSErrors: !!options?.tlsInsecure });
         const page = await context.newPage();
 
         // Navigate to OAuth2 auth URL — redirects to signin page
@@ -376,10 +423,19 @@ export async function playwrightLogin(
   });
 
   // Step 5: Exchange authorization code for tokens (includes refresh_token)
-  const token = await exchangeCodeForToken(base, code, client.clientId, client.clientSecret, redirectUri);
+  const token = await exchangeCodeForToken(
+    base,
+    code,
+    client.clientId,
+    client.clientSecret,
+    redirectUri,
+    undefined,
+    options?.tlsInsecure,
+  );
 
   setCurrentPlatform(base);
   return token;
+  });
 }
 
 function tokenNeedsRefresh(token: TokenConfig): boolean {
@@ -425,15 +481,17 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
 
   let response: Response;
   try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: body.toString(),
-    });
+    response = await runWithTlsInsecure(token.tlsInsecure, () =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: body.toString(),
+      }),
+    );
   } catch (cause) {
     const hint =
       cause instanceof Error ? cause.message : String(cause);
@@ -480,6 +538,7 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
     refreshToken: data.refresh_token ?? refreshToken,
     idToken: data.id_token ?? token.idToken ?? "",
     obtainedAt: now.toISOString(),
+    ...(token.tlsInsecure ? { tlsInsecure: true } : {}),
   };
   saveTokenConfig(newToken);
   return newToken;
@@ -639,6 +698,11 @@ export function formatHttpError(error: unknown): string {
   }
 
   if (error instanceof Error) {
+    const cause =
+      "cause" in error && error.cause instanceof Error ? error.cause.message : "";
+    if (cause && error.message === "fetch failed") {
+      return `${error.message}: ${cause}\nHint: use --insecure (-k) to skip TLS verification for self-signed certificates.`;
+    }
     return error.message;
   }
 

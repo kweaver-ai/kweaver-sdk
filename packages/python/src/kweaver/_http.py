@@ -48,6 +48,7 @@ class HttpClient:
         business_domain: str | None = None,
         timeout: float = 30.0,
         transport: httpx.BaseTransport | None = None,
+        verify: bool = True,
         log_requests: bool = False,
         middlewares: list | None = None,
     ) -> None:
@@ -69,6 +70,8 @@ class HttpClient:
         }
         if transport is not None:
             client_kwargs["transport"] = transport
+        else:
+            client_kwargs["verify"] = verify
         self._client = httpx.Client(**client_kwargs)
 
     def _build_headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:

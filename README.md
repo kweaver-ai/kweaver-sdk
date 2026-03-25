@@ -81,7 +81,7 @@ kweaver auth login https://your-kweaver-instance.com
 kweaver auth login https://your-kweaver-instance.com --alias prod
 ```
 
-Or use environment variables: `KWEAVER_BASE_URL`, `KWEAVER_BUSINESS_DOMAIN`, `KWEAVER_TOKEN`.
+Or use environment variables: `KWEAVER_BASE_URL`, `KWEAVER_BUSINESS_DOMAIN`, `KWEAVER_TOKEN`. For TLS in the Node `kweaver` CLI, see `KWEAVER_TLS_INSECURE` and `NODE_TLS_REJECT_UNAUTHORIZED` in the [TypeScript README](packages/typescript/README.md#environment-variables).
 
 ## TypeScript SDK Usage
 
@@ -191,7 +191,7 @@ result    = client.action_types.execute("bkn-id", "at-id", params={})
 ## CLI Quick Reference
 
 ```bash
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] — also: status, list, use, delete, logout
+kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k] — also: status, list, use, delete, logout
 kweaver token
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties

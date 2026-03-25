@@ -98,7 +98,7 @@ const results = await cl.search({ query: "hypertension treatment" });
 ## CLI Reference
 
 ```
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] — also: status, list, use, delete, logout
+kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k] — also: status, list, use, delete, logout
 kweaver token
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
@@ -120,6 +120,33 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header]
 | `KWEAVER_BASE_URL` | KWeaver instance URL |
 | `KWEAVER_BUSINESS_DOMAIN` | Business domain identifier |
 | `KWEAVER_TOKEN` | Access token |
+| `KWEAVER_TLS_INSECURE` | Set to `1` or `true` to skip TLS certificate verification for all HTTPS in the process (dev only; prefer `kweaver auth … --insecure` which saves per platform) |
+| `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js built-in TLS switch: set to `0` to skip certificate verification for HTTPS in this process. The `kweaver` CLI sets this when `KWEAVER_TLS_INSECURE` is set or the saved token has insecure TLS (same scope as above; dev only). |
+
+### TLS Certificate Troubleshooting
+
+If you encounter errors like `fetch failed`, `self-signed certificate`, or `UNABLE_TO_GET_ISSUER_CERT`, the target server likely uses a self-signed certificate or Kubernetes Ingress default fake certificate. Try the following in order of preference:
+
+1. **Recommended (persists per platform)** — add `--insecure` during login:
+   ```bash
+   kweaver auth login https://your-host --insecure
+   # or shorthand
+   kweaver auth login https://your-host -k
+   ```
+   The flag is saved to `token.json` in `~/.kweaver/`, so all subsequent CLI commands for that platform skip TLS verification automatically.
+
+2. **Temporary (current shell)** — set an environment variable:
+   ```bash
+   export KWEAVER_TLS_INSECURE=1
+   kweaver bkn list
+   ```
+
+3. **Node.js native** — set `NODE_TLS_REJECT_UNAUTHORIZED` directly:
+   ```bash
+   NODE_TLS_REJECT_UNAUTHORIZED=0 kweaver bkn list
+   ```
+
+> **Security note:** All of the above disable HTTPS certificate verification and should only be used in development or internal network environments. Use trusted CA-signed certificates in production.
 
 ## Using with AI Agents
 

@@ -13,8 +13,8 @@ npm install playwright && npx playwright install chromium
 ## 命令
 
 ```bash
-kweaver auth login <url> [--alias <name>] [-u user] [-p pass] [--playwright]
-kweaver auth <url> [--alias <name>] [-u user] [-p pass] [--playwright]   # 同上（简写）
+kweaver auth login <url> [--alias <name>] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth <url> [--alias <name>] [-u user] [-p pass] [--playwright] [--insecure|-k]   # 同上（简写）
 kweaver auth logout [<url|alias>]              # 登出（清除本地 token）
 kweaver auth status [url|alias]                # 查看 token 状态
 kweaver auth list                              # 列出已保存的平台
@@ -29,6 +29,7 @@ kweaver auth delete <url|alias> [-y]           # 删除平台凭证
   - **Playwright cookie 登录**（回退方式）：通过 headless 浏览器提取 cookie token，**不支持自动刷新**，过期后需重新 `auth login`
 - Token 有效期 1 小时
 - 支持多平台，用 `--alias` 设置短名称方便切换
+- `--insecure` / `-k`：跳过 TLS 证书校验（仅用于自签名/内网 HTTPS）；会写入 `token.json`，后续 CLI 对该平台同样生效。生产环境请使用受信任证书
 
 ## 示例
 

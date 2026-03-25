@@ -98,7 +98,7 @@ const results = await cl.search({ query: "高血压 治疗" });
 ## 命令速查
 
 ```
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] — 另有 status、list、use、delete、logout
+kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k] — 另有 status、list、use、delete、logout
 kweaver token
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
@@ -120,6 +120,33 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header]
 | `KWEAVER_BASE_URL` | KWeaver 实例地址 |
 | `KWEAVER_BUSINESS_DOMAIN` | 业务域标识 |
 | `KWEAVER_TOKEN` | 访问令牌 |
+| `KWEAVER_TLS_INSECURE` | 设为 `1` 或 `true` 时跳过 TLS 证书校验（仅开发；更推荐 `kweaver auth … --insecure` 以按平台持久化） |
+| `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js 内置 TLS 开关：设为 `0` 时在本进程内跳过 HTTPS 证书校验。`kweaver` 在 `KWEAVER_TLS_INSECURE` 生效或已保存 token 为不安全 TLS 时会设置此项（范围同上；仅开发）。 |
+
+### TLS 证书问题排查
+
+如果遇到 `fetch failed`、`self-signed certificate`、`UNABLE_TO_GET_ISSUER_CERT` 等 TLS 相关错误，通常是目标服务器使用了自签名证书或 Kubernetes Ingress 默认假证书。可按优先级尝试以下方案：
+
+1. **推荐（按平台持久化）** — 登录时加 `--insecure`：
+   ```bash
+   kweaver auth login https://your-host --insecure
+   # 或简写
+   kweaver auth login https://your-host -k
+   ```
+   该标记会写入 `~/.kweaver/` 的 `token.json`，后续所有 CLI 命令对该平台自动生效，无需额外操作。
+
+2. **临时生效（当前 shell）** — 设置环境变量：
+   ```bash
+   export KWEAVER_TLS_INSECURE=1
+   kweaver bkn list
+   ```
+
+3. **Node.js 原生方式** — 直接设置 `NODE_TLS_REJECT_UNAUTHORIZED`：
+   ```bash
+   NODE_TLS_REJECT_UNAUTHORIZED=0 kweaver bkn list
+   ```
+
+> **安全提示：** 以上方式均会跳过 HTTPS 证书校验，仅适用于开发/内网环境。生产环境请使用受信任的 CA 签发证书。
 
 ## 在 AI 智能体中使用
 

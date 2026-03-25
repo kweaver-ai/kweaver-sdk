@@ -131,6 +131,7 @@ KWeaverClient(
     vega_url="http://vega:13014",    # 可选：Vega 数据平台 URL
     debug=False,                     # 打印请求/响应诊断
     dry_run=False,                   # 拦截写操作
+    tls_insecure=False,              # 跳过 TLS 校验（仅开发/自签名；生产请用受信任证书）
 )
 ```
 
@@ -141,6 +142,7 @@ KWeaverClient(
 | `KWEAVER_VEGA_URL` | Vega 后端 URL |
 | `KWEAVER_DEBUG` | 启用 debug 模式（`true`） |
 | `KWEAVER_FORMAT` | CLI 输出格式（`md`/`json`/`yaml`） |
+| `KWEAVER_TLS_INSECURE` | 设为 `1` 或 `true` 时跳过 TLS 校验（仅开发；`kweaver auth … --insecure` 会按平台写入 `token.json`） |
 
 ---
 

@@ -81,7 +81,7 @@ kweaver auth login https://your-kweaver-instance.com
 kweaver auth login https://your-kweaver-instance.com --alias prod
 ```
 
-或使用环境变量：`KWEAVER_BASE_URL`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_TOKEN`。
+或使用环境变量：`KWEAVER_BASE_URL`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_TOKEN`。Node 版 `kweaver` CLI 的 TLS 说明见 [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md) 中「环境变量」一节（含 `KWEAVER_TLS_INSECURE`、`NODE_TLS_REJECT_UNAUTHORIZED`）。
 
 ## TypeScript SDK 用法
 
@@ -190,7 +190,7 @@ result    = client.action_types.execute("bkn-id", "at-id", params={})
 ## 命令速查
 
 ```bash
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] — 另有 status、list、use、delete、logout
+kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k] — 另有 status、list、use、delete、logout
 kweaver token
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties

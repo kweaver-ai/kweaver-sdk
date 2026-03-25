@@ -39,7 +39,8 @@ Login options:
   --client-secret <s>    Client secret (omit for public/PKCE clients)
   -u, --username         Username (with -p triggers Playwright headless login)
   -p, --password         Password
-  --playwright           Force Playwright browser login even without -u/-p`);
+  --playwright           Force Playwright browser login even without -u/-p
+  --insecure, -k         Skip TLS certificate verification (self-signed / dev HTTPS only)`);
 
     return 0;
   }
@@ -68,17 +69,18 @@ Login options:
       const usePlaywright = args.includes("--playwright");
       const clientId = readOption(args, "--client-id");
       const clientSecret = readOption(args, "--client-secret");
+      const tlsInsecure = args.includes("--insecure") || args.includes("-k");
 
       let token;
 
       if (username && password) {
         // Headless Playwright login with credentials
         console.log("Logging in (headless)...");
-        token = await playwrightLogin(normalizedTarget, { username, password });
+        token = await playwrightLogin(normalizedTarget, { username, password, tlsInsecure });
       } else if (usePlaywright) {
         // Explicit Playwright fallback
         console.log("Opening browser for login (Playwright)...");
-        token = await playwrightLogin(normalizedTarget);
+        token = await playwrightLogin(normalizedTarget, { tlsInsecure });
       } else {
         // Default: OAuth2 authorization code flow (supports refresh_token)
         if (clientId) {
@@ -86,7 +88,11 @@ Login options:
         } else {
           console.log("Opening browser for OAuth2 login...");
         }
-        token = await oauth2Login(normalizedTarget, { clientId: clientId ?? undefined, clientSecret: clientSecret ?? undefined });
+        token = await oauth2Login(normalizedTarget, {
+          clientId: clientId ?? undefined,
+          clientSecret: clientSecret ?? undefined,
+          tlsInsecure,
+        });
       }
 
       if (alias) {
@@ -147,6 +153,9 @@ Login options:
     ];
 
     lines.push(`Refresh token: ${token.refreshToken ? "yes (auto-refresh enabled)" : "no"}`);
+    if (token.tlsInsecure) {
+      lines.push(`TLS: certificate verification disabled (saved; dev only)`);
+    }
 
     if (token.expiresAt) {
       const expiry = new Date(token.expiresAt);

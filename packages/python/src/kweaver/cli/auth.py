@@ -17,12 +17,19 @@ def auth_group() -> None:
 @click.argument("url")
 @click.option("--alias", default=None, help="Short alias for this platform.")
 @click.option("--port", default=9010, help="Local callback port.")
-def login(url: str, alias: str | None, port: int) -> None:
+@click.option(
+    "--insecure",
+    "-k",
+    is_flag=True,
+    default=False,
+    help="Skip TLS certificate verification (self-signed / dev HTTPS only).",
+)
+def login(url: str, alias: str | None, port: int, insecure: bool) -> None:
     """Login to a KWeaver platform via browser OAuth2 flow."""
     url = url.rstrip("/")
     click.echo(f"Logging in to {url} ...")
 
-    auth = OAuth2BrowserAuth(url, redirect_port=port)
+    auth = OAuth2BrowserAuth(url, redirect_port=port, tls_insecure=insecure)
     auth.login()
 
     if alias:
@@ -63,6 +70,8 @@ def status() -> None:
         expires = token.get("expiresAt", "unknown")
         click.echo(f"Token expires: {expires}")
         click.echo(f"Scope: {token.get('scope', 'N/A')}")
+        if token.get("tlsInsecure"):
+            click.echo("TLS: certificate verification disabled (saved; dev only)")
     else:
         click.echo("No token stored.")
 

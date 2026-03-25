@@ -10,7 +10,8 @@ from typing import Any
 
 import click
 
-from kweaver._auth import ConfigAuth, PasswordAuth, TokenAuth
+from kweaver._auth import ConfigAuth, PasswordAuth, TokenAuth, _env_tls_insecure
+from kweaver.config.store import PlatformStore
 from kweaver._client import KWeaverClient
 from kweaver._errors import KWeaverError, AuthenticationError, AuthorizationError, NotFoundError, DryRunIntercepted
 
@@ -29,17 +30,44 @@ def make_client(*, debug: bool = False, dry_run: bool = False) -> KWeaverClient:
 
     username = os.environ.get("KWEAVER_USERNAME")
     password = os.environ.get("KWEAVER_PASSWORD")
+    env_tls = _env_tls_insecure()
     if username and password and base_url:
         auth = PasswordAuth(base_url=base_url, username=username, password=password)
-        return KWeaverClient(base_url=base_url, auth=auth, business_domain=bd, debug=debug, dry_run=dry_run)
+        return KWeaverClient(
+            base_url=base_url,
+            auth=auth,
+            business_domain=bd,
+            debug=debug,
+            dry_run=dry_run,
+            tls_insecure=env_tls,
+        )
 
     token = os.environ.get("KWEAVER_TOKEN")
     if token and base_url:
-        return KWeaverClient(base_url=base_url, auth=TokenAuth(token), business_domain=bd, debug=debug, dry_run=dry_run)
+        return KWeaverClient(
+            base_url=base_url,
+            auth=TokenAuth(token),
+            business_domain=bd,
+            debug=debug,
+            dry_run=dry_run,
+            tls_insecure=env_tls,
+        )
 
     # Default: ConfigAuth reads ~/.kweaver/
     auth = ConfigAuth()
-    return KWeaverClient(auth=auth, business_domain=bd, debug=debug, dry_run=dry_run)
+    store = PlatformStore()
+    active = store.get_active()
+    token_data: dict = {}
+    if active:
+        token_data = store.load_token(active)
+    tls_insecure = env_tls or bool(token_data.get("tlsInsecure"))
+    return KWeaverClient(
+        auth=auth,
+        business_domain=bd,
+        debug=debug,
+        dry_run=dry_run,
+        tls_insecure=tls_insecure,
+    )
 
 
 def pp(data: Any) -> None:

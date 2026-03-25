@@ -131,6 +131,7 @@ KWeaverClient(
     vega_url="http://vega:13014",    # optional: Vega data platform URL
     debug=False,                     # print request/response diagnostics
     dry_run=False,                   # intercept write operations
+    tls_insecure=False,              # skip TLS verification (dev/self-signed; prefer trusted certs in prod)
 )
 ```
 
@@ -141,6 +142,7 @@ KWeaverClient(
 | `KWEAVER_VEGA_URL` | Vega backend URL |
 | `KWEAVER_DEBUG` | Enable debug mode (`true`) |
 | `KWEAVER_FORMAT` | Output format (`md`/`json`/`yaml`) |
+| `KWEAVER_TLS_INSECURE` | Set to `1` or `true` to skip TLS verification for HTTPS (dev only; `kweaver auth … --insecure` persists per platform in `token.json`) |
 
 ---
 

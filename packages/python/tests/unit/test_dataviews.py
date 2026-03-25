@@ -1,6 +1,7 @@
 """Tests for dataviews resource."""
 
 import json
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -88,3 +89,51 @@ def test_create_requires_table_or_sql():
     client = make_client(handler)
     with pytest.raises(ValueError, match="Either"):
         client.dataviews.create(name="bad", datasource_id="ds_01")
+
+
+def test_find_by_table_passes_keyword_param(capture: RequestCapture):
+    """find_by_table must send keyword=<table_name> to narrow server results."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "entries": [{"id": "dv_01", "name": "products", "type": "atomic",
+                         "query_type": "SQL", "fields": [], "data_source_id": "ds_01"}],
+        })
+
+    client = make_client(handler, capture)
+    client.dataviews.find_by_table("ds_01", "products", wait=False)
+
+    url = str(capture.requests[-1].url)
+    assert "keyword=products" in url
+
+
+def test_find_by_table_default_timeout_is_30s():
+    """Default timeout should be 30 seconds, not 10."""
+    import inspect
+    from kweaver.resources.dataviews import DataViewsResource
+    sig = inspect.signature(DataViewsResource.find_by_table)
+    assert sig.parameters["timeout"].default == 30
+
+
+def test_find_by_table_uses_exponential_backoff(capture: RequestCapture):
+    """Polling should use exponential backoff (1s, 2s, 4s, ...) capped at 5s."""
+    call_count = 0
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count < 4:
+            return httpx.Response(200, json={"entries": []})
+        return httpx.Response(200, json={
+            "entries": [{"id": "dv_01", "name": "tbl", "type": "atomic",
+                         "query_type": "SQL", "fields": [], "data_source_id": "ds_01"}],
+        })
+
+    client = make_client(handler, capture)
+    sleep_calls = []
+    with patch("kweaver.resources.dataviews.time.sleep", side_effect=lambda s: sleep_calls.append(s)):
+        with patch("kweaver.resources.dataviews.time.monotonic") as mock_mono:
+            mock_mono.return_value = 0.0
+            client.dataviews.find_by_table("ds_01", "tbl", wait=True)
+
+    assert call_count == 4
+    assert sleep_calls == [1.0, 2.0, 4.0]

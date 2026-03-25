@@ -27,7 +27,7 @@ class DataViewsResource:
         table_name: str,
         *,
         wait: bool = True,
-        timeout: float = 10,
+        timeout: float = 30,
     ) -> DataView | None:
         """Find the auto-created atomic view for a table in a datasource.
 
@@ -38,22 +38,23 @@ class DataViewsResource:
         deadline = time.monotonic() + timeout
         attempt = 0
         while True:
-            attempt += 1
             data = self._http.get(
                 "/api/mdl-data-model/v1/data-views",
-                params={"data_source_id": datasource_id, "limit": -1},
+                params={"data_source_id": datasource_id, "keyword": table_name, "limit": -1},
             )
             items = data if isinstance(data, list) else (data.get("entries") or data.get("data") or [])
             logger.debug(
                 "find_by_table attempt=%d ds=%s table=%r found=%d",
-                attempt, datasource_id, table_name, len(items),
+                attempt + 1, datasource_id, table_name, len(items),
             )
             for d in items:
                 if d.get("name") == table_name:
                     return _parse_single_dataview(d)
             if not wait or time.monotonic() >= deadline:
                 return None
-            time.sleep(5)
+            delay = min(5.0, 1.0 * 2 ** attempt)
+            time.sleep(delay)
+            attempt += 1
 
     def create(
         self,

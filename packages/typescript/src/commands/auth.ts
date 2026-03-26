@@ -1,4 +1,5 @@
 import {
+  autoSelectBusinessDomain,
   clearPlatformSession,
   deletePlatform,
   getConfigDir,
@@ -141,6 +142,10 @@ Login options:
       if (token.expiresAt) {
         console.log(`Token expires at: ${token.expiresAt}`);
       }
+      const selectedBd = await autoSelectBusinessDomain(normalizedTarget, token.accessToken, {
+        tlsInsecure: token.tlsInsecure,
+      });
+      console.log(`Business domain: ${selectedBd}`);
       return 0;
     } catch (error) {
       console.error(formatHttpError(error));

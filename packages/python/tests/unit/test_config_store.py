@@ -116,6 +116,16 @@ def test_delete_platform(tmp_path: Path):
     assert store.resolve("prod") == "prod"
 
 
+def test_save_and_load_business_domain(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://adp.example.com"
+    store.use(url)
+    store.save_business_domain(url, "54308785-4438-43df-9490-a7fd11df5765")
+    assert store.load_business_domain(url) == "54308785-4438-43df-9490-a7fd11df5765"
+    cfg = store.load_config(url)
+    assert cfg.get("businessDomain") == "54308785-4438-43df-9490-a7fd11df5765"
+
+
 def test_encode_url_is_url_safe_base64():
     encoded = _encode_url("https://adp.example.com:8443/path")
     # URL-safe base64 must not contain +, /, or =

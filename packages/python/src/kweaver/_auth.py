@@ -158,9 +158,11 @@ class OAuth2Auth:
 
 
 class ConfigAuth:
-    """Read credentials from ~/.kweaver/, auto-refresh with refresh_token.
+    """Read credentials from ~/.kweaver/.
 
-    Compatible with kweaverc (TypeScript CLI) — shared credential storage.
+    Default behavior: when access token is expired or near expiry, obtain a new one using the
+    OAuth2 refresh_token grant (same as the TypeScript CLI ``ensureValidToken``). Compatible with
+    kweaverc — shared credential storage.
     """
 
     _REFRESH_THRESHOLD = 60  # seconds before expiry to trigger refresh

@@ -65,5 +65,38 @@ describe("kweaver config", () => {
     const { code, stdout } = await runCli(["config", "--help"]);
     assert.equal(code, 0);
     assert.ok(stdout.includes("set-bd"));
+    assert.ok(stdout.includes("list-bd"));
+  });
+
+  it("config list-bd prints domains from API", async () => {
+    const platformsDir = join(tempDir, "platforms", "aHR0cHM6Ly9leGFtcGxlLmNvbQ");
+    writeFileSync(
+      join(platformsDir, "token.json"),
+      JSON.stringify({
+        baseUrl: "https://example.com",
+        accessToken: "tok",
+        tokenType: "Bearer",
+        scope: "openid",
+        obtainedAt: "2020-01-01T00:00:00Z",
+      }),
+    );
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify([{ id: "bd_public", name: "Public", description: "d" }]), {
+        status: 200,
+      });
+    try {
+      const { code, stdout } = await runCli(["config", "list-bd"]);
+      assert.equal(code, 0);
+      const data = JSON.parse(stdout) as {
+        currentId: string;
+        domains: Array<{ id: string; current: boolean }>;
+      };
+      assert.equal(data.domains.length, 1);
+      assert.equal(data.domains[0].id, "bd_public");
+      assert.equal(data.domains[0].current, true);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });

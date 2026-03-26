@@ -763,6 +763,15 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
   return newToken;
 }
 
+/**
+ * Resolve a usable access token for the current platform.
+ *
+ * **Default behavior** (saved `~/.kweaver/` session from OAuth2 code login): when the access
+ * token is expired or near expiry, automatically exchanges the saved **refresh_token** for a new
+ * access token (OAuth2 `refresh_token` grant) and persists it. No extra flags are required.
+ *
+ * Static env `KWEAVER_TOKEN` bypasses refresh (see implementation).
+ */
 export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promise<TokenConfig> {
   const envToken = process.env.KWEAVER_TOKEN;
   const envBaseUrl = process.env.KWEAVER_BASE_URL;

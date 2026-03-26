@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from kweaver._auth import OAuth2BrowserAuth
+from kweaver.business_domains import auto_select_business_domain
 from kweaver.config.store import PlatformStore
 
 
@@ -32,12 +33,21 @@ def login(url: str, alias: str | None, port: int, insecure: bool) -> None:
     auth = OAuth2BrowserAuth(url, redirect_port=port, tls_insecure=insecure)
     auth.login()
 
+    store = PlatformStore()
     if alias:
-        store = PlatformStore()
         store.set_alias(alias, url)
         click.echo(f"Alias '{alias}' saved.")
 
     click.echo("Login successful.")
+
+    active = store.get_active()
+    if active:
+        tok = store.load_token(active)
+        at = tok.get("accessToken", "")
+        if at:
+            tls_flag = bool(tok.get("tlsInsecure")) or insecure
+            bd = auto_select_business_domain(store, active, at, tls_insecure=tls_flag)
+            click.echo(f"Business domain: {bd}")
 
 
 @auth_group.command("logout")

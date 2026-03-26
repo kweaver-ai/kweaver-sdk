@@ -190,6 +190,10 @@ export {
 } from "./api/dataviews.js";
 export { DataViewsResource } from "./resources/dataviews.js";
 
+// ── Business domains (platform API) ───────────────────────────────────────────
+export type { BusinessDomain, ListBusinessDomainsOptions } from "./api/business-domains.js";
+export { listBusinessDomains } from "./api/business-domains.js";
+
 // ── HTTP utilities ────────────────────────────────────────────────────────────
 export { HttpError, NetworkRequestError, fetchTextOrThrow } from "./utils/http.js";
 
@@ -199,4 +203,4 @@ export type {
   ContextLoaderEntry,
   ContextLoaderConfig,
 } from "./config/store.js";
-export { getConfigDir, getCurrentPlatform } from "./config/store.js";
+export { autoSelectBusinessDomain, getConfigDir, getCurrentPlatform } from "./config/store.js";

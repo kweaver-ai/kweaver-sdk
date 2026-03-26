@@ -81,7 +81,7 @@ kweaver auth login https://your-kweaver-instance.com
 kweaver auth login https://your-kweaver-instance.com --alias prod
 ```
 
-或使用环境变量：`KWEAVER_BASE_URL`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_TOKEN`。Node 版 `kweaver` CLI 的 TLS 说明见 [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md) 中「环境变量」一节（含 `KWEAVER_TLS_INSECURE`、`NODE_TLS_REJECT_UNAUTHORIZED`）。
+或使用环境变量：`KWEAVER_BASE_URL`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_TOKEN`。通过浏览器 OAuth2 登录写入的 `~/.kweaver/` 会话，**默认在 access token 过期时用 refresh_token 换发新 token**（OAuth2 refresh 授权，无需额外参数）。Node 版 `kweaver` CLI 的 TLS 说明见 [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md) 中「环境变量」一节（含 `KWEAVER_TLS_INSECURE`、`NODE_TLS_REJECT_UNAUTHORIZED`）。
 
 ### 无浏览器环境（SSH、CI、容器）
 
@@ -91,6 +91,20 @@ kweaver auth login https://your-kweaver-instance.com --alias prod
 2. 在**无浏览器**的机器上执行该命令（含 `--client-id`、`--client-secret`、`--refresh-token`），会换取 token 并写入 `~/.kweaver/`，之后行为与正常登录一致。
 
 详见 [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md) 中「无浏览器 / 服务器端认证」一节。Python 版 `kweaver` CLI 仍为浏览器交互登录；可将已在 Node CLI 下登录生成的 `~/.kweaver/` 目录拷贝到目标机复用。
+
+## 平台配置（business domain / 业务域）
+
+多数接口会带 `x-business-domain`。**登录后应先确认或设置业务域**，DIP 类产品常用 UUID；若一直用默认 `bd_public`，列表类命令可能为空。
+
+```bash
+kweaver config show              # 当前平台与解析后的业务域
+kweaver config list-bd           # 从平台列出可选业务域（需已登录）
+kweaver config set-bd <uuid>     # 写入当前平台的默认业务域
+```
+
+优先级：`KWEAVER_BUSINESS_DOMAIN` 环境变量 → 平台目录下 `config.json` → `bd_public`。首次 `kweaver auth login` 成功后，若尚未配置，CLI 会尝试自动选择（列表含 `bd_public` 则选它，否则选第一项）。
+
+详见 [`skills/kweaver-core/references/config.md`](skills/kweaver-core/references/config.md)。
 
 ## TypeScript SDK 用法
 
@@ -202,6 +216,7 @@ result    = client.action_types.execute("bkn-id", "at-id", params={})
 kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   （无浏览器主机）
 kweaver auth export [url|alias] [--json]   auth status/list/use/delete/logout
+kweaver config show / list-bd / set-bd <value>   # 平台业务域，登录后优先执行
 kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver dataview list/find/get/query/delete
@@ -228,7 +243,7 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 | `kweaver query kn-search <kn_id> <query>`（REST） | `kweaver context-loader kn-search <query>`（MCP），或 SDK `client.bkn.knSearch` — 传输方式不同 |
 | `kweaver action query` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
 
-**仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver dataview list|find|get|delete`、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。两种 CLI 均支持 `kweaver dataview query`（mdl-uniquery SQL；Python 需 `pip install kweaver-sdk[cli]`）。
+**仅 TypeScript CLI：** `kweaver vega`、`kweaver dataview list|find|get|delete`、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。两种 CLI 均支持 `kweaver config show|list-bd|set-bd` 与 `kweaver dataview query`（mdl-uniquery SQL；Python 需 `pip install kweaver-sdk[cli]`）。
 
 ## 项目结构（Monorepo）
 

@@ -27,7 +27,7 @@ kweaver dataview delete <id> [-y] [-bd value]
 | `--exact` | 仅 **`find`**：在 keyword 结果上再做精确匹配 |
 | `--wait` / `--no-wait` | 仅 **`find`**：是否轮询直到出现或超时（与 `bkn create-from-ds` 内「先找已有原子视图」一致） |
 | `--timeout` | 仅 **`find`**：与 `--wait` 配合的总等待时间（毫秒） |
-| `-bd` / `--biz-domain` | 业务域；默认来自 `kweaver config show` |
+| `-bd` / `--biz-domain` | 业务域；默认来自 `kweaver config show`（可用 `kweaver config list-bd` 查看平台可选域） |
 
 ### `list` 与 `find`
 

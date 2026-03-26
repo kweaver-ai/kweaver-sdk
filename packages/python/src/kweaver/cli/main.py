@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from kweaver.cli.auth import auth_group
+from kweaver.cli.config import config_group
 from kweaver.cli.dataview import dataview_group
 from kweaver.cli.ds import ds_group
 from kweaver.cli.kn import kn_group
@@ -36,6 +37,7 @@ def cli(ctx: click.Context, debug: bool, dry_run: bool, output_format: str) -> N
 
 
 cli.add_command(auth_group, "auth")
+cli.add_command(config_group, "config")
 cli.add_command(ds_group, "ds")
 cli.add_command(dataview_group, "dataview")
 cli.add_command(kn_group, "bkn")

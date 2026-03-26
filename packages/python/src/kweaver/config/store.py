@@ -170,6 +170,42 @@ class PlatformStore:
     def save_token(self, url: str, data: dict[str, Any]) -> None:
         _write_json(self._platform_dir(url) / "token.json", data)
 
+    # -- Platform config (business domain, etc.) — same as kweaverc config.json --
+
+    def load_config(self, url: str | None = None) -> dict[str, Any]:
+        """Load config.json for a platform (e.g. businessDomain)."""
+        url = url or self.get_active()
+        if not url:
+            return {}
+        return _read_json(self._platform_dir(url) / "config.json")
+
+    def save_config(self, url: str, data: dict[str, Any]) -> None:
+        _write_json(self._platform_dir(url) / "config.json", data)
+
+    def load_business_domain(self, url: str | None = None) -> str | None:
+        """Return saved business domain id if set."""
+        cfg = self.load_config(url)
+        bd = cfg.get("businessDomain")
+        return bd if isinstance(bd, str) and bd else None
+
+    def save_business_domain(self, url: str, business_domain: str) -> None:
+        """Persist default business domain for the platform."""
+        existing = self.load_config(url)
+        existing["businessDomain"] = business_domain
+        self.save_config(url, existing)
+
+    def resolve_business_domain(self, url: str | None = None) -> str:
+        """Resolve business domain: env > config.json > bd_public."""
+        from_env = os.environ.get("KWEAVER_BUSINESS_DOMAIN")
+        if from_env:
+            return from_env
+        target = url or self.get_active()
+        if target:
+            from_cfg = self.load_business_domain(target)
+            if from_cfg:
+                return from_cfg
+        return "bd_public"
+
     # -- Context Loader config --
 
     def load_context_loader_config(self, url: str | None = None) -> dict[str, Any]:

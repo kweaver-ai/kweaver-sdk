@@ -11,6 +11,8 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { listBusinessDomains } from "../api/business-domains.js";
+
 export interface TokenConfig {
   baseUrl: string;
   accessToken: string;
@@ -539,4 +541,44 @@ export function resolveBusinessDomain(baseUrl?: string): string {
     if (fromConfig) return fromConfig;
   }
   return "bd_public";
+}
+
+/**
+ * Pick and persist a default business domain after login when none is configured.
+ * Skips API calls when KWEAVER_BUSINESS_DOMAIN is set or config already has businessDomain.
+ * Preference: bd_public if present in the list, else first item; empty list or failure → bd_public (not saved).
+ */
+export async function autoSelectBusinessDomain(
+  baseUrl: string,
+  accessToken: string,
+  options?: { tlsInsecure?: boolean }
+): Promise<string> {
+  if (process.env.KWEAVER_BUSINESS_DOMAIN) {
+    return process.env.KWEAVER_BUSINESS_DOMAIN;
+  }
+  const configured = loadPlatformBusinessDomain(baseUrl);
+  if (configured) {
+    return configured;
+  }
+  try {
+    const list = await listBusinessDomains({
+      baseUrl,
+      accessToken,
+      tlsInsecure: options?.tlsInsecure,
+    });
+    let selected: string;
+    if (list.some((d) => d.id === "bd_public")) {
+      selected = "bd_public";
+    } else if (list.length > 0 && list[0].id) {
+      selected = list[0].id;
+    } else {
+      return "bd_public";
+    }
+    savePlatformBusinessDomain(baseUrl, selected);
+    return selected;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Could not fetch business domains: ${message}. Using bd_public.`);
+    return "bd_public";
+  }
 }

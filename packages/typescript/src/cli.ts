@@ -78,6 +78,7 @@ Usage:
   kweaver bkn action-log list|get|cancel <kn-id> ...
 
   kweaver config set-bd <value>
+  kweaver config list-bd
   kweaver config show
 
   kweaver vega health|stats|inspect

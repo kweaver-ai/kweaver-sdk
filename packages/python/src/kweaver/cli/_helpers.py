@@ -26,7 +26,9 @@ def make_client(*, debug: bool = False, dry_run: bool = False) -> KWeaverClient:
     PasswordAuth is preferred over TokenAuth because it auto-refreshes expired tokens.
     """
     base_url = os.environ.get("KWEAVER_BASE_URL")
-    bd = os.environ.get("KWEAVER_BUSINESS_DOMAIN") or "bd_public"
+    store = PlatformStore()
+    active = store.get_active()
+    bd = os.environ.get("KWEAVER_BUSINESS_DOMAIN") or store.resolve_business_domain(active)
 
     username = os.environ.get("KWEAVER_USERNAME")
     password = os.environ.get("KWEAVER_PASSWORD")
@@ -55,7 +57,6 @@ def make_client(*, debug: bool = False, dry_run: bool = False) -> KWeaverClient:
 
     # Default: ConfigAuth reads ~/.kweaver/
     auth = ConfigAuth()
-    store = PlatformStore()
     active = store.get_active()
     token_data: dict = {}
     if active:

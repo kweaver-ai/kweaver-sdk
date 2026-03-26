@@ -31,6 +31,18 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
+### Business domain (platform)
+
+Set or verify **before** calling list/query APIs that scope by tenant. DIP deployments often need a UUID, not only `bd_public`.
+
+```bash
+kweaver config show
+kweaver config list-bd
+kweaver config set-bd <uuid>
+```
+
+After `kweaver auth login`, the CLI may auto-select a domain when none is saved yet. Override with `KWEAVER_BUSINESS_DOMAIN` or `-bd` / `--biz-domain` on commands. See [`../../skills/kweaver-core/references/config.md`](../../skills/kweaver-core/references/config.md).
+
 ### Simple API (recommended)
 
 ```typescript
@@ -130,8 +142,8 @@ kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--in
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless login)
 kweaver auth export [url|alias] [--json]   (export command to run on a headless host)
 kweaver auth status/list/use/delete/logout
+kweaver config show / list-bd / set-bd <value>   # platform business domain — after login
 kweaver token
-kweaver config show / set-bd <value>
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500]
 kweaver dataview list/find/get/query/delete

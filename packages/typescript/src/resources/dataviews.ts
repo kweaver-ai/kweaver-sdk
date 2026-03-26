@@ -4,8 +4,9 @@ import {
   findDataView,
   getDataView,
   listDataViews,
+  queryDataView,
 } from "../api/dataviews.js";
-import type { DataView } from "../api/dataviews.js";
+import type { DataView, DataViewQueryResult } from "../api/dataviews.js";
 import type { ClientContext } from "../client.js";
 
 export class DataViewsResource {
@@ -49,5 +50,30 @@ export class DataViewsResource {
 
   async delete(id: string): Promise<void> {
     await deleteDataView({ ...this.ctx.base(), id });
+  }
+
+  async query(
+    id: string,
+    opts?: {
+      sql?: string;
+      offset?: number;
+      limit?: number;
+      needTotal?: boolean;
+      outputFields?: string[];
+      filters?: Record<string, unknown>;
+      sort?: Array<Record<string, unknown>>;
+    },
+  ): Promise<DataViewQueryResult> {
+    return queryDataView({
+      ...this.ctx.base(),
+      id,
+      sql: opts?.sql,
+      offset: opts?.offset,
+      limit: opts?.limit,
+      needTotal: opts?.needTotal,
+      outputFields: opts?.outputFields,
+      filters: opts?.filters,
+      sort: opts?.sort,
+    });
   }
 }

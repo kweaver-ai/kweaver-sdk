@@ -32,8 +32,22 @@ def _mock_client():
 def test_cli_help(runner):
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
-    for cmd in ("auth", "bkn", "query", "action", "agent", "call", "ds"):
+    for cmd in ("auth", "bkn", "query", "action", "agent", "call", "ds", "dataview"):
         assert cmd in result.output
+
+
+def test_dataview_query(runner):
+    """dataview query calls client.dataviews.query."""
+    mock = _mock_client()
+    mock.dataviews.query.return_value = {"entries": [[1, "a"]], "total_count": 1}
+    with patch("kweaver.cli.dataview.make_client", return_value=mock):
+        result = runner.invoke(cli, ["dataview", "query", "dv-1", "--sql", "SELECT 1", "--limit", "5"])
+    assert result.exit_code == 0
+    mock.dataviews.query.assert_called_once()
+    args, kwargs = mock.dataviews.query.call_args
+    assert args[0] == "dv-1"
+    assert kwargs["sql"] == "SELECT 1"
+    assert kwargs["limit"] == 5
 
 
 def test_cli_version(runner):

@@ -101,6 +101,11 @@ const exact = await client.dataviews.find("orders", {
   wait: true,
 });
 const dv = await client.dataviews.get(viewId);
+const queryRows = await client.dataviews.query(viewId, {
+  sql: "SELECT id, name FROM orders LIMIT 10",
+  limit: 10,
+  needTotal: true,
+});
 
 // Context Loader（通过 MCP 对 BKN 做语义搜索）
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
@@ -113,7 +118,7 @@ const results = await cl.search({ query: "高血压 治疗" });
 kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k] — 另有 status、list、use、delete、logout
 kweaver token
 kweaver ds list/get/delete/tables/connect
-kweaver dataview list/find/get/delete
+kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
 kweaver bkn relation-type list/get/create/update/delete

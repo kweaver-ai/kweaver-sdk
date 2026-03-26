@@ -54,7 +54,7 @@ kweaver <command> [subcommand] [options]
 | `bkn` | BKN 知识网络管理、Schema、查询、Action | `bkn validate`/`push` 默认检测 `.bkn` 编码并规范为 UTF-8，可用 `--no-detect-encoding` 或 `--source-encoding gb18030`；另有 `pull`、`object-type`、`search`、`create-from-ds`/`create-from-csv` 等，见 `references/bkn.md` | `references/bkn.md` |
 | `agent` | Agent CRUD、发布、对话 | `agent list`, `agent get <id>`, `agent chat <id> -m "..."`、`agent sessions <agent_id>`、`agent history <conversation_id>` | `references/agent.md` |
 | `ds` | 数据源管理 | `ds list`, `ds get <id>`, `ds import-csv <file> --name <name>` | `references/ds.md` |
-| `dataview` | 原子/自定义数据视图（mdl-data-model） | `dataview list`（按数据源/类型/条数）、`find --name`（模糊；`--exact` 精确）、`get`/`delete` | `references/dataview.md` |
+| `dataview` | 原子/自定义数据视图（mdl-data-model） | `dataview list`、`find --name`、`get`、`query`（SQL / mdl-uniquery）、`delete` | `references/dataview.md` |
 | `vega` | Vega 可观测平台 | `vega health`, `vega catalog list`, `vega resource list` | `references/vega.md` |
 | `config` | 平台配置（business domain 等） | `config show`, `config set-bd <uuid>` | `references/config.md` |
 | `context-loader` | MCP 分层检索 | `context-loader config show`, `context-loader kn-search <query>` | `references/context-loader.md` |
@@ -65,7 +65,7 @@ kweaver <command> [subcommand] [options]
 | 场景 | 说明 | 详细参考 |
 |------|------|---------|
 | 从数据库/CSV 构建 KN | 连接数据源 → CSV 导入 → 创建 KN → 构建索引 → 查询验证 → 绑定 Agent | [references/build-kn-from-db.md](references/build-kn-from-db.md) |
-| 列/查数据视图 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`） | [references/dataview.md](references/dataview.md) |
+| 列/查数据视图 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 对视图跑 SQL | [references/dataview.md](references/dataview.md) |
 
 **按需阅读**：需要子命令完整参数或编排示例时，读取对应的 reference 文件。
 

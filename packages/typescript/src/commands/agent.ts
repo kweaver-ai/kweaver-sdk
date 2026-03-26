@@ -84,7 +84,7 @@ export function formatSimpleAgentList(text: string, pretty: boolean): string {
 export function parseAgentListArgs(args: string[]): AgentListOptions {
   let name = "";
   let offset = 0;
-  let limit = 50;
+  let limit = 30;
   let category_id = "";
   let custom_space_id = "";
   let is_to_square = 1;
@@ -113,8 +113,8 @@ export function parseAgentListArgs(args: string[]): AgentListOptions {
     }
 
     if (arg === "--limit") {
-      limit = parseInt(args[i + 1] ?? "50", 10);
-      if (Number.isNaN(limit) || limit < 1) limit = 50;
+      limit = parseInt(args[i + 1] ?? "30", 10);
+      if (Number.isNaN(limit) || limit < 1) limit = 30;
       i += 1;
       continue;
     }
@@ -192,7 +192,7 @@ export function parseAgentSessionsArgs(args: string[]): AgentSessionsOptions {
   }
 
   let businessDomain = "";
-  let limit: number | undefined;
+  let limit = 30;
   let pretty = true;
 
   for (let i = 1; i < args.length; i += 1) {
@@ -212,8 +212,8 @@ export function parseAgentSessionsArgs(args: string[]): AgentSessionsOptions {
     }
 
     if (arg === "--limit") {
-      limit = parseInt(args[i + 1] ?? "0", 10);
-      if (Number.isNaN(limit) || limit < 1) limit = undefined;
+      limit = parseInt(args[i + 1] ?? "30", 10);
+      if (Number.isNaN(limit) || limit < 1) limit = 30;
       i += 1;
       continue;
     }
@@ -249,7 +249,7 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
   }
 
   let businessDomain = "";
-  let limit: number | undefined;
+  let limit = 30;
   let pretty = true;
 
   for (let i = 1; i < args.length; i += 1) {
@@ -269,8 +269,8 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
     }
 
     if (arg === "--limit") {
-      limit = parseInt(args[i + 1] ?? "0", 10);
-      if (Number.isNaN(limit) || limit < 1) limit = undefined;
+      limit = parseInt(args[i + 1] ?? "30", 10);
+      if (Number.isNaN(limit) || limit < 1) limit = 30;
       i += 1;
       continue;
     }
@@ -383,7 +383,7 @@ List published agents from the agent-factory API.
 Options:
   --name <text>             Filter by name
   --offset <n>              Pagination offset (default: 0)
-  --limit <n>               Max items to return (default: 50)
+  --limit <n>               Max items to return (default: 30)
   --category-id <id>        Filter by category
   --custom-space-id <id>    Filter by custom space
   --is-to-square <0|1>      Is to square (default: 1)
@@ -401,7 +401,7 @@ Options:
 List all conversations for an agent.
 
 Options:
-  --limit <n>              Max conversations to return
+  --limit <n>              Max conversations to return (default: 30)
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
       return 0;
@@ -415,7 +415,7 @@ Options:
 Show message history for a conversation.
 
 Options:
-  --limit <n>              Max messages to return
+  --limit <n>              Max messages to return (default: 30)
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
       return 0;
@@ -557,7 +557,7 @@ List published agents from the agent-factory API.
 Options:
   --name <text>             Filter by name
   --offset <n>              Pagination offset (default: 0)
-  --limit <n>               Max items to return (default: 50)
+  --limit <n>               Max items to return (default: 30)
   --category-id <id>        Filter by category
   --custom-space-id <id>    Filter by custom space
   --is-to-square <0|1>      Is to square (default: 1)
@@ -605,7 +605,7 @@ async function runAgentSessionsCommand(args: string[]): Promise<number> {
 List all conversations for an agent.
 
 Options:
-  --limit <n>              Max conversations to return
+  --limit <n>              Max conversations to return (default: 30)
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
       return 0;
@@ -642,7 +642,7 @@ async function runAgentHistoryCommand(args: string[]): Promise<number> {
 Show message history for a conversation.
 
 Options:
-  --limit <n>              Max messages to return
+  --limit <n>              Max messages to return (default: 30)
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
       return 0;

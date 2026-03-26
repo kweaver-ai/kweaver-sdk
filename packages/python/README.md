@@ -105,6 +105,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Agents | `client.agents` | `list`, `get`, `get_by_key`, `create`, `update`, `delete`, `publish`, `unpublish` |
 | Conversations | `client.conversations` | `send_message`, `list_messages` |
 | Dataflows | `client.dataflows` | `create`, `run`, `poll`, `delete`, `execute` |
+| Data Views | `client.dataviews` | `create`, `list`, `get`, `delete`, `find_by_table`, `query` (SQL via mdl-uniquery) |
 
 ### Vega (Data Platform)
 

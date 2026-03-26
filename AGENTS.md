@@ -32,6 +32,20 @@
 - 所有代码注释（含 docstring）必须使用英文
 - 所有新增日志（log message）必须使用英文
 
+### CLI / SDK 默认 limit 约定
+
+所有 CLI 命令和 SDK 方法的 `limit` 参数统一遵循以下默认值：
+
+| 类型 | 默认 limit | 适用命令 |
+|------|-----------|---------|
+| 列表类（list） | **30** | `bkn list`、`agent list`、`agent sessions`、`agent history`、`dataview list`、`vega catalog list`、`vega catalog resources`、`vega resource list`、`bkn action-log list`、`ds list` |
+| 查询类（query / preview） | **50** | `bkn object-type query`、`dataview query`、`vega resource preview` |
+
+- 新增列表类命令默认 limit 设为 **30**，查询类命令设为 **50**
+- TypeScript 和 Python 两端保持一致
+- `--limit` CLI 参数始终作为最高优先级覆盖
+- 除非有特别说明，否则一律遵循上述默认值
+
 ## 熵减原则（Entropy Reduction）
 
 目标：每次变更都应让系统更"有序"——更易理解、更一致、更可维护；避免引入无谓复杂度与噪声。

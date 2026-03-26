@@ -8,8 +8,12 @@
 kweaver dataview list [--datasource-id <id>] [--type <atomic|custom>] [--limit <n>] [-bd value] [--pretty]
 kweaver dataview find --name <name> [--exact] [--datasource-id <id>] [--wait] [--no-wait] [--timeout <ms>] [-bd value] [--pretty]
 kweaver dataview get <id> [-bd value] [--pretty]
+kweaver dataview query <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]   # TypeScript CLI
+kweaver dataview query <view_id> [--sql/-s <sql>] [--limit N] [--offset N] [--need-total]   # Python CLI
 kweaver dataview delete <id> [-y] [-bd value]
 ```
+
+**`query`**：对指定数据视图执行 SQL 查询，走平台 **mdl-uniquery** `POST /api/mdl-uniquery/v1/data-views/:id`。省略 `--sql` 时使用视图自身保存的 SQL。
 
 ### 参数说明
 
@@ -43,6 +47,24 @@ const exact = await client.dataviews.find("orders", {
   exact: true,
   wait: true,
 });
+const rows = await client.dataviews.query("view-id", {
+  sql: "SELECT id, name FROM t WHERE status = 'active'",
+  limit: 100,
+  offset: 0,
+  needTotal: true,
+});
+```
+
+## SDK（Python）
+
+```python
+rows = client.dataviews.query(
+    "view-id",
+    sql="SELECT id, name FROM t WHERE status = 'active'",
+    limit=100,
+    offset=0,
+    need_total=True,
+)
 ```
 
 ## 端到端示例
@@ -59,6 +81,9 @@ kweaver dataview find --name 产品信息 --exact --datasource-id <ds-uuid> --no
 
 # 精确名称 + 轮询等待（与 create-from-ds 内部行为一致）
 kweaver dataview find --name orders --exact --datasource-id <ds-uuid> --wait --pretty
+
+# 对视图执行 SQL（或省略 --sql 使用视图默认 SQL）
+kweaver dataview query <view-id> --sql "SELECT * FROM my_table LIMIT 10" --pretty
 ```
 
 ## 与 BKN 的关系

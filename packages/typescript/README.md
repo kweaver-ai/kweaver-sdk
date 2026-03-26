@@ -102,6 +102,11 @@ const exact = await client.dataviews.find("orders", {
   wait: true,
 });
 const dv = await client.dataviews.get(viewId);
+const queryRows = await client.dataviews.query(viewId, {
+  sql: "SELECT id, name FROM orders LIMIT 10",
+  limit: 10,
+  needTotal: true,
+});
 
 // Dataflow automation (CSV import pipeline, etc.)
 const result = await client.dataflows.execute({
@@ -126,7 +131,7 @@ kweaver token
 kweaver config show / set-bd <value>
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500]
-kweaver dataview list/find/get/delete
+kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
 kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]

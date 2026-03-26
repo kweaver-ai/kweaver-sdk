@@ -41,7 +41,12 @@ class DataView(BaseModel):
     name: str
     query_type: str
     datasource_id: str = ""
-    fields: list[ViewField] = []
+    type: str | None = None
+    data_source_type: str | None = None
+    data_source_name: str | None = None
+    sql_str: str | None = None
+    meta_table_name: str | None = None
+    fields: list[ViewField] | None = None
 
 
 class KNStatistics(BaseModel):

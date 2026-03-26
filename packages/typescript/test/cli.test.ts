@@ -338,7 +338,7 @@ test("formatVerboseRequest prints method url headers and body state", () => {
 test("parseKnListArgs parses flags with defaults", () => {
   const opts = parseKnListArgs([]);
   assert.equal(opts.offset, 0);
-  assert.equal(opts.limit, 50);
+  assert.equal(opts.limit, 30);
   assert.equal(opts.sort, "update_time");
   assert.equal(opts.direction, "desc");
   assert.equal(opts.businessDomain, "bd_public");
@@ -522,10 +522,10 @@ test("parseKnObjectTypeQueryArgs allows body omission when --limit is provided",
   assert.deepEqual(JSON.parse(opts.body), { limit: 20 });
 });
 
-test("parseKnObjectTypeQueryArgs defaults limit to 30 when omitted", () => {
+test("parseKnObjectTypeQueryArgs defaults limit to 50 when omitted", () => {
   const opts = parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"condition":{"operation":"and","sub_conditions":[]}}']);
   const body = JSON.parse(opts.body);
-  assert.strictEqual(body.limit, 30);
+  assert.strictEqual(body.limit, 50);
 });
 
 test("parseKnObjectTypeQueryArgs validates --search-after json array", () => {
@@ -539,7 +539,7 @@ test("parseAgentListArgs parses flags with defaults", () => {
   const opts = parseAgentListArgs([]);
   assert.equal(opts.name, "");
   assert.equal(opts.offset, 0);
-  assert.equal(opts.limit, 50);
+  assert.equal(opts.limit, 30);
   assert.equal(opts.category_id, "");
   assert.equal(opts.custom_space_id, "");
   assert.equal(opts.is_to_square, 1);
@@ -1013,7 +1013,7 @@ test("parseAgentSessionsArgs parses positional agent_id", () => {
   assert.equal(opts.agentId, "agent-123");
   assert.equal(opts.businessDomain, "bd_public");
   assert.equal(opts.pretty, true);
-  assert.equal(opts.limit, undefined);
+  assert.equal(opts.limit, 30);
 });
 
 test("parseAgentSessionsArgs parses --limit and -bd", () => {
@@ -1030,7 +1030,7 @@ test("parseAgentHistoryArgs parses positional conversation_id", () => {
   const opts = parseAgentHistoryArgs(["conv-abc"]);
   assert.equal(opts.conversationId, "conv-abc");
   assert.equal(opts.pretty, true);
-  assert.equal(opts.limit, undefined);
+  assert.equal(opts.limit, 30);
 });
 
 test("parseAgentHistoryArgs parses --limit", () => {

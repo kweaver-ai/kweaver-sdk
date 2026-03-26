@@ -114,6 +114,78 @@ def test_find_by_table_default_timeout_is_30s():
     assert sig.parameters["timeout"].default == 30
 
 
+def test_query_posts_to_uniquery_path(capture: RequestCapture):
+    """query() POSTs to mdl-uniquery data-views endpoint."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "POST" and "/api/mdl-uniquery/v1/data-views/dv-99" in str(req.url):
+            return httpx.Response(200, json={"columns": [], "entries": [], "total_count": 0})
+        return httpx.Response(404)
+
+    client = make_client(handler, capture)
+    out = client.dataviews.query("dv-99", limit=10, offset=0)
+    assert out.get("total_count") == 0
+    assert any(
+        r.method == "POST" and "/api/mdl-uniquery/v1/data-views/dv-99" in str(r.url)
+        for r in capture.requests
+    )
+
+
+def test_query_with_sql_override(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "POST":
+            body = json.loads(req.content.decode())
+            assert body["sql"] == "SELECT 1"
+            assert body["need_total"] is True
+            return httpx.Response(200, json={"entries": []})
+        return httpx.Response(404)
+
+    client = make_client(handler, capture)
+    client.dataviews.query("x", sql="SELECT 1", need_total=True)
+
+
+def test_query_default_params(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        body = json.loads(req.content.decode())
+        assert body["offset"] == 0
+        assert body["limit"] == 50
+        assert body["need_total"] is False
+        assert "sql" not in body
+        return httpx.Response(200, json={})
+
+    client = make_client(handler, capture)
+    client.dataviews.query("vid")
+
+
+def test_list_omits_fields_when_backend_returns_empty(capture: RequestCapture):
+    """List results should have fields=None when backend returns empty array."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "entries": [{"id": "dv-1", "name": "v", "query_type": "SQL",
+                         "data_source_id": "ds-1", "fields": []}],
+        })
+
+    client = make_client(handler, capture)
+    views = client.dataviews.list(datasource_id="ds-1")
+    assert len(views) == 1
+    assert views[0].fields is None
+
+
+def test_get_populates_fields_when_present(capture: RequestCapture):
+    """get() should parse fields when backend returns non-empty array."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "id": "dv-2", "name": "v2", "query_type": "SQL",
+            "data_source_id": "ds-1",
+            "fields": [{"name": "col1", "type": "integer"}],
+        })
+
+    client = make_client(handler, capture)
+    dv = client.dataviews.get("dv-2")
+    assert dv.fields is not None
+    assert len(dv.fields) == 1
+    assert dv.fields[0].name == "col1"
+
+
 def test_find_by_table_uses_exponential_backoff(capture: RequestCapture):
     """Polling should use exponential backoff (1s, 2s, 4s, ...) capped at 5s."""
     call_count = 0

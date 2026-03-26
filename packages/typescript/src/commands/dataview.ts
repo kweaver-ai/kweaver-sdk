@@ -5,6 +5,7 @@ import {
   findDataView,
   getDataView,
   listDataViews,
+  queryDataView,
 } from "../api/dataviews.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -30,10 +31,12 @@ Subcommands:
   list   [--datasource-id <id>] [--type <atomic|custom>] [--limit <n>] [-bd value] [--pretty]
   find   --name <name> [--exact] [--datasource-id <id>] [--wait] [--no-wait] [--timeout <ms>] [-bd value] [--pretty]
   get    <id> [-bd value] [--pretty]
+  query  <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]
   delete <id> [-y] [-bd value]
 
   list  — list all data views (no keyword search)
-  find  — search by name; default fuzzy, --exact for strict match, --wait to poll`);
+  find  — search by name; default fuzzy, --exact for strict match, --wait to poll
+  query — run SQL query against a data view (mdl-uniquery); omit --sql to use view default SQL`);
     return 0;
   }
 
@@ -41,6 +44,7 @@ Subcommands:
     if (subcommand === "list") return runDataviewListCommand(rest);
     if (subcommand === "find") return runDataviewFindCommand(rest);
     if (subcommand === "get") return runDataviewGetCommand(rest);
+    if (subcommand === "query") return runDataviewQueryCommand(rest);
     if (subcommand === "delete") return runDataviewDeleteCommand(rest);
     return Promise.resolve(-1);
   };
@@ -188,6 +192,64 @@ async function runDataviewGetCommand(args: string[]): Promise<number> {
     id,
   });
   console.log(formatCallOutput(JSON.stringify(view), pretty));
+  return 0;
+}
+
+async function runDataviewQueryCommand(args: string[]): Promise<number> {
+  const { businessDomain, pretty } = parseDataviewCommonArgs(args);
+  let sql: string | undefined;
+  let limit = 50;
+  let offset = 0;
+  let needTotal = false;
+
+  if (args.length === 0 || args[0].startsWith("-")) {
+    console.error(
+      "Usage: kweaver dataview query <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]",
+    );
+    return 1;
+  }
+  const id = args[0];
+  const tail = args.slice(1);
+
+  for (let i = 0; i < tail.length; i += 1) {
+    const arg = tail[i];
+    if (arg === "-bd" || arg === "--biz-domain") {
+      i += 1;
+      continue;
+    }
+    if (arg === "--pretty") continue;
+    if ((arg === "--sql" || arg === "-s") && tail[i + 1]) {
+      sql = tail[++i];
+      continue;
+    }
+    if (arg === "--limit" && tail[i + 1]) {
+      const n = Number.parseInt(tail[++i], 10);
+      if (!Number.isNaN(n)) limit = n;
+      continue;
+    }
+    if (arg === "--offset" && tail[i + 1]) {
+      const n = Number.parseInt(tail[++i], 10);
+      if (!Number.isNaN(n)) offset = n;
+      continue;
+    }
+    if (arg === "--need-total") {
+      needTotal = true;
+      continue;
+    }
+  }
+
+  const token = await ensureValidToken();
+  const result = await queryDataView({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    businessDomain,
+    id,
+    sql,
+    offset,
+    limit,
+    needTotal,
+  });
+  console.log(formatCallOutput(JSON.stringify(result), pretty));
   return 0;
 }
 

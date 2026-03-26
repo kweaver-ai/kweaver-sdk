@@ -7,6 +7,7 @@ import logging
 import time
 import uuid
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ class DataViewsResource:
         name: str | None = None,
         type: str | None = None,
     ) -> list[DataView]:
-        params: dict[str, Any] = {"limit": -1}
+        params: dict[str, Any] = {"limit": 30}
         if datasource_id:
             params["data_source_id"] = datasource_id
         if name:
@@ -183,6 +184,46 @@ class DataViewsResource:
     def delete(self, id: str) -> None:
         self._http.delete(f"/api/mdl-data-model/v1/data-views/{id}")
 
+    def query(
+        self,
+        id: str,
+        *,
+        sql: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+        need_total: bool = False,
+        output_fields: list[str] | None = None,
+        filters: dict[str, Any] | None = None,
+        sort: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Execute a query against a data view (mdl-uniquery).
+
+        POST ``/api/mdl-uniquery/v1/data-views/{id}``. When *sql* is omitted,
+        the server uses the view's stored SQL definition.
+
+        Returns the raw JSON object (typically ``columns``, ``entries``,
+        ``total_count``).
+        """
+        body: dict[str, Any] = {
+            "offset": offset,
+            "limit": limit,
+            "need_total": need_total,
+        }
+        if sql is not None:
+            body["sql"] = sql
+        if output_fields is not None:
+            body["output_fields"] = output_fields
+        if filters is not None:
+            body["filters"] = filters
+        if sort is not None:
+            body["sort"] = sort
+        path = f"/api/mdl-uniquery/v1/data-views/{quote(str(id), safe='')}"
+        data = self._http.post(
+            path,
+            json=body,
+            headers={"x-http-method-override": "GET"},
+        )
+        return data if isinstance(data, dict) else {}
 
 def _extract_view_id(data: Any) -> str | None:
     """Extract the first view ID from a create response (which may be IDs only)."""
@@ -198,18 +239,27 @@ def _extract_view_id(data: Any) -> str | None:
 
 
 def _parse_single_dataview(d: dict[str, Any]) -> DataView:
-    return DataView(
-        id=str(d.get("id", "")),
-        name=d.get("name", ""),
-        query_type=d.get("query_type", "SQL"),
-        datasource_id=str(d.get("data_source_id", "")),
-        fields=[
+    raw_fields = d.get("fields")
+    fields: list[ViewField] | None = None
+    if raw_fields:
+        fields = [
             ViewField(
                 name=f["name"],
                 type=f.get("type", "varchar"),
                 display_name=f.get("display_name"),
                 comment=f.get("comment"),
             )
-            for f in d.get("fields", [])
-        ],
+            for f in raw_fields
+        ]
+    return DataView(
+        id=str(d.get("id", "")),
+        name=d.get("name", ""),
+        query_type=d.get("query_type", "SQL"),
+        datasource_id=str(d.get("data_source_id", "")),
+        type=d.get("type"),
+        data_source_type=d.get("data_source_type"),
+        data_source_name=d.get("data_source_name"),
+        sql_str=d.get("sql_str"),
+        meta_table_name=d.get("meta_table_name"),
+        fields=fields,
     )

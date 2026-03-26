@@ -193,7 +193,7 @@ result    = client.action_types.execute("bkn-id", "at-id", params={})
 kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k] — 另有 status、list、use、delete、logout
 kweaver token
 kweaver ds list/get/delete/tables/connect
-kweaver dataview list/find/get/delete
+kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
 kweaver bkn relation-type list/get/create/update/delete
@@ -217,7 +217,7 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 | `kweaver query kn-search <kn_id> <query>`（REST） | `kweaver context-loader kn-search <query>`（MCP），或 SDK `client.bkn.knSearch` — 传输方式不同 |
 | `kweaver action query` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
 
-**仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver dataview`、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。
+**仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver dataview list|find|get|delete`、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。两种 CLI 均支持 `kweaver dataview query`（mdl-uniquery SQL；Python 需 `pip install kweaver-sdk[cli]`）。
 
 ## 项目结构（Monorepo）
 

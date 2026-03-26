@@ -108,7 +108,7 @@ export function formatSimpleKnList(text: string, pretty: boolean, includeDetail 
 
 export function parseKnListArgs(args: string[]): KnListOptions {
   let offset = 0;
-  let limit = 50;
+  let limit = 30;
   let sort = "update_time";
   let direction: "asc" | "desc" = "desc";
   let businessDomain = "";
@@ -133,8 +133,8 @@ export function parseKnListArgs(args: string[]): KnListOptions {
     }
 
     if (arg === "--limit") {
-      limit = parseInt(args[i + 1] ?? "50", 10);
-      if (Number.isNaN(limit) || limit < 1) limit = 50;
+      limit = parseInt(args[i + 1] ?? "30", 10);
+      if (Number.isNaN(limit) || limit < 1) limit = 30;
       i += 1;
       continue;
     }
@@ -800,7 +800,7 @@ export function parseKnObjectTypeQueryArgs(args: string[]): KnObjectTypeQueryOpt
     body.search_after = searchAfter;
   }
   if (typeof body.limit !== "number" || !Number.isFinite(body.limit) || body.limit < 1) {
-    body.limit = 30;
+    body.limit = 50;
   }
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
@@ -1421,7 +1421,7 @@ kweaver bkn object-type properties <kn-id> <ot-id> '<json>' [--pretty] [-bd valu
 list: List object types (schema) from ontology-manager.
 get: Get single object type details.
 create/update/delete: Schema CRUD (create requires dataview-id). update: merge flags (--add-property / --update-property / --remove-property, etc.) GET-merge-PUT; or full JSON as third arg.
-query: Query via ontology-query API. Default limit is 30 if not specified. Use --search-after for pagination.
+query: Query via ontology-query API. Default limit is 50 if not specified. Use --search-after for pagination.
 properties: Query instance properties by primary key.
 
 properties JSON format: {"_instance_identities":[{"<primary-key>":"<value>"}],"properties":["prop1","prop2"]}`);
@@ -2145,7 +2145,7 @@ Options for list: --limit, --need-total, --action-type-id, --status, --trigger-t
 
   let pretty = true;
   let businessDomain = "";
-  let limit: number | undefined;
+  let limit = 30;
   let needTotal: boolean | undefined;
   let actionTypeId: string | undefined;
   let status: string | undefined;
@@ -2307,7 +2307,7 @@ List business knowledge networks from the ontology-manager API.
 
 Options:
   --offset <n>       Offset (default: 0)
-  --limit <n>        Limit (default: 50)
+  --limit <n>        Limit (default: 30)
   --sort <key>       Sort field (default: update_time)
   --direction <asc|desc>  Sort direction (default: desc)
   --name-pattern <s> Filter by name pattern

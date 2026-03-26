@@ -124,7 +124,6 @@ test("dataviews.get returns DataView", async () => {
       name: "test-view",
       query_type: "SQL",
       datasource_id: "ds-1",
-      fields: [],
     });
   } finally {
     mock.restore();
@@ -147,6 +146,7 @@ test("dataviews.list returns DataView[] from entries wrapper", async () => {
     const result = await makeClient().dataviews.list({ datasourceId: "ds-1" });
     assert.equal(result.length, 1);
     assert.equal(result[0].id, "dv-1");
+    assert.equal(result[0].fields, undefined);
     assert.ok(mock.calls[0].url.includes("data_source_id=ds-1"));
   } finally {
     mock.restore();
@@ -219,6 +219,36 @@ test("dataviews.find exact returns empty when wait false and not found", async (
       wait: false,
     });
     assert.equal(result.length, 0);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("dataviews.query sends POST to mdl-uniquery data-views path", async () => {
+  const mock = mockFetch({ columns: [], entries: [], total_count: 0 });
+  try {
+    await makeClient().dataviews.query("dv-1", { limit: 10, offset: 0 });
+    assert.equal(mock.calls[0].method, "POST");
+    assert.ok(mock.calls[0].url.includes("/api/mdl-uniquery/v1/data-views/dv-1"));
+    const body = JSON.parse(mock.calls[0].body ?? "{}");
+    assert.equal(body.limit, 10);
+    assert.equal(body.offset, 0);
+    assert.equal(body.need_total, false);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("dataviews.query passes sql in body when provided", async () => {
+  const mock = mockFetch({ entries: [[1, "a"]] });
+  try {
+    await makeClient().dataviews.query("dv-2", {
+      sql: "SELECT id FROM t",
+      needTotal: true,
+    });
+    const body = JSON.parse(mock.calls[0].body ?? "{}");
+    assert.equal(body.sql, "SELECT id FROM t");
+    assert.equal(body.need_total, true);
   } finally {
     mock.restore();
   }

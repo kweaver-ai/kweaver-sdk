@@ -380,7 +380,7 @@ export async function previewVegaResource(options: PreviewVegaResourceOptions): 
     baseUrl,
     accessToken,
     id,
-    limit = 10,
+    limit = 50,
     businessDomain = "bd_public",
   } = options;
 

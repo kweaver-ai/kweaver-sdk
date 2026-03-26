@@ -176,6 +176,8 @@ export type {
   ListDataViewsOptions,
   DeleteDataViewOptions,
   FindDataViewOptions,
+  QueryDataViewOptions,
+  DataViewQueryResult,
 } from "./api/dataviews.js";
 export {
   parseDataView,
@@ -184,6 +186,7 @@ export {
   listDataViews,
   deleteDataView,
   findDataView,
+  queryDataView,
 } from "./api/dataviews.js";
 export { DataViewsResource } from "./resources/dataviews.js";
 

@@ -52,6 +52,7 @@ Usage:
   kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value] [--pretty]
   kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value] [--pretty]
   kweaver dataview get <id> [-bd value] [--pretty]
+  kweaver dataview query <id> [--sql sql] [--limit n] [--offset n] [--need-total] [-bd value] [--pretty]
   kweaver dataview delete <id> [-y] [-bd value]
 
   kweaver bkn list [options]
@@ -97,7 +98,7 @@ Commands:
   call (curl)    Call an API with curl-style flags and auto-injected token headers
   agent          Agent CRUD, chat, sessions, history, publish/unpublish
   ds             Manage datasources (list, get, delete, tables, connect)
-  dataview|dv    List, find, get, delete data views (atomic / custom)
+  dataview|dv    List, find, get, query (SQL), delete data views (atomic / custom)
   bkn            Knowledge network (CRUD, build, validate, export, stats, push/pull,
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)

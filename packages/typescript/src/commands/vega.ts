@@ -255,7 +255,7 @@ async function runCatalogList(args: string[]): Promise<number> {
 
 Options:
   --status <s>    Filter by status
-  --limit <n>     Max results
+  --limit <n>     Max results (default: 30)
   --offset <n>    Offset
   -bd, --biz-domain  Business domain (default: bd_public)
   --pretty         Pretty-print JSON (default)`);
@@ -263,7 +263,7 @@ Options:
   }
 
   let status: string | undefined;
-  let limit: number | undefined;
+  let limit = 30;
   let offset: number | undefined;
   const { remaining, businessDomain, pretty } = parseCommonFlags(args);
 
@@ -440,12 +440,12 @@ async function runCatalogResources(args: string[]): Promise<number> {
 
 Options:
   --category <s>   Filter by category
-  --limit <n>      Max results`);
+  --limit <n>      Max results (default: 30)`);
     return 0;
   }
 
   let category: string | undefined;
-  let limit: number | undefined;
+  let limit = 30;
   const { remaining, businessDomain, pretty } = parseCommonFlags(args);
 
   const positionals: string[] = [];
@@ -522,7 +522,7 @@ Options:
   --catalog-id <s>  Filter by catalog
   --category <s>    Filter by category
   --status <s>      Filter by status
-  --limit <n>       Max results
+  --limit <n>       Max results (default: 30)
   --offset <n>      Offset
   -bd, --biz-domain  Business domain (default: bd_public)
   --pretty           Pretty-print JSON (default)`);
@@ -532,7 +532,7 @@ Options:
   let catalogId: string | undefined;
   let category: string | undefined;
   let status: string | undefined;
-  let limit: number | undefined;
+  let limit = 30;
   let offset: number | undefined;
   const { remaining, businessDomain, pretty } = parseCommonFlags(args);
 
@@ -658,7 +658,7 @@ async function runResourcePreview(args: string[]): Promise<number> {
     console.log(`kweaver vega resource preview <id> [--limit N]
 
 Options:
-  --limit <n>   Number of rows to preview (default: 10)`);
+  --limit <n>   Number of rows to preview (default: 50)`);
     return 0;
   }
 

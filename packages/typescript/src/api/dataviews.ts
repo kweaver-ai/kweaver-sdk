@@ -40,13 +40,25 @@ export interface DataView {
   name: string;
   query_type: string;
   datasource_id: string;
-  fields: ViewField[];
+  /** View type, e.g. "atomic" or "custom". */
+  type?: string;
+  /** Underlying data source engine, e.g. "mysql", "postgresql". */
+  data_source_type?: string;
+  /** Human-readable data source name. */
+  data_source_name?: string;
+  /** Full SQL expression stored in the view definition (Trino catalog.schema.table). */
+  sql_str?: string;
+  /** Fully-qualified table reference (catalog."schema"."table"). */
+  meta_table_name?: string;
+  /** Field metadata. Populated by `get`; absent (`undefined`) in `list` results. */
+  fields?: ViewField[];
 }
 
 export function parseDataView(raw: Record<string, unknown>): DataView {
   const fieldsRaw = raw.fields;
-  const fields: ViewField[] = [];
-  if (Array.isArray(fieldsRaw)) {
+  let fields: ViewField[] | undefined;
+  if (Array.isArray(fieldsRaw) && fieldsRaw.length > 0) {
+    fields = [];
     for (const f of fieldsRaw) {
       if (f && typeof f === "object") {
         const fr = f as Record<string, unknown>;
@@ -59,13 +71,19 @@ export function parseDataView(raw: Record<string, unknown>): DataView {
       }
     }
   }
-  return {
+  const dv: DataView = {
     id: String(raw.id ?? ""),
     name: String(raw.name ?? ""),
     query_type: String(raw.query_type ?? "SQL"),
     datasource_id: String(raw.data_source_id ?? raw.group_id ?? ""),
-    fields,
   };
+  if (raw.type != null) dv.type = String(raw.type);
+  if (raw.data_source_type != null) dv.data_source_type = String(raw.data_source_type);
+  if (raw.data_source_name != null) dv.data_source_name = String(raw.data_source_name);
+  if (raw.sql_str != null) dv.sql_str = String(raw.sql_str);
+  if (raw.meta_table_name != null) dv.meta_table_name = String(raw.meta_table_name);
+  if (fields) dv.fields = fields;
+  return dv;
 }
 
 function extractListPayload(data: unknown): unknown[] {
@@ -199,7 +217,7 @@ export async function listDataViews(options: ListDataViewsOptions): Promise<Data
     datasourceId,
     name,
     type,
-    limit = -1,
+    limit = 30,
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
@@ -343,4 +361,80 @@ export async function findDataView(options: FindDataViewOptions): Promise<DataVi
     attempt += 1;
     await sleepMs(delayMs);
   }
+}
+
+/** Options for querying data view rows via mdl-uniquery (SQL / view definition). */
+export interface QueryDataViewOptions {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  sql?: string;
+  offset?: number;
+  limit?: number;
+  needTotal?: boolean;
+  outputFields?: string[];
+  filters?: Record<string, unknown>;
+  sort?: Array<Record<string, unknown>>;
+  businessDomain?: string;
+}
+
+/** Query result from mdl-uniquery data-views POST (shape varies by backend). */
+export interface DataViewQueryResult {
+  columns?: Array<{ name: string; type?: string; vega_type?: string }>;
+  entries?: unknown;
+  total_count?: number;
+}
+
+/**
+ * Execute a query against a data view (POST /api/mdl-uniquery/v1/data-views/:id).
+ * When `sql` is omitted, the server uses the view's stored SQL definition.
+ */
+export async function queryDataView(options: QueryDataViewOptions): Promise<DataViewQueryResult> {
+  const {
+    baseUrl,
+    accessToken,
+    id,
+    sql,
+    offset = 0,
+    limit = 50,
+    needTotal = false,
+    outputFields,
+    filters,
+    sort,
+    businessDomain = "bd_public",
+  } = options;
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/mdl-uniquery/v1/data-views/${encodeURIComponent(id)}`;
+
+  const body: Record<string, unknown> = {
+    offset,
+    limit,
+    need_total: needTotal,
+  };
+  if (sql !== undefined && sql !== "") body.sql = sql;
+  if (outputFields !== undefined) body.output_fields = outputFields;
+  if (filters !== undefined) body.filters = filters;
+  if (sort !== undefined) body.sort = sort;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+      "x-http-method-override": "GET",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const bodyText = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, bodyText);
+  }
+
+  const parsed = JSON.parse(bodyText) as unknown;
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return parsed as DataViewQueryResult;
+  }
+  return {};
 }

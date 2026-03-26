@@ -14,6 +14,12 @@ export interface ListMessagesOptions {
   limit?: number;
 }
 
+export interface GetTracesOptions {
+  baseUrl: string;
+  accessToken: string;
+  conversationId: string;
+}
+
 function buildConversationsUrl(baseUrl: string, agentId: string): string {
   const base = baseUrl.replace(/\/+$/, "");
   return `${base}/api/agent-app/v1/app/${agentId}/conversations`;
@@ -55,6 +61,32 @@ export async function listConversations(opts: ListConversationsOptions): Promise
   }
 
   return body || "[]";
+}
+
+function buildTracesUrl(baseUrl: string, conversationId: string): string {
+  const base = baseUrl.replace(/\/+$/, "");
+  return `${base}/api/v1/traces/by-conversation?conversation_id=${conversationId}`;
+}
+
+export async function getTracesByConversation(opts: GetTracesOptions): Promise<string> {
+  const { baseUrl, accessToken, conversationId } = opts;
+  const url = buildTracesUrl(baseUrl, conversationId);
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${accessToken}`,
+      token: accessToken,
+    },
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(`getTracesByConversation failed: HTTP ${response.status} ${response.statusText} — ${body.slice(0, 200)}`);
+  }
+
+  return body || "{}";
 }
 
 /**

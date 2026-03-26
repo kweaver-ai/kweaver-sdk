@@ -5,7 +5,7 @@ import {
   createAgent, updateAgent, deleteAgent,
   publishAgent, unpublishAgent,
 } from "../api/agent-list.js";
-import { listConversations, listMessages } from "../api/conversations.js";
+import { listConversations, listMessages, getTracesByConversation } from "../api/conversations.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 
@@ -292,6 +292,42 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
   return { conversationId, businessDomain, limit, pretty };
 }
 
+export interface AgentTraceOptions {
+  conversationId: string;
+  pretty: boolean;
+}
+
+export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
+  const conversationId = args[0];
+  if (!conversationId || conversationId.startsWith("-")) {
+    throw new Error("Missing conversation_id");
+  }
+
+  let pretty = true;
+
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === "--help" || arg === "-h") {
+      throw new Error("help");
+    }
+
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+
+    if (arg === "--compact") {
+      pretty = false;
+      continue;
+    }
+
+    throw new Error(`Unsupported agent trace argument: ${arg}`);
+  }
+
+  return { conversationId, pretty };
+}
+
 export async function runAgentCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
@@ -312,7 +348,8 @@ Subcommands:
   chat <agent_id>                    Start interactive chat with an agent
   chat <agent_id> -m "message"       Send a single message (non-interactive)
   sessions <agent_id>                List all conversations for an agent
-  history <conversation_id>          Show message history for a conversation`);
+  history <conversation_id>          Show message history for a conversation
+  trace <conversation_id>            Get trace data for a conversation`);
     return Promise.resolve(0);
   }
 
@@ -322,6 +359,7 @@ Subcommands:
     if (subcommand === "list") return runAgentListCommand(rest);
     if (subcommand === "sessions") return runAgentSessionsCommand(rest);
     if (subcommand === "history") return runAgentHistoryCommand(rest);
+    if (subcommand === "trace") return runAgentTraceCommand(rest);
     if (subcommand === "get-by-key") return runAgentGetByKeyCommand(rest);
     if (subcommand === "create") return runAgentCreateCommand(rest);
     if (subcommand === "update") return runAgentUpdateCommand(rest);
@@ -418,6 +456,19 @@ Options:
   --limit <n>              Max messages to return
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
+      return 0;
+    }
+  }
+
+  if (subcommand === "trace") {
+    if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
+      console.log(`kweaver agent trace <conversation_id> [options]
+
+Get trace data for a conversation.
+
+Options:
+  --pretty                  Pretty-print JSON output (default)
+  --compact                 Compact JSON output`);
       return 0;
     }
   }
@@ -659,6 +710,40 @@ Options:
       conversationId: options.conversationId,
       businessDomain: options.businessDomain,
       limit: options.limit,
+    });
+    console.log(formatCallOutput(body, options.pretty));
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
+}
+
+async function runAgentTraceCommand(args: string[]): Promise<number> {
+  let options: AgentTraceOptions;
+  try {
+    options = parseAgentTraceArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver agent trace <conversation_id> [options]
+
+Get trace data for a conversation.
+
+Options:
+  --pretty                  Pretty-print JSON output (default)
+  --compact                 Compact JSON output`);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  try {
+    const token = await ensureValidToken();
+    const body = await getTracesByConversation({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      conversationId: options.conversationId,
     });
     console.log(formatCallOutput(body, options.pretty));
     return 0;

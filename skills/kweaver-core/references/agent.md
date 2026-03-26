@@ -29,7 +29,20 @@ kweaver agent chat <agent_id> -m '<message>' [--conversation-id <id>] [--stream/
 kweaver agent chat <agent_id>                    # 交互式模式
 kweaver agent sessions <agent_id> [--limit <n>]
 kweaver agent history <conversation_id> [--limit <n>]
+kweaver agent trace <conversation_id> [--pretty|--compact]
 ```
+
+## Trace 数据
+
+```bash
+kweaver agent trace <conversation_id>
+```
+
+获取指定会话的 trace 数据，用于追踪数据流、调试问题、构建证据链。
+
+选项：
+- `--pretty`：格式化 JSON 输出（默认）
+- `--compact`：紧凑 JSON 输出
 
 ## 说明
 

@@ -1458,6 +1458,7 @@ test("run vega catalog update --help shows options", async () => {
     assert.equal(await run(["vega", "catalog", "update", "--help"]), 0);
     const help = lines.join("\n");
     assert.ok(help.includes("--name"));
+    assert.ok(help.includes("--connector-type"));
     assert.ok(help.includes("--tags"));
     assert.ok(help.includes("--description"));
     assert.ok(help.includes("--connector-config"));

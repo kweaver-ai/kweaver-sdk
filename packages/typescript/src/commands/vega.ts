@@ -47,7 +47,7 @@ Subcommands:
   catalog discover <id> [--wait]      Trigger discovery
   catalog resources <id> [--category X] [--limit N]
   catalog create --name <n> --connector-type <t> --connector-config <json>
-  catalog update <id> [--name X] [--tags X] [--description X]
+  catalog update <id> [--name X] [--connector-type X] [--tags X] [--description X]
   catalog delete <ids...> [-y]
   resource list [--catalog-id X] [--category X] [--status X] [--limit N] [--offset N]
   resource get <id>
@@ -266,7 +266,7 @@ Subcommands:
   discover <id> [--wait]
   resources <id> [--category X] [--limit N]
   create --name <name> --connector-type <type> --connector-config <json> [--tags t1,t2] [--description X]
-  update <id> [--name X] [--tags X] [--description X] [--connector-config X]
+  update <id> [--name X] [--connector-type X] [--tags X] [--description X] [--connector-config X]
   delete <ids...> [-y]`);
     return 0;
   }
@@ -605,6 +605,7 @@ async function runCatalogUpdate(args: string[]): Promise<number> {
 
 Options:
   --name <s>              New name
+  --connector-type <t>    Connector type (e.g. mysql, opensearch)
   --tags <t1,t2>          Comma-separated tags
   --description <s>       Description
   --connector-config <j>  Connector config JSON`);
@@ -612,6 +613,7 @@ Options:
   }
 
   let name: string | undefined;
+  let connectorType: string | undefined;
   let tags: string | undefined;
   let description: string | undefined;
   let connectorConfig: string | undefined;
@@ -622,6 +624,10 @@ Options:
     const arg = remaining[i];
     if (arg === "--name" && remaining[i + 1]) {
       name = remaining[++i];
+      continue;
+    }
+    if (arg === "--connector-type" && remaining[i + 1]) {
+      connectorType = remaining[++i];
       continue;
     }
     if (arg === "--tags" && remaining[i + 1]) {
@@ -643,12 +649,13 @@ Options:
 
   const id = positionals[0];
   if (!id) {
-    console.error("Usage: kweaver vega catalog update <id> [--name X] [--tags X] [--description X] [--connector-config X]");
+    console.error("Usage: kweaver vega catalog update <id> [--name X] [--connector-type X] [--tags X] [--description X] [--connector-config X]");
     return 1;
   }
 
   const payload: Record<string, unknown> = {};
   if (name) payload.name = name;
+  if (connectorType) payload.connector_type = connectorType;
   if (tags) payload.tags = tags.split(",");
   if (description) payload.description = description;
   if (connectorConfig) payload.connector_config = JSON.parse(connectorConfig);

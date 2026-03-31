@@ -152,6 +152,23 @@ test("run skill shows subcommand help", async () => {
   assert.equal(await run(["skill"]), 0);
 });
 
+test("run skill subcommand help does not require auth", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["skill", "list", "--help"]), 0);
+    assert.ok(lines.join("\n").includes("kweaver skill list"), "help should show skill list usage");
+  } finally {
+    console.log = orig;
+  }
+});
+
 test("run context-loader help includes standard MCP short commands", async () => {
   const lines: string[] = [];
   const originalLog = console.log;

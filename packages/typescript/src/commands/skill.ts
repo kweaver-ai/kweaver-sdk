@@ -64,6 +64,72 @@ interface InstallOptions extends BaseOptions {
   force: boolean;
 }
 
+function printSkillHelp(subcommand?: string): void {
+  if (subcommand === "list") {
+    console.log(`kweaver skill list [--name kw] [--source src] [--status status] [--create-user user]
+                   [--page N] [--page-size N|--limit N] [--all] [-bd value] [--pretty|--compact]`);
+    return;
+  }
+  if (subcommand === "market") {
+    console.log(`kweaver skill market [--name kw] [--source src] [--page N] [--page-size N|--limit N]
+                     [--all] [-bd value] [--pretty|--compact]`);
+    return;
+  }
+  if (subcommand === "get") {
+    console.log("kweaver skill get <skill-id> [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "register") {
+    console.log(`kweaver skill register (--content-file <path> | --zip-file <path>)
+                       [--source src] [--extend-info json] [-bd value] [--pretty|--compact]`);
+    return;
+  }
+  if (subcommand === "status") {
+    console.log("kweaver skill status <skill-id> <unpublish|published|offline> [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "delete") {
+    console.log("kweaver skill delete <skill-id> [-y|--yes] [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "content") {
+    console.log("kweaver skill content <skill-id> [--raw] [--output file] [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "read-file") {
+    console.log("kweaver skill read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "download") {
+    console.log("kweaver skill download <skill-id> [--output file] [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "install") {
+    console.log("kweaver skill install <skill-id> [directory] [--force] [-bd value] [--pretty|--compact]");
+    return;
+  }
+  console.log(`kweaver skill
+
+Subcommands:
+  list [--name kw] [--status status] [--page N] [--page-size N] [-bd value]
+  market [--name kw] [--source src] [--page N] [--page-size N] [-bd value]
+  get <skill-id> [-bd value]
+  register --content-file <path> | --zip-file <path> [--source src] [--extend-info json]
+  status <skill-id> <unpublish|published|offline> [-bd value]
+  delete <skill-id> [-y] [-bd value]
+  content <skill-id> [--raw] [--output file] [-bd value]
+  read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value]
+  download <skill-id> [--output file] [-bd value]
+  install <skill-id> [directory] [--force] [-bd value]
+
+Examples:
+  kweaver skill list --name kweaver
+  kweaver skill register --zip-file ./demo-skill.zip --source upload_zip
+  kweaver skill content skill-123 --raw
+  kweaver skill read-file skill-123 references/guide.md --output ./guide.md
+  kweaver skill install skill-123 ./skills/demo-skill --force`);
+}
+
 function format(value: unknown, pretty: boolean): string {
   return JSON.stringify(value, null, pretty ? 2 : 0);
 }
@@ -90,12 +156,12 @@ function ensureDirectoryForFile(path: string): void {
   mkdirSync(dir, { recursive: true });
 }
 
-function parseBaseArgs(args: string[], start = 0): { opts: BaseOptions; next: number } {
+function parseBaseArgs(args: string[], start = 0): { opts: BaseOptions; args: string[] } {
   let businessDomain = "";
   let pretty = true;
-  let i = start;
+  const normalized = args.slice(0, start);
 
-  for (; i < args.length; i += 1) {
+  for (let i = start; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === "-bd" || arg === "--biz-domain") {
       businessDomain = args[i + 1] ?? "";
@@ -110,12 +176,12 @@ function parseBaseArgs(args: string[], start = 0): { opts: BaseOptions; next: nu
       pretty = false;
       continue;
     }
-    break;
+    normalized.push(arg);
   }
 
   return {
     opts: { businessDomain: businessDomain || resolveBusinessDomain(), pretty },
-    next: i,
+    args: normalized,
   };
 }
 
@@ -131,16 +197,16 @@ export function parseSkillListArgs(args: string[]): ListOptions {
   let sortOrder: "asc" | "desc" | undefined;
 
   const base = parseBaseArgs(args);
-  for (let i = base.next; i < args.length; i += 1) {
-    const arg = args[i];
+  for (let i = 0; i < base.args.length; i += 1) {
+    const arg = base.args[i];
     if (arg === "--help" || arg === "-h") throw new Error("help");
     if (arg === "--page") {
-      page = parseInt(args[i + 1] ?? "1", 10) || 1;
+      page = parseInt(base.args[i + 1] ?? "1", 10) || 1;
       i += 1;
       continue;
     }
     if (arg === "--page-size" || arg === "--limit") {
-      pageSize = parseInt(args[i + 1] ?? "30", 10) || 30;
+      pageSize = parseInt(base.args[i + 1] ?? "30", 10) || 30;
       i += 1;
       continue;
     }
@@ -149,17 +215,17 @@ export function parseSkillListArgs(args: string[]): ListOptions {
       continue;
     }
     if (arg === "--name") {
-      name = args[i + 1];
+      name = base.args[i + 1];
       i += 1;
       continue;
     }
     if (arg === "--source") {
-      source = args[i + 1];
+      source = base.args[i + 1];
       i += 1;
       continue;
     }
     if (arg === "--status") {
-      const value = args[i + 1] as SkillStatus | undefined;
+      const value = base.args[i + 1] as SkillStatus | undefined;
       if (value !== "unpublish" && value !== "published" && value !== "offline") {
         throw new Error("Invalid --status. Expected unpublish|published|offline");
       }
@@ -168,12 +234,12 @@ export function parseSkillListArgs(args: string[]): ListOptions {
       continue;
     }
     if (arg === "--create-user") {
-      createUser = args[i + 1];
+      createUser = base.args[i + 1];
       i += 1;
       continue;
     }
     if (arg === "--sort-by") {
-      const value = args[i + 1];
+      const value = base.args[i + 1];
       if (value !== "create_time" && value !== "update_time" && value !== "name") {
         throw new Error("Invalid --sort-by. Expected create_time|update_time|name");
       }
@@ -182,7 +248,7 @@ export function parseSkillListArgs(args: string[]): ListOptions {
       continue;
     }
     if (arg === "--sort-order") {
-      const value = (args[i + 1] ?? "").toLowerCase();
+      const value = (base.args[i + 1] ?? "").toLowerCase();
       if (value !== "asc" && value !== "desc") {
         throw new Error("Invalid --sort-order. Expected asc|desc");
       }
@@ -203,26 +269,26 @@ export function parseSkillRegisterArgs(args: string[]): RegisterOptions {
   let extendInfo: Record<string, unknown> | undefined;
 
   const base = parseBaseArgs(args);
-  for (let i = base.next; i < args.length; i += 1) {
-    const arg = args[i];
+  for (let i = 0; i < base.args.length; i += 1) {
+    const arg = base.args[i];
     if (arg === "--help" || arg === "-h") throw new Error("help");
     if (arg === "--content-file") {
-      contentFile = args[i + 1];
+      contentFile = base.args[i + 1];
       i += 1;
       continue;
     }
     if (arg === "--zip-file") {
-      zipFile = args[i + 1];
+      zipFile = base.args[i + 1];
       i += 1;
       continue;
     }
     if (arg === "--source") {
-      source = args[i + 1];
+      source = base.args[i + 1];
       i += 1;
       continue;
     }
     if (arg === "--extend-info") {
-      extendInfo = parseJsonFlag(args[i + 1], "--extend-info");
+      extendInfo = parseJsonFlag(base.args[i + 1], "--extend-info");
       i += 1;
       continue;
     }
@@ -242,15 +308,15 @@ function parseSkillContentArgs(args: string[]): ContentOptions {
   let fetchRaw = false;
   let output: string | undefined;
   const base = parseBaseArgs(args, 1);
-  for (let i = base.next; i < args.length; i += 1) {
-    const arg = args[i];
+  for (let i = 1; i < base.args.length; i += 1) {
+    const arg = base.args[i];
     if (arg === "--help" || arg === "-h") throw new Error("help");
     if (arg === "--raw") {
       fetchRaw = true;
       continue;
     }
     if (arg === "--output" || arg === "-o") {
-      output = args[i + 1];
+      output = base.args[i + 1];
       i += 1;
       continue;
     }
@@ -265,8 +331,8 @@ function parseSkillGetArgs(args: string[]): BaseOptions & { skillId: string } {
     throw new Error("Missing skill-id");
   }
   const base = parseBaseArgs(args, 1);
-  if (base.next !== args.length) {
-    throw new Error(`Unsupported skill get argument: ${args[base.next]}`);
+  if (base.args.length !== 1) {
+    throw new Error(`Unsupported skill get argument: ${base.args[1]}`);
   }
   return { ...base.opts, skillId };
 }
@@ -285,11 +351,11 @@ function parseSkillDownloadArgs(args: string[]): DownloadOptions {
   if (!skillId || skillId.startsWith("-")) throw new Error("Missing skill-id");
   let output: string | undefined;
   const base = parseBaseArgs(args, 1);
-  for (let i = base.next; i < args.length; i += 1) {
-    const arg = args[i];
+  for (let i = 1; i < base.args.length; i += 1) {
+    const arg = base.args[i];
     if (arg === "--help" || arg === "-h") throw new Error("help");
     if (arg === "--output" || arg === "-o") {
-      output = args[i + 1];
+      output = base.args[i + 1];
       i += 1;
       continue;
     }
@@ -305,8 +371,8 @@ function parseSkillInstallArgs(args: string[]): InstallOptions {
   let force = false;
   const start = directory === skillId ? 1 : 2;
   const base = parseBaseArgs(args, start);
-  for (let i = base.next; i < args.length; i += 1) {
-    const arg = args[i];
+  for (let i = start; i < base.args.length; i += 1) {
+    const arg = base.args[i];
     if (arg === "--help" || arg === "-h") throw new Error("help");
     if (arg === "--force") {
       force = true;
@@ -325,8 +391,8 @@ function parseStatusArgs(args: string[]): { skillId: string; status: SkillStatus
     throw new Error("Missing or invalid status. Use unpublish|published|offline");
   }
   const base = parseBaseArgs(args, 2);
-  if (base.next !== args.length) {
-    throw new Error(`Unsupported skill status argument: ${args[base.next]}`);
+  if (base.args.length !== 2) {
+    throw new Error(`Unsupported skill status argument: ${base.args[2]}`);
   }
   return { ...base.opts, skillId, status };
 }
@@ -345,26 +411,12 @@ export async function runSkillCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(`kweaver skill
+    printSkillHelp();
+    return 0;
+  }
 
-Subcommands:
-  list [--name kw] [--status status] [--page N] [--page-size N] [-bd value]
-  market [--name kw] [--source src] [--page N] [--page-size N] [-bd value]
-  get <skill-id> [-bd value]
-  register --content-file <path> | --zip-file <path> [--source src] [--extend-info json]
-  status <skill-id> <unpublish|published|offline> [-bd value]
-  delete <skill-id> [-y] [-bd value]
-  content <skill-id> [--raw] [--output file] [-bd value]
-  read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value]
-  download <skill-id> [--output file] [-bd value]
-  install <skill-id> [directory] [--force] [-bd value]
-
-Examples:
-  kweaver skill list --name kweaver
-  kweaver skill register --zip-file ./demo-skill.zip --source upload_zip
-  kweaver skill content skill-123 --raw
-  kweaver skill read-file skill-123 references/guide.md --output ./guide.md
-  kweaver skill install skill-123 ./skills/demo-skill --force`);
+  if (rest.includes("--help") || rest.includes("-h")) {
+    printSkillHelp(subcommand);
     return 0;
   }
 

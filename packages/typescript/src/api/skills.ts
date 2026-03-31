@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { HttpError, fetchTextOrThrow } from "../utils/http.js";
 
@@ -338,15 +338,18 @@ export function installSkillArchive(options: InstallSkillArchiveOptions): { dire
       if (!options.force) {
         throw new Error(`Install target is not empty: ${targetDir}. Use --force to replace it.`);
       }
-      rmSync(targetDir, { recursive: true, force: true });
     }
   }
-  mkdirSync(targetDir, { recursive: true });
+  const parentDir = resolve(targetDir, "..");
+  mkdirSync(parentDir, { recursive: true });
+  const archivePath = resolve(parentDir, `${basename(targetDir)}.zip`);
+  const stagingDir = resolve(parentDir, `.${basename(targetDir)}.tmp-${process.pid}-${Date.now()}`);
+  const backupDir = existed ? resolve(parentDir, `.${basename(targetDir)}.bak-${process.pid}-${Date.now()}`) : undefined;
 
-  const archivePath = resolve(targetDir, "..", `${basename(targetDir)}.zip`);
+  mkdirSync(stagingDir, { recursive: true });
   writeFileSync(archivePath, options.bytes);
   try {
-    const result = spawnSync("unzip", ["-oq", archivePath, "-d", targetDir], {
+    const result = spawnSync("unzip", ["-oq", archivePath, "-d", stagingDir], {
       encoding: "utf8",
     });
     if (result.error) {
@@ -355,9 +358,19 @@ export function installSkillArchive(options: InstallSkillArchiveOptions): { dire
     if (result.status !== 0) {
       throw new Error(result.stderr || `unzip exited with status ${result.status}`);
     }
+    if (existsSync(targetDir)) {
+      renameSync(targetDir, backupDir!);
+    }
+    renameSync(stagingDir, targetDir);
+    if (backupDir && existsSync(backupDir)) {
+      rmSync(backupDir, { recursive: true, force: true });
+    }
     return { directory: targetDir };
   } catch (error) {
-    rmSync(targetDir, { recursive: true, force: true });
+    rmSync(stagingDir, { recursive: true, force: true });
+    if (backupDir && existsSync(backupDir) && !existsSync(targetDir)) {
+      renameSync(backupDir, targetDir);
+    }
     throw new Error(
       error instanceof Error
         ? `Skill install failed: ${error.message}`
@@ -365,5 +378,8 @@ export function installSkillArchive(options: InstallSkillArchiveOptions): { dire
     );
   } finally {
     rmSync(archivePath, { force: true });
+    if (backupDir && existsSync(backupDir)) {
+      rmSync(backupDir, { recursive: true, force: true });
+    }
   }
 }

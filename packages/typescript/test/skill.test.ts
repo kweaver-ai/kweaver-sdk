@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { KWeaverClient } from "../src/client.js";
 import { parseSkillListArgs, parseSkillRegisterArgs } from "../src/commands/skill.js";
+import { installSkillArchive } from "../src/api/skills.js";
 
 const BASE = "https://mock.kweaver.test";
 const TOKEN = "test-token-abc";
@@ -12,6 +16,13 @@ test("parseSkillListArgs uses list default page size 30", () => {
   assert.equal(parsed.page, 1);
   assert.equal(parsed.pageSize, 30);
   assert.equal(parsed.name, "demo");
+});
+
+test("parseSkillListArgs accepts common flags after subcommand options", () => {
+  const parsed = parseSkillListArgs(["--name", "demo", "-bd", "bd_demo", "--compact"]);
+  assert.equal(parsed.name, "demo");
+  assert.equal(parsed.businessDomain, "bd_demo");
+  assert.equal(parsed.pretty, false);
 });
 
 test("parseSkillRegisterArgs requires exactly one source flag", () => {
@@ -73,4 +84,19 @@ test("client.skills.fetchContent resolves index then fetches remote markdown", a
   } finally {
     globalThis.fetch = orig;
   }
+});
+
+test("installSkillArchive preserves existing files when extraction fails", () => {
+  const root = mkdtempSync(join(tmpdir(), "kweaver-skill-install-"));
+  const targetDir = join(root, "demo-skill");
+  const skillFile = join(targetDir, "SKILL.md");
+  mkdirSync(targetDir, { recursive: true });
+  writeFileSync(skillFile, "# Existing skill\n", "utf8");
+
+  assert.throws(
+    () => installSkillArchive({ bytes: new Uint8Array(Buffer.from("not-a-zip")), directory: targetDir, force: true }),
+    /Skill install failed:/
+  );
+  assert.equal(existsSync(skillFile), true);
+  assert.equal(readFileSync(skillFile, "utf8"), "# Existing skill\n");
 });

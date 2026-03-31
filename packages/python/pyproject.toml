@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kweaver-sdk"
-version = "0.5.0"
+version = "0.5.1"
 description = "KWeaver Python SDK — client library for knowledge network construction and querying"
 requires-python = ">=3.10"
 dependencies = [

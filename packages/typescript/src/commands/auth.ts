@@ -29,6 +29,7 @@ export async function runAuthCommand(args: string[]): Promise<number> {
   if (!target || target === "--help" || target === "-h") {
     console.log(`kweaver auth login <url> [options]   Login to a platform (browser OAuth2 by default)
 kweaver auth <url>                   Login (shorthand; same options as login)
+kweaver auth whoami [url|alias]      Show current user identity (from id_token)
 kweaver auth export [url|alias] [--json]   Export credentials; run printed command on a headless host
 kweaver auth status [url|alias]      Show current auth status
 kweaver auth list                    List saved platforms
@@ -68,11 +69,15 @@ Login options:
     return runAuthCommand([url, ...rest.slice(1)]);
   }
 
+  if (target === "whoami") {
+    return runAuthWhoamiCommand(rest);
+  }
+
   if (target === "export") {
     return runAuthExportCommand(rest);
   }
 
-  const LOGIN_SUBCOMMANDS = new Set(["status", "list", "use", "delete", "logout", "export"]);
+  const LOGIN_SUBCOMMANDS = new Set(["status", "list", "use", "delete", "logout", "export", "whoami"]);
   if (target && !LOGIN_SUBCOMMANDS.has(target)) {
     try {
       const normalizedTarget = normalizeBaseUrl(target);
@@ -281,6 +286,7 @@ Login options:
   }
 
   console.error("Usage: kweaver auth login <platform-url> [--alias <name>] [-u user] [-p pass] [--playwright]");
+  console.error("       kweaver auth whoami [platform-url|alias]");
   console.error("       kweaver auth export [platform-url|alias] [--json]");
   console.error("       kweaver auth status [platform-url|alias]");
   console.error("       kweaver auth list");
@@ -288,6 +294,74 @@ Login options:
   console.error("       kweaver auth logout [platform-url|alias]");
   console.error("       kweaver auth delete <platform-url|alias>");
   return 1;
+}
+
+function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
+  const parts = jwt.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = Buffer.from(base64, "base64").toString("utf8");
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function runAuthWhoamiCommand(args: string[]): number {
+  if (args[0] === "--help" || args[0] === "-h") {
+    console.log(`kweaver auth whoami [platform-url|alias] [--json]
+
+Show current user identity decoded from the saved id_token.
+
+Options:
+  --json   Output as JSON (machine-readable)`);
+    return 0;
+  }
+
+  const jsonOutput = args.includes("--json");
+  const positional = args.find((a) => !a.startsWith("-"));
+  const resolved = positional ? resolvePlatformIdentifier(positional) : null;
+  const platform = resolved && /^https?:\/\//.test(resolved) ? normalizeBaseUrl(resolved) : resolved ?? getCurrentPlatform();
+
+  if (!platform) {
+    console.error("No active platform. Run `kweaver auth login <platform-url>` first.");
+    return 1;
+  }
+
+  const token = loadTokenConfig(platform);
+  if (!token) {
+    console.error(`No saved token for ${platform}.`);
+    return 1;
+  }
+
+  if (!token.idToken) {
+    console.error(`No id_token saved for ${platform}. Re-login to obtain one.`);
+    return 1;
+  }
+
+  const payload = decodeJwtPayload(token.idToken);
+  if (!payload) {
+    console.error("Failed to decode id_token.");
+    return 1;
+  }
+
+  if (jsonOutput) {
+    console.log(JSON.stringify({ platform, ...payload }, null, 2));
+    return 0;
+  }
+
+  console.log(`Platform: ${platform}`);
+  console.log(`User ID:  ${payload.sub ?? "(unknown)"}`);
+  console.log(`Issuer:   ${payload.iss ?? "(unknown)"}`);
+  if (payload.sid) console.log(`Session:  ${payload.sid}`);
+  if (payload.iat) {
+    console.log(`Issued:   ${new Date((payload.iat as number) * 1000).toISOString()}`);
+  }
+  if (payload.exp) {
+    console.log(`Expires:  ${new Date((payload.exp as number) * 1000).toISOString()}`);
+  }
+  return 0;
 }
 
 async function runAuthExportCommand(args: string[]): Promise<number> {

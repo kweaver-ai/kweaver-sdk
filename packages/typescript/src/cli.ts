@@ -20,6 +20,7 @@ Usage:
   kweaver auth <platform-url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
   kweaver auth login <platform-url>          (alias for auth <url>)
   kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (run on host without browser)
+  kweaver auth whoami [platform-url|alias] [--json]
   kweaver auth export [platform-url|alias] [--json]
   kweaver auth status [platform-url|alias]
   kweaver auth list

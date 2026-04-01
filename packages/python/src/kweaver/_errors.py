@@ -106,6 +106,54 @@ _STATUS_MAP: dict[int, type[KWeaverError]] = {
 }
 
 
+def raise_for_status_parts(
+    status_code: int,
+    body: bytes,
+    *,
+    reason_phrase: str | None = None,
+) -> None:
+    """Raise a typed KWeaverError from raw status/body parts."""
+    if status_code < 400:
+        return
+
+    error_code: str | None = None
+    message: str = reason_phrase or "Unknown error"
+    trace_id: str | None = None
+
+    try:
+        payload = httpx.Response(status_code, content=body).json()
+        if isinstance(payload, dict):
+            error_code = payload.get("error_code") or payload.get("ErrorCode") or payload.get("code")
+            message = (
+                payload.get("message")
+                or payload.get("Description")
+                or payload.get("detail")
+                or payload.get("description")
+                or message
+            )
+            trace_id = payload.get("trace_id")
+            if status_code == 400 and not message:
+                message = str(payload)
+        elif isinstance(payload, (list, str)):
+            message = str(payload)
+    except Exception:
+        try:
+            message = body.decode("utf-8") or message
+        except Exception:
+            pass
+
+    exc_cls = _STATUS_MAP.get(status_code)
+    if exc_cls is None:
+        exc_cls = ServerError if status_code >= 500 else KWeaverError
+
+    raise exc_cls(
+        message,
+        status_code=status_code,
+        error_code=error_code,
+        trace_id=trace_id,
+    )
+
+
 def raise_for_status(response: httpx.Response) -> None:
     """Raise a typed KWeaverError if the response indicates failure."""
     if response.status_code < 400:

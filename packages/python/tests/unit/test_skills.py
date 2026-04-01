@@ -72,17 +72,64 @@ def test_skills_get_and_read_file():
 
 def test_skills_download_returns_filename():
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            content=b"PK",
-            headers={"content-disposition": 'attachment; filename="demo-skill.zip"'},
-        )
+        return httpx.Response(200, content=b"PK")
 
     client = KWeaverClient(base_url="https://mock", token="tok", transport=_transport(handler))
     try:
         filename, data = client.skills.download("skill-1")
-        assert filename == "demo-skill.zip"
+        assert filename == "skill-1.zip"
         assert data == b"PK"
+    finally:
+        client.close()
+
+
+def test_skills_fetch_content_uses_shared_http_client():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/content"):
+            return httpx.Response(
+                200,
+                json={
+                    "code": 0,
+                    "data": {
+                        "skill_id": "skill-1",
+                        "url": "https://download.example/skill.md",
+                    },
+                },
+            )
+        assert str(request.url) == "https://download.example/skill.md"
+        assert "authorization" not in request.headers
+        return httpx.Response(200, text="# demo")
+
+    client = KWeaverClient(base_url="https://mock", token="tok", transport=_transport(handler))
+    try:
+        content = client.skills.fetch_content("skill-1")
+        assert content == "# demo"
+    finally:
+        client.close()
+
+
+def test_skills_fetch_file_uses_shared_http_client():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/files/read"):
+            return httpx.Response(
+                200,
+                json={
+                    "code": 0,
+                    "data": {
+                        "skill_id": "skill-1",
+                        "rel_path": "refs/guide.md",
+                        "url": "https://download.example/guide.md",
+                    },
+                },
+            )
+        assert str(request.url) == "https://download.example/guide.md"
+        assert "authorization" not in request.headers
+        return httpx.Response(200, content=b"guide")
+
+    client = KWeaverClient(base_url="https://mock", token="tok", transport=_transport(handler))
+    try:
+        content = client.skills.fetch_file("skill-1", "refs/guide.md")
+        assert content == b"guide"
     finally:
         client.close()
 

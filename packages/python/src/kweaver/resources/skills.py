@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import httpx
+from kweaver._errors import raise_for_status_parts
 
 if TYPE_CHECKING:
     from kweaver._http import HttpClient
@@ -112,7 +112,6 @@ class SkillsResource:
         source: str | None = None,
         extend_info: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        headers = self._http._build_headers()
         files = {
             "file_type": (None, "zip"),
             "file": (filename, data, "application/zip"),
@@ -121,15 +120,12 @@ class SkillsResource:
             files["source"] = (None, source)
         if extend_info is not None:
             files["extend_info"] = (None, json.dumps(extend_info))
-        resp = self._http._client.post(
+        status_code, body = self._http.post_multipart(
             "/api/agent-operator-integration/v1/skills",
-            headers=headers,
             files=files,
         )
-        from kweaver._errors import raise_for_status
-
-        raise_for_status(resp)
-        return _unwrap_data(resp.json())
+        raise_for_status_parts(status_code, body)
+        return _unwrap_data(json.loads(body))
 
     def delete(self, skill_id: str) -> dict[str, Any]:
         return _unwrap_data(self._http.delete(f"/api/agent-operator-integration/v1/skills/{skill_id}"))
@@ -147,9 +143,7 @@ class SkillsResource:
 
     def fetch_content(self, skill_id: str) -> str:
         content = self.content(skill_id)
-        resp = httpx.get(content["url"], follow_redirects=True, timeout=30.0)
-        resp.raise_for_status()
-        return resp.text
+        return self._http.fetch_response(content["url"], follow_redirects=True, timeout=30.0).text
 
     def read_file(self, skill_id: str, rel_path: str) -> dict[str, Any]:
         return _unwrap_data(
@@ -161,24 +155,12 @@ class SkillsResource:
 
     def fetch_file(self, skill_id: str, rel_path: str) -> bytes:
         file_info = self.read_file(skill_id, rel_path)
-        resp = httpx.get(file_info["url"], follow_redirects=True, timeout=30.0)
-        resp.raise_for_status()
-        return resp.content
+        return self._http.fetch_response(file_info["url"], follow_redirects=True, timeout=30.0).content
 
     def download(self, skill_id: str) -> tuple[str, bytes]:
-        headers = self._http._build_headers()
-        resp = self._http._client.get(
-            f"/api/agent-operator-integration/v1/skills/{skill_id}/download",
-            headers=headers,
-        )
-        from kweaver._errors import raise_for_status
-
-        raise_for_status(resp)
-        filename = f"{skill_id}.zip"
-        content_disposition = resp.headers.get("content-disposition", "")
-        if "filename=" in content_disposition:
-            filename = content_disposition.split("filename=")[-1].strip('"')
-        return filename, resp.content
+        status_code, archive = self._http.get_bytes(f"/api/agent-operator-integration/v1/skills/{skill_id}/download")
+        raise_for_status_parts(status_code, archive)
+        return f"{skill_id}.zip", archive
 
     def install(self, skill_id: str, directory: str, *, force: bool = False) -> dict[str, Any]:
         _, archive = self.download(skill_id)

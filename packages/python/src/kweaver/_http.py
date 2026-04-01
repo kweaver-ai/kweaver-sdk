@@ -224,6 +224,26 @@ class HttpClient:
             raise NetworkError(str(exc), status_code=None, error_code=None) from exc
         return resp.status_code, resp.content
 
+    def fetch_response(
+        self,
+        url: str,
+        *,
+        timeout: float | None = 30.0,
+        follow_redirects: bool = True,
+    ) -> httpx.Response:
+        """Fetch an absolute URL through the shared HTTP client without auth headers."""
+        self._log("GET", url)
+        try:
+            resp = self._client.get(
+                url,
+                follow_redirects=follow_redirects,
+                timeout=timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise NetworkError(str(exc), status_code=None, error_code=None) from exc
+        raise_for_status(resp)
+        return resp
+
     def put(self, path: str, *, json: Any = None, headers: dict[str, str] | None = None) -> Any:
         return self.request("PUT", path, json=json, headers=headers)
 

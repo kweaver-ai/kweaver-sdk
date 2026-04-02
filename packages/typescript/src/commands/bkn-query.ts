@@ -342,7 +342,18 @@ export async function runKnSearchCommand(args: string[]): Promise<number> {
 // ── relation-type-paths ───────────────────────────────────────────────────────
 
 export async function runKnRelationTypePathsCommand(args: string[]): Promise<number> {
-  const parsed = parseOntologyQueryFlags(args);
+  let parsed;
+  try {
+    parsed = parseOntologyQueryFlags(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver bkn relation-type-paths <kn-id> '<json>' [--pretty] [-bd value]
+
+Query relation type paths between object types.`);
+      return 0;
+    }
+    throw error;
+  }
   const [knId, body] = parsed.filteredArgs;
 
   if (!knId || !body) {
@@ -367,13 +378,17 @@ Query relation type paths between object types.`);
 // ── resources ─────────────────────────────────────────────────────────────────
 
 export async function runKnResourcesCommand(args: string[]): Promise<number> {
-  const parsed = parseOntologyQueryFlags(args);
-
-  if (parsed.filteredArgs.includes("--help") || parsed.filteredArgs.includes("-h")) {
-    console.log(`kweaver bkn resources [--pretty] [-bd value]
+  let parsed;
+  try {
+    parsed = parseOntologyQueryFlags(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver bkn resources [--pretty] [-bd value]
 
 List available resources.`);
-    return 0;
+      return 0;
+    }
+    throw error;
   }
 
   const token = await ensureValidToken();

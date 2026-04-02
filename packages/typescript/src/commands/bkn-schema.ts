@@ -1301,11 +1301,11 @@ export async function runKnConceptGroupCommand(args: string[]): Promise<number> 
       console.log(`kweaver bkn concept-group <action> <kn-id> [args] [--pretty] [-bd value]
 
 Actions:
-  concept-group list <kn-id>                              List concept groups
-  concept-group get <kn-id> <cg-id>                       Get concept group details
-  concept-group create <kn-id> '<json>'                   Create concept group
-  concept-group update <kn-id> <cg-id> '<json>'           Update concept group
-  concept-group delete <kn-id> <cg-id> [-y]              Delete concept group
+  list <kn-id>                              List concept groups
+  get <kn-id> <cg-id>                       Get concept group details
+  create <kn-id> '<json>'                   Create concept group
+  update <kn-id> <cg-id> '<json>'           Update concept group
+  delete <kn-id> <cg-id> [-y]              Delete concept group
   add-members <kn-id> <cg-id> <ot-ids>     Add object type members (comma-separated)
   remove-members <kn-id> <cg-id> <ot-ids> [-y]  Remove object type members`);
       return 0;

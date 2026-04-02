@@ -91,6 +91,10 @@ export class BknResource {
     return JSON.parse(raw) as unknown;
   }
 
+  /**
+   * Execute an action type (has side effects).
+   * @param body - Must include `_instance_identities`: `[{"<primary_key>": "<value>"}]`
+   */
   async executeAction(knId: string, atId: string, body: Record<string, unknown>): Promise<unknown> {
     const raw = await actionTypeExecute({ ...this.ctx.base(), knId, atId, body: JSON.stringify(body) });
     return JSON.parse(raw) as unknown;

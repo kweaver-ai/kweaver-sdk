@@ -39,7 +39,15 @@ class ActionTypesResource:
         return data or {}
 
     def execute(self, kn_id: str, action_type_id: str, params: dict[str, Any] | None = None) -> ActionExecution:
-        """Execute an Action Type, returns an async execution object."""
+        """Execute an Action Type, returns an async execution object.
+
+        Args:
+            kn_id: Knowledge network ID.
+            action_type_id: Action type ID.
+            params: Request body. Must include ``_instance_identities`` — a list
+                of dicts identifying the instances to act on, e.g.
+                ``{"_instance_identities": [{"pod_ip": "1.2.3.4"}]}``.
+        """
         data = self._http.post(
             f"{_PREFIX}/{kn_id}/action-types/{action_type_id}/execute",
             json=params or {},

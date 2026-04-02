@@ -25,6 +25,14 @@ import {
   setVegaConnectorTypeEnabled,
   listVegaDiscoverTasks,
   getVegaDiscoverTask,
+  createVegaDatasetDocs,
+  updateVegaDatasetDocs,
+  deleteVegaDatasetDocs,
+  deleteVegaDatasetDocsQuery,
+  buildVegaDataset,
+  getVegaDatasetBuildStatus,
+  executeVegaQuery,
+  listAllVegaResources,
 } from "../api/vega.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -55,6 +63,14 @@ Subcommands:
   resource create --catalog-id <cid> --name <n> --category <cat>
   resource update <id> [--name X] [--status X] [--tags X] [-d json]
   resource delete <ids...> [-y]
+  resource list-all [--limit N] [--offset N]
+  dataset create-docs <resource-id> -d <json-array>
+  dataset update-docs <resource-id> -d <json-array>
+  dataset delete-docs <resource-id> <doc-ids...>
+  dataset delete-docs-query <resource-id> -d <filter-json>
+  dataset build <resource-id> [--mode full|incremental|realtime]
+  dataset build-status <resource-id> <task-id>
+  query execute -d <json>
   connector-type list                 List connector types
   connector-type get <type>           Get connector type details
   connector-type register -d <json>   Register a new connector type
@@ -128,6 +144,8 @@ export async function runVegaCommand(args: string[]): Promise<number> {
     if (subcommand === "inspect") return runVegaInspectCommand(rest);
     if (subcommand === "catalog") return runVegaCatalogCommand(rest);
     if (subcommand === "resource") return runVegaResourceCommand(rest);
+    if (subcommand === "dataset") return runVegaDatasetCommand(rest);
+    if (subcommand === "query") return runVegaQueryCommand(rest);
     if (subcommand === "connector-type") return runVegaConnectorTypeCommand(rest);
     if (subcommand === "discovery-task") return runVegaDiscoveryTaskCommand(rest);
     return Promise.resolve(-1);
@@ -735,6 +753,7 @@ async function runVegaResourceCommand(args: string[]): Promise<number> {
 
 Subcommands:
   list [--catalog-id X] [--category X] [--status X] [--limit N] [--offset N]
+  list-all [--limit N] [--offset N]
   get <id>
   query <id> -d <json-body>
   create --catalog-id <cid> --name <name> --category <cat>
@@ -744,6 +763,7 @@ Subcommands:
   }
 
   if (sub === "list") return await runResourceList(rest);
+  if (sub === "list-all") return await runResourceListAll(rest);
   if (sub === "get") return await runResourceGet(rest);
   if (sub === "query") return await runResourceQuery(rest);
   if (sub === "create") return await runResourceCreate(rest);
@@ -811,6 +831,50 @@ Options:
     catalogId,
     category,
     status,
+    limit,
+    offset,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body, pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// resource list-all
+// ---------------------------------------------------------------------------
+
+async function runResourceListAll(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega resource list-all [options]
+
+Options:
+  --limit <n>       Max results (default: 30)
+  --offset <n>      Offset
+  -bd, --biz-domain  Business domain (default: bd_public)
+  --pretty           Pretty-print JSON (default)`);
+    return 0;
+  }
+
+  let limit = 30;
+  let offset: number | undefined;
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+
+  for (let i = 0; i < remaining.length; i += 1) {
+    const arg = remaining[i];
+    if (arg === "--limit" && remaining[i + 1]) {
+      limit = parseInt(remaining[++i], 10);
+      continue;
+    }
+    if (arg === "--offset" && remaining[i + 1]) {
+      offset = parseInt(remaining[++i], 10);
+      continue;
+    }
+  }
+
+  const token = await ensureValidToken();
+  const body = await listAllVegaResources({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
     limit,
     offset,
     businessDomain,
@@ -1047,6 +1111,327 @@ Options:
     businessDomain,
   });
   console.error(`Deleted ${ids}`);
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Dataset router
+// ---------------------------------------------------------------------------
+
+async function runVegaDatasetCommand(args: string[]): Promise<number> {
+  const [sub, ...rest] = args;
+
+  if (!sub || sub === "--help" || sub === "-h") {
+    console.log(`kweaver vega dataset
+
+Subcommands:
+  create-docs <resource-id> -d <json-array>
+  update-docs <resource-id> -d <json-array>
+  delete-docs <resource-id> <doc-ids...>
+  delete-docs-query <resource-id> -d <filter-json>
+  build <resource-id> [--mode full|incremental|realtime]
+  build-status <resource-id> <task-id>`);
+    return 0;
+  }
+
+  if (sub === "create-docs") return await runDatasetCreateDocs(rest);
+  if (sub === "update-docs") return await runDatasetUpdateDocs(rest);
+  if (sub === "delete-docs") return await runDatasetDeleteDocs(rest);
+  if (sub === "delete-docs-query") return await runDatasetDeleteDocsQuery(rest);
+  if (sub === "build") return await runDatasetBuild(rest);
+  if (sub === "build-status") return await runDatasetBuildStatus(rest);
+
+  console.error(`Unknown dataset subcommand: ${sub}`);
+  return 1;
+}
+
+// ---------------------------------------------------------------------------
+// dataset create-docs
+// ---------------------------------------------------------------------------
+
+async function runDatasetCreateDocs(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega dataset create-docs <resource-id> -d <json-array>
+
+Options:
+  -d, --data <json>   Array of documents (JSON string)`);
+    return 0;
+  }
+
+  let data: string | undefined;
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+
+  const positionals: string[] = [];
+  for (let i = 0; i < remaining.length; i += 1) {
+    const arg = remaining[i];
+    if ((arg === "-d" || arg === "--data") && remaining[i + 1]) { data = remaining[++i]; continue; }
+    if (!arg.startsWith("-")) positionals.push(arg);
+  }
+
+  const id = positionals[0];
+  if (!id || !data) {
+    console.error("Usage: kweaver vega dataset create-docs <resource-id> -d <json-array>");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await createVegaDatasetDocs({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    id,
+    body: data,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body, pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// dataset update-docs
+// ---------------------------------------------------------------------------
+
+async function runDatasetUpdateDocs(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega dataset update-docs <resource-id> -d <json-array>
+
+Options:
+  -d, --data <json>   Array of documents with ids (JSON string)`);
+    return 0;
+  }
+
+  let data: string | undefined;
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+
+  const positionals: string[] = [];
+  for (let i = 0; i < remaining.length; i += 1) {
+    const arg = remaining[i];
+    if ((arg === "-d" || arg === "--data") && remaining[i + 1]) { data = remaining[++i]; continue; }
+    if (!arg.startsWith("-")) positionals.push(arg);
+  }
+
+  const id = positionals[0];
+  if (!id || !data) {
+    console.error("Usage: kweaver vega dataset update-docs <resource-id> -d <json-array>");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await updateVegaDatasetDocs({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    id,
+    body: data,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body || "{}", pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// dataset delete-docs
+// ---------------------------------------------------------------------------
+
+async function runDatasetDeleteDocs(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega dataset delete-docs <resource-id> <doc-ids...>
+
+Positional args:
+  resource-id   The dataset resource ID
+  doc-ids       One or more document IDs (comma-joined)`);
+    return 0;
+  }
+
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+  const positionals = remaining.filter((a) => !a.startsWith("-"));
+
+  const id = positionals[0];
+  const docIds = positionals.slice(1);
+  if (!id || docIds.length === 0) {
+    console.error("Usage: kweaver vega dataset delete-docs <resource-id> <doc-ids...>");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await deleteVegaDatasetDocs({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    id,
+    docIds: docIds.join(","),
+    businessDomain,
+  });
+  console.log(formatCallOutput(body || "{}", pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// dataset delete-docs-query
+// ---------------------------------------------------------------------------
+
+async function runDatasetDeleteDocsQuery(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega dataset delete-docs-query <resource-id> -d <filter-json>
+
+Options:
+  -d, --data <json>   Filter condition (JSON string)`);
+    return 0;
+  }
+
+  let data: string | undefined;
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+
+  const positionals: string[] = [];
+  for (let i = 0; i < remaining.length; i += 1) {
+    const arg = remaining[i];
+    if ((arg === "-d" || arg === "--data") && remaining[i + 1]) { data = remaining[++i]; continue; }
+    if (!arg.startsWith("-")) positionals.push(arg);
+  }
+
+  const id = positionals[0];
+  if (!id || !data) {
+    console.error("Usage: kweaver vega dataset delete-docs-query <resource-id> -d <filter-json>");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await deleteVegaDatasetDocsQuery({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    id,
+    body: data,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body || "{}", pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// dataset build
+// ---------------------------------------------------------------------------
+
+async function runDatasetBuild(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega dataset build <resource-id> [options]
+
+Options:
+  --mode <mode>   Build mode: full, incremental, realtime (default: full)`);
+    return 0;
+  }
+
+  let mode = "full";
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+
+  const positionals: string[] = [];
+  for (let i = 0; i < remaining.length; i += 1) {
+    const arg = remaining[i];
+    if (arg === "--mode" && remaining[i + 1]) { mode = remaining[++i]; continue; }
+    if (!arg.startsWith("-")) positionals.push(arg);
+  }
+
+  const id = positionals[0];
+  if (!id) {
+    console.error("Usage: kweaver vega dataset build <resource-id> [--mode full|incremental|realtime]");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await buildVegaDataset({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    id,
+    mode,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body, pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// dataset build-status
+// ---------------------------------------------------------------------------
+
+async function runDatasetBuildStatus(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega dataset build-status <resource-id> <task-id>`);
+    return 0;
+  }
+
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+  const positionals = remaining.filter((a) => !a.startsWith("-"));
+
+  const id = positionals[0];
+  const taskId = positionals[1];
+  if (!id || !taskId) {
+    console.error("Usage: kweaver vega dataset build-status <resource-id> <task-id>");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await getVegaDatasetBuildStatus({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    id,
+    taskId,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body, pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Query router
+// ---------------------------------------------------------------------------
+
+async function runVegaQueryCommand(args: string[]): Promise<number> {
+  const [sub, ...rest] = args;
+
+  if (!sub || sub === "--help" || sub === "-h") {
+    console.log(`kweaver vega query
+
+Subcommands:
+  execute -d <json>   Execute a query`);
+    return 0;
+  }
+
+  if (sub === "execute") return await runQueryExecute(rest);
+
+  console.error(`Unknown query subcommand: ${sub}`);
+  return 1;
+}
+
+// ---------------------------------------------------------------------------
+// query execute
+// ---------------------------------------------------------------------------
+
+async function runQueryExecute(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega query execute -d <json>
+
+Options:
+  -d, --data <json>   Query body (tables, joins, output_fields, filter_condition, sort, limit, ...)`);
+    return 0;
+  }
+
+  let data: string | undefined;
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+
+  for (let i = 0; i < remaining.length; i += 1) {
+    const arg = remaining[i];
+    if ((arg === "-d" || arg === "--data") && remaining[i + 1]) { data = remaining[++i]; continue; }
+  }
+
+  if (!data) {
+    console.error("Usage: kweaver vega query execute -d <json>");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await executeVegaQuery({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    body: data,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body, pretty));
   return 0;
 }
 

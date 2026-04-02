@@ -702,6 +702,220 @@ export async function listVegaDiscoverTasks(options: ListVegaDiscoverTasksOption
   return body;
 }
 
+// ── Dataset Docs CRUD ────────────────────────────────────────────────────────
+
+export interface CreateVegaDatasetDocsOptions {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  body: string;
+  businessDomain?: string;
+}
+
+export async function createVegaDatasetDocs(options: CreateVegaDatasetDocsOptions): Promise<string> {
+  const { baseUrl, accessToken, id, body: requestBody, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/resources/dataset/${encodeURIComponent(id)}/docs`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+    },
+    body: requestBody,
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
+export interface UpdateVegaDatasetDocsOptions {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  body: string;
+  businessDomain?: string;
+}
+
+export async function updateVegaDatasetDocs(options: UpdateVegaDatasetDocsOptions): Promise<string> {
+  const { baseUrl, accessToken, id, body: requestBody, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/resources/dataset/${encodeURIComponent(id)}/docs`;
+
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+    },
+    body: requestBody,
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
+export interface DeleteVegaDatasetDocsOptions {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  docIds: string;
+  businessDomain?: string;
+}
+
+export async function deleteVegaDatasetDocs(options: DeleteVegaDatasetDocsOptions): Promise<string> {
+  const { baseUrl, accessToken, id, docIds, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/resources/dataset/${encodeURIComponent(id)}/docs/${encodeURIComponent(docIds)}`;
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: buildHeaders(accessToken, businessDomain),
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
+export interface DeleteVegaDatasetDocsQueryOptions {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  body: string;
+  businessDomain?: string;
+}
+
+export async function deleteVegaDatasetDocsQuery(options: DeleteVegaDatasetDocsQueryOptions): Promise<string> {
+  const { baseUrl, accessToken, id, body: requestBody, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/resources/dataset/${encodeURIComponent(id)}/docs/query`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+      "x-http-method-override": "DELETE",
+    },
+    body: requestBody,
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
+// ── Dataset Build ────────────────────────────────────────────────────────────
+
+export interface BuildVegaDatasetOptions {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  mode?: string;
+  businessDomain?: string;
+}
+
+export async function buildVegaDataset(options: BuildVegaDatasetOptions): Promise<string> {
+  const { baseUrl, accessToken, id, mode = "full", businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/resources/${encodeURIComponent(id)}/build`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ mode }),
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
+export interface GetVegaDatasetBuildStatusOptions {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  taskId: string;
+  businessDomain?: string;
+}
+
+export async function getVegaDatasetBuildStatus(options: GetVegaDatasetBuildStatusOptions): Promise<string> {
+  const { baseUrl, accessToken, id, taskId, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/resources/dataset/${encodeURIComponent(id)}/build/${encodeURIComponent(taskId)}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(accessToken, businessDomain),
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
+// ── Query Execute ────────────────────────────────────────────────────────────
+
+export interface ExecuteVegaQueryOptions {
+  baseUrl: string;
+  accessToken: string;
+  body: string;
+  businessDomain?: string;
+}
+
+export async function executeVegaQuery(options: ExecuteVegaQueryOptions): Promise<string> {
+  const { baseUrl, accessToken, body: requestBody, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/query/execute`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+    },
+    body: requestBody,
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
+// ── Resource List All ────────────────────────────────────────────────────────
+
+export interface ListAllVegaResourcesOptions {
+  baseUrl: string;
+  accessToken: string;
+  limit?: number;
+  offset?: number;
+  businessDomain?: string;
+}
+
+export async function listAllVegaResources(options: ListAllVegaResourcesOptions): Promise<string> {
+  const { baseUrl, accessToken, limit, offset, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = new URL(`${base}${VEGA_BASE}/resources/list`);
+  if (limit !== undefined) url.searchParams.set("limit", String(limit));
+  if (offset !== undefined) url.searchParams.set("offset", String(offset));
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: buildHeaders(accessToken, businessDomain),
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
 export interface GetVegaDiscoverTaskOptions {
   baseUrl: string;
   accessToken: string;

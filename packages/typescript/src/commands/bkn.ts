@@ -1956,7 +1956,11 @@ kweaver bkn action-type query <kn-id> <at-id> '<json>' [--pretty] [-bd value]
 kweaver bkn action-type execute <kn-id> <at-id> '<json>' [--pretty] [-bd value] [--wait|--no-wait] [--timeout n]
 
 list: List action types (schema) from ontology-manager.
-query/execute: Query or execute actions. execute has side effects - only use when explicitly requested.
+query: Query action type definition and parameters.
+execute: Execute an action (has side effects - only use when explicitly requested).
+  The JSON body MUST include "_instance_identities" to specify which instances to act on:
+    {"_instance_identities":[{"<primary_key>":"<value>"}], ...other_params}
+  Example: '{"_instance_identities":[{"pod_ip":"1.2.3.4"}]}'
   --wait (default)    Poll until execution completes
   --no-wait           Return immediately after starting execution
   --timeout <seconds> Max wait time when --wait (default: 300)`);

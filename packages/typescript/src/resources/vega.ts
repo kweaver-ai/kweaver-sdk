@@ -15,6 +15,14 @@ import {
   createVegaResource,
   updateVegaResource,
   deleteVegaResources,
+  createVegaDatasetDocs,
+  updateVegaDatasetDocs,
+  deleteVegaDatasetDocs,
+  deleteVegaDatasetDocsQuery,
+  buildVegaDataset,
+  getVegaDatasetBuildStatus,
+  executeVegaQuery,
+  listAllVegaResources,
   listVegaConnectorTypes,
   getVegaConnectorType,
   registerVegaConnectorType,
@@ -139,6 +147,54 @@ export class VegaResource {
   async deleteResources(ids: string): Promise<unknown> {
     const raw = await deleteVegaResources({ ...this.ctx.base(), ids });
     return raw ? JSON.parse(raw) : {};
+  }
+
+  // ── Dataset Docs ────────────────────────────────────────────────────────────
+
+  async createDatasetDocs(id: string, body: string): Promise<unknown> {
+    const raw = await createVegaDatasetDocs({ ...this.ctx.base(), id, body });
+    return JSON.parse(raw);
+  }
+
+  async updateDatasetDocs(id: string, body: string): Promise<unknown> {
+    const raw = await updateVegaDatasetDocs({ ...this.ctx.base(), id, body });
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  async deleteDatasetDocs(id: string, docIds: string): Promise<unknown> {
+    const raw = await deleteVegaDatasetDocs({ ...this.ctx.base(), id, docIds });
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  async deleteDatasetDocsQuery(id: string, body: string): Promise<unknown> {
+    const raw = await deleteVegaDatasetDocsQuery({ ...this.ctx.base(), id, body });
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  // ── Dataset Build ──────────────────────────────────────────────────────────
+
+  async buildDataset(id: string, mode?: string): Promise<unknown> {
+    const raw = await buildVegaDataset({ ...this.ctx.base(), id, mode });
+    return JSON.parse(raw);
+  }
+
+  async getDatasetBuildStatus(id: string, taskId: string): Promise<unknown> {
+    const raw = await getVegaDatasetBuildStatus({ ...this.ctx.base(), id, taskId });
+    return JSON.parse(raw);
+  }
+
+  // ── Query ──────────────────────────────────────────────────────────────────
+
+  async executeQuery(body: string): Promise<unknown> {
+    const raw = await executeVegaQuery({ ...this.ctx.base(), body });
+    return JSON.parse(raw);
+  }
+
+  // ── Resource List All ──────────────────────────────────────────────────────
+
+  async listAllResources(opts: { limit?: number; offset?: number } = {}): Promise<unknown[]> {
+    const raw = await listAllVegaResources({ ...this.ctx.base(), ...opts });
+    return unwrapArray(raw);
   }
 
   // ── Connector Types ─────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ import {
   parseSearchAfterArray,
   confirmYes,
   pollWithBackoff,
-} from "./bkn.js";
+} from "./bkn-utils.js";
 
 // ── Object-type query options ──────────────────────────────────────────────────
 

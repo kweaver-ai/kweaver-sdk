@@ -550,7 +550,7 @@ Subcommands:
   relation-type list <kn-id>   List relation types (schema)
   relation-type get <kn-id> <rt-id>   Get relation type details
   relation-type create <kn-id> [options]   Create relation type (--name --source --target [--mapping src:tgt])
-  relation-type update <kn-id> <rt-id> [options]   Update relation type
+  relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X]   Update relation type
   relation-type delete <kn-id> <rt-ids> [-y]   Delete relation type(s)
   subgraph <kn-id> '<json>'   Query subgraph
   action-type list <kn-id>   List action types (schema)

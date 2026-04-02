@@ -26,6 +26,9 @@ import {
   parseConceptGroupArgs,
   parseActionScheduleArgs,
   parseJobArgs,
+  parseRelationTypeCreateArgs,
+  parseRelationTypeUpdateArgs,
+  parseRelationTypeDeleteArgs,
 } from "../src/commands/bkn.js";
 import { parseDsListArgs, parseImportCsvArgs } from "../src/commands/ds.js";
 import {
@@ -2000,4 +2003,97 @@ test("parseJobArgs parses -bd flag", () => {
 
 test("parseJobArgs throws on missing kn-id", () => {
   assert.throws(() => parseJobArgs(["list"]), /Missing kn-id/);
+});
+
+// ── relation-type create parse tests ────────────────────────────────────────
+
+test("parseRelationTypeCreateArgs parses all required flags", () => {
+  const opts = parseRelationTypeCreateArgs([
+    "kn-1", "--name", "knows", "--source", "ot-1", "--target", "ot-2",
+  ]);
+  assert.equal(opts.knId, "kn-1");
+  const body = JSON.parse(opts.body);
+  assert.equal(body.entries[0].name, "knows");
+  assert.equal(body.entries[0].source_object_type_id, "ot-1");
+  assert.equal(body.entries[0].target_object_type_id, "ot-2");
+});
+
+test("parseRelationTypeCreateArgs parses --mapping", () => {
+  const opts = parseRelationTypeCreateArgs([
+    "kn-1", "--name", "rt", "--source", "ot-1", "--target", "ot-2",
+    "--mapping", "src_prop:tgt_prop",
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.equal(body.entries[0].mapping_rules[0].source_property.name, "src_prop");
+  assert.equal(body.entries[0].mapping_rules[0].target_property.name, "tgt_prop");
+});
+
+test("parseRelationTypeCreateArgs throws on missing required flags", () => {
+  assert.throws(
+    () => parseRelationTypeCreateArgs(["kn-1", "--name", "rt"]),
+    /Usage/
+  );
+});
+
+// ── relation-type update parse tests ────────────────────────────────────────
+
+test("parseRelationTypeUpdateArgs includes source_object_type_id and target_object_type_id", () => {
+  const opts = parseRelationTypeUpdateArgs([
+    "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2", "--name", "new-name",
+  ]);
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.rtId, "rt-1");
+  const body = JSON.parse(opts.body);
+  assert.equal(body.source_object_type_id, "ot-1");
+  assert.equal(body.target_object_type_id, "ot-2");
+  assert.equal(body.name, "new-name");
+});
+
+test("parseRelationTypeUpdateArgs works without --name (only source/target)", () => {
+  const opts = parseRelationTypeUpdateArgs([
+    "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2",
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.equal(body.source_object_type_id, "ot-1");
+  assert.equal(body.target_object_type_id, "ot-2");
+  assert.equal(body.name, undefined);
+});
+
+test("parseRelationTypeUpdateArgs throws on missing --source/--target", () => {
+  assert.throws(
+    () => parseRelationTypeUpdateArgs(["kn-1", "rt-1", "--name", "x"]),
+    /--source and --target are required/
+  );
+});
+
+test("parseRelationTypeUpdateArgs throws on missing kn-id or rt-id", () => {
+  assert.throws(
+    () => parseRelationTypeUpdateArgs(["kn-1"]),
+    /Usage/
+  );
+});
+
+test("parseRelationTypeUpdateArgs throws help on --help", () => {
+  assert.throws(() => parseRelationTypeUpdateArgs(["--help"]), { message: "help" });
+});
+
+// ── relation-type delete parse tests ────────────────────────────────────────
+
+test("parseRelationTypeDeleteArgs parses kn-id and rt-ids", () => {
+  const opts = parseRelationTypeDeleteArgs(["kn-1", "rt-1,rt-2"]);
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.rtIds, "rt-1,rt-2");
+  assert.equal(opts.yes, false);
+});
+
+test("parseRelationTypeDeleteArgs parses -y flag", () => {
+  const opts = parseRelationTypeDeleteArgs(["kn-1", "rt-1", "-y"]);
+  assert.equal(opts.yes, true);
+});
+
+test("parseRelationTypeDeleteArgs throws on missing args", () => {
+  assert.throws(
+    () => parseRelationTypeDeleteArgs(["kn-1"]),
+    /Usage|Missing/
+  );
 });

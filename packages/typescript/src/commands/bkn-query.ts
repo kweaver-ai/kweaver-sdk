@@ -6,6 +6,7 @@ import {
   actionLogGet,
   actionLogCancel,
 } from "../api/ontology-query.js";
+import { queryRelationTypePaths, listBknResources } from "../api/bkn-backend.js";
 import { semanticSearch } from "../api/semantic-search.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -336,4 +337,51 @@ export async function runKnSearchCommand(args: string[]): Promise<number> {
     console.error(formatHttpError(error));
     return 1;
   }
+}
+
+// ── relation-type-paths ───────────────────────────────────────────────────────
+
+export async function runKnRelationTypePathsCommand(args: string[]): Promise<number> {
+  const parsed = parseOntologyQueryFlags(args);
+  const [knId, body] = parsed.filteredArgs;
+
+  if (!knId || !body) {
+    console.log(`kweaver bkn relation-type-paths <kn-id> '<json>' [--pretty] [-bd value]
+
+Query relation type paths between object types.`);
+    return knId && !body ? 1 : 0;
+  }
+
+  const token = await ensureValidToken();
+  const result = await queryRelationTypePaths({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    knId,
+    body,
+    businessDomain: parsed.businessDomain,
+  });
+  console.log(formatCallOutput(result, parsed.pretty));
+  return 0;
+}
+
+// ── resources ─────────────────────────────────────────────────────────────────
+
+export async function runKnResourcesCommand(args: string[]): Promise<number> {
+  const parsed = parseOntologyQueryFlags(args);
+
+  if (parsed.filteredArgs.includes("--help") || parsed.filteredArgs.includes("-h")) {
+    console.log(`kweaver bkn resources [--pretty] [-bd value]
+
+List available resources.`);
+    return 0;
+  }
+
+  const token = await ensureValidToken();
+  const result = await listBknResources({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    businessDomain: parsed.businessDomain,
+  });
+  console.log(formatCallOutput(result, parsed.pretty));
+  return 0;
 }

@@ -799,6 +799,18 @@ test("run bkn --help shows subcommand help", async () => {
   }
 });
 
+test("KN_HELP includes relation-type-paths and resources", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
+  try {
+    assert.equal(await run(["bkn", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("relation-type-paths"));
+    assert.ok(help.includes("resources"));
+  } finally { console.log = originalLog; }
+});
+
 test("run bkn get --help shows get options", async () => {
   const lines: string[] = [];
   const originalLog = console.log;

@@ -21,6 +21,8 @@ import {
   runKnActionExecutionCommand,
   runKnActionLogCommand,
   runKnSearchCommand,
+  runKnRelationTypePathsCommand,
+  runKnResourcesCommand,
 } from "./bkn-query.js";
 import {
   runKnBuildCommand,
@@ -561,6 +563,8 @@ Subcommands:
   concept-group list|get|create|update|delete|add-members|remove-members <kn-id> ...
   action-schedule list|get|create|update|set-status|delete <kn-id> ...
   job list|get|tasks|delete <kn-id> ...
+  relation-type-paths <kn-id> '<json>'   Query relation type paths between OTs
+  resources                              List available resources
 
 Use 'kweaver bkn <subcommand> --help' for subcommand options.`;
 
@@ -598,6 +602,8 @@ export async function runKnCommand(args: string[]): Promise<number> {
     if (subcommand === "concept-group") return runKnConceptGroupCommand(rest);
     if (subcommand === "action-schedule") return runKnActionScheduleCommand(rest);
     if (subcommand === "job") return runKnJobCommand(rest);
+    if (subcommand === "relation-type-paths") return runKnRelationTypePathsCommand(rest);
+    if (subcommand === "resources") return runKnResourcesCommand(rest);
     return Promise.resolve(-1);
   };
 

@@ -554,6 +554,10 @@ Subcommands:
   relation-type delete <kn-id> <rt-ids> [-y]   Delete relation type(s)
   subgraph <kn-id> '<json>'   Query subgraph
   action-type list <kn-id>   List action types (schema)
+  action-type get <kn-id> <at-id>   Get action type details
+  action-type create <kn-id> '<json>'   Create action type
+  action-type update <kn-id> <at-id> '<json>'   Update action type
+  action-type delete <kn-id> <at-ids> [-y]   Delete action type(s)
   action-type query <kn-id> <at-id> '<json>'   Query action info
   action-type execute <kn-id> <at-id> '<json>'   Execute action (has side effects)
   action-execution get <kn-id> <execution-id>   Get execution status

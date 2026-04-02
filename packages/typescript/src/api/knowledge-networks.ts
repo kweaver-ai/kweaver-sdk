@@ -313,6 +313,92 @@ export async function listActionTypes(
   return body;
 }
 
+export interface GetActionTypeOptions {
+  baseUrl: string;
+  accessToken: string;
+  knId: string;
+  atId: string;
+  businessDomain?: string;
+  branch?: string;
+}
+
+export async function getActionType(options: GetActionTypeOptions): Promise<string> {
+  const { baseUrl, accessToken, knId, atId, businessDomain = "bd_public", branch = "main" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = new URL(`${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}`);
+  url.searchParams.set("branch", branch);
+  const response = await fetch(url.toString(), { method: "GET", headers: buildHeaders(accessToken, businessDomain) });
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
+export interface CreateActionTypesOptions {
+  baseUrl: string;
+  accessToken: string;
+  knId: string;
+  body: string;
+  businessDomain?: string;
+  branch?: string;
+}
+
+export async function createActionTypes(options: CreateActionTypesOptions): Promise<string> {
+  const { baseUrl, accessToken, knId, body, businessDomain = "bd_public", branch = "main" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = new URL(`${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/action-types`);
+  url.searchParams.set("branch", branch);
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: { ...buildHeaders(accessToken, businessDomain), "content-type": "application/json" },
+    body,
+  });
+  const responseBody = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, responseBody);
+  return responseBody;
+}
+
+export interface UpdateActionTypeOptions {
+  baseUrl: string;
+  accessToken: string;
+  knId: string;
+  atId: string;
+  body: string;
+  businessDomain?: string;
+}
+
+export async function updateActionType(options: UpdateActionTypeOptions): Promise<string> {
+  const { baseUrl, accessToken, knId, atId, body, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}`;
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { ...buildHeaders(accessToken, businessDomain), "content-type": "application/json" },
+    body,
+  });
+  const responseBody = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, responseBody);
+  return responseBody;
+}
+
+export interface DeleteActionTypesOptions {
+  baseUrl: string;
+  accessToken: string;
+  knId: string;
+  atIds: string;
+  businessDomain?: string;
+}
+
+export async function deleteActionTypes(options: DeleteActionTypesOptions): Promise<void> {
+  const { baseUrl, accessToken, knId, atIds, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atIds)}`;
+  const response = await fetch(url, { method: "DELETE", headers: buildHeaders(accessToken, businessDomain) });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new HttpError(response.status, response.statusText, body);
+  }
+}
+
 export interface GetObjectTypeOptions {
   baseUrl: string;
   accessToken: string;

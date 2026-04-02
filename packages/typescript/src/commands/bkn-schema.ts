@@ -15,6 +15,10 @@ import {
   updateRelationType,
   deleteRelationTypes,
   listActionTypes,
+  getActionType,
+  createActionTypes,
+  updateActionType,
+  deleteActionTypes,
 } from "../api/knowledge-networks.js";
 import {
   objectTypeQuery,
@@ -1117,10 +1121,18 @@ export async function runKnActionTypeCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
   if (!action || action === "--help" || action === "-h") {
     console.log(`kweaver bkn action-type list <kn-id> [--pretty] [-bd value]
+kweaver bkn action-type get <kn-id> <at-id> [--pretty] [-bd value]
+kweaver bkn action-type create <kn-id> '<json>' [--pretty] [-bd value]
+kweaver bkn action-type update <kn-id> <at-id> '<json>' [--pretty] [-bd value]
+kweaver bkn action-type delete <kn-id> <at-ids> [-y] [--pretty] [-bd value]
 kweaver bkn action-type query <kn-id> <at-id> '<json>' [--pretty] [-bd value]
 kweaver bkn action-type execute <kn-id> <at-id> '<json>' [--pretty] [-bd value] [--wait|--no-wait] [--timeout n]
 
 list: List action types (schema) from ontology-manager.
+get: Get a single action type by ID.
+create: Create action type(s) (POST JSON body).
+update: Update an action type (PUT JSON body).
+delete: Delete action type(s) by ID(s).
 query/execute: Query or execute actions. execute has side effects - only use when explicitly requested.
   --wait (default)    Poll until execution completes
   --no-wait           Return immediately after starting execution
@@ -1144,6 +1156,87 @@ query/execute: Query or execute actions. execute has side effects - only use whe
         businessDomain: parsed.businessDomain,
       });
       console.log(formatCallOutput(body, parsed.pretty));
+      return 0;
+    } catch (error) {
+      console.error(formatHttpError(error));
+      return 1;
+    }
+  }
+
+  if (action === "get") {
+    try {
+      const parsed = parseOntologyQueryFlags(rest);
+      const [knId, atId] = parsed.filteredArgs;
+      if (!knId || !atId) {
+        console.error("Usage: kweaver bkn action-type get <kn-id> <at-id>");
+        return 1;
+      }
+      const token = await ensureValidToken();
+      const body = await getActionType({ baseUrl: token.baseUrl, accessToken: token.accessToken, knId, atId, businessDomain: parsed.businessDomain });
+      console.log(formatCallOutput(body, parsed.pretty));
+      return 0;
+    } catch (error) {
+      console.error(formatHttpError(error));
+      return 1;
+    }
+  }
+
+  if (action === "create") {
+    try {
+      const parsed = parseOntologyQueryFlags(rest);
+      const [knId, bodyJson] = parsed.filteredArgs;
+      if (!knId || !bodyJson) {
+        console.error("Usage: kweaver bkn action-type create <kn-id> '<json>'");
+        return 1;
+      }
+      const token = await ensureValidToken();
+      const result = await createActionTypes({ baseUrl: token.baseUrl, accessToken: token.accessToken, knId, body: bodyJson, businessDomain: parsed.businessDomain });
+      console.log(formatCallOutput(result, parsed.pretty));
+      return 0;
+    } catch (error) {
+      console.error(formatHttpError(error));
+      return 1;
+    }
+  }
+
+  if (action === "update") {
+    try {
+      const parsed = parseOntologyQueryFlags(rest);
+      const [knId, atId, bodyJson] = parsed.filteredArgs;
+      if (!knId || !atId || !bodyJson) {
+        console.error("Usage: kweaver bkn action-type update <kn-id> <at-id> '<json>'");
+        return 1;
+      }
+      const token = await ensureValidToken();
+      const result = await updateActionType({ baseUrl: token.baseUrl, accessToken: token.accessToken, knId, atId, body: bodyJson, businessDomain: parsed.businessDomain });
+      console.log(formatCallOutput(result, parsed.pretty));
+      return 0;
+    } catch (error) {
+      console.error(formatHttpError(error));
+      return 1;
+    }
+  }
+
+  if (action === "delete") {
+    try {
+      const parsed = parseOntologyQueryFlags(rest);
+      const yes = parsed.filteredArgs.includes("-y") || parsed.filteredArgs.includes("--yes");
+      const positional = parsed.filteredArgs.filter(a => a !== "-y" && a !== "--yes");
+      const [knId, atIds] = positional;
+      if (!knId || !atIds) {
+        console.error("Usage: kweaver bkn action-type delete <kn-id> <at-ids> [-y]");
+        return 1;
+      }
+      if (!yes) {
+        const confirmed = await confirmYes(`Delete action type(s) ${atIds}?`);
+        if (!confirmed) {
+          console.log("Cancelled.");
+          return 0;
+        }
+      }
+      const token = await ensureValidToken();
+      await deleteActionTypes({ baseUrl: token.baseUrl, accessToken: token.accessToken, knId, atIds, businessDomain: parsed.businessDomain });
+      console.log("Deleted.");
       return 0;
     } catch (error) {
       console.error(formatHttpError(error));
@@ -1250,7 +1343,7 @@ query/execute: Query or execute actions. execute has side effects - only use whe
     }
   }
 
-  console.error(`Unknown action-type action: ${action}. Use list, query, or execute.`);
+  console.error(`Unknown action-type action: ${action}. Use list, get, create, update, delete, query, or execute.`);
   return 1;
 }
 

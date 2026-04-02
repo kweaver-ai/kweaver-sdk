@@ -364,13 +364,15 @@ export interface UpdateActionTypeOptions {
   atId: string;
   body: string;
   businessDomain?: string;
+  branch?: string;
 }
 
 export async function updateActionType(options: UpdateActionTypeOptions): Promise<string> {
-  const { baseUrl, accessToken, knId, atId, body, businessDomain = "bd_public" } = options;
+  const { baseUrl, accessToken, knId, atId, body, businessDomain = "bd_public", branch = "main" } = options;
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}`;
-  const response = await fetch(url, {
+  const url = new URL(`${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atId)}`);
+  url.searchParams.set("branch", branch);
+  const response = await fetch(url.toString(), {
     method: "PUT",
     headers: { ...buildHeaders(accessToken, businessDomain), "content-type": "application/json" },
     body,
@@ -386,13 +388,15 @@ export interface DeleteActionTypesOptions {
   knId: string;
   atIds: string;
   businessDomain?: string;
+  branch?: string;
 }
 
 export async function deleteActionTypes(options: DeleteActionTypesOptions): Promise<void> {
-  const { baseUrl, accessToken, knId, atIds, businessDomain = "bd_public" } = options;
+  const { baseUrl, accessToken, knId, atIds, businessDomain = "bd_public", branch = "main" } = options;
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atIds)}`;
-  const response = await fetch(url, { method: "DELETE", headers: buildHeaders(accessToken, businessDomain) });
+  const url = new URL(`${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/action-types/${encodeURIComponent(atIds)}`);
+  url.searchParams.set("branch", branch);
+  const response = await fetch(url.toString(), { method: "DELETE", headers: buildHeaders(accessToken, businessDomain) });
   if (!response.ok) {
     const body = await response.text();
     throw new HttpError(response.status, response.statusText, body);
@@ -484,6 +488,7 @@ export interface UpdateObjectTypeOptions {
   otId: string;
   body: string;
   businessDomain?: string;
+  branch?: string;
 }
 
 export async function updateObjectType(options: UpdateObjectTypeOptions): Promise<string> {
@@ -494,12 +499,14 @@ export async function updateObjectType(options: UpdateObjectTypeOptions): Promis
     otId,
     body,
     businessDomain = "bd_public",
+    branch = "main",
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}`;
+  const url = new URL(`${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otId)}`);
+  url.searchParams.set("branch", branch);
 
-  const response = await fetch(url, {
+  const response = await fetch(url.toString(), {
     method: "PUT",
     headers: {
       ...buildHeaders(accessToken, businessDomain),
@@ -521,6 +528,7 @@ export interface DeleteObjectTypesOptions {
   knId: string;
   otIds: string;
   businessDomain?: string;
+  branch?: string;
 }
 
 export async function deleteObjectTypes(options: DeleteObjectTypesOptions): Promise<void> {
@@ -530,12 +538,14 @@ export async function deleteObjectTypes(options: DeleteObjectTypesOptions): Prom
     knId,
     otIds,
     businessDomain = "bd_public",
+    branch = "main",
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otIds)}`;
+  const url = new URL(`${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/object-types/${encodeURIComponent(otIds)}`);
+  url.searchParams.set("branch", branch);
 
-  const response = await fetch(url, {
+  const response = await fetch(url.toString(), {
     method: "DELETE",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -631,6 +641,7 @@ export interface UpdateRelationTypeOptions {
   rtId: string;
   body: string;
   businessDomain?: string;
+  branch?: string;
 }
 
 export async function updateRelationType(options: UpdateRelationTypeOptions): Promise<string> {
@@ -641,12 +652,14 @@ export async function updateRelationType(options: UpdateRelationTypeOptions): Pr
     rtId,
     body,
     businessDomain = "bd_public",
+    branch = "main",
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/relation-types/${encodeURIComponent(rtId)}`;
+  const url = new URL(`${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/relation-types/${encodeURIComponent(rtId)}`);
+  url.searchParams.set("branch", branch);
 
-  const response = await fetch(url, {
+  const response = await fetch(url.toString(), {
     method: "PUT",
     headers: {
       ...buildHeaders(accessToken, businessDomain),
@@ -668,6 +681,7 @@ export interface DeleteRelationTypesOptions {
   knId: string;
   rtIds: string;
   businessDomain?: string;
+  branch?: string;
 }
 
 export async function deleteRelationTypes(options: DeleteRelationTypesOptions): Promise<void> {
@@ -677,12 +691,14 @@ export async function deleteRelationTypes(options: DeleteRelationTypesOptions): 
     knId,
     rtIds,
     businessDomain = "bd_public",
+    branch = "main",
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/relation-types/${encodeURIComponent(rtIds)}`;
+  const url = new URL(`${base}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(knId)}/relation-types/${encodeURIComponent(rtIds)}`);
+  url.searchParams.set("branch", branch);
 
-  const response = await fetch(url, {
+  const response = await fetch(url.toString(), {
     method: "DELETE",
     headers: buildHeaders(accessToken, businessDomain),
   });

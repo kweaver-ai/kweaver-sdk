@@ -27,6 +27,10 @@ import {
   updateActionSchedule,
   setActionScheduleStatus,
   deleteActionSchedules,
+  listJobs,
+  getJob,
+  getJobTasks,
+  deleteJobs,
 } from "../api/bkn-backend.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -1058,5 +1062,94 @@ Actions:
   }
 
   console.error(`Unknown action-schedule action: ${action}`);
+  return 1;
+}
+
+export interface JobParsed {
+  action: string;
+  knId: string;
+  itemId: string;
+  yes: boolean;
+  pretty: boolean;
+  businessDomain: string;
+}
+
+export function parseJobArgs(args: string[]): JobParsed {
+  const [action, ...rest] = args;
+  if (!action || action === "--help" || action === "-h") throw new Error("help");
+
+  let pretty = true;
+  let businessDomain = "";
+  let yes = false;
+  const positional: string[] = [];
+
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--pretty") { pretty = true; continue; }
+    if ((arg === "-bd" || arg === "--biz-domain") && rest[i + 1]) { businessDomain = rest[++i]; continue; }
+    if (arg === "-y" || arg === "--yes") { yes = true; continue; }
+    positional.push(arg);
+  }
+
+  const [knId, itemId] = positional;
+  if (!knId) throw new Error("Missing kn-id. Usage: kweaver bkn job <action> <kn-id> ...");
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+
+  return { action, knId, itemId: itemId || "", yes, pretty, businessDomain };
+}
+
+export async function runKnJobCommand(args: string[]): Promise<number> {
+  let parsed: JobParsed;
+  try {
+    parsed = parseJobArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver bkn job <action> <kn-id> [args] [--pretty] [-bd value]
+
+Actions:
+  list <kn-id>                    List jobs
+  get <kn-id> <job-id>            Get job details
+  tasks <kn-id> <job-id>          List tasks within a job
+  delete <kn-id> <job-ids> [-y]   Delete job(s) (comma-separated)`);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  const { action, knId, itemId, yes, pretty, businessDomain } = parsed;
+  const token = await ensureValidToken();
+  const base = { baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain };
+
+  if (action === "list") {
+    const result = await listJobs({ ...base, knId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "get") {
+    if (!itemId) { console.error("Missing job-id"); return 1; }
+    const result = await getJob({ ...base, knId, jobId: itemId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "tasks") {
+    if (!itemId) { console.error("Missing job-id"); return 1; }
+    const result = await getJobTasks({ ...base, knId, jobId: itemId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "delete") {
+    if (!itemId) { console.error("Missing job-ids"); return 1; }
+    if (!yes) {
+      const confirmed = await confirmYes(`Delete job(s) ${itemId}?`);
+      if (!confirmed) { console.log("Cancelled."); return 0; }
+    }
+    const result = await deleteJobs({ ...base, knId, jobIds: itemId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+
+  console.error(`Unknown job action: ${action}`);
   return 1;
 }

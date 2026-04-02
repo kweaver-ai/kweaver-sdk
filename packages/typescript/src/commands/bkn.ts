@@ -30,6 +30,7 @@ import {
   runKnCreateFromDsCommand,
   runKnCreateFromCsvCommand,
   runKnActionScheduleCommand,
+  runKnJobCommand,
 } from "./bkn-ops.js";
 
 // Re-export shared utils for backward compatibility (tests import from bkn.js)
@@ -80,6 +81,7 @@ export {
   packDirectoryToTar,
   extractTarToDirectory,
   parseActionScheduleArgs,
+  parseJobArgs,
 } from "./bkn-ops.js";
 export type { KnPushOptions, KnPullOptions } from "./bkn-ops.js";
 
@@ -558,6 +560,7 @@ Subcommands:
   action-log cancel <kn-id> <log-id>   Cancel running execution (has side effects)
   concept-group list|get|create|update|delete|add-members|remove-members <kn-id> ...
   action-schedule list|get|create|update|set-status|delete <kn-id> ...
+  job list|get|tasks|delete <kn-id> ...
 
 Use 'kweaver bkn <subcommand> --help' for subcommand options.`;
 
@@ -594,6 +597,7 @@ export async function runKnCommand(args: string[]): Promise<number> {
     if (subcommand === "action-log") return runKnActionLogCommand(rest);
     if (subcommand === "concept-group") return runKnConceptGroupCommand(rest);
     if (subcommand === "action-schedule") return runKnActionScheduleCommand(rest);
+    if (subcommand === "job") return runKnJobCommand(rest);
     return Promise.resolve(-1);
   };
 

@@ -25,6 +25,7 @@ import {
   formatSimpleKnList,
   parseConceptGroupArgs,
   parseActionScheduleArgs,
+  parseJobArgs,
 } from "../src/commands/bkn.js";
 import { parseDsListArgs, parseImportCsvArgs } from "../src/commands/ds.js";
 import {
@@ -1884,4 +1885,29 @@ test("parseActionScheduleArgs parses delete with -y", () => {
 test("parseActionScheduleArgs throws help on --help", () => {
   assert.throws(() => parseActionScheduleArgs(["--help"]), { message: "help" });
   assert.throws(() => parseActionScheduleArgs([]), { message: "help" });
+});
+
+test("parseJobArgs parses list", () => {
+  const opts = parseJobArgs(["list", "kn-1"]);
+  assert.equal(opts.action, "list");
+  assert.equal(opts.knId, "kn-1");
+});
+
+test("parseJobArgs parses tasks", () => {
+  const opts = parseJobArgs(["tasks", "kn-1", "j-1"]);
+  assert.equal(opts.action, "tasks");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "j-1");
+});
+
+test("parseJobArgs parses delete with -y", () => {
+  const opts = parseJobArgs(["delete", "kn-1", "j-1,j-2", "-y"]);
+  assert.equal(opts.action, "delete");
+  assert.equal(opts.itemId, "j-1,j-2");
+  assert.equal(opts.yes, true);
+});
+
+test("parseJobArgs throws help on --help", () => {
+  assert.throws(() => parseJobArgs(["--help"]), { message: "help" });
+  assert.throws(() => parseJobArgs([]), { message: "help" });
 });

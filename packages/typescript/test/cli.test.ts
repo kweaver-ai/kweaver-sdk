@@ -1923,3 +1923,81 @@ test("parseJobArgs throws help on --help", () => {
   assert.throws(() => parseJobArgs(["--help"]), { message: "help" });
   assert.throws(() => parseJobArgs([]), { message: "help" });
 });
+
+// ── concept-group additional parse tests ────────────────────────────────────
+
+test("parseConceptGroupArgs parses get", () => {
+  const opts = parseConceptGroupArgs(["get", "kn-1", "cg-1"]);
+  assert.equal(opts.action, "get");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "cg-1");
+});
+
+test("parseConceptGroupArgs parses update with body", () => {
+  const opts = parseConceptGroupArgs(["update", "kn-1", "cg-1", '{"name":"g2"}']);
+  assert.equal(opts.action, "update");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "cg-1");
+  assert.equal(opts.extra, '{"name":"g2"}');
+});
+
+test("parseConceptGroupArgs parses -bd flag", () => {
+  const opts = parseConceptGroupArgs(["list", "kn-1", "-bd", "bd_enterprise"]);
+  assert.equal(opts.action, "list");
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseConceptGroupArgs throws on missing kn-id", () => {
+  assert.throws(() => parseConceptGroupArgs(["list"]), /Missing kn-id/);
+});
+
+// ── action-schedule additional parse tests ──────────────────────────────────
+
+test("parseActionScheduleArgs parses get", () => {
+  const opts = parseActionScheduleArgs(["get", "kn-1", "s-1"]);
+  assert.equal(opts.action, "get");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "s-1");
+});
+
+test("parseActionScheduleArgs parses create with body", () => {
+  const opts = parseActionScheduleArgs(["create", "kn-1", '{"cron":"* * * * *"}']);
+  assert.equal(opts.action, "create");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.body, '{"cron":"* * * * *"}');
+});
+
+test("parseActionScheduleArgs parses update with body", () => {
+  const opts = parseActionScheduleArgs(["update", "kn-1", "s-1", '{"cron":"0 * * * *"}']);
+  assert.equal(opts.action, "update");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "s-1");
+  assert.equal(opts.extra, '{"cron":"0 * * * *"}');
+});
+
+test("parseActionScheduleArgs parses -bd flag", () => {
+  const opts = parseActionScheduleArgs(["list", "kn-1", "-bd", "bd_enterprise"]);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseActionScheduleArgs throws on missing kn-id", () => {
+  assert.throws(() => parseActionScheduleArgs(["list"]), /Missing kn-id/);
+});
+
+// ── job additional parse tests ──────────────────────────────────────────────
+
+test("parseJobArgs parses get", () => {
+  const opts = parseJobArgs(["get", "kn-1", "j-1"]);
+  assert.equal(opts.action, "get");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "j-1");
+});
+
+test("parseJobArgs parses -bd flag", () => {
+  const opts = parseJobArgs(["list", "kn-1", "-bd", "bd_enterprise"]);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseJobArgs throws on missing kn-id", () => {
+  assert.throws(() => parseJobArgs(["list"]), /Missing kn-id/);
+});

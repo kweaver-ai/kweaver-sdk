@@ -18,7 +18,16 @@ import {
 } from "../api/knowledge-networks.js";
 import { listTablesWithColumns, scanMetadata, getDatasource } from "../api/datasources.js";
 import { createDataView, findDataView } from "../api/dataviews.js";
-import { downloadBkn, uploadBkn } from "../api/bkn-backend.js";
+import {
+  downloadBkn,
+  uploadBkn,
+  listActionSchedules,
+  getActionSchedule,
+  createActionSchedule,
+  updateActionSchedule,
+  setActionScheduleStatus,
+  deleteActionSchedules,
+} from "../api/bkn-backend.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { runDsImportCsv } from "./ds.js";
@@ -26,6 +35,7 @@ import {
   pollWithBackoff,
   detectPrimaryKey,
   detectDisplayKey,
+  confirmYes,
 } from "./bkn-utils.js";
 
 // ── Build ───────────────────────────────────────────────────────────────────
@@ -942,4 +952,111 @@ export async function runKnCreateFromCsvCommand(args: string[]): Promise<number>
     "-bd", options.businessDomain,
   ];
   return runKnCreateFromDsCommand(knArgs, importResult.sampleRows);
+}
+
+// ── Action Schedule ──────────────────────────────────────────────────────────
+
+export interface ActionScheduleParsed {
+  action: string;
+  knId: string;
+  itemId: string;
+  body: string;
+  extra: string;
+  yes: boolean;
+  pretty: boolean;
+  businessDomain: string;
+}
+
+export function parseActionScheduleArgs(args: string[]): ActionScheduleParsed {
+  const [action, ...rest] = args;
+  if (!action || action === "--help" || action === "-h") throw new Error("help");
+
+  let pretty = true;
+  let businessDomain = "";
+  let yes = false;
+  const positional: string[] = [];
+
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--pretty") { pretty = true; continue; }
+    if ((arg === "-bd" || arg === "--biz-domain") && rest[i + 1]) { businessDomain = rest[++i]; continue; }
+    if (arg === "-y" || arg === "--yes") { yes = true; continue; }
+    positional.push(arg);
+  }
+
+  const [knId, itemId, extra] = positional;
+  if (!knId) throw new Error("Missing kn-id. Usage: kweaver bkn action-schedule <action> <kn-id> ...");
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+
+  return { action, knId, itemId: itemId || "", body: itemId || "", extra: extra || "", yes, pretty, businessDomain };
+}
+
+export async function runKnActionScheduleCommand(args: string[]): Promise<number> {
+  let parsed: ActionScheduleParsed;
+  try {
+    parsed = parseActionScheduleArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver bkn action-schedule <action> <kn-id> [args] [--pretty] [-bd value]
+
+Actions:
+  list <kn-id>                                    List action schedules
+  get <kn-id> <schedule-id>                       Get schedule details
+  create <kn-id> '<json>'                         Create schedule
+  update <kn-id> <schedule-id> '<json>'           Update schedule
+  set-status <kn-id> <schedule-id> <status>       Enable/disable schedule (enabled|disabled)
+  delete <kn-id> <schedule-ids> [-y]              Delete schedule(s) (comma-separated)`);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  const { action, knId, itemId, body, extra, yes, pretty, businessDomain } = parsed;
+  const token = await ensureValidToken();
+  const base = { baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain };
+
+  if (action === "list") {
+    const result = await listActionSchedules({ ...base, knId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "get") {
+    if (!itemId) { console.error("Missing schedule-id"); return 1; }
+    const result = await getActionSchedule({ ...base, knId, scheduleId: itemId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "create") {
+    if (!itemId) { console.error("Missing JSON body"); return 1; }
+    const result = await createActionSchedule({ ...base, knId, body });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "update") {
+    if (!itemId || !extra) { console.error("Missing schedule-id or JSON body"); return 1; }
+    const result = await updateActionSchedule({ ...base, knId, scheduleId: itemId, body: extra });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "set-status") {
+    if (!itemId || !extra) { console.error("Missing schedule-id or status"); return 1; }
+    const result = await setActionScheduleStatus({ ...base, knId, scheduleId: itemId, body: JSON.stringify({ status: extra }) });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "delete") {
+    if (!itemId) { console.error("Missing schedule-ids"); return 1; }
+    if (!yes) {
+      const confirmed = await confirmYes(`Delete action schedule(s) ${itemId}?`);
+      if (!confirmed) { console.log("Cancelled."); return 0; }
+    }
+    const result = await deleteActionSchedules({ ...base, knId, scheduleIds: itemId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+
+  console.error(`Unknown action-schedule action: ${action}`);
+  return 1;
 }

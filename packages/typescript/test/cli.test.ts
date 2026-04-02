@@ -24,6 +24,7 @@ import {
   parseKnBuildArgs,
   formatSimpleKnList,
   parseConceptGroupArgs,
+  parseActionScheduleArgs,
 } from "../src/commands/bkn.js";
 import { parseDsListArgs, parseImportCsvArgs } from "../src/commands/ds.js";
 import {
@@ -1865,5 +1866,38 @@ test("run bkn concept-group --help shows all actions", async () => {
     assert.ok(help.includes("concept-group create"));
     assert.ok(help.includes("add-members"));
     assert.ok(help.includes("remove-members"));
+  } finally { console.log = originalLog; }
+});
+
+test("parseActionScheduleArgs parses list", () => {
+  const opts = parseActionScheduleArgs(["list", "kn-1"]);
+  assert.equal(opts.action, "list");
+  assert.equal(opts.knId, "kn-1");
+});
+
+test("parseActionScheduleArgs parses set-status", () => {
+  const opts = parseActionScheduleArgs(["set-status", "kn-1", "s-1", "enabled"]);
+  assert.equal(opts.action, "set-status");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "s-1");
+  assert.equal(opts.extra, "enabled");
+});
+
+test("parseActionScheduleArgs parses delete with -y", () => {
+  const opts = parseActionScheduleArgs(["delete", "kn-1", "s-1,s-2", "-y"]);
+  assert.equal(opts.action, "delete");
+  assert.equal(opts.itemId, "s-1,s-2");
+  assert.equal(opts.yes, true);
+});
+
+test("run bkn action-schedule --help shows all actions", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
+  try {
+    assert.equal(await run(["bkn", "action-schedule", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("action-schedule list"));
+    assert.ok(help.includes("set-status"));
   } finally { console.log = originalLog; }
 });

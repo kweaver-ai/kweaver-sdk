@@ -1,15 +1,5 @@
 import { HttpError } from "../utils/http.js";
-
-function buildHeaders(accessToken: string, businessDomain: string): Record<string, string> {
-  return {
-    accept: "application/json, text/plain, */*",
-    "accept-language": "zh-cn",
-    authorization: `Bearer ${accessToken}`,
-    token: accessToken,
-    "x-business-domain": businessDomain,
-    "x-language": "zh-cn",
-  };
-}
+import { buildHeaders } from "./headers.js";
 
 function debugLog(method: string, url: string, headers: Record<string, string>, body?: string): void {
   if (!process.env["KWEAVER_DEBUG_HTTP"]) return;

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { getActionType, createActionTypes, updateActionType, deleteActionTypes } from "../src/api/knowledge-networks.js";
+
 import {
   objectTypeQuery,
   objectTypeProperties,
@@ -246,4 +248,53 @@ test("actionLogCancel maps path", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("getActionType sends GET to /action-types/:atId", async () => {
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input.toString();
+    assert.equal(init?.method, "GET");
+    assert.ok(url.includes("/action-types/at-1"));
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    await getActionType({ baseUrl: "https://host", accessToken: "t", knId: "kn-1", atId: "at-1" });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("createActionTypes sends POST to /action-types", async () => {
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input.toString();
+    assert.equal(init?.method, "POST");
+    assert.ok(url.includes("/action-types"));
+    assert.equal(init?.body, '{"name":"at"}');
+    return new Response("{}", { status: 201 });
+  };
+  try {
+    await createActionTypes({ baseUrl: "https://host", accessToken: "t", knId: "kn-1", body: '{"name":"at"}' });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("updateActionType sends PUT to /action-types/:atId", async () => {
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input.toString();
+    assert.equal(init?.method, "PUT");
+    assert.ok(url.includes("/action-types/at-1"));
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    await updateActionType({ baseUrl: "https://host", accessToken: "t", knId: "kn-1", atId: "at-1", body: '{}' });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("deleteActionTypes sends DELETE to /action-types/:atIds", async () => {
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input.toString();
+    assert.equal(init?.method, "DELETE");
+    assert.ok(url.includes("/action-types/at-1"));
+    return new Response("", { status: 200 });
+  };
+  try {
+    await deleteActionTypes({ baseUrl: "https://host", accessToken: "t", knId: "kn-1", atIds: "at-1" });
+  } finally { globalThis.fetch = originalFetch; }
 });

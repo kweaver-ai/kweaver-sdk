@@ -23,6 +23,12 @@ import {
   parseKnSearchArgs,
   parseKnBuildArgs,
   formatSimpleKnList,
+  parseConceptGroupArgs,
+  parseActionScheduleArgs,
+  parseJobArgs,
+  parseRelationTypeCreateArgs,
+  parseRelationTypeUpdateArgs,
+  parseRelationTypeDeleteArgs,
 } from "../src/commands/bkn.js";
 import { parseDsListArgs, parseImportCsvArgs } from "../src/commands/ds.js";
 import {
@@ -794,6 +800,18 @@ test("run bkn --help shows subcommand help", async () => {
   } finally {
     console.log = originalLog;
   }
+});
+
+test("KN_HELP includes relation-type-paths and resources", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
+  try {
+    assert.equal(await run(["bkn", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("relation-type-paths"));
+    assert.ok(help.includes("resources"));
+  } finally { console.log = originalLog; }
 });
 
 test("run bkn get --help shows get options", async () => {
@@ -1814,4 +1832,294 @@ test("run vega unknown-subcommand exits 1", async () => {
   } finally {
     console.error = originalErr;
   }
+});
+
+test("parseConceptGroupArgs parses list args", () => {
+  const opts = parseConceptGroupArgs(["list", "kn-1"]);
+  assert.equal(opts.action, "list");
+  assert.equal(opts.knId, "kn-1");
+});
+
+test("parseConceptGroupArgs parses create with body", () => {
+  const opts = parseConceptGroupArgs(["create", "kn-1", '{"name":"g1"}']);
+  assert.equal(opts.action, "create");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.body, '{"name":"g1"}');
+});
+
+test("parseConceptGroupArgs parses delete with -y", () => {
+  const opts = parseConceptGroupArgs(["delete", "kn-1", "cg-1", "-y"]);
+  assert.equal(opts.action, "delete");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "cg-1");
+  assert.equal(opts.yes, true);
+});
+
+test("parseConceptGroupArgs parses add-members", () => {
+  const opts = parseConceptGroupArgs(["add-members", "kn-1", "cg-1", "ot-1,ot-2"]);
+  assert.equal(opts.action, "add-members");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "cg-1");
+  assert.equal(opts.extra, "ot-1,ot-2");
+});
+
+test("parseConceptGroupArgs parses remove-members with -y", () => {
+  const opts = parseConceptGroupArgs(["remove-members", "kn-1", "cg-1", "ot-1", "-y"]);
+  assert.equal(opts.action, "remove-members");
+  assert.equal(opts.itemId, "cg-1");
+  assert.equal(opts.extra, "ot-1");
+  assert.equal(opts.yes, true);
+});
+
+test("parseConceptGroupArgs throws help on --help", () => {
+  assert.throws(() => parseConceptGroupArgs(["--help"]), { message: "help" });
+  assert.throws(() => parseConceptGroupArgs([]), { message: "help" });
+});
+
+test("parseActionScheduleArgs parses list", () => {
+  const opts = parseActionScheduleArgs(["list", "kn-1"]);
+  assert.equal(opts.action, "list");
+  assert.equal(opts.knId, "kn-1");
+});
+
+test("parseActionScheduleArgs parses set-status", () => {
+  const opts = parseActionScheduleArgs(["set-status", "kn-1", "s-1", "enabled"]);
+  assert.equal(opts.action, "set-status");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "s-1");
+  assert.equal(opts.extra, "enabled");
+});
+
+test("parseActionScheduleArgs parses delete with -y", () => {
+  const opts = parseActionScheduleArgs(["delete", "kn-1", "s-1,s-2", "-y"]);
+  assert.equal(opts.action, "delete");
+  assert.equal(opts.itemId, "s-1,s-2");
+  assert.equal(opts.yes, true);
+});
+
+test("parseActionScheduleArgs throws help on --help", () => {
+  assert.throws(() => parseActionScheduleArgs(["--help"]), { message: "help" });
+  assert.throws(() => parseActionScheduleArgs([]), { message: "help" });
+});
+
+test("parseJobArgs parses list", () => {
+  const opts = parseJobArgs(["list", "kn-1"]);
+  assert.equal(opts.action, "list");
+  assert.equal(opts.knId, "kn-1");
+});
+
+test("parseJobArgs parses tasks", () => {
+  const opts = parseJobArgs(["tasks", "kn-1", "j-1"]);
+  assert.equal(opts.action, "tasks");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "j-1");
+});
+
+test("parseJobArgs parses delete with -y", () => {
+  const opts = parseJobArgs(["delete", "kn-1", "j-1,j-2", "-y"]);
+  assert.equal(opts.action, "delete");
+  assert.equal(opts.itemId, "j-1,j-2");
+  assert.equal(opts.yes, true);
+});
+
+test("parseJobArgs throws help on --help", () => {
+  assert.throws(() => parseJobArgs(["--help"]), { message: "help" });
+  assert.throws(() => parseJobArgs([]), { message: "help" });
+});
+
+// ── concept-group additional parse tests ────────────────────────────────────
+
+test("parseConceptGroupArgs parses get", () => {
+  const opts = parseConceptGroupArgs(["get", "kn-1", "cg-1"]);
+  assert.equal(opts.action, "get");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "cg-1");
+});
+
+test("parseConceptGroupArgs parses update with body", () => {
+  const opts = parseConceptGroupArgs(["update", "kn-1", "cg-1", '{"name":"g2"}']);
+  assert.equal(opts.action, "update");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "cg-1");
+  assert.equal(opts.extra, '{"name":"g2"}');
+});
+
+test("parseConceptGroupArgs parses -bd flag", () => {
+  const opts = parseConceptGroupArgs(["list", "kn-1", "-bd", "bd_enterprise"]);
+  assert.equal(opts.action, "list");
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseConceptGroupArgs throws on missing kn-id", () => {
+  assert.throws(() => parseConceptGroupArgs(["list"]), /Missing kn-id/);
+});
+
+// ── action-schedule additional parse tests ──────────────────────────────────
+
+test("parseActionScheduleArgs parses get", () => {
+  const opts = parseActionScheduleArgs(["get", "kn-1", "s-1"]);
+  assert.equal(opts.action, "get");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "s-1");
+});
+
+test("parseActionScheduleArgs parses create with body", () => {
+  const opts = parseActionScheduleArgs(["create", "kn-1", '{"cron":"* * * * *"}']);
+  assert.equal(opts.action, "create");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.body, '{"cron":"* * * * *"}');
+});
+
+test("parseActionScheduleArgs parses update with body", () => {
+  const opts = parseActionScheduleArgs(["update", "kn-1", "s-1", '{"cron":"0 * * * *"}']);
+  assert.equal(opts.action, "update");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "s-1");
+  assert.equal(opts.extra, '{"cron":"0 * * * *"}');
+});
+
+test("parseActionScheduleArgs parses -bd flag", () => {
+  const opts = parseActionScheduleArgs(["list", "kn-1", "-bd", "bd_enterprise"]);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseActionScheduleArgs throws on missing kn-id", () => {
+  assert.throws(() => parseActionScheduleArgs(["list"]), /Missing kn-id/);
+});
+
+// ── job additional parse tests ──────────────────────────────────────────────
+
+test("parseJobArgs parses get", () => {
+  const opts = parseJobArgs(["get", "kn-1", "j-1"]);
+  assert.equal(opts.action, "get");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "j-1");
+});
+
+test("parseJobArgs parses -bd flag", () => {
+  const opts = parseJobArgs(["list", "kn-1", "-bd", "bd_enterprise"]);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseJobArgs throws on missing kn-id", () => {
+  assert.throws(() => parseJobArgs(["list"]), /Missing kn-id/);
+});
+
+// ── relation-type create parse tests ────────────────────────────────────────
+
+test("parseRelationTypeCreateArgs parses all required flags", () => {
+  const opts = parseRelationTypeCreateArgs([
+    "kn-1", "--name", "knows", "--source", "ot-1", "--target", "ot-2",
+  ]);
+  assert.equal(opts.knId, "kn-1");
+  const body = JSON.parse(opts.body);
+  assert.equal(body.entries[0].name, "knows");
+  assert.equal(body.entries[0].source_object_type_id, "ot-1");
+  assert.equal(body.entries[0].target_object_type_id, "ot-2");
+});
+
+test("parseRelationTypeCreateArgs parses --mapping", () => {
+  const opts = parseRelationTypeCreateArgs([
+    "kn-1", "--name", "rt", "--source", "ot-1", "--target", "ot-2",
+    "--mapping", "src_prop:tgt_prop",
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.equal(body.entries[0].mapping_rules[0].source_property.name, "src_prop");
+  assert.equal(body.entries[0].mapping_rules[0].target_property.name, "tgt_prop");
+});
+
+test("parseRelationTypeCreateArgs throws on missing required flags", () => {
+  assert.throws(
+    () => parseRelationTypeCreateArgs(["kn-1", "--name", "rt"]),
+    /Usage/
+  );
+});
+
+// ── relation-type update parse tests ────────────────────────────────────────
+
+test("parseRelationTypeUpdateArgs includes source/target/type/mapping_rules", () => {
+  const opts = parseRelationTypeUpdateArgs([
+    "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2",
+    "--name", "new-name", "--type", "data_view",
+    "--mapping", "material_name:material_name",
+  ]);
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.rtId, "rt-1");
+  const body = JSON.parse(opts.body);
+  assert.equal(body.source_object_type_id, "ot-1");
+  assert.equal(body.target_object_type_id, "ot-2");
+  assert.equal(body.name, "new-name");
+  assert.equal(body.type, "data_view");
+  assert.equal(body.mapping_rules[0].source_property.name, "material_name");
+  assert.equal(body.mapping_rules[0].target_property.name, "material_name");
+});
+
+test("parseRelationTypeUpdateArgs defaults type to direct, empty mapping_rules", () => {
+  const opts = parseRelationTypeUpdateArgs([
+    "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2",
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.equal(body.source_object_type_id, "ot-1");
+  assert.equal(body.target_object_type_id, "ot-2");
+  assert.equal(body.type, "direct");
+  assert.deepEqual(body.mapping_rules, []);
+  assert.equal(body.name, undefined);
+});
+
+test("parseRelationTypeUpdateArgs supports multiple --mapping flags", () => {
+  const opts = parseRelationTypeUpdateArgs([
+    "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2",
+    "--mapping", "a:b", "--mapping", "c:d",
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.equal(body.mapping_rules.length, 2);
+  assert.equal(body.mapping_rules[1].source_property.name, "c");
+});
+
+test("parseRelationTypeUpdateArgs throws on invalid mapping format", () => {
+  assert.throws(
+    () => parseRelationTypeUpdateArgs([
+      "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2", "--mapping", "bad",
+    ]),
+    /Invalid mapping format/
+  );
+});
+
+test("parseRelationTypeUpdateArgs throws on missing --source/--target", () => {
+  assert.throws(
+    () => parseRelationTypeUpdateArgs(["kn-1", "rt-1", "--name", "x"]),
+    /--source and --target are required/
+  );
+});
+
+test("parseRelationTypeUpdateArgs throws on missing kn-id or rt-id", () => {
+  assert.throws(
+    () => parseRelationTypeUpdateArgs(["kn-1"]),
+    /Usage/
+  );
+});
+
+test("parseRelationTypeUpdateArgs throws help on --help", () => {
+  assert.throws(() => parseRelationTypeUpdateArgs(["--help"]), { message: "help" });
+});
+
+// ── relation-type delete parse tests ────────────────────────────────────────
+
+test("parseRelationTypeDeleteArgs parses kn-id and rt-ids", () => {
+  const opts = parseRelationTypeDeleteArgs(["kn-1", "rt-1,rt-2"]);
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.rtIds, "rt-1,rt-2");
+  assert.equal(opts.yes, false);
+});
+
+test("parseRelationTypeDeleteArgs parses -y flag", () => {
+  const opts = parseRelationTypeDeleteArgs(["kn-1", "rt-1", "-y"]);
+  assert.equal(opts.yes, true);
+});
+
+test("parseRelationTypeDeleteArgs throws on missing args", () => {
+  assert.throws(
+    () => parseRelationTypeDeleteArgs(["kn-1"]),
+    /Usage|Missing/
+  );
 });

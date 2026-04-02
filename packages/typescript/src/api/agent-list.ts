@@ -1,15 +1,5 @@
 import { HttpError } from "../utils/http.js";
-
-function buildHeaders(accessToken: string, businessDomain: string): Record<string, string> {
-  return {
-    accept: "application/json, text/plain, */*",
-    "accept-language": "zh-CN",
-    authorization: `Bearer ${accessToken}`,
-    token: accessToken,
-    "x-business-domain": businessDomain,
-    "x-language": "zh-CN",
-  };
-}
+import { buildHeaders } from "./headers.js";
 
 // ── List published agents ────────────────────────────────────────────────────
 

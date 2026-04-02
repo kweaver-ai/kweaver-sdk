@@ -1,17 +1,7 @@
 import { HttpError } from "../utils/http.js";
+import { buildHeaders } from "./headers.js";
 
 const VEGA_BASE = "/api/vega-backend/v1";
-
-function buildHeaders(accessToken: string, businessDomain: string): Record<string, string> {
-  return {
-    accept: "application/json, text/plain, */*",
-    "accept-language": "zh-cn",
-    authorization: `Bearer ${accessToken}`,
-    token: accessToken,
-    "x-business-domain": businessDomain,
-    "x-language": "zh-cn",
-  };
-}
 
 export interface VegaHealthOptions {
   baseUrl: string;

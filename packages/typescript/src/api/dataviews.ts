@@ -1,16 +1,6 @@
 import { createHash } from "node:crypto";
 import { HttpError } from "../utils/http.js";
-
-function buildHeaders(accessToken: string, businessDomain: string): Record<string, string> {
-  return {
-    accept: "application/json, text/plain, */*",
-    "accept-language": "zh-cn",
-    authorization: `Bearer ${accessToken}`,
-    token: accessToken,
-    "x-business-domain": businessDomain,
-    "x-language": "zh-cn",
-  };
-}
+import { buildHeaders } from "./headers.js";
 
 function extractViewId(data: unknown): string | null {
   if (Array.isArray(data) && data.length > 0) {

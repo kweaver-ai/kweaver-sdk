@@ -23,6 +23,7 @@ import {
   parseKnSearchArgs,
   parseKnBuildArgs,
   formatSimpleKnList,
+  parseConceptGroupArgs,
 } from "../src/commands/bkn.js";
 import { parseDsListArgs, parseImportCsvArgs } from "../src/commands/ds.js";
 import {
@@ -1814,4 +1815,55 @@ test("run vega unknown-subcommand exits 1", async () => {
   } finally {
     console.error = originalErr;
   }
+});
+
+test("parseConceptGroupArgs parses list args", () => {
+  const opts = parseConceptGroupArgs(["list", "kn-1"]);
+  assert.equal(opts.action, "list");
+  assert.equal(opts.knId, "kn-1");
+});
+
+test("parseConceptGroupArgs parses create with body", () => {
+  const opts = parseConceptGroupArgs(["create", "kn-1", '{"name":"g1"}']);
+  assert.equal(opts.action, "create");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.body, '{"name":"g1"}');
+});
+
+test("parseConceptGroupArgs parses delete with -y", () => {
+  const opts = parseConceptGroupArgs(["delete", "kn-1", "cg-1", "-y"]);
+  assert.equal(opts.action, "delete");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "cg-1");
+  assert.equal(opts.yes, true);
+});
+
+test("parseConceptGroupArgs parses add-members", () => {
+  const opts = parseConceptGroupArgs(["add-members", "kn-1", "cg-1", "ot-1,ot-2"]);
+  assert.equal(opts.action, "add-members");
+  assert.equal(opts.knId, "kn-1");
+  assert.equal(opts.itemId, "cg-1");
+  assert.equal(opts.extra, "ot-1,ot-2");
+});
+
+test("parseConceptGroupArgs parses remove-members with -y", () => {
+  const opts = parseConceptGroupArgs(["remove-members", "kn-1", "cg-1", "ot-1", "-y"]);
+  assert.equal(opts.action, "remove-members");
+  assert.equal(opts.itemId, "cg-1");
+  assert.equal(opts.extra, "ot-1");
+  assert.equal(opts.yes, true);
+});
+
+test("run bkn concept-group --help shows all actions", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
+  try {
+    assert.equal(await run(["bkn", "concept-group", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("concept-group list"));
+    assert.ok(help.includes("concept-group create"));
+    assert.ok(help.includes("add-members"));
+    assert.ok(help.includes("remove-members"));
+  } finally { console.log = originalLog; }
 });

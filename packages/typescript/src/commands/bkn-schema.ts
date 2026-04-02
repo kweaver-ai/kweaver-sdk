@@ -1,5 +1,9 @@
 import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
 import {
+  listConceptGroups, getConceptGroup, createConceptGroup, updateConceptGroup,
+  deleteConceptGroup, addConceptGroupMembers, removeConceptGroupMembers,
+} from "../api/bkn-backend.js";
+import {
   listObjectTypes,
   getObjectType,
   createObjectTypes,
@@ -1247,5 +1251,123 @@ query/execute: Query or execute actions. execute has side effects - only use whe
   }
 
   console.error(`Unknown action-type action: ${action}. Use list, query, or execute.`);
+  return 1;
+}
+
+// ── Concept-group commands ─────────────────────────────────────────────────────
+
+export interface ConceptGroupParsed {
+  action: string;
+  knId: string;
+  itemId: string;
+  body: string;
+  extra: string;
+  yes: boolean;
+  pretty: boolean;
+  businessDomain: string;
+}
+
+export function parseConceptGroupArgs(args: string[]): ConceptGroupParsed {
+  const [action, ...rest] = args;
+  if (!action || action === "--help" || action === "-h") throw new Error("help");
+
+  let pretty = true;
+  let businessDomain = "";
+  let yes = false;
+  const positional: string[] = [];
+
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--pretty") { pretty = true; continue; }
+    if ((arg === "-bd" || arg === "--biz-domain") && rest[i + 1]) { businessDomain = rest[++i]; continue; }
+    if (arg === "-y" || arg === "--yes") { yes = true; continue; }
+    positional.push(arg);
+  }
+
+  const [knId, itemId, extra] = positional;
+  if (!knId) throw new Error("Missing kn-id. Usage: kweaver bkn concept-group <action> <kn-id> ...");
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+
+  return { action, knId, itemId: itemId || "", body: itemId || "", extra: extra || "", yes, pretty, businessDomain };
+}
+
+export async function runKnConceptGroupCommand(args: string[]): Promise<number> {
+  let parsed: ConceptGroupParsed;
+  try {
+    parsed = parseConceptGroupArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver bkn concept-group <action> <kn-id> [args] [--pretty] [-bd value]
+
+Actions:
+  concept-group list <kn-id>                              List concept groups
+  concept-group get <kn-id> <cg-id>                       Get concept group details
+  concept-group create <kn-id> '<json>'                   Create concept group
+  concept-group update <kn-id> <cg-id> '<json>'           Update concept group
+  concept-group delete <kn-id> <cg-id> [-y]              Delete concept group
+  add-members <kn-id> <cg-id> <ot-ids>     Add object type members (comma-separated)
+  remove-members <kn-id> <cg-id> <ot-ids> [-y]  Remove object type members`);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  const { action, knId, itemId, body, extra, yes, pretty, businessDomain } = parsed;
+  const token = await ensureValidToken();
+  const base = { baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain };
+
+  if (action === "list") {
+    const result = await listConceptGroups({ ...base, knId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "get") {
+    if (!itemId) { console.error("Missing cg-id"); return 1; }
+    const result = await getConceptGroup({ ...base, knId, cgId: itemId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "create") {
+    if (!itemId) { console.error("Missing JSON body"); return 1; }
+    const result = await createConceptGroup({ ...base, knId, body });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "update") {
+    if (!itemId || !extra) { console.error("Missing cg-id or JSON body"); return 1; }
+    const result = await updateConceptGroup({ ...base, knId, cgId: itemId, body: extra });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "delete") {
+    if (!itemId) { console.error("Missing cg-id"); return 1; }
+    if (!yes) {
+      const confirmed = await confirmYes(`Delete concept group ${itemId}?`);
+      if (!confirmed) { console.log("Cancelled."); return 0; }
+    }
+    const result = await deleteConceptGroup({ ...base, knId, cgId: itemId });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "add-members") {
+    if (!itemId || !extra) { console.error("Missing cg-id or ot-ids"); return 1; }
+    const result = await addConceptGroupMembers({ ...base, knId, cgId: itemId, body: JSON.stringify({ ot_ids: extra.split(",") }) });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+  if (action === "remove-members") {
+    if (!itemId || !extra) { console.error("Missing cg-id or ot-ids"); return 1; }
+    if (!yes) {
+      const confirmed = await confirmYes(`Remove members ${extra} from concept group ${itemId}?`);
+      if (!confirmed) { console.log("Cancelled."); return 0; }
+    }
+    const result = await removeConceptGroupMembers({ ...base, knId, cgId: itemId, otIds: extra });
+    console.log(formatCallOutput(result, pretty));
+    return 0;
+  }
+
+  console.error(`Unknown concept-group action: ${action}`);
   return 1;
 }

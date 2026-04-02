@@ -14,6 +14,7 @@ import {
   runKnObjectTypeCommand,
   runKnRelationTypeCommand,
   runKnActionTypeCommand,
+  runKnConceptGroupCommand,
 } from "./bkn-schema.js";
 import {
   runKnSubgraphCommand,
@@ -58,6 +59,7 @@ export {
   runKnObjectTypeCommand,
   runKnRelationTypeCommand,
   runKnActionTypeCommand,
+  parseConceptGroupArgs,
 } from "./bkn-schema.js";
 export type {
   KnObjectTypeQueryOptions,
@@ -552,6 +554,7 @@ Subcommands:
   action-log list <kn-id> [options]   List action execution logs
   action-log get <kn-id> <log-id>   Get single execution log
   action-log cancel <kn-id> <log-id>   Cancel running execution (has side effects)
+  concept-group list|get|create|update|delete|add-members|remove-members <kn-id> ...
 
 Use 'kweaver bkn <subcommand> --help' for subcommand options.`;
 
@@ -586,6 +589,7 @@ export async function runKnCommand(args: string[]): Promise<number> {
     if (subcommand === "action-type") return runKnActionTypeCommand(rest);
     if (subcommand === "action-execution") return runKnActionExecutionCommand(rest);
     if (subcommand === "action-log") return runKnActionLogCommand(rest);
+    if (subcommand === "concept-group") return runKnConceptGroupCommand(rest);
     return Promise.resolve(-1);
   };
 

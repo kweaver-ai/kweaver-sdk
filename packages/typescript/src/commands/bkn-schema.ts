@@ -745,6 +745,8 @@ export function parseRelationTypeUpdateArgs(args: string[]): {
   let name: string | undefined;
   let source: string | undefined;
   let target: string | undefined;
+  let type: string | undefined;
+  const mappings: [string, string][] = [];
   let businessDomain = "";
   let pretty = true;
   const positional: string[] = [];
@@ -764,6 +766,19 @@ export function parseRelationTypeUpdateArgs(args: string[]): {
       target = args[++i];
       continue;
     }
+    if (arg === "--type" && args[i + 1]) {
+      type = args[++i];
+      continue;
+    }
+    if (arg === "--mapping" && args[i + 1]) {
+      const m = args[++i];
+      if (!m.includes(":")) {
+        throw new Error(`Invalid mapping format '${m}'. Expected source_prop:target_prop.`);
+      }
+      const [s, t] = m.split(":", 2);
+      mappings.push([s, t]);
+      continue;
+    }
     if ((arg === "-bd" || arg === "--biz-domain") && args[i + 1]) {
       businessDomain = args[++i];
       continue;
@@ -777,7 +792,7 @@ export function parseRelationTypeUpdateArgs(args: string[]): {
 
   const [knId, rtId] = positional;
   if (!knId || !rtId) {
-    throw new Error("Usage: kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X]");
+    throw new Error("Usage: kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X] [--type direct|data_view] [--mapping src:tgt ...] [--type direct|data_view] [--mapping src:tgt ...]");
   }
   if (!source || !target) {
     throw new Error("--source and --target are required for relation-type update (API requires source_object_type_id and target_object_type_id).");
@@ -785,6 +800,11 @@ export function parseRelationTypeUpdateArgs(args: string[]): {
   const body: Record<string, unknown> = {
     source_object_type_id: source,
     target_object_type_id: target,
+    type: type || "direct",
+    mapping_rules: mappings.map(([s, t]) => ({
+      source_property: { name: s },
+      target_property: { name: t },
+    })),
   };
   if (name !== undefined) body.name = name;
   if (!businessDomain) businessDomain = resolveBusinessDomain();
@@ -1020,7 +1040,7 @@ export async function runKnRelationTypeCommand(args: string[]): Promise<number> 
     console.log(`kweaver bkn relation-type list <kn-id> [--pretty] [-bd value]
 kweaver bkn relation-type get <kn-id> <rt-id> [--pretty] [-bd value]
 kweaver bkn relation-type create <kn-id> --name X --source <ot-id> --target <ot-id> [--mapping src:tgt ...]
-kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X]
+kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X] [--type direct|data_view] [--mapping src:tgt ...]
 kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]
 
 list: List relation types (schema) from ontology-manager.
@@ -1123,7 +1143,7 @@ create/update/delete: Schema CRUD.`);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
       console.log(`kweaver bkn relation-type create <kn-id> --name X --source <ot-id> --target <ot-id> [--mapping src:tgt ...]
-kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X]
+kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X] [--type direct|data_view] [--mapping src:tgt ...]
 kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]`);
       return 0;
     }

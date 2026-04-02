@@ -2037,9 +2037,11 @@ test("parseRelationTypeCreateArgs throws on missing required flags", () => {
 
 // ── relation-type update parse tests ────────────────────────────────────────
 
-test("parseRelationTypeUpdateArgs includes source_object_type_id and target_object_type_id", () => {
+test("parseRelationTypeUpdateArgs includes source/target/type/mapping_rules", () => {
   const opts = parseRelationTypeUpdateArgs([
-    "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2", "--name", "new-name",
+    "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2",
+    "--name", "new-name", "--type", "data_view",
+    "--mapping", "material_name:material_name",
   ]);
   assert.equal(opts.knId, "kn-1");
   assert.equal(opts.rtId, "rt-1");
@@ -2047,16 +2049,40 @@ test("parseRelationTypeUpdateArgs includes source_object_type_id and target_obje
   assert.equal(body.source_object_type_id, "ot-1");
   assert.equal(body.target_object_type_id, "ot-2");
   assert.equal(body.name, "new-name");
+  assert.equal(body.type, "data_view");
+  assert.equal(body.mapping_rules[0].source_property.name, "material_name");
+  assert.equal(body.mapping_rules[0].target_property.name, "material_name");
 });
 
-test("parseRelationTypeUpdateArgs works without --name (only source/target)", () => {
+test("parseRelationTypeUpdateArgs defaults type to direct, empty mapping_rules", () => {
   const opts = parseRelationTypeUpdateArgs([
     "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2",
   ]);
   const body = JSON.parse(opts.body);
   assert.equal(body.source_object_type_id, "ot-1");
   assert.equal(body.target_object_type_id, "ot-2");
+  assert.equal(body.type, "direct");
+  assert.deepEqual(body.mapping_rules, []);
   assert.equal(body.name, undefined);
+});
+
+test("parseRelationTypeUpdateArgs supports multiple --mapping flags", () => {
+  const opts = parseRelationTypeUpdateArgs([
+    "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2",
+    "--mapping", "a:b", "--mapping", "c:d",
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.equal(body.mapping_rules.length, 2);
+  assert.equal(body.mapping_rules[1].source_property.name, "c");
+});
+
+test("parseRelationTypeUpdateArgs throws on invalid mapping format", () => {
+  assert.throws(
+    () => parseRelationTypeUpdateArgs([
+      "kn-1", "rt-1", "--source", "ot-1", "--target", "ot-2", "--mapping", "bad",
+    ]),
+    /Invalid mapping format/
+  );
 });
 
 test("parseRelationTypeUpdateArgs throws on missing --source/--target", () => {

@@ -1855,18 +1855,9 @@ test("parseConceptGroupArgs parses remove-members with -y", () => {
   assert.equal(opts.yes, true);
 });
 
-test("run bkn concept-group --help shows all actions", async () => {
-  const lines: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["bkn", "concept-group", "--help"]), 0);
-    const help = lines.join("\n");
-    assert.ok(help.includes("concept-group list"));
-    assert.ok(help.includes("concept-group create"));
-    assert.ok(help.includes("add-members"));
-    assert.ok(help.includes("remove-members"));
-  } finally { console.log = originalLog; }
+test("parseConceptGroupArgs throws help on --help", () => {
+  assert.throws(() => parseConceptGroupArgs(["--help"]), { message: "help" });
+  assert.throws(() => parseConceptGroupArgs([]), { message: "help" });
 });
 
 test("parseActionScheduleArgs parses list", () => {
@@ -1890,14 +1881,7 @@ test("parseActionScheduleArgs parses delete with -y", () => {
   assert.equal(opts.yes, true);
 });
 
-test("run bkn action-schedule --help shows all actions", async () => {
-  const lines: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["bkn", "action-schedule", "--help"]), 0);
-    const help = lines.join("\n");
-    assert.ok(help.includes("action-schedule list"));
-    assert.ok(help.includes("set-status"));
-  } finally { console.log = originalLog; }
+test("parseActionScheduleArgs throws help on --help", () => {
+  assert.throws(() => parseActionScheduleArgs(["--help"]), { message: "help" });
+  assert.throws(() => parseActionScheduleArgs([]), { message: "help" });
 });

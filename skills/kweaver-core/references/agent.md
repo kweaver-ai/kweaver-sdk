@@ -2,7 +2,7 @@
 
 Decision Agent CRUD、发布管理与对话。
 
-与 CLI 一致：运行 `kweaver agent` 或 `kweaver agent chat --help` 等可查看与当前版本同步的用法。`history` 的参数为 **conversation_id**（由 `agent sessions` 返回），不是 `agent_id` + `session_id` 两个参数。
+与 CLI 一致：运行 `kweaver agent` 或 `kweaver agent chat --help` 等可查看与当前版本同步的用法。
 
 ## CRUD 命令
 
@@ -57,7 +57,7 @@ kweaver agent unpublish <agent_id>
 kweaver agent chat <agent_id> -m '<message>' [--conversation-id <id>] [--stream/--no-stream]
 kweaver agent chat <agent_id>                    # 交互式模式
 kweaver agent sessions <agent_id> [--limit <n>]
-kweaver agent history <conversation_id> [--limit <n>]
+kweaver agent history <agent_id> <conversation_id>
 kweaver agent trace <conversation_id> [--pretty|--compact]
 ```
 
@@ -196,7 +196,7 @@ kweaver agent chat $AGENT_ID -m "帮忙审核合同：JJFAGHBJF25090012"
 # 多轮对话
 kweaver agent chat <agent_id> -m "分析库存数据" --no-stream
 kweaver agent chat <agent_id> -m "给出改进建议" --conversation-id <conv_id>
-kweaver agent history <conv_id>
+kweaver agent history <agent_id> <conv_id>
 ```
 ## Trace 数据分析
 

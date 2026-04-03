@@ -1,17 +1,18 @@
 export interface ListConversationsOptions {
   baseUrl: string;
   accessToken: string;
-  agentId: string;
+  agentKey: string;
   businessDomain?: string;
-  limit?: number;
+  page?: number;
+  size?: number;
 }
 
 export interface ListMessagesOptions {
   baseUrl: string;
   accessToken: string;
+  agentKey: string;
   conversationId: string;
   businessDomain?: string;
-  limit?: number;
 }
 
 export interface GetTracesOptions {
@@ -20,14 +21,14 @@ export interface GetTracesOptions {
   conversationId: string;
 }
 
-function buildConversationsUrl(baseUrl: string, agentId: string): string {
+function buildConversationsUrl(baseUrl: string, agentKey: string): string {
   const base = baseUrl.replace(/\/+$/, "");
-  return `${base}/api/agent-app/v1/app/${agentId}/conversations`;
+  return `${base}/api/agent-factory/v1/app/${agentKey}/conversation`;
 }
 
-function buildMessagesUrl(baseUrl: string, conversationId: string): string {
+function buildMessagesUrl(baseUrl: string, agentKey: string, conversationId: string): string {
   const base = baseUrl.replace(/\/+$/, "");
-  return `${base}/api/agent-app/v1/conversations/${conversationId}/messages`;
+  return `${base}/api/agent-factory/v1/app/${agentKey}/conversation/${conversationId}`;
 }
 
 /**
@@ -35,11 +36,10 @@ function buildMessagesUrl(baseUrl: string, conversationId: string): string {
  * Returns empty array on 404 (endpoint may not be available in all deployments).
  */
 export async function listConversations(opts: ListConversationsOptions): Promise<string> {
-  const { baseUrl, accessToken, agentId, businessDomain = "bd_public", limit } = opts;
-  const url = new URL(buildConversationsUrl(baseUrl, agentId));
-  if (limit !== undefined) {
-    url.searchParams.set("limit", String(limit));
-  }
+  const { baseUrl, accessToken, agentKey, businessDomain = "bd_public", page = 1, size = 10 } = opts;
+  const url = new URL(buildConversationsUrl(baseUrl, agentKey));
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("size", String(size));
 
   const response = await fetch(url.toString(), {
     method: "GET",
@@ -94,11 +94,8 @@ export async function getTracesByConversation(opts: GetTracesOptions): Promise<s
  * Returns empty array on 404 (endpoint may not be available in all deployments).
  */
 export async function listMessages(opts: ListMessagesOptions): Promise<string> {
-  const { baseUrl, accessToken, conversationId, businessDomain = "bd_public", limit } = opts;
-  const url = new URL(buildMessagesUrl(baseUrl, conversationId));
-  if (limit !== undefined) {
-    url.searchParams.set("limit", String(limit));
-  }
+  const { baseUrl, accessToken, agentKey, conversationId, businessDomain = "bd_public" } = opts;
+  const url = buildMessagesUrl(baseUrl, agentKey, conversationId);
 
   const response = await fetch(url.toString(), {
     method: "GET",

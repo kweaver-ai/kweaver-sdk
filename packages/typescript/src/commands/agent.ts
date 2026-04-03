@@ -6,6 +6,7 @@ import {
   publishAgent, unpublishAgent, listPersonalAgents, listPublishedAgentTemplates, getPublishedAgentTemplate, listAgentCategories,
 } from "../api/agent-list.js";
 import { listConversations, listMessages, getTracesByConversation } from "../api/conversations.js";
+import { fetchAgentInfo } from "../api/agent-chat.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { promises as fs } from "fs";
@@ -507,23 +508,26 @@ export function parseAgentSessionsArgs(args: string[]): AgentSessionsOptions {
 }
 
 export interface AgentHistoryOptions {
+  agentId: string;
   conversationId: string;
   businessDomain: string;
-  limit?: number;
   pretty: boolean;
 }
 
 export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
-  const conversationId = args[0];
+  const agentId = args[0];
+  if (!agentId || agentId.startsWith("-")) {
+    throw new Error("Missing agent_id");
+  }
+  const conversationId = args[1];
   if (!conversationId || conversationId.startsWith("-")) {
     throw new Error("Missing conversation_id");
   }
 
   let businessDomain = "";
-  let limit = 30;
   let pretty = true;
 
-  for (let i = 1; i < args.length; i += 1) {
+  for (let i = 2; i < args.length; i += 1) {
     const arg = args[i];
 
     if (arg === "--help" || arg === "-h") {
@@ -535,13 +539,6 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
       if (!businessDomain || businessDomain.startsWith("-")) {
         throw new Error("Missing value for biz-domain flag");
       }
-      i += 1;
-      continue;
-    }
-
-    if (arg === "--limit") {
-      limit = parseInt(args[i + 1] ?? "30", 10);
-      if (Number.isNaN(limit) || limit < 1) limit = 30;
       i += 1;
       continue;
     }
@@ -560,7 +557,7 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
   }
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { conversationId, businessDomain, limit, pretty };
+  return { agentId, conversationId, businessDomain, pretty };
 }
 
 export interface AgentTraceOptions {
@@ -623,7 +620,7 @@ Subcommands:
   chat <agent_id>                    Start interactive chat with an agent
   chat <agent_id> -m "message"       Send a single message (non-interactive)
   sessions <agent_id>                List all conversations for an agent
-  history <conversation_id>          Show message history for a conversation
+  history <agent_id> <conversation_id> Show message history for a conversation
   trace <conversation_id>            Get trace data for a conversation`);
     return Promise.resolve(0);
   }
@@ -809,12 +806,11 @@ Options:
 
   if (subcommand === "history") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent history <conversation_id> [options]
+      console.log(`kweaver agent history <agent_id> <conversation_id> [options]
 
 Show message history for a conversation.
 
 Options:
-  --limit <n>              Max messages to return (default: 30)
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
       return 0;
@@ -1063,12 +1059,21 @@ Options:
 
   try {
     const token = await ensureValidToken();
-    const body = await listConversations({
+    // Get agent key first
+    const agentInfo = await fetchAgentInfo({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
       agentId: options.agentId,
+      version: "v0",
       businessDomain: options.businessDomain,
-      limit: options.limit,
+    });
+    const body = await listConversations({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      agentKey: agentInfo.key,
+      businessDomain: options.businessDomain,
+      page: 1,
+      size: options.limit ?? 30,
     });
     console.log(formatCallOutput(body, options.pretty));
     return 0;
@@ -1084,12 +1089,11 @@ async function runAgentHistoryCommand(args: string[]): Promise<number> {
     options = parseAgentHistoryArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent history <conversation_id> [options]
+      console.log(`kweaver agent history <agent_id> <conversation_id> [options]
 
 Show message history for a conversation.
 
 Options:
-  --limit <n>              Max messages to return (default: 30)
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
       return 0;
@@ -1100,12 +1104,20 @@ Options:
 
   try {
     const token = await ensureValidToken();
+    // Get agent key first
+    const agentInfo = await fetchAgentInfo({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      agentId: options.agentId,
+      version: "v0",
+      businessDomain: options.businessDomain,
+    });
     const body = await listMessages({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
+      agentKey: agentInfo.key,
       conversationId: options.conversationId,
       businessDomain: options.businessDomain,
-      limit: options.limit,
     });
     console.log(formatCallOutput(body, options.pretty));
     return 0;

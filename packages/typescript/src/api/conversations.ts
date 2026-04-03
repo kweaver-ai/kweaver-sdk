@@ -74,11 +74,19 @@ export async function getTracesByConversation(opts: GetTracesOptions): Promise<s
   const response = await fetch(url, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       accept: "application/json",
       authorization: `Bearer ${accessToken}`,
       token: accessToken,
       "x-business-domain": businessDomain,
     },
+    body: JSON.stringify({
+      agent_id: agentId,
+      start_time: 1,
+      end_time: Date.now() + 86400000,
+      page: 1,
+      size: 50,
+    }),
   });
 
   const body = await response.text();

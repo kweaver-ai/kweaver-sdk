@@ -125,3 +125,75 @@ def test_status_mapping():
     client = make_client(handler)
     agents = client.agents.list()
     assert agents[0].status == "published"
+
+
+def _template_list_json(**overrides):
+    """Simulates agent-factory /published/agent-tpl response item."""
+    base = {
+        "tpl_id": "tpl_01",
+        "name": "合同审核助手模板",
+        "profile": "合同审核领域问答",
+        "config": {"key": "value"},
+    }
+    base.update(overrides)
+    return base
+
+
+def _category_json(**overrides):
+    """Simulates agent-factory /category response item."""
+    base = {
+        "id": "cat_01",
+        "name": "分类1",
+        "description": "描述",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_list_personal_agents():
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"entries": [_agent_list_json()]})
+
+    client = make_client(handler)
+    agents = client.agents.list_personal()
+    assert len(agents) == 1
+    assert agents[0].id == "agent_01"
+
+
+def test_list_templates():
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"entries": [_template_list_json()]})
+
+    client = make_client(handler)
+    templates = client.agents.list_templates()
+    assert len(templates) == 1
+    assert templates[0].id == "tpl_01"
+
+
+def test_get_template():
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_template_list_json())
+
+    client = make_client(handler)
+    template = client.agents.get_template("tpl_01")
+    assert template.id == "tpl_01"
+
+
+def test_list_categories():
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"entries": [_category_json()]})
+
+    client = make_client(handler)
+    categories = client.agents.list_categories()
+    assert len(categories) == 1
+    assert categories[0].id == "cat_01"
+
+
+def test_publish_with_category_id(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={})
+
+    client = make_client(handler, capture)
+    client.agents.publish("agent_01", category_id="cat_01")
+    body = capture.last_body()
+    assert body["category_ids"] == ["cat_01"]

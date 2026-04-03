@@ -57,9 +57,9 @@ interface StreamAccumulator {
 const CHAT_PATH = "/api/agent-factory/v1/app";
 const AGENT_INFO_PATH = "/api/agent-factory/v3/agent-market/agent";
 
-export function buildChatUrl(baseUrl: string, agentId: string): string {
+export function buildChatUrl(baseUrl: string, agentKey: string): string {
   const base = baseUrl.replace(/\/+$/, "");
-  return `${base}${CHAT_PATH}/${agentId}/chat/completion`;
+  return `${base}${CHAT_PATH}/${agentKey}/chat/completion`;
 }
 
 export function buildAgentInfoUrl(baseUrl: string, agentId: string, version: string): string {
@@ -337,7 +337,7 @@ export async function sendChatRequest(options: SendChatRequestOptions): Promise<
     businessDomain = "bd_public",
   } = options;
 
-  const url = buildChatUrl(baseUrl, agentId);
+  const url = buildChatUrl(baseUrl, agentKey);
   const body: Record<string, unknown> = {
     agent_id: agentId,
     agent_key: agentKey,
@@ -428,7 +428,7 @@ export async function sendChatRequestStream(
     businessDomain = "bd_public",
   } = opts;
 
-  const url = buildChatUrl(baseUrl, agentId);
+  const url = buildChatUrl(baseUrl, agentKey);
   const body: Record<string, unknown> = {
     agent_id: agentId,
     agent_key: agentKey,

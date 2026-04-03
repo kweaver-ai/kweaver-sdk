@@ -36,6 +36,9 @@ import {
   parseAgentSessionsArgs,
   parseAgentHistoryArgs,
   parseAgentGetArgs,
+  parseAgentPersonalListArgs,
+  parseAgentTemplateListArgs,
+  parseAgentTemplateGetArgs,
   formatSimpleAgentList,
 } from "../src/commands/agent.js";
 import { parseTokenArgs } from "../src/commands/token.js";
@@ -1241,6 +1244,52 @@ test("parseAgentHistoryArgs parses --limit", () => {
   assert.equal(opts.limit, 20);
 });
 
+test("parseAgentHistoryArgs parses agentId and conversationId", () => {
+  const opts = parseAgentHistoryArgs(["agent-xyz", "conv-abc"]);
+  assert.equal(opts.agentId, "agent-xyz");
+  assert.equal(opts.conversationId, "conv-abc");
+  assert.equal(opts.pretty, true);
+  assert.equal(opts.limit, 30);
+});
+
+test("parseAgentHistoryArgs parses -bd with single conversationId", () => {
+  const opts = parseAgentHistoryArgs(["conv-abc", "-bd", "bd_enterprise"]);
+  assert.equal(opts.conversationId, "conv-abc");
+  assert.equal(opts.businessDomain, "bd_enterprise");
+  assert.equal(opts.agentId, undefined);
+});
+
+test("parseAgentHistoryArgs parses -bd with agentId and conversationId", () => {
+  const opts = parseAgentHistoryArgs(["agent-xyz", "conv-abc", "-bd", "bd_enterprise"]);
+  assert.equal(opts.agentId, "agent-xyz");
+  assert.equal(opts.conversationId, "conv-abc");
+  assert.equal(opts.businessDomain, "bd_enterprise");
+});
+
+test("parseAgentHistoryArgs parses --compact", () => {
+  const opts = parseAgentHistoryArgs(["conv-abc", "--compact"]);
+  assert.equal(opts.conversationId, "conv-abc");
+  assert.equal(opts.pretty, false);
+});
+
+test("parseAgentHistoryArgs parses all options with agentId and conversationId", () => {
+  const opts = parseAgentHistoryArgs(["agent-xyz", "conv-abc", "--limit", "50", "-bd", "bd_custom", "--compact"]);
+  assert.equal(opts.agentId, "agent-xyz");
+  assert.equal(opts.conversationId, "conv-abc");
+  assert.equal(opts.limit, 50);
+  assert.equal(opts.businessDomain, "bd_custom");
+  assert.equal(opts.pretty, false);
+});
+
+test("parseAgentHistoryArgs parses all options with single conversationId", () => {
+  const opts = parseAgentHistoryArgs(["conv-abc", "--limit", "100", "-bd", "bd_enterprise", "--pretty"]);
+  assert.equal(opts.agentId, undefined);
+  assert.equal(opts.conversationId, "conv-abc");
+  assert.equal(opts.limit, 100);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+  assert.equal(opts.pretty, true);
+});
+
 test("parseAgentGetArgs parses agent_id and options", () => {
   const opts = parseAgentGetArgs(["agent-123", "--verbose", "-bd", "bd_enterprise"]);
   assert.equal(opts.agentId, "agent-123");
@@ -1257,6 +1306,130 @@ test("parseAgentGetArgs throws on unknown flag", () => {
   assert.throws(
     () => parseAgentGetArgs(["agent-123", "--unknown"]),
     /Unsupported agent get argument/
+  );
+});
+
+// ─── Agent Personal List Tests ────────────────────────────────────────────────────────
+
+test("parseAgentPersonalListArgs parses defaults", () => {
+  const opts = parseAgentPersonalListArgs([]);
+  assert.equal(opts.name, "");
+  assert.equal(opts.pagination_marker_str, "");
+  assert.equal(opts.publish_status, "");
+  assert.equal(opts.publish_to_be, "");
+  assert.equal(opts.size, 48);
+  assert.equal(opts.businessDomain, "bd_public");
+  assert.equal(opts.pretty, true);
+  assert.equal(opts.verbose, false);
+});
+
+test("parseAgentPersonalListArgs parses --name and --size", () => {
+  const opts = parseAgentPersonalListArgs(["--name", "test", "--size", "20"]);
+  assert.equal(opts.name, "test");
+  assert.equal(opts.size, 20);
+});
+
+test("parseAgentPersonalListArgs parses --publish-status and --publish-to-be", () => {
+  const opts = parseAgentPersonalListArgs(["--publish-status", "published", "--publish-to-be", "yes"]);
+  assert.equal(opts.publish_status, "published");
+  assert.equal(opts.publish_to_be, "yes");
+});
+
+test("parseAgentPersonalListArgs parses -bd and --verbose", () => {
+  const opts = parseAgentPersonalListArgs(["-bd", "bd_enterprise", "--verbose"]);
+  assert.equal(opts.businessDomain, "bd_enterprise");
+  assert.equal(opts.verbose, true);
+});
+
+test("parseAgentPersonalListArgs parses --pagination-marker", () => {
+  const opts = parseAgentPersonalListArgs(["--pagination-marker", "marker123"]);
+  assert.equal(opts.pagination_marker_str, "marker123");
+});
+
+test("parseAgentPersonalListArgs throws on unknown flag", () => {
+  assert.throws(
+    () => parseAgentPersonalListArgs(["--unknown"]),
+    /Unsupported agent personal-list argument/
+  );
+});
+
+// ─── Agent Template List Tests ────────────────────────────────────────────────────────
+
+test("parseAgentTemplateListArgs parses defaults", () => {
+  const opts = parseAgentTemplateListArgs([]);
+  assert.equal(opts.category_id, "");
+  assert.equal(opts.name, "");
+  assert.equal(opts.pagination_marker_str, "");
+  assert.equal(opts.size, 48);
+  assert.equal(opts.businessDomain, "bd_public");
+  assert.equal(opts.pretty, true);
+  assert.equal(opts.verbose, false);
+});
+
+test("parseAgentTemplateListArgs parses --category-id and --name", () => {
+  const opts = parseAgentTemplateListArgs(["--category-id", "cat123", "--name", "template"]);
+  assert.equal(opts.category_id, "cat123");
+  assert.equal(opts.name, "template");
+});
+
+test("parseAgentTemplateListArgs parses --size and -bd", () => {
+  const opts = parseAgentTemplateListArgs(["--size", "100", "-bd", "bd_custom"]);
+  assert.equal(opts.size, 100);
+  assert.equal(opts.businessDomain, "bd_custom");
+});
+
+test("parseAgentTemplateListArgs parses --pagination-marker", () => {
+  const opts = parseAgentTemplateListArgs(["--pagination-marker", "page2"]);
+  assert.equal(opts.pagination_marker_str, "page2");
+});
+
+test("parseAgentTemplateListArgs parses --verbose", () => {
+  const opts = parseAgentTemplateListArgs(["--verbose"]);
+  assert.equal(opts.verbose, true);
+});
+
+test("parseAgentTemplateListArgs throws on unknown flag", () => {
+  assert.throws(
+    () => parseAgentTemplateListArgs(["--unknown"]),
+    /Unsupported agent template-list argument/
+  );
+});
+
+// ─── Agent Template Get Tests ──────────────────────────────────────────────────────────
+
+test("parseAgentTemplateGetArgs requires template_id", () => {
+  assert.throws(
+    () => parseAgentTemplateGetArgs([]),
+    /Missing template_id/
+  );
+});
+
+test("parseAgentTemplateGetArgs parses template_id", () => {
+  const opts = parseAgentTemplateGetArgs(["tpl-123"]);
+  assert.equal(opts.templateId, "tpl-123");
+  assert.equal(opts.businessDomain, "bd_public");
+  assert.equal(opts.pretty, true);
+  assert.equal(opts.verbose, false);
+  assert.equal(opts.saveConfig, null);
+});
+
+test("parseAgentTemplateGetArgs parses -bd and --verbose", () => {
+  const opts = parseAgentTemplateGetArgs(["tpl-456", "-bd", "bd_enterprise", "--verbose"]);
+  assert.equal(opts.templateId, "tpl-456");
+  assert.equal(opts.businessDomain, "bd_enterprise");
+  assert.equal(opts.verbose, true);
+});
+
+test("parseAgentTemplateGetArgs parses --save-config", () => {
+  const opts = parseAgentTemplateGetArgs(["tpl-789", "--save-config", "/tmp/config.json"]);
+  assert.equal(opts.templateId, "tpl-789");
+  assert.equal(opts.saveConfig, "/tmp/config.json");
+});
+
+test("parseAgentTemplateGetArgs throws on unknown flag", () => {
+  assert.throws(
+    () => parseAgentTemplateGetArgs(["tpl-123", "--unknown"]),
+    /Unsupported agent template-get argument/
   );
 });
 

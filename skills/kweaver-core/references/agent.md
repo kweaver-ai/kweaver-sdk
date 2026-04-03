@@ -2,25 +2,54 @@
 
 Decision Agent CRUD、发布管理与对话。
 
-与 CLI 一致：运行 `kweaver agent` 或 `kweaver agent chat --help` 等可查看与当前版本同步的用法。`history` 的参数为 **conversation_id**（由 `agent sessions` 返回），不是 `agent_id` + `session_id` 两个参数。
+与 CLI 一致：运行 `kweaver agent` 或 `kweaver agent chat --help` 等可查看与当前版本同步的用法。
 
 ## CRUD 命令
 
 ```bash
+# 已发布的 Agent
 kweaver agent list [--name <kw>] [--limit 50] [--verbose]
-kweaver agent get <agent_id> [--verbose]
+kweaver agent get <agent_id> [--verbose] [--save-config <path>]
 kweaver agent get-by-key <key>
-kweaver agent create --name <name> --profile <profile> --llm-id <model_id> [--key <key>] [--product-key DIP|AnyShare|ChatBI] [--system-prompt <sp>] [--llm-max-tokens 4096]
-kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <sp>]
+
+# 私人空间的 Agent
+kweaver agent personal-list [--name <kw>] [--size 48] [--verbose]
+
+# Agent 模板
+kweaver agent template-list [--name <kw>] [--size 48] [--verbose]
+kweaver agent template-get <template_id> [--save-config <path>] [--verbose]
+
+# Agent 分类
+kweaver agent category-list [--verbose]
+
+# 创建 Agent
+kweaver agent create --name <name> --profile <profile> --llm-id <model_id> [--key <key>] [--product-key DIP|AnyShare|ChatBI] [--system-prompt <sp>] [--llm-max-tokens 4096] [--config <json|path>]
+
+# 更新/删除
+kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <sp>] [--knowledge-network-id <id> [--config-path <path>]]
 kweaver agent delete <agent_id> [-y]
 ```
 
 ## 发布管理
 
 ```bash
-kweaver agent publish <agent_id>
+kweaver agent publish <agent_id> [--category-id <category_id>]
 kweaver agent unpublish <agent_id>
 ```
+
+**发布说明**：
+- `--category-id`：指定 Agent 分类（可选）
+- 默认发布到广场（square）
+- 发布时会使用默认配置：
+  ```json
+  {
+    "business_domain_id": "bd_public",
+    "category_ids": ["<category_id>"] | [],
+    "description": "",
+    "publish_to_where": ["square"],
+    "pms_control": null
+  }
+  ```
 
 ## 对话
 
@@ -28,7 +57,7 @@ kweaver agent unpublish <agent_id>
 kweaver agent chat <agent_id> -m '<message>' [--conversation-id <id>] [--stream/--no-stream]
 kweaver agent chat <agent_id>                    # 交互式模式
 kweaver agent sessions <agent_id> [--limit <n>]
-kweaver agent history <conversation_id> [--limit <n>]
+kweaver agent history <agent_id> <conversation_id>
 kweaver agent trace <conversation_id> [--pretty|--compact]
 ```
 
@@ -47,24 +76,127 @@ kweaver agent trace <conversation_id>
 ## 说明
 
 - `create` 需要 `--llm-id`，可通过模型工厂 API 查询可用 LLM：`GET /api/mf-model-manager/v1/llm/list?page=1&size=100`
+- `get` 的 `--save-config` 自动添加时间戳防止文件被覆盖，输出文件路径格式：`<basename>-<timestamp>.<ext>`
+- `update` 的 `--config-path` 从指定路径读取配置文件（由 `get --save-config` 生成），`--knowledge-network-id` 配置业务知识网络
+- `create` 的 `--config` 支持两种方式：
+  - **文件路径**：`--config /path/to/config.json`（推荐，避免长度限制）
+  - **JSON 字符串**：`--config '{"input":...,"llms":...}'`
+- `template-get` 的 `--save-config` 自动添加时间戳防止文件被覆盖
 - `update` 采用 read-modify-write 模式：先 GET 当前配置，修改字段后 PUT 回去
 - `list` 只返回已发布的 agent；`get` 可以获取未发布的（需要是 owner）
 - `publish` 后 agent 才会出现在 `list` 里
 
+## 更新 Agent 知识网络配置
+
+通过 `get --save-config` 保存配置，然后使用 `update --config-path --knowledge-network-id` 更新。
+
+```bash
+# 1. 获取并保存 Agent 配置（自动添加时间戳）
+kweaver agent get <agent_id> --save-config /tmp/agent_config.json
+# 输出: /tmp/agent_config-2026-04-02T14-50-55.json
+
+# 2. 更新知识网络配置
+kweaver agent update <agent_id> --config-path /tmp/agent_config-2026-04-02T14-50-55.json --knowledge-network-id d5ordervm0qr3o2trdn0
+
+# 3. 重新发布使配置生效
+kweaver agent publish <agent_id>
+```
+
+**选项说明**：
+- `--save-config <path>`：保存配置到文件，自动添加时间戳防止覆盖
+  - 支持目录路径（以 `/` 结尾），自动生成文件名
+  - 自动创建不存在的目录
+- `--config-path <path>`：从文件读取配置（配合 `--save-config` 使用）
+- `--knowledge-network-id <id>`：配置业务知识网络ID
+
+**简写方式**（不保存文件）：
+```bash
+# 直接更新知识网络（自动从API获取当前配置）
+kweaver agent update <agent_id> --knowledge-network-id <kn_id>
+```
+
+## 基于模板创建 Agent
+
+通过模板快速创建 Agent，避免手动配置复杂的 config 对象。
+
+### 方式一：使用 --save-config（推荐）
+
+直接保存模板配置到文件，避免长 JSON 字符串被截断。
+
+```bash
+# 1. 列举所有模板
+kweaver agent template-list
+
+# 2. 保存模板配置到文件（自动添加时间戳，防止覆盖）
+kweaver agent template-get <template_id> --save-config /tmp/config.json
+# 输出: /tmp/config-2026-04-02T14-30-45.json
+
+# 3. 使用配置文件创建 Agent
+kweaver agent create --name "我的Agent" --profile "描述" --config /tmp/config-2026-04-02T14-30-45.json
+```
+
+**--save-config 说明**：
+- 输出文件路径自动添加时间戳，格式：`<basename>-<timestamp>.<ext>`
+- 支持目录路径（以 `/` 结尾），自动生成文件名：`/tmp/dir/` → `/tmp/dir/agent-config-2026-04-02T14-30-45.json`
+- 自动创建不存在的目录
+
+### 方式二：手动提取配置
+
+```bash
+# 1. 获取模板详情
+kweaver agent template-get <template_id> --verbose
+
+# 2. 从返回的 JSON 中提取 config 对象，手动创建 Agent
+kweaver agent create --name "我的Agent" --profile "描述" --config '{"input":{...},"llms":...}'
+```
+
+### 完整示例
+
+```bash
+# 1. 列举所有分类（可选）
+kweaver agent category-list
+
+# 2. 列举所有模板
+kweaver agent template-list
+
+# 返回示例：
+# [
+#   {"id": "88", "name": "合同审核助手演示版_模板", "description": "..."},
+#   {"id": "92", "name": "业务知识网络召回_模板", "description": "..."}
+# ]
+
+# 3. 保存模板配置
+CONFIG=$(kweaver agent template-get 88 --save-config /tmp/contract-audit.json)
+echo "配置已保存到: $CONFIG"
+
+# 4. 创建 Agent
+AGENT_ID=$(kweaver agent create --name "合同审核助手" --profile "基于模板创建" --config "$CONFIG" | jq -r '.id')
+
+# 5. 发布 Agent
+kweaver agent publish $AGENT_ID
+```
+
 ## 端到端示例
 
 ```bash
-# 创建 → 发布 → 对话 → 清理
+# 方式一：从零创建 → 配置知识网络 → 发布 → 对话 → 清理
 kweaver agent create --name "测试助手" --profile "SDK 测试用" --llm-id <model_id> --system-prompt "你是一个测试助手"
-kweaver agent publish <agent_id>
+kweaver agent update <agent_id> --knowledge-network-id <kn_id>
+kweaver agent publish <agent_id> --category-id 01JRYRKP0M8VYHQSX4FXR5CKG1
 kweaver agent chat <agent_id> -m "你好"
 kweaver agent unpublish <agent_id>
 kweaver agent delete <agent_id> -y
 
+# 方式二：基于模板创建（推荐）
+CONFIG=$(kweaver agent template-get 88 --save-config /tmp/config.json)
+AGENT_ID=$(kweaver agent create --name "合同审核助手" --profile "描述" --config "$CONFIG" | jq -r '.id')
+kweaver agent publish $AGENT_ID
+kweaver agent chat $AGENT_ID -m "帮忙审核合同：JJFAGHBJF25090012"
+
 # 多轮对话
 kweaver agent chat <agent_id> -m "分析库存数据" --no-stream
 kweaver agent chat <agent_id> -m "给出改进建议" --conversation-id <conv_id>
-kweaver agent history <conv_id>
+kweaver agent history <agent_id> <conv_id>
 ```
 ## Trace 数据分析
 

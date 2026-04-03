@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from kweaver.types import Agent
+from kweaver.types import Agent, AgentTemplate, AgentCategory
 
 if TYPE_CHECKING:
     from kweaver._http import HttpClient
@@ -66,6 +66,113 @@ class AgentsResource:
             else (data.get("entries") or data.get("data") or [])
         )
         return [_parse_agent(d) for d in items]
+
+    # ── List personal space agents ────────────────────────────────────────
+
+    def list_personal(
+        self,
+        *,
+        keyword: str | None = None,
+        pagination_marker: str | None = None,
+        publish_status: str | None = None,
+        publish_to_be: str | None = None,
+        size: int = 48,
+    ) -> list[Agent]:
+        """List personal space agents.
+
+        Args:
+            keyword: Filter by name substring.
+            pagination_marker: Pagination token.
+            publish_status: Filter by publish status.
+            publish_to_be: Filter by publish destination.
+            size: Number of results (default 48).
+
+        Returns:
+            List of Agent objects.
+        """
+        params: dict[str, Any] = {"size": size}
+        if keyword:
+            params["name"] = keyword
+        if pagination_marker:
+            params["pagination_marker_str"] = pagination_marker
+        if publish_status:
+            params["publish_status"] = publish_status
+        if publish_to_be:
+            params["publish_to_be"] = publish_to_be
+
+        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        url = f"/api/agent-factory/v3/personal-space/agent-list?{query_string}"
+
+        data = self._http.get(url)
+        items = (data if isinstance(data, list) else data.get("entries") or [])
+        return [_parse_agent(d) for d in items]
+
+    # ── List published agent templates ─────────────────────────────────────
+
+    def list_templates(
+        self,
+        *,
+        keyword: str | None = None,
+        category_id: str | None = None,
+        pagination_marker: str | None = None,
+        size: int = 48,
+    ) -> list[AgentTemplate]:
+        """List published agent templates.
+
+        Args:
+            keyword: Filter by name substring.
+            category_id: Filter by category ID.
+            pagination_marker: Pagination token.
+            size: Number of results (default 48).
+
+        Returns:
+            List of AgentTemplate objects.
+        """
+        params: dict[str, Any] = {"size": size}
+        if keyword:
+            params["name"] = keyword
+        if category_id:
+            params["category_id"] = category_id
+        if pagination_marker:
+            params["pagination_marker_str"] = pagination_marker
+
+        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        url = f"/api/agent-factory/v3/published/agent-tpl?{query_string}"
+
+        data = self._http.get(url)
+        items = (data if isinstance(data, list) else data.get("entries") or [])
+        return [_parse_template(d) for d in items]
+
+    def get_template(self, id: str) -> AgentTemplate:
+        """Get published agent template by ID.
+
+        Args:
+            id: Template ID.
+
+        Returns:
+            AgentTemplate object.
+        """
+        data = self._http.get(f"/api/agent-factory/v3/published/agent-tpl/{id}")
+        return _parse_template(data)
+
+    # ── List categories ───────────────────────────────────────────────────
+
+    def list_categories(self) -> list[AgentCategory]:
+        """List agent categories.
+
+        Returns:
+            List of AgentCategory objects.
+        """
+        data = self._http.get("/api/agent-factory/v3/category")
+        items = (data if isinstance(data, list) else data.get("entries") or [])
+        return [
+            AgentCategory(
+                id=str(c.get("id", "")),
+                name=c.get("name", ""),
+                description=c.get("description", ""),
+            )
+            for c in items
+        ]
 
     # ── Get by ID ────────────────────────────────────────────────────────
 
@@ -150,15 +257,24 @@ class AgentsResource:
 
     # ── Publish ──────────────────────────────────────────────────────────
 
-    def publish(self, id: str, *, business_domain_id: str | None = None) -> dict[str, Any]:
-        """Publish an agent, making it available for chat.
+    def publish(self, id: str, *, category_id: str | None = None) -> dict[str, Any]:
+        """Publish an agent.
+
+        Args:
+            id: Agent ID.
+            category_id: Optional category ID for classification.
 
         Returns:
-            Dict with ``release_id``, ``version``, ``published_at``, etc.
+            Dict with release_id, version, published_at, etc.
         """
-        body: dict[str, Any] = {"agent_id": id}
-        if business_domain_id is not None:
-            body["business_domain_id"] = business_domain_id
+        body: dict[str, Any] = {
+            "business_domain_id": "bd_public",
+            "category_ids": [category_id] if category_id else [],
+            "description": "",
+            "publish_to_where": ["square"],
+            "publish_to_bes": ["skill_agent"],
+            "pms_control": None,
+        }
         data = self._http.post(f"/api/agent-factory/v3/agent/{id}/publish", json=body)
         return data or {}
 
@@ -167,6 +283,16 @@ class AgentsResource:
     def unpublish(self, id: str) -> None:
         """Unpublish an agent (remove from published list)."""
         self._http.put(f"/api/agent-factory/v3/agent/{id}/unpublish")
+
+
+def _parse_template(d: Any) -> AgentTemplate:
+    """Parse API response into AgentTemplate."""
+    return AgentTemplate(
+        id=str(d.get("tpl_id") or d.get("id", "")),
+        name=d.get("name", ""),
+        description=d.get("profile") or d.get("description", ""),
+        config=d.get("config"),
+    )
 
 
 def _parse_agent(d: Any) -> Agent:

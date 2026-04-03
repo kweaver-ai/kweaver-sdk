@@ -351,6 +351,21 @@ class Agent(BaseModel):
     conversation_count: int = 0
 
 
+class AgentTemplate(BaseModel):
+    """Agent 模板."""
+    id: str
+    name: str
+    description: str
+    config: dict[str, Any] | None = None
+
+
+class AgentCategory(BaseModel):
+    """Agent 分类."""
+    id: str
+    name: str
+    description: str = ""
+
+
 class Conversation(BaseModel):
     id: str
     agent_id: str

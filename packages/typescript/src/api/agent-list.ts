@@ -229,6 +229,7 @@ export interface PublishAgentOptions {
   accessToken: string;
   agentId: string;
   body?: string;
+  categoryId?: string;
   businessDomain?: string;
 }
 
@@ -237,12 +238,23 @@ export async function publishAgent(options: PublishAgentOptions): Promise<string
     baseUrl,
     accessToken,
     agentId,
-    body = "{}",
+    body,
+    categoryId,
     businessDomain = "bd_public",
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/agent/${encodeURIComponent(agentId)}/publish`;
+
+  // Build default body if not provided
+  const requestBody = body || JSON.stringify({
+    business_domain_id: "bd_public",
+    category_ids: categoryId ? [categoryId] : [],
+    description: "",
+    publish_to_where: ["square"],
+    publish_to_bes: ["skill_agent"],
+    pms_control: null,
+  });
 
   const response = await fetch(url, {
     method: "POST",
@@ -250,7 +262,7 @@ export async function publishAgent(options: PublishAgentOptions): Promise<string
       ...buildHeaders(accessToken, businessDomain),
       "content-type": "application/json",
     },
-    body,
+    body: requestBody,
   });
 
   const responseBody = await response.text();
@@ -289,4 +301,157 @@ export async function unpublishAgent(options: UnpublishAgentOptions): Promise<vo
     const responseBody = await response.text();
     throw new HttpError(response.status, response.statusText, responseBody);
   }
+}
+
+// ── List personal space agents ───────────────────────────────────────────────
+
+export interface ListPersonalAgentsOptions {
+  baseUrl: string;
+  accessToken: string;
+  businessDomain?: string;
+  name?: string;
+  pagination_marker_str?: string;
+  publish_status?: string;
+  publish_to_be?: string;
+  size?: number;
+}
+
+export async function listPersonalAgents(options: ListPersonalAgentsOptions): Promise<string> {
+  const {
+    baseUrl,
+    accessToken,
+    businessDomain = "bd_public",
+    name = "",
+    pagination_marker_str = "",
+    publish_status = "",
+    publish_to_be = "",
+    size = 48,
+  } = options;
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const params = new URLSearchParams();
+  if (name) params.append("name", name);
+  if (pagination_marker_str) params.append("pagination_marker_str", pagination_marker_str);
+  if (publish_status) params.append("publish_status", publish_status);
+  if (publish_to_be) params.append("publish_to_be", publish_to_be);
+  params.append("size", String(size));
+
+  const url = `${base}/api/agent-factory/v3/personal-space/agent-list?${params.toString()}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(accessToken, businessDomain),
+  });
+
+  const responseBody = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, responseBody);
+  }
+  return responseBody;
+}
+
+// ── List published agent templates ────────────────────────────────────────────
+
+export interface ListPublishedAgentTemplatesOptions {
+  baseUrl: string;
+  accessToken: string;
+  businessDomain?: string;
+  category_id?: string;
+  name?: string;
+  pagination_marker_str?: string;
+  size?: number;
+}
+
+export async function listPublishedAgentTemplates(options: ListPublishedAgentTemplatesOptions): Promise<string> {
+  const {
+    baseUrl,
+    accessToken,
+    businessDomain = "bd_public",
+    category_id = "",
+    name = "",
+    pagination_marker_str = "",
+    size = 48,
+  } = options;
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const params = new URLSearchParams();
+  if (category_id) params.append("category_id", category_id);
+  if (name) params.append("name", name);
+  if (pagination_marker_str) params.append("pagination_marker_str", pagination_marker_str);
+  params.append("size", String(size));
+
+  const url = `${base}/api/agent-factory/v3/published/agent-tpl?${params.toString()}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(accessToken, businessDomain),
+  });
+
+  const responseBody = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, responseBody);
+  }
+  return responseBody;
+}
+
+// ── Get published agent template by ID ───────────────────────────────────────
+
+export interface GetPublishedAgentTemplateOptions {
+  baseUrl: string;
+  accessToken: string;
+  templateId: string;
+  businessDomain?: string;
+}
+
+export async function getPublishedAgentTemplate(options: GetPublishedAgentTemplateOptions): Promise<string> {
+  const {
+    baseUrl,
+    accessToken,
+    templateId,
+    businessDomain = "bd_public",
+  } = options;
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/agent-factory/v3/published/agent-tpl/${encodeURIComponent(templateId)}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(accessToken, businessDomain),
+  });
+
+  const responseBody = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, responseBody);
+  }
+  return responseBody;
+}
+
+// ── List agent categories ─────────────────────────────────────────────────────
+
+export interface ListAgentCategoriesOptions {
+  baseUrl: string;
+  accessToken: string;
+  businessDomain?: string;
+}
+
+export async function listAgentCategories(options: ListAgentCategoriesOptions): Promise<string> {
+  const {
+    baseUrl,
+    accessToken,
+    businessDomain = "bd_public",
+  } = options;
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/agent-factory/v3/category`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(accessToken, businessDomain),
+  });
+
+  const responseBody = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, responseBody);
+  }
+  return responseBody;
 }

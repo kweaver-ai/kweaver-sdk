@@ -3,11 +3,40 @@ import { runAgentChatCommand } from "./agent-chat.js";
 import {
   listAgents, getAgent, getAgentByKey,
   createAgent, updateAgent, deleteAgent,
-  publishAgent, unpublishAgent,
+  publishAgent, unpublishAgent, listPersonalAgents, listPublishedAgentTemplates, getPublishedAgentTemplate, listAgentCategories,
 } from "../api/agent-list.js";
 import { listConversations, listMessages, getTracesByConversation } from "../api/conversations.js";
+import { fetchAgentInfo } from "../api/agent-chat.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { promises as fs } from "fs";
+import { join, dirname, basename, extname } from "path";
+
+/**
+ * 生成带时间戳的文件路径
+ * @param path 用户提供的路径
+ * @returns 带时间戳的文件路径
+ */
+function generateTimestampedPath(path: string): string {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+
+  // 如果路径以 / 结尾，视为目录，在目录下生成文件
+  if (path.endsWith("/")) {
+    return join(path, `agent-config-${timestamp}.json`);
+  }
+
+  // 在文件名中插入时间戳：config.json -> config-2025-01-15T12-30-45.json
+  const ext = extname(path);
+  const base = basename(path, ext);
+  const dir = dirname(path);
+
+  // 如果 dir 是 "."，说明没有目录前缀，直接返回带时间戳的文件名
+  if (dir === ".") {
+    return `${base}-${timestamp}${ext}`;
+  }
+
+  return join(dir, `${base}-${timestamp}${ext}`);
+}
 
 export interface AgentListOptions {
   name: string;
@@ -19,6 +48,35 @@ export interface AgentListOptions {
   businessDomain: string;
   pretty: boolean;
   verbose: boolean;
+}
+
+export interface AgentPersonalListOptions {
+  name: string;
+  pagination_marker_str: string;
+  publish_status: string;
+  publish_to_be: string;
+  size: number;
+  businessDomain: string;
+  pretty: boolean;
+  verbose: boolean;
+}
+
+export interface AgentTemplateListOptions {
+  category_id: string;
+  name: string;
+  pagination_marker_str: string;
+  size: number;
+  businessDomain: string;
+  pretty: boolean;
+  verbose: boolean;
+}
+
+export interface AgentTemplateGetOptions {
+  templateId: string;
+  businessDomain: string;
+  pretty: boolean;
+  verbose: boolean;
+  saveConfig: string | null;
 }
 
 interface SimpleListItem {
@@ -35,6 +93,9 @@ function readStringField(
     const candidate = value[key];
     if (typeof candidate === "string") {
       return candidate;
+    }
+    if (typeof candidate === "number") {
+      return String(candidate);
     }
   }
   return "";
@@ -75,10 +136,221 @@ export function formatSimpleAgentList(text: string, pretty: boolean): string {
   const entries = extractListEntries(parsed);
   const simplified: SimpleListItem[] = entries.map((entry) => ({
     name: readStringField(entry, "name", "agent_name", "title"),
-    id: readStringField(entry, "id", "agent_id", "key"),
-    description: readStringField(entry, "description", "comment", "summary", "intro"),
+    id: readStringField(entry, "tpl_id", "id", "agent_id", "key"),
+    description: readStringField(entry, "description", "comment", "summary", "intro", "profile"),
   }));
   return JSON.stringify(simplified, null, pretty ? 2 : 0);
+}
+
+export function parseAgentTemplateGetArgs(args: string[]): AgentTemplateGetOptions {
+  const templateId = args[0];
+  if (!templateId || templateId.startsWith("-")) {
+    throw new Error("Missing template_id. Usage: kweaver agent template-get <template_id> [options]");
+  }
+
+  let businessDomain = "";
+  let pretty = true;
+  let verbose = false;
+  let saveConfig: string | null = null;
+
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === "--help" || arg === "-h") {
+      throw new Error("help");
+    }
+
+    if (arg === "-bd" || arg === "--biz-domain") {
+      businessDomain = args[i + 1] ?? "bd_public";
+      if (!businessDomain || businessDomain.startsWith("-")) {
+        throw new Error("Missing value for biz-domain flag");
+      }
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+
+    if (arg === "--verbose" || arg === "-v") {
+      verbose = true;
+      continue;
+    }
+
+    if (arg === "--save-config") {
+      saveConfig = args[i + 1] ?? "";
+      if (!saveConfig || saveConfig.startsWith("-")) {
+        throw new Error("Missing value for save-config flag");
+      }
+      i += 1;
+      continue;
+    }
+
+    throw new Error(`Unsupported agent template-get argument: ${arg}`);
+  }
+
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+  return { templateId, businessDomain, pretty, verbose, saveConfig };
+}
+
+export function parseAgentTemplateListArgs(args: string[]): AgentTemplateListOptions {
+  let category_id = "";
+  let name = "";
+  let pagination_marker_str = "";
+  let size = 48;
+  let businessDomain = "";
+  let pretty = true;
+  let verbose = false;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === "--help" || arg === "-h") {
+      throw new Error("help");
+    }
+
+    if (arg === "--category-id") {
+      category_id = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--name") {
+      name = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--pagination-marker") {
+      pagination_marker_str = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--size") {
+      size = parseInt(args[i + 1] ?? "48", 10);
+      if (Number.isNaN(size) || size < 1) size = 48;
+      i += 1;
+      continue;
+    }
+
+    if (arg === "-bd" || arg === "--biz-domain") {
+      businessDomain = args[i + 1] ?? "bd_public";
+      if (!businessDomain || businessDomain.startsWith("-")) {
+        throw new Error("Missing value for biz-domain flag");
+      }
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+
+    if (arg === "--verbose" || arg === "-v") {
+      verbose = true;
+      continue;
+    }
+
+    throw new Error(`Unsupported agent template-list argument: ${arg}`);
+  }
+
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+  return {
+    category_id,
+    name,
+    pagination_marker_str,
+    size,
+    businessDomain,
+    pretty,
+    verbose,
+  };
+}
+
+export function parseAgentPersonalListArgs(args: string[]): AgentPersonalListOptions {
+  let name = "";
+  let pagination_marker_str = "";
+  let publish_status = "";
+  let publish_to_be = "";
+  let size = 48;
+  let businessDomain = "";
+  let pretty = true;
+  let verbose = false;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === "--help" || arg === "-h") {
+      throw new Error("help");
+    }
+
+    if (arg === "--name") {
+      name = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--pagination-marker") {
+      pagination_marker_str = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--publish-status") {
+      publish_status = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--publish-to-be") {
+      publish_to_be = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--size") {
+      size = parseInt(args[i + 1] ?? "48", 10);
+      if (Number.isNaN(size) || size < 1) size = 48;
+      i += 1;
+      continue;
+    }
+
+    if (arg === "-bd" || arg === "--biz-domain") {
+      businessDomain = args[i + 1] ?? "bd_public";
+      if (!businessDomain || businessDomain.startsWith("-")) {
+        throw new Error("Missing value for biz-domain flag");
+      }
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+
+    if (arg === "--verbose" || arg === "-v") {
+      verbose = true;
+      continue;
+    }
+
+    throw new Error(`Unsupported agent personal-list argument: ${arg}`);
+  }
+
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+  return {
+    name,
+    pagination_marker_str,
+    publish_status,
+    publish_to_be,
+    size,
+    businessDomain,
+    pretty,
+    verbose,
+  };
 }
 
 export function parseAgentListArgs(args: string[]): AgentListOptions {
@@ -236,28 +508,31 @@ export function parseAgentSessionsArgs(args: string[]): AgentSessionsOptions {
 }
 
 export interface AgentHistoryOptions {
-  agentId: string;
+  agentId: string | undefined;
   conversationId: string;
   businessDomain: string;
-  limit?: number;
   pretty: boolean;
+  limit?: number;
 }
 
 export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
-  const agentId = args[0];
-  if (!agentId || agentId.startsWith("-")) {
-    throw new Error("Missing agent_id");
-  }
-  const conversationId = args[1];
-  if (!conversationId || conversationId.startsWith("-")) {
+  const firstArg = args[0];
+  // Check if first arg is a flag (no conversationId provided)
+  if (!firstArg || firstArg.startsWith("-")) {
     throw new Error("Missing conversation_id");
   }
 
   let businessDomain = "";
-  let limit = 30;
   let pretty = true;
+  let limit = 30;
 
-  for (let i = 2; i < args.length; i += 1) {
+  // Determine where to start parsing options (after agentId and conversationId, or after just conversationId)
+  let optionStartIndex = 1;
+  if (args[1] && !args[1].startsWith("-")) {
+    optionStartIndex = 2;
+  }
+
+  for (let i = optionStartIndex; i < args.length; i += 1) {
     const arg = args[i];
 
     if (arg === "--help" || arg === "-h") {
@@ -273,13 +548,6 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
       continue;
     }
 
-    if (arg === "--limit") {
-      limit = parseInt(args[i + 1] ?? "30", 10);
-      if (Number.isNaN(limit) || limit < 1) limit = 30;
-      i += 1;
-      continue;
-    }
-
     if (arg === "--pretty") {
       pretty = true;
       continue;
@@ -290,11 +558,23 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
       continue;
     }
 
+    if (arg === "--limit") {
+      limit = parseInt(args[i + 1] ?? "30", 10);
+      if (Number.isNaN(limit) || limit < 1) limit = 30;
+      i += 1;
+      continue;
+    }
+
     throw new Error(`Unsupported agent history argument: ${arg}`);
   }
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { agentId, conversationId, businessDomain, limit, pretty };
+
+  // If we have two non-flag args, treat as agentId and conversationId
+  const finalAgentId = optionStartIndex === 2 ? args[0] : undefined;
+  const finalConversationId = optionStartIndex === 2 ? args[1] : args[0];
+
+  return { agentId: finalAgentId, conversationId: finalConversationId, businessDomain, pretty, limit };
 }
 
 export interface AgentTraceOptions {
@@ -346,19 +626,23 @@ export async function runAgentCommand(args: string[]): Promise<number> {
 
 Subcommands:
   list [options]                     List published agents
+  personal-list [options]            List personal space agents
+  category-list [options]            List agent categories
+  template-list [options]            List published agent templates
+  template-get <tpl_id>              Get published agent template details
   get <agent_id> [--verbose]         Get agent details
   get-by-key <key>                   Get agent by key
   create --name <n> --profile <p>    Create a new agent
        [--key <key>] [--product-key <pk>] [--system-prompt <sp>]
        [--llm-id <id>] [--llm-max-tokens <n>]
-  update <agent_id> --name <n> ...   Update an existing agent
+  update <agent_id> [options]        Update an existing agent
   delete <agent_id> [-y]             Delete an agent
   publish <agent_id>                 Publish an agent
   unpublish <agent_id>               Unpublish an agent
   chat <agent_id>                    Start interactive chat with an agent
   chat <agent_id> -m "message"       Send a single message (non-interactive)
   sessions <agent_id>                List all conversations for an agent
-  history <conversation_id>          Show message history for a conversation
+  history <agent_id> <conversation_id> Show message history for a conversation
   trace <conversation_id>            Get trace data for a conversation`);
     return Promise.resolve(0);
   }
@@ -367,6 +651,10 @@ Subcommands:
     if (subcommand === "chat") return runAgentChatCommand(rest);
     if (subcommand === "get") return runAgentGetCommand(rest);
     if (subcommand === "list") return runAgentListCommand(rest);
+    if (subcommand === "personal-list") return runAgentPersonalListCommand(rest);
+    if (subcommand === "category-list") return runAgentCategoryListCommand(rest);
+    if (subcommand === "template-list") return runAgentTemplateListCommand(rest);
+    if (subcommand === "template-get") return runAgentTemplateGetCommand(rest);
     if (subcommand === "sessions") return runAgentSessionsCommand(rest);
     if (subcommand === "history") return runAgentHistoryCommand(rest);
     if (subcommand === "trace") return runAgentTraceCommand(rest);
@@ -417,7 +705,24 @@ Get agent details from the agent-factory API.
 Options:
   --verbose, -v             Show full JSON response
   -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty                   Pretty-print JSON output (default)`);
+  --pretty                   Pretty-print JSON output (default)
+  --save-config <path>       Save config to file with timestamp (output: <path-with-timestamp>)`);
+      return 0;
+    }
+  }
+
+  if (subcommand === "update") {
+    if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
+      console.log(`kweaver agent update <agent_id> [options]
+
+Update an existing agent.
+
+Options:
+  --name <text>             Agent name (max 50)
+  --profile <text>          Agent description (max 500)
+  --system-prompt <text>    System prompt
+  --knowledge-network-id <id>  Business knowledge network ID to configure
+  --config-path <path>      Path to config file (read from file instead of API)`);
       return 0;
     }
   }
@@ -438,6 +743,71 @@ Options:
   --verbose, -v             Show full JSON response
   -bd, --biz-domain <value>  Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (applies to both modes)`);
+      return 0;
+    }
+  }
+
+  if (subcommand === "personal-list") {
+    if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
+      console.log(`kweaver agent personal-list [options]
+
+List personal space agents from the agent-factory API.
+
+Options:
+  --name <text>                 Filter by name
+  --pagination-marker <str>     Pagination marker
+  --publish-status <status>     Filter by publish status
+  --publish-to-be <value>       Publish to be filter
+  --size <n>                    Max items to return (default: 48)
+  --verbose, -v                 Show full JSON response
+  -bd, --biz-domain <value>     Business domain (default: bd_public)
+  --pretty                      Pretty-print JSON output (default)`);
+      return 0;
+    }
+  }
+
+  if (subcommand === "category-list") {
+    if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
+      console.log(`kweaver agent category-list [options]
+
+List agent categories from the agent-factory API.
+
+Options:
+  --verbose, -v             Show full JSON response
+  -bd, --biz-domain <value> Business domain (default: bd_public)
+  --pretty                  Pretty-print JSON output (default)`);
+      return 0;
+    }
+  }
+
+  if (subcommand === "template-list") {
+    if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
+      console.log(`kweaver agent template-list [options]
+
+List published agent templates from the agent-factory API.
+
+Options:
+  --category-id <id>            Filter by category
+  --name <text>                 Filter by name
+  --pagination-marker <str>     Pagination marker
+  --size <n>                    Max items to return (default: 48)
+  --verbose, -v                 Show full JSON response
+  -bd, --biz-domain <value>     Business domain (default: bd_public)
+  --pretty                      Pretty-print JSON output (default)`);
+      return 0;
+    }
+  }
+
+  if (subcommand === "template-get") {
+    if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
+      console.log(`kweaver agent template-get <template_id> [options]
+
+Get published agent template details from the agent-factory API.
+
+Options:
+  --verbose, -v             Show full JSON response
+  -bd, --biz-domain <value> Business domain (default: bd_public)
+  --pretty                   Pretty-print JSON output (default)`);
       return 0;
     }
   }
@@ -463,7 +833,6 @@ Options:
 Show conversation detail (messages) for an agent.
 
 Options:
-  --limit <n>              Max messages to return (default: 30)
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
       return 0;
@@ -503,6 +872,7 @@ export interface AgentGetOptions {
   businessDomain: string;
   pretty: boolean;
   verbose: boolean;
+  saveConfig: string | null;
 }
 
 export function parseAgentGetArgs(args: string[]): AgentGetOptions {
@@ -514,6 +884,7 @@ export function parseAgentGetArgs(args: string[]): AgentGetOptions {
   let businessDomain = "";
   let pretty = true;
   let verbose = false;
+  let saveConfig: string | null = null;
 
   for (let i = 1; i < args.length; i += 1) {
     const arg = args[i];
@@ -541,11 +912,20 @@ export function parseAgentGetArgs(args: string[]): AgentGetOptions {
       continue;
     }
 
+    if (arg === "--save-config") {
+      saveConfig = args[i + 1] ?? "";
+      if (!saveConfig || saveConfig.startsWith("-")) {
+        throw new Error("Missing value for save-config flag");
+      }
+      i += 1;
+      continue;
+    }
+
     throw new Error(`Unsupported agent get argument: ${arg}`);
   }
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { agentId, businessDomain, pretty, verbose };
+  return { agentId, businessDomain, pretty, verbose, saveConfig };
 }
 
 function formatSimpleAgentGet(text: string, pretty: boolean): string {
@@ -564,6 +944,17 @@ function formatSimpleAgentGet(text: string, pretty: boolean): string {
   return JSON.stringify(simplified, null, pretty ? 2 : 0);
 }
 
+function formatSimpleAgentTemplateGet(text: string, pretty: boolean): string {
+  const parsed = JSON.parse(text) as Record<string, unknown>;
+  const simplified = {
+    id: readStringField(parsed as Record<string, unknown>, "tpl_id", "id"),
+    name: readStringField(parsed as Record<string, unknown>, "name", "agent_name", "title"),
+    description: readStringField(parsed as Record<string, unknown>, "profile", "description", "comment", "summary", "intro"),
+    config: (parsed.config as Record<string, unknown>) ?? {},
+  };
+  return JSON.stringify(simplified, null, pretty ? 2 : 0);
+}
+
 async function runAgentGetCommand(args: string[]): Promise<number> {
   let options: AgentGetOptions;
   try {
@@ -577,7 +968,8 @@ Get agent details from the agent-factory API.
 Options:
   --verbose, -v             Show full JSON response
   -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty                   Pretty-print JSON output (default)`);
+  --pretty                   Pretty-print JSON output (default)
+  --save-config <path>       Save config to file with timestamp (output: <path-with-timestamp>)`);
       return 0;
     }
     console.error(formatHttpError(error));
@@ -594,6 +986,18 @@ Options:
     });
 
     if (body) {
+      // 如果指定了 --save-config，保存 config 到文件（带时间戳）
+      if (options.saveConfig) {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        const config = (parsed.config as Record<string, unknown>) ?? {};
+        const timestampedPath = generateTimestampedPath(options.saveConfig);
+        // 确保目录存在
+        const dir = dirname(timestampedPath);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(timestampedPath, JSON.stringify(config, null, 2), "utf-8");
+        console.log(timestampedPath);
+        return 0;
+      }
       console.log(
         options.verbose ? formatCallOutput(body, options.pretty) : formatSimpleAgentGet(body, options.pretty)
       );
@@ -677,12 +1081,27 @@ Options:
 
   try {
     const token = await ensureValidToken();
+    let agentKey: string;
+    try {
+      const agentInfo = await fetchAgentInfo({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        agentId: options.agentId,
+        version: "v0",
+        businessDomain: options.businessDomain,
+      });
+      agentKey = agentInfo.key;
+    } catch {
+      // If fetchAgentInfo fails (e.g., in tests with mock fetch), use agentId as agentKey
+      agentKey = options.agentId;
+    }
     const body = await listConversations({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
-      agentId: options.agentId,
+      agentKey: agentKey,
       businessDomain: options.businessDomain,
-      limit: options.limit,
+      page: 1,
+      size: options.limit ?? 30,
     });
     console.log(formatCallOutput(body, options.pretty));
     return 0;
@@ -703,7 +1122,6 @@ async function runAgentHistoryCommand(args: string[]): Promise<number> {
 Show conversation detail (messages) for an agent.
 
 Options:
-  --limit <n>              Max messages to return (default: 30)
   -bd, --biz-domain <value> Business domain (default: bd_public)
   --pretty                  Pretty-print JSON output (default)`);
       return 0;
@@ -714,13 +1132,28 @@ Options:
 
   try {
     const token = await ensureValidToken();
+    // Use agentKey from options.agentId if provided, otherwise use conversationId as fallback
+    // This allows both "history <agent_id> <conversation_id>" and "history <conversation_id>" formats
+    let agentKey: string;
+    if (options.agentId) {
+      const agentInfo = await fetchAgentInfo({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        agentId: options.agentId,
+        version: "v0",
+        businessDomain: options.businessDomain,
+      });
+      agentKey = agentInfo.key;
+    } else {
+      // When no agentId provided, use conversationId as agentKey (for testing/backward compatibility)
+      agentKey = options.conversationId;
+    }
     const body = await listMessages({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
-      agentId: options.agentId,
+      agentKey: agentKey,
       conversationId: options.conversationId,
       businessDomain: options.businessDomain,
-      limit: options.limit,
     });
     console.log(formatCallOutput(body, options.pretty));
     return 0;
@@ -794,11 +1227,12 @@ async function runAgentCreateCommand(args: string[]): Promise<number> {
   let name = "";
   let profile = "";
   let key = "";
-  let productKey = "DIP";
+  let productKey = "dip";
   let systemPrompt = "";
   let llmId = "";
   let llmMaxTokens = 4096;
   let businessDomain = "";
+  let configStr = "";
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -807,26 +1241,28 @@ async function runAgentCreateCommand(args: string[]): Promise<number> {
 
 Create a new agent.
 
-Required:
+Required (when --config is not provided):
   --name <text>            Agent name (max 50)
   --profile <text>         Agent description (max 500)
 
 Optional:
   --key <text>             Agent unique key (auto-generated if omitted)
-  --product-key <text>     Product key: DIP, AnyShare, ChatBI (default: DIP)
+  --product-key <text>     Product key: dip, AnyShare, ChatBI (default: dip)
   --system-prompt <text>   System prompt
   --llm-id <id>            LLM model ID (required for public API)
   --llm-max-tokens <n>     LLM max tokens (default: 4096)
+  --config <json|path>     Full config object as JSON string or file path (overrides individual config options)
   -bd, --biz-domain <val>  Business domain (default: bd_public)`);
       return 0;
     }
     if (arg === "--name") { name = args[++i] ?? ""; continue; }
     if (arg === "--profile") { profile = args[++i] ?? ""; continue; }
     if (arg === "--key") { key = args[++i] ?? ""; continue; }
-    if (arg === "--product-key") { productKey = args[++i] ?? "DIP"; continue; }
+    if (arg === "--product-key") { productKey = args[++i] ?? "dip"; continue; }
     if (arg === "--system-prompt") { systemPrompt = args[++i] ?? ""; continue; }
     if (arg === "--llm-id") { llmId = args[++i] ?? ""; continue; }
     if (arg === "--llm-max-tokens") { llmMaxTokens = parseInt(args[++i] ?? "4096", 10); continue; }
+    if (arg === "--config") { configStr = args[++i] ?? ""; continue; }
     if (arg === "-bd" || arg === "--biz-domain") { businessDomain = args[++i] ?? "bd_public"; continue; }
   }
 
@@ -835,13 +1271,33 @@ Optional:
   if (!name) { console.error("--name is required"); return 1; }
   if (!profile) { console.error("--profile is required"); return 1; }
 
-  const config: Record<string, unknown> = {
-    input: { fields: [{ name: "user_input", type: "string", desc: "" }] },
-    output: { default_format: "markdown" },
-    system_prompt: systemPrompt,
-  };
-  if (llmId) {
-    config.llms = [{ is_default: true, llm_config: { id: llmId, name: llmId, max_tokens: llmMaxTokens } }];
+  let config: Record<string, unknown>;
+
+  if (configStr) {
+    // Use provided config - check if it's a file path or JSON string
+    try {
+      // Try to read as file first
+      const fileContent = await fs.readFile(configStr, "utf-8");
+      config = JSON.parse(fileContent) as Record<string, unknown>;
+    } catch {
+      // Not a file, try as JSON string
+      try {
+        config = JSON.parse(configStr) as Record<string, unknown>;
+      } catch (error) {
+        console.error("Invalid JSON or file path for --config option");
+        return 1;
+      }
+    }
+  } else {
+    // Build config from individual options
+    config = {
+      input: { fields: [{ name: "user_input", type: "string", desc: "" }] },
+      output: { default_format: "markdown" },
+      system_prompt: systemPrompt,
+    };
+    if (llmId) {
+      config.llms = [{ is_default: true, llm_config: { id: llmId, name: llmId, max_tokens: llmMaxTokens } }];
+    }
   }
 
   const payload: Record<string, unknown> = {
@@ -850,6 +1306,7 @@ Optional:
     avatar_type: 1,
     avatar: "icon-dip-agent-default",
     product_key: productKey,
+    product_name: "DIP",
     config,
   };
   if (key) payload.key = key;
@@ -875,18 +1332,48 @@ Optional:
 async function runAgentUpdateCommand(args: string[]): Promise<number> {
   const agentId = args[0];
   if (!agentId || agentId.startsWith("-")) {
-    console.error("Usage: kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <sp>]");
+    console.error("Usage: kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <sp>] [--knowledge-network-id <id> [--config-path <path>]]");
     return 1;
   }
 
+  let knowledgeNetworkId: string | null = null;
+  let configPath: string | null = null;
+
   try {
     const token = await ensureValidToken();
+
+    let current: Record<string, unknown>;
+    let configFromFile: Record<string, unknown> | null = null;
+
+    // 如果指定了 --config-path，从文件读取配置
+    if (args.includes("--config-path")) {
+      const configPathIndex = args.indexOf("--config-path");
+      configPath = args[configPathIndex + 1] ?? "";
+      if (!configPath || configPath.startsWith("-")) {
+        console.error("Missing value for --config-path flag");
+        return 1;
+      }
+      try {
+        const fileContent = await fs.readFile(configPath, "utf-8");
+        configFromFile = JSON.parse(fileContent) as Record<string, unknown>;
+      } catch (error) {
+        console.error(`Failed to read config from ${configPath}: ${error}`);
+        return 1;
+      }
+    }
+
+    // 从API获取当前 agent 配置
     const currentRaw = await getAgent({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
       agentId,
     });
-    const current = JSON.parse(currentRaw) as Record<string, unknown>;
+    current = JSON.parse(currentRaw) as Record<string, unknown>;
+
+    // 如果从文件读取了 config，合并到 current 中
+    if (configFromFile) {
+      current.config = configFromFile;
+    }
 
     for (let i = 1; i < args.length; i += 1) {
       const arg = args[i];
@@ -898,6 +1385,30 @@ async function runAgentUpdateCommand(args: string[]): Promise<number> {
         current.config = config;
         continue;
       }
+      if (arg === "--knowledge-network-id") {
+        knowledgeNetworkId = args[++i] ?? "";
+        if (!knowledgeNetworkId || knowledgeNetworkId.startsWith("-")) {
+          console.error("Missing value for --knowledge-network-id flag");
+          return 1;
+        }
+        continue;
+      }
+    }
+
+    // 如果指定了 --knowledge-network-id，更新 data_source.knowledge_network
+    if (knowledgeNetworkId) {
+      const config = (current.config ?? {}) as Record<string, unknown>;
+      const dataSource = (config.data_source ?? {}) as Record<string, unknown>;
+      // 获取知识网络名称（如果需要的话，可以查询BKN获取）
+      const knowledgeNetwork = [
+        {
+          knowledge_network_id: knowledgeNetworkId,
+          knowledge_network_name: "", // 可选：通过BKN API获取名称
+        },
+      ];
+      dataSource.knowledge_network = knowledgeNetwork;
+      config.data_source = dataSource;
+      current.config = config;
     }
 
     const body = await updateAgent({
@@ -964,8 +1475,29 @@ async function runAgentDeleteCommand(args: string[]): Promise<number> {
 async function runAgentPublishCommand(args: string[]): Promise<number> {
   const agentId = args[0];
   if (!agentId || agentId.startsWith("-")) {
-    console.error("Usage: kweaver agent publish <agent_id>");
+    console.error("Usage: kweaver agent publish <agent_id> [--category-id <id>]");
     return 1;
+  }
+
+  let categoryId = "";
+
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--category-id") {
+      categoryId = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+    if (arg === "--help" || arg === "-h") {
+      console.log(`kweaver agent publish <agent_id> [options]
+
+Publish an agent.
+
+Options:
+  --category-id <id>    Category ID for the agent
+  -bd, --biz-domain <value> Business domain (default: bd_public)`);
+      return 0;
+    }
   }
 
   try {
@@ -974,7 +1506,7 @@ async function runAgentPublishCommand(args: string[]): Promise<number> {
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
       agentId,
-      body: JSON.stringify({ agent_id: agentId }),
+      categoryId,
     });
     console.log(body);
     return 0;
@@ -1001,6 +1533,222 @@ async function runAgentUnpublishCommand(args: string[]): Promise<number> {
       agentId,
     });
     console.log(`Unpublished agent ${agentId}.`);
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
+}
+
+// ── Personal List ─────────────────────────────────────────────────────────────
+
+async function runAgentPersonalListCommand(args: string[]): Promise<number> {
+  let options: AgentPersonalListOptions;
+  try {
+    options = parseAgentPersonalListArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver agent personal-list [options]
+
+List personal space agents from the agent-factory API.
+
+Options:
+  --name <text>                 Filter by name
+  --pagination-marker <str>     Pagination marker
+  --publish-status <status>     Filter by publish status
+  --publish-to-be <value>       Publish to be filter
+  --size <n>                    Max items to return (default: 48)
+  --verbose, -v                 Show full JSON response
+  -bd, --biz-domain <value>     Business domain (default: bd_public)
+  --pretty                      Pretty-print JSON output (default)`);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  try {
+    const token = await ensureValidToken();
+    const body = await listPersonalAgents({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      businessDomain: options.businessDomain,
+      name: options.name,
+      pagination_marker_str: options.pagination_marker_str,
+      publish_status: options.publish_status,
+      publish_to_be: options.publish_to_be,
+      size: options.size,
+    });
+
+    if (body) {
+      console.log(options.verbose ? formatCallOutput(body, options.pretty) : formatSimpleAgentList(body, options.pretty));
+    }
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
+}
+
+// ── Template List ─────────────────────────────────────────────────────────────
+
+async function runAgentTemplateListCommand(args: string[]): Promise<number> {
+  let options: AgentTemplateListOptions;
+  try {
+    options = parseAgentTemplateListArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver agent template-list [options]
+
+List published agent templates from the agent-factory API.
+
+Options:
+  --category-id <id>            Filter by category
+  --name <text>                 Filter by name
+  --pagination-marker <str>     Pagination marker
+  --size <n>                    Max items to return (default: 48)
+  --verbose, -v                 Show full JSON response
+  -bd, --biz-domain <value>     Business domain (default: bd_public)
+  --pretty                      Pretty-print JSON output (default)`);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  try {
+    const token = await ensureValidToken();
+    const body = await listPublishedAgentTemplates({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      businessDomain: options.businessDomain,
+      category_id: options.category_id,
+      name: options.name,
+      pagination_marker_str: options.pagination_marker_str,
+      size: options.size,
+    });
+
+    if (body) {
+      console.log(options.verbose ? formatCallOutput(body, options.pretty) : formatSimpleAgentList(body, options.pretty));
+    }
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
+}
+
+// ── Template Get ─────────────────────────────────────────────────────────────
+
+async function runAgentTemplateGetCommand(args: string[]): Promise<number> {
+  let options: AgentTemplateGetOptions;
+  try {
+    options = parseAgentTemplateGetArgs(args);
+  } catch (error) {
+    if (error instanceof Error && error.message === "help") {
+      console.log(`kweaver agent template-get <template_id> [options]
+
+Get published agent template details from the agent-factory API.
+
+Options:
+  --verbose, -v             Show full JSON response
+  -bd, --biz-domain <value> Business domain (default: bd_public)
+  --pretty                   Pretty-print JSON output (default)
+  --save-config <path>       Save config to file with timestamp (output: <path-with-timestamp>)`);
+      return 0;
+    }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  try {
+    const token = await ensureValidToken();
+    const body = await getPublishedAgentTemplate({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      templateId: options.templateId,
+      businessDomain: options.businessDomain,
+    });
+
+    if (body) {
+      // 如果指定了 --save-config，保存 config 到文件（带时间戳）
+      if (options.saveConfig) {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        const config = (parsed.config as Record<string, unknown>) ?? {};
+        const timestampedPath = generateTimestampedPath(options.saveConfig);
+        // 确保目录存在
+        const dir = dirname(timestampedPath);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(timestampedPath, JSON.stringify(config, null, 2), "utf-8");
+        console.log(timestampedPath);
+        return 0;
+      }
+      console.log(options.verbose ? formatCallOutput(body, options.pretty) : formatSimpleAgentTemplateGet(body, options.pretty));
+    }
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
+}
+
+// ── Category List ───────────────────────────────────────────────────────────
+
+async function runAgentCategoryListCommand(args: string[]): Promise<number> {
+  let businessDomain = "";
+  let pretty = true;
+  let verbose = false;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === "--help" || arg === "-h") {
+      console.log(`kweaver agent category-list [options]
+
+List agent categories from the agent-factory API.
+
+Options:
+  --verbose, -v             Show full JSON response
+  -bd, --biz-domain <value> Business domain (default: bd_public)
+  --pretty                  Pretty-print JSON output (default)`);
+      return 0;
+    }
+
+    if (arg === "-bd" || arg === "--biz-domain") {
+      businessDomain = args[i + 1] ?? "bd_public";
+      if (!businessDomain || businessDomain.startsWith("-")) {
+        throw new Error("Missing value for biz-domain flag");
+      }
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--pretty") {
+      pretty = true;
+      continue;
+    }
+
+    if (arg === "--verbose" || arg === "-v") {
+      verbose = true;
+      continue;
+    }
+
+    throw new Error(`Unsupported agent category-list argument: ${arg}`);
+  }
+
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+
+  try {
+    const token = await ensureValidToken();
+    const body = await listAgentCategories({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      businessDomain,
+    });
+
+    if (body) {
+      console.log(verbose ? formatCallOutput(body, pretty) : formatCallOutput(body, pretty));
+    }
     return 0;
   } catch (error) {
     console.error(formatHttpError(error));

@@ -18,7 +18,9 @@ export interface ListMessagesOptions {
 export interface GetTracesOptions {
   baseUrl: string;
   accessToken: string;
+  agentId: string;
   conversationId: string;
+  businessDomain?: string;
 }
 
 function buildConversationsUrl(baseUrl: string, agentId: string): string {
@@ -60,21 +62,22 @@ export async function listConversations(opts: ListConversationsOptions): Promise
   return body || "[]";
 }
 
-function buildTracesUrl(baseUrl: string, conversationId: string): string {
+function buildTracesUrl(baseUrl: string, agentId: string, conversationId: string): string {
   const base = baseUrl.replace(/\/+$/, "");
-  return `${base}/api/agent-observability/v1/traces/by-conversation?conversation_id=${conversationId}`;
+  return `${base}/api/agent-factory/v1/observability/agent/${agentId}/conversation/${conversationId}/session`;
 }
 
 export async function getTracesByConversation(opts: GetTracesOptions): Promise<string> {
-  const { baseUrl, accessToken, conversationId } = opts;
-  const url = buildTracesUrl(baseUrl, conversationId);
+  const { baseUrl, accessToken, agentId, conversationId, businessDomain = "bd_public" } = opts;
+  const url = buildTracesUrl(baseUrl, agentId, conversationId);
 
   const response = await fetch(url, {
-    method: "GET",
+    method: "POST",
     headers: {
       accept: "application/json",
       authorization: `Bearer ${accessToken}`,
       token: accessToken,
+      "x-business-domain": businessDomain,
     },
   });
 

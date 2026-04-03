@@ -298,19 +298,24 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
 }
 
 export interface AgentTraceOptions {
+  agentId: string;
   conversationId: string;
   pretty: boolean;
 }
 
 export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
-  const conversationId = args[0];
+  const agentId = args[0];
+  if (!agentId || agentId.startsWith("-")) {
+    throw new Error("Missing agent_id");
+  }
+  const conversationId = args[1];
   if (!conversationId || conversationId.startsWith("-")) {
     throw new Error("Missing conversation_id");
   }
 
   let pretty = true;
 
-  for (let i = 1; i < args.length; i += 1) {
+  for (let i = 2; i < args.length; i += 1) {
     const arg = args[i];
 
     if (arg === "--help" || arg === "-h") {
@@ -330,7 +335,7 @@ export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
     throw new Error(`Unsupported agent trace argument: ${arg}`);
   }
 
-  return { conversationId, pretty };
+  return { agentId, conversationId, pretty };
 }
 
 export async function runAgentCommand(args: string[]): Promise<number> {
@@ -467,7 +472,7 @@ Options:
 
   if (subcommand === "trace") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent trace <conversation_id> [options]
+      console.log(`kweaver agent trace <agent_id> <conversation_id> [options]
 
 Get trace data for a conversation.
 
@@ -731,7 +736,7 @@ async function runAgentTraceCommand(args: string[]): Promise<number> {
     options = parseAgentTraceArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent trace <conversation_id> [options]
+      console.log(`kweaver agent trace <agent_id> <conversation_id> [options]
 
 Get trace data for a conversation.
 
@@ -749,6 +754,7 @@ Options:
     const body = await getTracesByConversation({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
+      agentId: options.agentId,
       conversationId: options.conversationId,
     });
     console.log(formatCallOutput(body, options.pretty));

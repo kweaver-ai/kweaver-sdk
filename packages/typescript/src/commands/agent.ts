@@ -236,6 +236,7 @@ export function parseAgentSessionsArgs(args: string[]): AgentSessionsOptions {
 }
 
 export interface AgentHistoryOptions {
+  agentId: string;
   conversationId: string;
   businessDomain: string;
   limit?: number;
@@ -243,7 +244,11 @@ export interface AgentHistoryOptions {
 }
 
 export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
-  const conversationId = args[0];
+  const agentId = args[0];
+  if (!agentId || agentId.startsWith("-")) {
+    throw new Error("Missing agent_id");
+  }
+  const conversationId = args[1];
   if (!conversationId || conversationId.startsWith("-")) {
     throw new Error("Missing conversation_id");
   }
@@ -252,7 +257,7 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
   let limit = 30;
   let pretty = true;
 
-  for (let i = 1; i < args.length; i += 1) {
+  for (let i = 2; i < args.length; i += 1) {
     const arg = args[i];
 
     if (arg === "--help" || arg === "-h") {
@@ -289,7 +294,7 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
   }
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { conversationId, businessDomain, limit, pretty };
+  return { agentId, conversationId, businessDomain, limit, pretty };
 }
 
 export interface AgentTraceOptions {
@@ -448,9 +453,9 @@ Options:
 
   if (subcommand === "history") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent history <conversation_id> [options]
+      console.log(`kweaver agent history <agent_id> <conversation_id> [options]
 
-Show message history for a conversation.
+Show conversation detail (messages) for an agent.
 
 Options:
   --limit <n>              Max messages to return (default: 30)
@@ -688,9 +693,9 @@ async function runAgentHistoryCommand(args: string[]): Promise<number> {
     options = parseAgentHistoryArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent history <conversation_id> [options]
+      console.log(`kweaver agent history <agent_id> <conversation_id> [options]
 
-Show message history for a conversation.
+Show conversation detail (messages) for an agent.
 
 Options:
   --limit <n>              Max messages to return (default: 30)
@@ -707,6 +712,7 @@ Options:
     const body = await listMessages({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
+      agentId: options.agentId,
       conversationId: options.conversationId,
       businessDomain: options.businessDomain,
       limit: options.limit,

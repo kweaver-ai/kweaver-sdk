@@ -10,8 +10,8 @@ export class ConversationsResource {
     return Array.isArray(parsed) ? parsed : [];
   }
 
-  async listMessages(conversationId: string, opts: { limit?: number } = {}): Promise<unknown[]> {
-    const raw = await listMessages({ ...this.ctx.base(), conversationId, ...opts });
+  async listMessages(agentId: string, conversationId: string, opts: { limit?: number } = {}): Promise<unknown[]> {
+    const raw = await listMessages({ ...this.ctx.base(), agentId, conversationId, ...opts });
     const parsed = JSON.parse(raw) as unknown;
     return Array.isArray(parsed) ? parsed : [];
   }

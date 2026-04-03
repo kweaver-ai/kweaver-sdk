@@ -9,6 +9,7 @@ export interface ListConversationsOptions {
 export interface ListMessagesOptions {
   baseUrl: string;
   accessToken: string;
+  agentId: string;
   conversationId: string;
   businessDomain?: string;
   limit?: number;
@@ -22,12 +23,12 @@ export interface GetTracesOptions {
 
 function buildConversationsUrl(baseUrl: string, agentId: string): string {
   const base = baseUrl.replace(/\/+$/, "");
-  return `${base}/api/agent-app/v1/app/${agentId}/conversations`;
+  return `${base}/api/agent-factory/v1/app/${agentId}/conversation`;
 }
 
-function buildMessagesUrl(baseUrl: string, conversationId: string): string {
+function buildConversationDetailUrl(baseUrl: string, agentId: string, conversationId: string): string {
   const base = baseUrl.replace(/\/+$/, "");
-  return `${base}/api/agent-app/v1/conversations/${conversationId}/messages`;
+  return `${base}/api/agent-factory/v1/app/${agentId}/conversation/${conversationId}`;
 }
 
 /**
@@ -50,10 +51,6 @@ export async function listConversations(opts: ListConversationsOptions): Promise
       "x-business-domain": businessDomain,
     },
   });
-
-  if (response.status === 404) {
-    return "[]";
-  }
 
   const body = await response.text();
   if (!response.ok) {
@@ -94,13 +91,10 @@ export async function getTracesByConversation(opts: GetTracesOptions): Promise<s
  * Returns empty array on 404 (endpoint may not be available in all deployments).
  */
 export async function listMessages(opts: ListMessagesOptions): Promise<string> {
-  const { baseUrl, accessToken, conversationId, businessDomain = "bd_public", limit } = opts;
-  const url = new URL(buildMessagesUrl(baseUrl, conversationId));
-  if (limit !== undefined) {
-    url.searchParams.set("limit", String(limit));
-  }
+  const { baseUrl, accessToken, agentId, conversationId, businessDomain = "bd_public" } = opts;
+  const url = buildConversationDetailUrl(baseUrl, agentId, conversationId);
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(url, {
     method: "GET",
     headers: {
       accept: "application/json",
@@ -110,14 +104,10 @@ export async function listMessages(opts: ListMessagesOptions): Promise<string> {
     },
   });
 
-  if (response.status === 404) {
-    return "[]";
-  }
-
   const body = await response.text();
   if (!response.ok) {
     throw new Error(`listMessages failed: HTTP ${response.status} ${response.statusText} — ${body.slice(0, 200)}`);
   }
 
-  return body || "[]";
+  return body || "{}";
 }

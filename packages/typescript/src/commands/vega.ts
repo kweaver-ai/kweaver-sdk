@@ -198,21 +198,26 @@ async function runVegaStatsCommand(args: string[]): Promise<number> {
   }
 
   const { businessDomain, pretty } = parseCommonFlags(args);
-  const token = await ensureValidToken();
-  const body = await listVegaCatalogs({
-    baseUrl: token.baseUrl,
-    accessToken: token.accessToken,
-    limit: 100,
-    businessDomain,
-  });
+  try {
+    const token = await ensureValidToken();
+    const body = await listVegaCatalogs({
+      baseUrl: token.baseUrl,
+      accessToken: token.accessToken,
+      limit: 100,
+      businessDomain,
+    });
 
-  const parsed = JSON.parse(body) as Record<string, unknown>;
-  const entries = Array.isArray(parsed) ? parsed : (parsed.entries ?? parsed.data ?? parsed.items ?? parsed.catalogs ?? []);
-  const count = Array.isArray(entries) ? entries.length : 0;
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    const entries = Array.isArray(parsed) ? parsed : (parsed.entries ?? parsed.data ?? parsed.items ?? parsed.catalogs ?? []);
+    const count = Array.isArray(entries) ? entries.length : 0;
 
-  const stats = { catalog_count: count };
-  console.log(pretty ? JSON.stringify(stats, null, 2) : JSON.stringify(stats));
-  return 0;
+    const stats = { catalog_count: count };
+    console.log(pretty ? JSON.stringify(stats, null, 2) : JSON.stringify(stats));
+    return 0;
+  } catch (error) {
+    console.error(formatHttpError(error));
+    return 1;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BKN Explorer</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="header-inner">
+        <a href="#/" class="logo">BKN Explorer</a>
+        <div class="search-box">
+          <input type="text" id="search-input" placeholder="语义搜索..." />
+          <button id="search-btn">搜索</button>
+        </div>
+      </div>
+    </header>
+
+    <nav id="sidebar">
+      <div class="nav-section">
+        <h3>对象类</h3>
+        <ul id="nav-ot-list"></ul>
+      </div>
+      <div class="nav-section">
+        <h3>关系类</h3>
+        <ul id="nav-rt-list"></ul>
+      </div>
+    </nav>
+
+    <main id="content">
+      <div id="loading">加载中...</div>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

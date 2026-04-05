@@ -219,7 +219,7 @@ function startServer(
 ): Promise<ReturnType<typeof createServer>> {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
-  const templateDir = join(__dirname, "templates", "bkn-explorer");
+  const templateDir = join(__dirname, "..", "templates", "bkn-explorer");
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
@@ -432,10 +432,11 @@ export async function runKnExploreCommand(args: string[]): Promise<number> {
     }
 
     // Wait for SIGINT
-    await new Promise<void>((resolve) => {
+    await new Promise<void>(() => {
       process.on("SIGINT", () => {
         console.log("\nShutting down...");
-        server.close(() => resolve());
+        server.close();
+        process.exit(0);
       });
     });
 

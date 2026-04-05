@@ -83,9 +83,12 @@ async function selectKnInteractive(
 ): Promise<string> {
   const raw = await listKnowledgeNetworks({ baseUrl, accessToken, businessDomain });
   const parsed = JSON.parse(raw) as {
-    knowledge_networks?: Array<{ id: string; name: string }>;
+    entries?: Array<Record<string, unknown>>;
   };
-  const kns = parsed.knowledge_networks ?? [];
+  const kns = (parsed.entries ?? []).map((e) => ({
+    id: typeof e.id === "string" ? e.id : "",
+    name: typeof e.name === "string" ? e.name : "",
+  })).filter((e) => e.id);
 
   if (kns.length === 0) {
     throw new Error("No knowledge networks found.");

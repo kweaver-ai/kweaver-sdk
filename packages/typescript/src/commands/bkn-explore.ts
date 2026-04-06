@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, extname } from "node:path";
 
 import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
+import { HttpError } from "../utils/http.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import {
   listKnowledgeNetworks,
@@ -128,27 +129,40 @@ export function buildMeta(
     name: string;
     statistics?: { object_count?: number; relation_count?: number };
   };
-  const ot = JSON.parse(otRaw) as {
-    object_types?: Array<{
-      id: string;
-      name: string;
-      display_key?: string;
-      properties?: Array<{ name: string; type?: string }>;
-    }>;
-  };
-  const rt = JSON.parse(rtRaw) as {
-    relation_types?: Array<{
-      id: string;
-      name: string;
-      source_object_type_id: string;
-      target_object_type_id: string;
-      source_object_type?: { name: string };
-      target_object_type?: { name: string };
-    }>;
-  };
-  const at = JSON.parse(atRaw) as {
-    action_types?: Array<{ id: string; name: string }>;
-  };
+  const otParsed = JSON.parse(otRaw) as Record<string, unknown>;
+  const otItems = (
+    Array.isArray(otParsed) ? otParsed
+    : Array.isArray(otParsed.entries) ? otParsed.entries
+    : Array.isArray(otParsed.object_types) ? otParsed.object_types
+    : []
+  ) as Array<{
+    id: string;
+    name: string;
+    display_key?: string;
+    properties?: Array<{ name: string; type?: string }>;
+    data_properties?: Array<{ name: string; type?: string }>;
+  }>;
+  const rtParsed = JSON.parse(rtRaw) as Record<string, unknown>;
+  const rtItems = (
+    Array.isArray(rtParsed) ? rtParsed
+    : Array.isArray(rtParsed.entries) ? rtParsed.entries
+    : Array.isArray(rtParsed.relation_types) ? rtParsed.relation_types
+    : []
+  ) as Array<{
+    id: string;
+    name: string;
+    source_object_type_id: string;
+    target_object_type_id: string;
+    source_object_type?: { name: string };
+    target_object_type?: { name: string };
+  }>;
+  const atParsed = JSON.parse(atRaw) as Record<string, unknown>;
+  const atItems = (
+    Array.isArray(atParsed) ? atParsed
+    : Array.isArray(atParsed.entries) ? atParsed.entries
+    : Array.isArray(atParsed.action_types) ? atParsed.action_types
+    : []
+  ) as Array<{ id: string; name: string }>;
 
   return {
     bkn: { id: kn.id, name: kn.name },
@@ -156,17 +170,20 @@ export function buildMeta(
       object_count: kn.statistics?.object_count ?? 0,
       relation_count: kn.statistics?.relation_count ?? 0,
     },
-    objectTypes: (ot.object_types ?? []).map((o) => ({
-      id: o.id,
-      name: o.name,
-      displayKey: o.display_key ?? "",
-      propertyCount: o.properties?.length ?? 0,
-      properties: (o.properties ?? []).map((p) => ({
-        name: p.name,
-        ...(p.type !== undefined ? { type: p.type } : {}),
-      })),
-    })),
-    relationTypes: (rt.relation_types ?? []).map((r) => ({
+    objectTypes: otItems.map((o) => {
+      const props = o.properties ?? o.data_properties ?? [];
+      return {
+        id: o.id,
+        name: o.name,
+        displayKey: o.display_key ?? "",
+        propertyCount: props.length,
+        properties: props.map((p) => ({
+          name: p.name,
+          ...(p.type !== undefined ? { type: p.type } : {}),
+        })),
+      };
+    }),
+    relationTypes: rtItems.map((r) => ({
       id: r.id,
       name: r.name,
       sourceOtId: r.source_object_type_id,
@@ -174,7 +191,7 @@ export function buildMeta(
       sourceOtName: r.source_object_type?.name ?? "",
       targetOtName: r.target_object_type?.name ?? "",
     })),
-    actionTypes: (at.action_types ?? []).map((a) => ({
+    actionTypes: atItems.map((a) => ({
       id: a.id,
       name: a.name,
     })),
@@ -239,11 +256,13 @@ function startServer(
           limit?: number;
           search_after?: unknown[];
           condition?: unknown;
+          _instance_identities?: unknown[];
         };
         const queryBody = JSON.stringify({
           limit: body.limit ?? 50,
           ...(body.search_after ? { search_after: body.search_after } : {}),
           ...(body.condition ? { condition: body.condition } : {}),
+          ...(body._instance_identities ? { _instance_identities: body._instance_identities } : {}),
         });
         const result = await objectTypeQuery({
           baseUrl: token.baseUrl,
@@ -260,15 +279,28 @@ function startServer(
 
       if (pathname === "/api/subgraph" && req.method === "POST") {
         const bodyStr = await readBody(req);
-        const result = await subgraph({
-          baseUrl: token.baseUrl,
-          accessToken: token.accessToken,
-          knId,
-          body: bodyStr,
-          businessDomain,
-        });
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(result);
+        console.error("[subgraph] request body:", bodyStr);
+        try {
+          const parsed = JSON.parse(bodyStr);
+          const hasRelationPaths = Array.isArray(parsed.relation_type_paths);
+          const result = await subgraph({
+            baseUrl: token.baseUrl,
+            accessToken: token.accessToken,
+            knId,
+            body: bodyStr,
+            businessDomain,
+            ...(hasRelationPaths ? { queryType: "relation_path" } : {}),
+          });
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(result);
+        } catch (err: unknown) {
+          const e = err as { status?: number; body?: string; message?: string };
+          console.error("[subgraph] error:", e.status, e.body ?? e.message);
+          const status = e.status ?? 500;
+          const errBody = e.body ?? e.message ?? "subgraph error";
+          res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: typeof errBody === "string" ? errBody : JSON.stringify(errBody) }));
+        }
         return;
       }
 
@@ -332,8 +364,21 @@ function startServer(
       res.writeHead(404, { "Content-Type": "text/plain" });
       res.end("Not Found");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      jsonResponse(res, 500, { error: message });
+      if (error instanceof HttpError) {
+        // Parse upstream error body for a human-readable description
+        let detail = "";
+        try {
+          const parsed = JSON.parse(error.body) as Record<string, unknown>;
+          detail = typeof parsed.description === "string" ? parsed.description : "";
+        } catch { /* ignore */ }
+        jsonResponse(res, error.status, {
+          error: detail || error.message,
+          upstream_status: error.status,
+        });
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        jsonResponse(res, 500, { error: message });
+      }
     }
   });
 

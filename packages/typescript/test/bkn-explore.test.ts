@@ -31,7 +31,7 @@ test("parseKnExploreArgs: -bd flag", () => {
   assert.equal(opts.businessDomain, "my_domain");
 });
 
-test("buildMeta: assembles schema from raw API responses", () => {
+test("buildMeta: assembles schema from raw API responses (legacy keys)", () => {
   const knRaw = JSON.stringify({
     id: "kn-1", name: "Test KN",
     statistics: { object_count: 10, relation_count: 5 },
@@ -60,4 +60,32 @@ test("buildMeta: assembles schema from raw API responses", () => {
   assert.equal(meta.relationTypes.length, 1);
   assert.equal(meta.relationTypes[0].sourceOtName, "Person");
   assert.equal(meta.actionTypes.length, 1);
+});
+
+test("buildMeta: handles entries-wrapped API responses", () => {
+  const knRaw = JSON.stringify({
+    id: "kn-2", name: "Entries KN",
+    statistics: { object_count: 3, relation_count: 1 },
+  });
+  const otRaw = JSON.stringify({
+    entries: [
+      { id: "ot-1", name: "Player", display_key: "name", data_properties: [{ name: "name" }, { name: "age", type: "integer" }] },
+    ],
+  });
+  const rtRaw = JSON.stringify({
+    entries: [
+      { id: "rt-1", name: "plays_for", source_object_type_id: "ot-1", target_object_type_id: "ot-2",
+        source_object_type: { name: "Player" }, target_object_type: { name: "Team" } },
+    ],
+  });
+  const atRaw = JSON.stringify({ entries: [] });
+
+  const meta = buildMeta(knRaw, otRaw, rtRaw, atRaw);
+  assert.equal(meta.objectTypes.length, 1);
+  assert.equal(meta.objectTypes[0].name, "Player");
+  assert.equal(meta.objectTypes[0].propertyCount, 2);
+  assert.equal(meta.objectTypes[0].properties[1].type, "integer");
+  assert.equal(meta.relationTypes.length, 1);
+  assert.equal(meta.relationTypes[0].name, "plays_for");
+  assert.equal(meta.actionTypes.length, 0);
 });

@@ -40,8 +40,8 @@ function generateTimestampedPath(path: string): string {
 
 export interface AgentListOptions {
   name: string;
-  pagination_marker_str: string;
-  size: number;
+  offset: number;
+  limit: number;
   category_id: string;
   custom_space_id: string;
   is_to_square: number;
@@ -355,8 +355,8 @@ export function parseAgentPersonalListArgs(args: string[]): AgentPersonalListOpt
 
 export function parseAgentListArgs(args: string[]): AgentListOptions {
   let name = "";
-  let pagination_marker_str = "";
-  let size = 48;
+  let offset = 0;
+  let limit = 30;
   let category_id = "";
   let custom_space_id = "";
   let is_to_square = 1;
@@ -377,15 +377,16 @@ export function parseAgentListArgs(args: string[]): AgentListOptions {
       continue;
     }
 
-    if (arg === "--pagination-marker") {
-      pagination_marker_str = args[i + 1] ?? "";
+    if (arg === "--offset") {
+      offset = parseInt(args[i + 1] ?? "0", 10);
+      if (Number.isNaN(offset) || offset < 0) offset = 0;
       i += 1;
       continue;
     }
 
-    if (arg === "--size") {
-      size = parseInt(args[i + 1] ?? "48", 10);
-      if (Number.isNaN(size) || size < 1) size = 48;
+    if (arg === "--limit") {
+      limit = parseInt(args[i + 1] ?? "30", 10);
+      if (Number.isNaN(limit) || limit < 1) limit = 30;
       i += 1;
       continue;
     }
@@ -438,8 +439,8 @@ export function parseAgentListArgs(args: string[]): AgentListOptions {
   if (!businessDomain) businessDomain = resolveBusinessDomain();
   return {
     name,
-    pagination_marker_str,
-    size,
+    offset,
+    limit,
     category_id,
     custom_space_id,
     is_to_square,
@@ -577,19 +578,24 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
 }
 
 export interface AgentTraceOptions {
+  agentId: string;
   conversationId: string;
   pretty: boolean;
 }
 
 export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
-  const conversationId = args[0];
+  const agentId = args[0];
+  if (!agentId || agentId.startsWith("-")) {
+    throw new Error("Missing agent_id");
+  }
+  const conversationId = args[1];
   if (!conversationId || conversationId.startsWith("-")) {
     throw new Error("Missing conversation_id");
   }
 
   let pretty = true;
 
-  for (let i = 1; i < args.length; i += 1) {
+  for (let i = 2; i < args.length; i += 1) {
     const arg = args[i];
 
     if (arg === "--help" || arg === "-h") {
@@ -609,7 +615,7 @@ export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
     throw new Error(`Unsupported agent trace argument: ${arg}`);
   }
 
-  return { conversationId, pretty };
+  return { agentId, conversationId, pretty };
 }
 
 export async function runAgentCommand(args: string[]): Promise<number> {
@@ -729,8 +735,8 @@ List published agents from the agent-factory API.
 
 Options:
   --name <text>             Filter by name
-  --pagination-marker <str> Pagination marker (default: "")
-  --size <n>                Max items to return (default: 48)
+  --offset <n>              Pagination offset (default: 0)
+  --limit <n>               Max items to return (default: 30)
   --category-id <id>        Filter by category
   --custom-space-id <id>    Filter by custom space
   --is-to-square <0|1>      Is to square (default: 1)
@@ -824,7 +830,7 @@ Options:
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
       console.log(`kweaver agent history <agent_id> <conversation_id> [options]
 
-Show message history for a conversation.
+Show conversation detail (messages) for an agent.
 
 Options:
   -bd, --biz-domain <value> Business domain (default: bd_public)
@@ -835,7 +841,7 @@ Options:
 
   if (subcommand === "trace") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent trace <conversation_id> [options]
+      console.log(`kweaver agent trace <agent_id> <conversation_id> [options]
 
 Get trace data for a conversation.
 
@@ -1036,8 +1042,8 @@ Options:
       accessToken: token.accessToken,
       businessDomain: options.businessDomain,
       name: options.name,
-      pagination_marker_str: options.pagination_marker_str,
-      size: options.size,
+      offset: options.offset,
+      limit: options.limit,
       category_id: options.category_id,
       custom_space_id: options.custom_space_id,
       is_to_square: options.is_to_square,
@@ -1113,7 +1119,7 @@ async function runAgentHistoryCommand(args: string[]): Promise<number> {
     if (error instanceof Error && error.message === "help") {
       console.log(`kweaver agent history <agent_id> <conversation_id> [options]
 
-Show message history for a conversation.
+Show conversation detail (messages) for an agent.
 
 Options:
   -bd, --biz-domain <value> Business domain (default: bd_public)
@@ -1163,7 +1169,7 @@ async function runAgentTraceCommand(args: string[]): Promise<number> {
     options = parseAgentTraceArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent trace <conversation_id> [options]
+      console.log(`kweaver agent trace <agent_id> <conversation_id> [options]
 
 Get trace data for a conversation.
 
@@ -1181,6 +1187,7 @@ Options:
     const body = await getTracesByConversation({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
+      agentId: options.agentId,
       conversationId: options.conversationId,
     });
     console.log(formatCallOutput(body, options.pretty));

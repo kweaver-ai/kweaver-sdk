@@ -732,8 +732,8 @@ test("parseKnObjectTypeQueryArgs validates --search-after json array", () => {
 test("parseAgentListArgs parses flags with defaults", () => {
   const opts = parseAgentListArgs([]);
   assert.equal(opts.name, "");
-  assert.equal(opts.pagination_marker_str, "");
-  assert.equal(opts.size, 48);
+  assert.equal(opts.offset, 0);
+  assert.equal(opts.limit, 30);
   assert.equal(opts.category_id, "");
   assert.equal(opts.custom_space_id, "");
   assert.equal(opts.is_to_square, 1);
@@ -742,13 +742,13 @@ test("parseAgentListArgs parses flags with defaults", () => {
   assert.equal(opts.verbose, false);
 });
 
-test("parseAgentListArgs parses custom name pagination_marker size and body fields", () => {
+test("parseAgentListArgs parses custom name offset limit and body fields", () => {
   const opts = parseAgentListArgs([
     "--name",
     "my-agent",
-    "--pagination-marker",
-    "abc123",
-    "--size",
+    "--offset",
+    "10",
+    "--limit",
     "20",
     "--category-id",
     "cat-1",
@@ -762,8 +762,8 @@ test("parseAgentListArgs parses custom name pagination_marker size and body fiel
     "bd_enterprise",
   ]);
   assert.equal(opts.name, "my-agent");
-  assert.equal(opts.pagination_marker_str, "abc123");
-  assert.equal(opts.size, 20);
+  assert.equal(opts.offset, 10);
+  assert.equal(opts.limit, 20);
   assert.equal(opts.category_id, "cat-1");
   assert.equal(opts.custom_space_id, "space-1");
   assert.equal(opts.is_to_square, 0);
@@ -1094,8 +1094,8 @@ test("run agent list --help shows list options", async () => {
     const help = lines.join("\n");
     assert.ok(help.includes("List published agents"));
     assert.ok(help.includes("--name"));
-    assert.ok(help.includes("--pagination-marker"));
-    assert.ok(help.includes("--size"));
+    assert.ok(help.includes("--offset"));
+    assert.ok(help.includes("--limit"));
     assert.ok(help.includes("--verbose"));
     assert.ok(help.includes("--pretty"));
   } finally {

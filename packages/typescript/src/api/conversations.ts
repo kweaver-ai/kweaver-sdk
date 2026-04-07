@@ -18,7 +18,9 @@ export interface ListMessagesOptions {
 export interface GetTracesOptions {
   baseUrl: string;
   accessToken: string;
+  agentId: string;
   conversationId: string;
+  businessDomain?: string;
 }
 
 function buildConversationsUrl(baseUrl: string, agentKey: string): string {
@@ -51,10 +53,6 @@ export async function listConversations(opts: ListConversationsOptions): Promise
     },
   });
 
-  if (response.status === 404) {
-    return "[]";
-  }
-
   const body = await response.text();
   if (!response.ok) {
     throw new Error(`listConversations failed: HTTP ${response.status} ${response.statusText} — ${body.slice(0, 200)}`);
@@ -63,22 +61,31 @@ export async function listConversations(opts: ListConversationsOptions): Promise
   return body || "[]";
 }
 
-function buildTracesUrl(baseUrl: string, conversationId: string): string {
+function buildTracesUrl(baseUrl: string, agentId: string, conversationId: string): string {
   const base = baseUrl.replace(/\/+$/, "");
-  return `${base}/api/agent-observability/v1/traces/by-conversation?conversation_id=${conversationId}`;
+  return `${base}/api/agent-factory/v1/observability/agent/${agentId}/conversation/${conversationId}/session`;
 }
 
 export async function getTracesByConversation(opts: GetTracesOptions): Promise<string> {
-  const { baseUrl, accessToken, conversationId } = opts;
-  const url = buildTracesUrl(baseUrl, conversationId);
+  const { baseUrl, accessToken, agentId, conversationId, businessDomain = "bd_public" } = opts;
+  const url = buildTracesUrl(baseUrl, agentId, conversationId);
 
   const response = await fetch(url, {
-    method: "GET",
+    method: "POST",
     headers: {
+      "Content-Type": "application/json",
       accept: "application/json",
       authorization: `Bearer ${accessToken}`,
       token: accessToken,
+      "x-business-domain": businessDomain,
     },
+    body: JSON.stringify({
+      agent_id: agentId,
+      start_time: 1,
+      end_time: Date.now() + 86400000,
+      page: 1,
+      size: 50,
+    }),
   });
 
   const body = await response.text();
@@ -97,7 +104,7 @@ export async function listMessages(opts: ListMessagesOptions): Promise<string> {
   const { baseUrl, accessToken, agentKey, conversationId, businessDomain = "bd_public" } = opts;
   const url = buildMessagesUrl(baseUrl, agentKey, conversationId);
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(url, {
     method: "GET",
     headers: {
       accept: "application/json",
@@ -107,14 +114,10 @@ export async function listMessages(opts: ListMessagesOptions): Promise<string> {
     },
   });
 
-  if (response.status === 404) {
-    return "[]";
-  }
-
   const body = await response.text();
   if (!response.ok) {
     throw new Error(`listMessages failed: HTTP ${response.status} ${response.statusText} — ${body.slice(0, 200)}`);
   }
 
-  return body || "[]";
+  return body || "{}";
 }

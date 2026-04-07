@@ -12,6 +12,7 @@ function isRetryableStatus(status: number): boolean {
 function isRetryableNetworkError(error: unknown): boolean {
   if (error instanceof HttpError) return isRetryableStatus(error.status);
   if (!(error instanceof Error)) return false;
+  if (error.name === "AbortError" || error.name === "TimeoutError") return true;
   const msg = error.message.toLowerCase();
   const cause = "cause" in error && error.cause instanceof Error ? error.cause.message.toLowerCase() : "";
   const combined = `${msg} ${cause}`;

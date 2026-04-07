@@ -48,7 +48,8 @@ export interface ImportOptions {
   accessToken: string;
   businessDomain?: string;
   type: "operator" | "toolbox" | "mcp";
-  body: Record<string, unknown>;
+  body?: Record<string, unknown>;
+  filePath?: string;
 }
 
 export async function importData(options: ImportOptions): Promise<string> {
@@ -58,10 +59,33 @@ export async function importData(options: ImportOptions): Promise<string> {
     businessDomain = "bd_public",
     type,
     body,
+    filePath,
   } = options;
 
   const base = getBaseUrl(baseUrl);
   const url = `${base}${API_PREFIX}/impex/import/${type}`;
+
+  if (filePath) {
+    const fileContent = await import("fs").then((fs) => fs.promises.readFile(filePath));
+    const formData = new FormData();
+    const blob = new Blob([fileContent], { type: "application/msaccess" });
+    formData.append("data", blob, filePath.split("/").pop() || "upload.adp");
+    formData.append("mode", "upsert");
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...buildHeaders(accessToken, businessDomain),
+      },
+      body: formData,
+    });
+
+    const responseBody = await response.text();
+    if (!response.ok) {
+      throw new HttpError(response.status, response.statusText, responseBody);
+    }
+    return responseBody;
+  }
 
   const response = await fetch(url, {
     method: "POST",

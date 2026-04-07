@@ -158,12 +158,14 @@ Arguments:
 
 Options:
   -bd, --biz-domain <value>  Business domain (default: bd_public)
+  -f, --file <path>         Import from ADP file (multipart/form-data)
   --pretty                    Pretty-print JSON output (default)
   --compact                   Compact JSON output`;
 
-function parseCommonArgs(args: string[]): { businessDomain: string; pretty: boolean; remaining: string[] } {
+function parseCommonArgs(args: string[]): { businessDomain: string; pretty: boolean; remaining: string[]; filePath?: string } {
   let businessDomain = "";
   let pretty = true;
+  let filePath: string | undefined;
   const remaining: string[] = [];
 
   for (let i = 0; i < args.length; i += 1) {
@@ -171,6 +173,12 @@ function parseCommonArgs(args: string[]): { businessDomain: string; pretty: bool
 
     if (arg === "-bd" || arg === "--biz-domain") {
       businessDomain = args[i + 1] ?? "bd_public";
+      i += 1;
+      continue;
+    }
+
+    if (arg === "-f" || arg === "--file") {
+      filePath = args[i + 1];
       i += 1;
       continue;
     }
@@ -189,7 +197,7 @@ function parseCommonArgs(args: string[]): { businessDomain: string; pretty: bool
   }
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { businessDomain, pretty, remaining };
+  return { businessDomain, pretty, remaining, filePath };
 }
 
 export async function runExecCommand(args: string[]): Promise<number> {
@@ -1039,7 +1047,7 @@ async function runImpexCommand(args: string[]): Promise<number> {
     return 0;
   }
 
-  const { businessDomain, pretty, remaining } = parseCommonArgs(rest);
+  const { businessDomain, pretty, remaining, filePath } = parseCommonArgs(rest);
   const token = await ensureValidToken();
 
   switch (cmd) {
@@ -1074,6 +1082,17 @@ async function runImpexCommand(args: string[]): Promise<number> {
       if (!["operator", "toolbox", "mcp"].includes(type)) {
         console.error("Type must be one of: operator, toolbox, mcp");
         return 1;
+      }
+      if (filePath) {
+        const result = await importData({
+          baseUrl: token.baseUrl,
+          accessToken: token.accessToken,
+          businessDomain,
+          type: type as "operator" | "toolbox" | "mcp",
+          filePath,
+        });
+        console.log(formatCallOutput(result, pretty));
+        return 0;
       }
       const body = await readBodyFromFileOrArg(rest);
       const result = await importData({

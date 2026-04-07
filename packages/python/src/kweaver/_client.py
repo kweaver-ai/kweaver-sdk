@@ -17,13 +17,17 @@ from kweaver.resources.conversations import ConversationsResource
 from kweaver.resources.dataflows import DataflowsResource
 from kweaver.resources.datasources import DataSourcesResource
 from kweaver.resources.dataviews import DataViewsResource
+from kweaver.resources.impex import ImpexResource
 from kweaver.resources.knowledge_networks import KnowledgeNetworksResource
+from kweaver.resources.mcp_servers import MCPServersResource
 from kweaver.resources.object_types import ObjectTypesResource
 from kweaver.resources.action_types import ActionTypesResource
+from kweaver.resources.operators import OperatorsResource
 from kweaver.resources.query import QueryResource
 from kweaver.resources.jobs import JobsResource
 from kweaver.resources.relation_types import RelationTypesResource
 from kweaver.resources.skills import SkillsResource
+from kweaver.resources.toolboxes import ToolBoxesResource
 from kweaver.resources.vega import VegaNamespace
 
 
@@ -109,6 +113,10 @@ class KWeaverClient:
         self.jobs = JobsResource(self._http)
         self.concept_groups = ConceptGroupsResource(self._http)
         self.skills = SkillsResource(self._http)
+        self.operators = OperatorsResource(self._http)
+        self.toolboxes = ToolBoxesResource(self._http)
+        self.mcp_servers = MCPServersResource(self._http)
+        self.impex = ImpexResource(self._http)
 
     @property
     def vega(self) -> VegaNamespace:

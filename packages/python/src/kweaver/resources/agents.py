@@ -269,6 +269,7 @@ class AgentsResource:
             "category_ids": [category_id] if category_id else [],
             "description": "",
             "publish_to_where": ["square"],
+            "publish_to_bes": ["skill_agent"],
             "pms_control": None,
         }
         data = self._http.post(f"/api/agent-factory/v3/agent/{id}/publish", json=body)

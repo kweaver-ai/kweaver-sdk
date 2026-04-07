@@ -252,6 +252,7 @@ export async function publishAgent(options: PublishAgentOptions): Promise<string
     category_ids: categoryId ? [categoryId] : [],
     description: "",
     publish_to_where: ["square"],
+    publish_to_bes: ["skill_agent"],
     pms_control: null,
   });
 

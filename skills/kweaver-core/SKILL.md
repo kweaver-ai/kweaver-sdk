@@ -81,10 +81,33 @@ kweaver <command> [subcommand] [options]
 | 登录后确认业务域 | `config show`；若异常或列表为空 → `config list-bd` → `config set-bd <uuid>` | [references/config.md](references/config.md) |
 | 从数据库/CSV 构建 KN | 连接数据源 → CSV 导入 → 创建 KN → 构建索引 → 查询验证 → 绑定 Agent | [references/build-kn-from-db.md](references/build-kn-from-db.md) |
 | 列/查数据视图 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 对视图跑 SQL | [references/dataview.md](references/dataview.md) |
-| Trace 数据分析 | `agent trace <conversation_id>` 获取 trace 数据，构建证据链 | — |
+| Trace 数据分析 | `agent trace <conversation_id>` 获取 trace数据，构建证据链 | — |
 | 管理 Skill | `list` / `market` 查找 Skill；`content` / `read-file` 渐进式读取；`install` 下载并解压本地使用 | [references/skill.md](references/skill.md) |
+| 为 Agent 添加技能 | 列出 tools/mcps/agents → 用户选择 → 合并到 config → update 保存 | [references/skill-add.md](references/skill-add.md) |
 
 **按需阅读**：需要子命令完整参数或编排示例时，读取对应的 reference 文件。
+
+## 为 Agent 添加技能
+
+支持为 Agent 的 `config.skills` 添加三种类型的技能：
+
+| 类型 | 来源 | 列表命令 |
+|------|------|---------|
+| `tools` | 执行工厂工具箱 | `exec toolbox list` → `toolbox tool-list <box_id>` |
+| `mcps` | 执行工厂 MCP Server | `exec mcp list` |
+| `agents` | 已发布 Agent（需含 `publish_to_bes: ["skill_agent"]`） | `agent list --verbose` |
+
+**完整操作流程见** [`references/skill-add.md`](references/skill-add.md)
+
+**快速流程**：
+```
+1. kweaver agent get <agent_id> --save-config /tmp/    # 获取当前配置
+2. kweaver exec toolbox list                            # 列出工具箱
+3. kweaver exec mcp list                                # 列出 MCP Server
+4. kweaver agent list --verbose                         # 列出 Agent（筛选 skill_agent）
+5. 用户选择 → 构建 skills 对象 → 更新配置文件
+6. kweaver agent update <agent_id> --config-path <file> # 保存到平台
+```
 
 ## 调用示例
 

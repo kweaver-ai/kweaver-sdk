@@ -48,6 +48,9 @@ export interface ExploreMeta {
   actionTypes: Array<{ id: string; name: string }>;
 }
 
+const EXPLORE_BOOTSTRAP_RETRY_DELAY_MS = 300;
+const EXPLORE_BOOTSTRAP_MAX_ATTEMPTS = 2;
+
 // ── Part A: Arg parsing ─────────────────────────────────────────────────────
 
 export function parseKnExploreArgs(args: string[]): KnExploreOptions {
@@ -114,6 +117,99 @@ async function selectKnInteractive(
   }
 
   return kns[idx]!.id;
+}
+
+function getErrorMessage(error: unknown): string {
+  const parts: string[] = [];
+
+  if (error instanceof Error) {
+    if (error.message) {
+      parts.push(error.message);
+    }
+    const cause = "cause" in error && error.cause instanceof Error ? error.cause.message : "";
+    if (cause) {
+      parts.push(cause);
+    }
+  } else {
+    parts.push(String(error));
+  }
+
+  return parts.join(" ").toLowerCase();
+}
+
+export function isRetryableExploreBootstrapError(error: unknown): boolean {
+  if (error instanceof HttpError) {
+    return false;
+  }
+
+  const message = getErrorMessage(error);
+  if (!message) {
+    return false;
+  }
+
+  return [
+    "fetch failed",
+    "client network socket disconnected",
+    "socket hang up",
+    "econnreset",
+    "econnrefused",
+    "etimedout",
+    "tls",
+    "secure tls connection",
+  ].some((token) => message.includes(token));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function loadExploreMetaWithRetry(
+  token: { baseUrl: string; accessToken: string },
+  knId: string,
+  businessDomain: string,
+): Promise<ExploreMeta> {
+  for (let attempt = 1; attempt <= EXPLORE_BOOTSTRAP_MAX_ATTEMPTS; attempt++) {
+    try {
+      const [knRaw, otRaw, rtRaw, atRaw] = await Promise.all([
+        getKnowledgeNetwork({
+          baseUrl: token.baseUrl,
+          accessToken: token.accessToken,
+          knId,
+          businessDomain,
+          include_statistics: true,
+        }),
+        listObjectTypes({
+          baseUrl: token.baseUrl,
+          accessToken: token.accessToken,
+          knId,
+          businessDomain,
+        }),
+        listRelationTypes({
+          baseUrl: token.baseUrl,
+          accessToken: token.accessToken,
+          knId,
+          businessDomain,
+        }),
+        listActionTypes({
+          baseUrl: token.baseUrl,
+          accessToken: token.accessToken,
+          knId,
+          businessDomain,
+        }),
+      ]);
+
+      return buildMeta(knRaw, otRaw, rtRaw, atRaw);
+    } catch (error) {
+      if (attempt >= EXPLORE_BOOTSTRAP_MAX_ATTEMPTS || !isRetryableExploreBootstrapError(error)) {
+        throw error;
+      }
+      await sleep(EXPLORE_BOOTSTRAP_RETRY_DELAY_MS);
+    }
+  }
+
+  throw new Error("Failed to load explorer metadata.");
 }
 
 // ── Part C: Meta builder ────────────────────────────────────────────────────
@@ -424,36 +520,7 @@ export async function runKnExploreCommand(args: string[]): Promise<number> {
       );
     }
 
-    // Load schema in parallel
-    const [knRaw, otRaw, rtRaw, atRaw] = await Promise.all([
-      getKnowledgeNetwork({
-        baseUrl: token.baseUrl,
-        accessToken: token.accessToken,
-        knId,
-        businessDomain: options.businessDomain,
-        include_statistics: true,
-      }),
-      listObjectTypes({
-        baseUrl: token.baseUrl,
-        accessToken: token.accessToken,
-        knId,
-        businessDomain: options.businessDomain,
-      }),
-      listRelationTypes({
-        baseUrl: token.baseUrl,
-        accessToken: token.accessToken,
-        knId,
-        businessDomain: options.businessDomain,
-      }),
-      listActionTypes({
-        baseUrl: token.baseUrl,
-        accessToken: token.accessToken,
-        knId,
-        businessDomain: options.businessDomain,
-      }),
-    ]);
-
-    const meta = buildMeta(knRaw, otRaw, rtRaw, atRaw);
+    const meta = await loadExploreMetaWithRetry(token, knId, options.businessDomain);
 
     const server = await startServer(meta, token, knId, options.businessDomain, options.port);
 

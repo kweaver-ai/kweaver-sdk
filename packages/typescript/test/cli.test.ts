@@ -496,6 +496,30 @@ test("formatHttpError formats OAuth invalid_grant with readable hint", () => {
   assert.ok(message.includes("Run `kweaver auth <platform-url>` again to log in"));
 });
 
+test("formatHttpError avoids insecure hint when tls verification is already disabled", () => {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+  try {
+    const message = formatHttpError(
+      new Error("fetch failed", {
+        cause: new Error("Client network socket disconnected before secure TLS connection was established"),
+      })
+    );
+
+    assert.equal(
+      message,
+      "fetch failed: Client network socket disconnected before secure TLS connection was established\nHint: TLS verification is already disabled for this process. Check network reachability, TLS termination, or proxy stability."
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    } else {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+    }
+  }
+});
+
 test("formatCallOutput pretty prints json when requested", () => {
   assert.equal(formatCallOutput("{\"ok\":true}", true), '{\n  "ok": true\n}');
   assert.equal(formatCallOutput("plain text", true), "plain text");

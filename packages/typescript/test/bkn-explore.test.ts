@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseKnExploreArgs, buildMeta } from "../src/commands/bkn-explore.js";
+import { parseKnExploreArgs, buildMeta, isRetryableExploreBootstrapError } from "../src/commands/bkn-explore.js";
+import { HttpError } from "../src/utils/http.js";
 
 test("parseKnExploreArgs: kn-id only", () => {
   const opts = parseKnExploreArgs(["kn-abc123"]);
@@ -88,4 +89,17 @@ test("buildMeta: handles entries-wrapped API responses", () => {
   assert.equal(meta.relationTypes.length, 1);
   assert.equal(meta.relationTypes[0].name, "plays_for");
   assert.equal(meta.actionTypes.length, 0);
+});
+
+test("isRetryableExploreBootstrapError: retries transient fetch failures", () => {
+  const error = new Error("fetch failed", {
+    cause: new Error("Client network socket disconnected before secure TLS connection was established"),
+  });
+
+  assert.equal(isRetryableExploreBootstrapError(error), true);
+});
+
+test("isRetryableExploreBootstrapError: does not retry http errors", () => {
+  const error = new HttpError(404, "Not Found", "{\"message\":\"missing\"}");
+  assert.equal(isRetryableExploreBootstrapError(error), false);
 });

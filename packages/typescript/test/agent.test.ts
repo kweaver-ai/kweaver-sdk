@@ -39,25 +39,31 @@ test("parseAgentHistoryArgs throws on unknown flag", () => {
   assert.throws(() => parseAgentHistoryArgs(["conv-abc", "--unknown"]), /Unsupported/);
 });
 
-test("parseAgentTraceArgs parses conversation_id", () => {
-  const result = parseAgentTraceArgs(["conv-123"]);
+test("parseAgentTraceArgs parses agent_id and conversation_id", () => {
+  const result = parseAgentTraceArgs(["agent-abc", "conv-123"]);
+  assert.equal(result.agentId, "agent-abc");
   assert.equal(result.conversationId, "conv-123");
   assert.equal(result.pretty, true);
 });
 
 test("parseAgentTraceArgs supports --compact flag", () => {
-  const result = parseAgentTraceArgs(["conv-123", "--compact"]);
+  const result = parseAgentTraceArgs(["agent-abc", "conv-123", "--compact"]);
   assert.equal(result.conversationId, "conv-123");
   assert.equal(result.pretty, false);
 });
 
+test("parseAgentTraceArgs throws on missing agent_id", () => {
+  assert.throws(() => parseAgentTraceArgs([]), /Missing agent_id/);
+  assert.throws(() => parseAgentTraceArgs(["--compact"]), /Missing agent_id/);
+});
+
 test("parseAgentTraceArgs throws on missing conversation_id", () => {
-  assert.throws(() => parseAgentTraceArgs([]), /Missing conversation_id/);
-  assert.throws(() => parseAgentTraceArgs(["--compact"]), /Missing conversation_id/);
+  assert.throws(() => parseAgentTraceArgs(["agent-abc"]), /Missing conversation_id/);
+  assert.throws(() => parseAgentTraceArgs(["agent-abc", "--compact"]), /Missing conversation_id/);
 });
 
 test("parseAgentTraceArgs throws on unknown flag", () => {
-  assert.throws(() => parseAgentTraceArgs(["conv-123", "--unknown"]), /Unsupported/);
+  assert.throws(() => parseAgentTraceArgs(["agent-abc", "conv-123", "--unknown"]), /Unsupported/);
 });
 
 test("listConversations returns body on 200", { concurrency: false }, async () => {
@@ -71,7 +77,7 @@ test("listConversations returns body on 200", { concurrency: false }, async () =
     const result = await listConversations({
       baseUrl: "https://dip.aishu.cn",
       accessToken: "token-abc",
-      agentId: "agent-123",
+      agentKey: "agent-123",
     });
     assert.deepEqual(JSON.parse(result), payload);
   } finally {
@@ -79,15 +85,20 @@ test("listConversations returns body on 200", { concurrency: false }, async () =
   }
 });
 
-test("listConversations returns empty array on 404", { concurrency: false }, async () => {
+test("listConversations throws on 404", { concurrency: false }, async () => {
   globalThis.fetch = async () => new Response("Not Found", { status: 404 });
   try {
-    const result = await listConversations({
-      baseUrl: "https://dip.aishu.cn",
-      accessToken: "token-abc",
-      agentId: "agent-123",
-    });
-    assert.deepEqual(JSON.parse(result), []);
+    await assert.rejects(
+      () => listConversations({
+        baseUrl: "https://dip.aishu.cn",
+        accessToken: "token-abc",
+        agentKey: "agent-123",
+      }),
+      (err: Error) => {
+        assert.ok(err.message.includes("404"));
+        return true;
+      }
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -104,6 +115,7 @@ test("listMessages returns body on 200", { concurrency: false }, async () => {
     const result = await listMessages({
       baseUrl: "https://dip.aishu.cn",
       accessToken: "token-abc",
+      agentKey: "agent-123",
       conversationId: "conv-abc",
     });
     assert.deepEqual(JSON.parse(result), payload);
@@ -112,15 +124,21 @@ test("listMessages returns body on 200", { concurrency: false }, async () => {
   }
 });
 
-test("listMessages returns empty array on 404", { concurrency: false }, async () => {
+test("listMessages throws on 404", { concurrency: false }, async () => {
   globalThis.fetch = async () => new Response("Not Found", { status: 404 });
   try {
-    const result = await listMessages({
-      baseUrl: "https://dip.aishu.cn",
-      accessToken: "token-abc",
-      conversationId: "conv-abc",
-    });
-    assert.deepEqual(JSON.parse(result), []);
+    await assert.rejects(
+      () => listMessages({
+        baseUrl: "https://dip.aishu.cn",
+        accessToken: "token-abc",
+        agentKey: "agent-123",
+        conversationId: "conv-abc",
+      }),
+      (err: Error) => {
+        assert.ok(err.message.includes("404"));
+        return true;
+      }
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -133,7 +151,7 @@ test("listConversations throws on non-404 error", { concurrency: false }, async 
       () => listConversations({
         baseUrl: "https://dip.aishu.cn",
         accessToken: "token-abc",
-        agentId: "agent-123",
+        agentKey: "agent-123",
       }),
       (err: Error) => {
         assert.ok(err.message.includes("500"));
@@ -152,6 +170,7 @@ test("listMessages throws on non-404 error", { concurrency: false }, async () =>
       () => listMessages({
         baseUrl: "https://dip.aishu.cn",
         accessToken: "token-abc",
+        agentKey: "agent-123",
         conversationId: "conv-abc",
       }),
       (err: Error) => {
@@ -168,8 +187,7 @@ test("getTracesByConversation returns body on 200", { concurrency: false }, asyn
   const payload = { traces: [{ span_id: "span-1", name: "query" }] };
   globalThis.fetch = async (url: string | URL | Request) => {
     const reqUrl = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
-    assert.ok(reqUrl.includes("/api/agent-observability/v1/traces/by-conversation"), `URL should contain trace path: ${reqUrl}`);
-    assert.ok(reqUrl.includes("conversation_id=conv-abc"), `URL should contain conversation_id: ${reqUrl}`);
+    assert.ok(reqUrl.includes("/api/agent-factory/v1/observability/agent/agent-abc/conversation/conv-abc/session"), `URL should contain trace path: ${reqUrl}`);
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -179,6 +197,7 @@ test("getTracesByConversation returns body on 200", { concurrency: false }, asyn
     const result = await getTracesByConversation({
       baseUrl: "https://dip.aishu.cn",
       accessToken: "token-abc",
+      agentId: "agent-abc",
       conversationId: "conv-abc",
     });
     assert.deepEqual(JSON.parse(result), payload);
@@ -194,6 +213,7 @@ test("getTracesByConversation throws on error", { concurrency: false }, async ()
       () => getTracesByConversation({
         baseUrl: "https://dip.aishu.cn",
         accessToken: "token-abc",
+        agentId: "agent-abc",
         conversationId: "conv-abc",
       }),
       (err: Error) => {
@@ -300,7 +320,7 @@ test("run agent trace prints trace data for conversation", { concurrency: false 
     });
 
   try {
-    const code = await runAgentCommand(["trace", "conv-abc"]);
+    const code = await runAgentCommand(["trace", "agent-abc", "conv-abc"]);
     assert.equal(code, 0);
   } finally {
     globalThis.fetch = originalFetch;

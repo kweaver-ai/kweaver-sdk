@@ -23,6 +23,17 @@ kweaver bkn object-type query <kn_id> <ot_id> '{"limit":5}'
 kweaver bkn search <kn_id> "订单"
 ```
 
+## 快速路径 vs 分步路径（能力差异）
+
+| 能力 | `create-from-ds` | 手动 `object-type create` |
+|------|------------------|----------------------------|
+| 自动创建 dataview | 是 | 否（需先有 dataview） |
+| 从 schema 生成全部属性 + `mapped_field` | 是 | 否；CLI 会按 dataview 拉取字段并补全 `mapped_field`（见下） |
+| 自动 `bkn build` | 可选 `--build` | 需单独 `bkn build` |
+| 自定义 PK/DK/属性名 | 有限（启发式） | 完全可控 |
+
+**推荐**：优先用快速路径；仅在需要自定义 PK/DK、筛选表或属性名时再走分步路径。
+
 ## 分步路径
 
 当需要精细控制（自定义 PK/display key、选择性建表等）时，手动逐步操作：
@@ -45,6 +56,11 @@ kweaver bkn object-type create <kn_id> \
 kweaver bkn object-type create <kn_id> \
   --name "库存" --dataview-id <dv_id> \
   --primary-key material_code --display-key material_name
+
+# 说明（mapped_field）：
+# - 不传 --property 时，CLI 会 GET 该 dataview 的字段列表，为每个字段生成 data_properties 与同名 mapped_field（与 create-from-ds 一致）。
+# - 传 --property 时，可省略 mapped_field；CLI 会按属性 name/type/display_name 自动补全 mapped_field。
+# - 构建引擎需要 PK 等列在 data_properties 中有映射；仅用 PK+DK 两列且未拉取 schema 时会导致 build 失败。
 
 # 5. 构建索引（等待完成）
 kweaver bkn build <kn_id> --wait --timeout 300
@@ -96,6 +112,7 @@ kweaver bkn create-from-ds <datasource_id> --name "my-kn" --build
 | `--files` | 是 | — | CSV 文件路径，逗号分隔或 glob |
 | `--table-prefix` | 否 | `""` | 表名前缀 |
 | `--batch-size` | 否 | 500 | 每批写入行数（1-10000） |
+| `--recreate` | 否 | off | 首批发 overwrite 以覆盖重建表（列结构变更后重导同名表） |
 
 ## PK / Display Key 选择原则
 
@@ -181,3 +198,5 @@ kweaver ds delete <ds_id> --yes
 | 查询返回空 | 构建未完成 / OT 未关联数据 | `kweaver bkn stats <kn_id>` 检查 doc_count |
 | `match` 操作报 500 | SQL 视图不支持全文检索 | 改用 `like` 操作符 |
 | PK 重复错误 | 选了非唯一列做 PK | 换用 `xxx_code`/`xxx_id` 列 |
+
+更多排障条目见 [`troubleshooting.md`](troubleshooting.md)。

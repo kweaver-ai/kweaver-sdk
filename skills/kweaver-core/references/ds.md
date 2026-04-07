@@ -10,7 +10,7 @@ kweaver ds get <datasource_id>
 kweaver ds connect <db_type> <host> <port> <database> --account <user> --password <pass> [--schema <s>] [--name <n>]
 kweaver ds tables <datasource_id> [--keyword <kw>]
 kweaver ds delete <datasource_id> [--yes]
-kweaver ds import-csv <datasource_id> --files <glob_or_list> [--table-prefix <p>] [--batch-size <n>]
+kweaver ds import-csv <datasource_id> --files <glob_or_list> [--table-prefix <p>] [--batch-size <n>] [--recreate]
 ```
 
 ## 支持的数据库类型

@@ -240,7 +240,7 @@ kweaver auth export [url|alias] [--json]   auth status/list/use/delete/logout
 kweaver config show / list-bd / set-bd <value>   # platform business domain — run after login
 kweaver token
 kweaver ds list/get/delete/tables/connect
-kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500]
+kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
 kweaver dataview|dv list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn build [--wait] [--timeout 300]

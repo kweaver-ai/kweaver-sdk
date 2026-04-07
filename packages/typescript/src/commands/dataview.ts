@@ -10,6 +10,32 @@ import {
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 
+/**
+ * Strip SQL line/block comments and leading whitespace, then return the first identifier token (lowercase).
+ * Used to reject DDL/DML passed to dataview query (server applies LIMIT semantics).
+ */
+export function getFirstSqlTokenAfterComments(sql: string): string {
+  let s = sql.replace(/\/\*[\s\S]*?\*\//g, " ");
+  const lines = s.split("\n").map((line) => {
+    const idx = line.indexOf("--");
+    return idx >= 0 ? line.slice(0, idx) : line;
+  });
+  s = lines.join("\n");
+  s = s.replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  const match = /^([a-zA-Z_][a-zA-Z0-9_]*|"(?:[^"]|"")*")/.exec(s);
+  if (!match) return "";
+  const tok = match[1];
+  if (tok.startsWith('"')) return tok.slice(1, -1).replace(/""/g, '"').toLowerCase();
+  return tok.toLowerCase();
+}
+
+/** True if ad-hoc SQL is safe for dataview query (SELECT / WITH only). */
+export function isDataviewSelectLikeSql(sql: string): boolean {
+  const kw = getFirstSqlTokenAfterComments(sql);
+  return kw === "select" || kw === "with";
+}
+
 function confirmYes(prompt: string): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -36,7 +62,7 @@ Subcommands:
 
   list  — list all data views (no keyword search)
   find  — search by name; default fuzzy, --exact for strict match, --wait to poll
-  query — run SQL query against a data view (mdl-uniquery); omit --sql to use view default SQL`);
+  query — run SQL query against a data view (mdl-uniquery); omit --sql to use view default SQL; only SELECT/WITH unless --raw-sql`);
     return 0;
   }
 
@@ -201,10 +227,11 @@ async function runDataviewQueryCommand(args: string[]): Promise<number> {
   let limit = 50;
   let offset = 0;
   let needTotal = false;
+  let rawSql = false;
 
   if (args.length === 0 || args[0].startsWith("-")) {
     console.error(
-      "Usage: kweaver dataview query <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]",
+      "Usage: kweaver dataview query <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [--raw-sql] [-bd value] [--pretty]",
     );
     return 1;
   }
@@ -218,6 +245,10 @@ async function runDataviewQueryCommand(args: string[]): Promise<number> {
       continue;
     }
     if (arg === "--pretty") continue;
+    if (arg === "--raw-sql") {
+      rawSql = true;
+      continue;
+    }
     if ((arg === "--sql" || arg === "-s") && tail[i + 1]) {
       sql = tail[++i];
       continue;
@@ -236,6 +267,13 @@ async function runDataviewQueryCommand(args: string[]): Promise<number> {
       needTotal = true;
       continue;
     }
+  }
+
+  if (sql !== undefined && sql !== "" && !rawSql && !isDataviewSelectLikeSql(sql)) {
+    console.error(
+      "dataview query only supports SELECT statements (or WITH for CTEs). Use --raw-sql to send other SQL at your own risk.",
+    );
+    return 1;
   }
 
   const token = await ensureValidToken();

@@ -22,6 +22,8 @@ export interface DagBodyOptions {
   tableExist: boolean;
   data: Array<Record<string, string | null>>;
   fieldMappings: FieldMapping[];
+  /** When true on the first batch (`tableExist` false), use overwrite to drop/recreate table before import. */
+  recreate?: boolean;
 }
 
 // ── parseCsvFile ──────────────────────────────────────────────────────────────
@@ -119,8 +121,9 @@ export function buildFieldMappings(headers: string[]): FieldMapping[] {
  * The DAG has two steps: a manual trigger and the database write.
  */
 export function buildDagBody(options: DagBodyOptions): DataflowCreateBody {
-  const { datasourceId, datasourceType, tableName, tableExist, data, fieldMappings } = options;
+  const { datasourceId, datasourceType, tableName, tableExist, data, fieldMappings, recreate } = options;
   const ts = Date.now();
+  const operateType = tableExist ? "append" : recreate ? "overwrite" : "append";
 
   const triggerStep = {
     id: "step-trigger",
@@ -138,7 +141,7 @@ export function buildDagBody(options: DagBodyOptions): DataflowCreateBody {
       datasource_id: datasourceId,
       table_name: tableName,
       table_exist: tableExist,
-      operate_type: "append",
+      operate_type: operateType,
       data,
       sync_model_fields: fieldMappings,
     },

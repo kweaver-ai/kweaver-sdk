@@ -8,18 +8,19 @@
 kweaver dataview list [--datasource-id <id>] [--type <atomic|custom>] [--limit <n>] [-bd value] [--pretty]
 kweaver dataview find --name <name> [--exact] [--datasource-id <id>] [--wait] [--no-wait] [--timeout <ms>] [-bd value] [--pretty]
 kweaver dataview get <id> [-bd value] [--pretty]
-kweaver dataview query <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]
+kweaver dataview query <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [--raw-sql] [-bd value] [--pretty]
 kweaver dataview delete <id> [-y] [-bd value]
 ```
 
 （Python 安装的 CLI 上，`query` 的 `--sql` 可简写为 `-s`。）
 
-**`query`**：对指定数据视图执行 SQL 查询，走平台 **mdl-uniquery** `POST /api/mdl-uniquery/v1/data-views/:id`。省略 `--sql` 时使用视图自身保存的 SQL。
+**`query`**：对指定数据视图执行 SQL 查询，走平台 **mdl-uniquery** `POST /api/mdl-uniquery/v1/data-views/:id`。省略 `--sql` 时使用视图自身保存的 SQL。CLI 默认仅允许 **SELECT** / **WITH**（CTE）；`--raw-sql` 跳过该检查（慎用）。
 
 ### 参数说明
 
 | 选项 | 含义 |
 |------|------|
+| `--raw-sql` | 仅 **`query`**：允许非 SELECT 语句（跳过客户端校验） |
 | `--datasource-id` | 按数据源 ID 过滤（`data_source_id`） |
 | `--type` | 视图类型，如 `atomic`、`custom`（按平台实际枚举） |
 | `--limit` | 返回条数上限；**`-1` 表示不限制**（与省略 `--limit` 时 CLI 默认行为一致） |

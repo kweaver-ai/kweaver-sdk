@@ -122,3 +122,75 @@ export async function runCli(args: string[]): Promise<{
     console.error = origErr;
   }
 }
+
+/** Extract array entries from CLI JSON output (handles entries/data/datas/array). */
+export function extractCliJsonEntries(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    for (const key of ["entries", "data", "datas", "records"]) {
+      if (Array.isArray(obj[key])) return obj[key] as unknown[];
+    }
+  }
+  return [];
+}
+
+export interface FirstObjectTypeQueryResult {
+  knId: string;
+  otId: string;
+  stdout: string;
+}
+
+/**
+ * Find the first (KN, OT) pair for which `bkn object-type query` exits 0.
+ * Schema-only OTs without indexed instances often return HTTP errors — this scans up to maxKn KNs with OTs.
+ */
+export async function findFirstSuccessfulObjectTypeQuery(options?: {
+  maxKn?: number;
+  maxOtPerKn?: number;
+}): Promise<FirstObjectTypeQueryResult | null> {
+  const maxKn = options?.maxKn ?? 20;
+  const maxOtPerKn = options?.maxOtPerKn ?? 15;
+  const { code, stdout } = await runCli(["bkn", "list", "--limit", String(Math.max(maxKn, 5))]);
+  if (code !== 0) return null;
+  let kns: unknown[];
+  try {
+    kns = extractCliJsonEntries(JSON.parse(stdout));
+  } catch {
+    return null;
+  }
+  let knProcessed = 0;
+  for (const item of kns as Array<{ id?: string }>) {
+    if (!item.id) continue;
+    if (knProcessed >= maxKn) break;
+    knProcessed += 1;
+    const knId = item.id;
+    const { code: otCode, stdout: otOut } = await runCli(["bkn", "object-type", "list", knId]);
+    if (otCode !== 0) continue;
+    let ots: unknown[];
+    try {
+      ots = extractCliJsonEntries(JSON.parse(otOut));
+    } catch {
+      continue;
+    }
+    let otCount = 0;
+    for (const ot of ots as Array<{ id?: string }>) {
+      if (otCount >= maxOtPerKn) break;
+      otCount += 1;
+      const otId = ot.id;
+      if (!otId) continue;
+      const { code: qCode, stdout: qOut } = await runCli([
+        "bkn",
+        "object-type",
+        "query",
+        knId,
+        otId,
+        "{}",
+        "--limit",
+        "5",
+      ]);
+      if (qCode === 0) return { knId, otId, stdout: qOut };
+    }
+  }
+  return null;
+}

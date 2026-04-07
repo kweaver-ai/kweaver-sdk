@@ -88,6 +88,17 @@ test("parseImportCsvArgs: --biz-domain long form works identically", () => {
   assert.equal(opts.businessDomain, "bd_other");
 });
 
+test("parseImportCsvArgs: --recreate flag", () => {
+  const withRecreate = parseImportCsvArgs([
+    "ds-999",
+    "--files", "data.csv",
+    "--recreate",
+  ]);
+  assert.equal(withRecreate.recreate, true);
+  const without = parseImportCsvArgs(["ds-999", "--files", "data.csv"]);
+  assert.equal(without.recreate, false);
+});
+
 // ── Teardown ──────────────────────────────────────────────────────────────────
 
 test("teardown: remove temp dir", () => {

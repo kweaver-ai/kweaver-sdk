@@ -56,7 +56,7 @@ Usage:
   kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value] [--pretty]
   kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value] [--pretty]
   kweaver dataview get <id> [-bd value] [--pretty]
-  kweaver dataview query <id> [--sql sql] [--limit n] [--offset n] [--need-total] [-bd value] [--pretty]
+  kweaver dataview query <id> [--sql sql] [--limit n] [--offset n] [--need-total] [--raw-sql] [-bd value] [--pretty]
   kweaver dataview delete <id> [-y] [-bd value]
 
   kweaver bkn list [options]

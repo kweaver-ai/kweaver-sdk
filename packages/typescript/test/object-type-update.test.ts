@@ -67,7 +67,7 @@ test("applyObjectTypeMerge sets tags and comment", () => {
 
 // --- parseObjectTypeCreateArgs / parseRelationTypeCreateArgs ---
 
-test("parseObjectTypeCreateArgs places branch inside entry, not top-level", () => {
+test("parseObjectTypeCreateArgs without --property defers data_properties to dataview fetch", () => {
   const opts = parseObjectTypeCreateArgs([
     "kn-001",
     "--name", "Player",
@@ -76,12 +76,14 @@ test("parseObjectTypeCreateArgs places branch inside entry, not top-level", () =
     "--display-key", "name",
     "--branch", "dev",
   ]);
-  const parsed = JSON.parse(opts.body);
-  assert.equal("branch" in parsed, false, "branch must NOT be a top-level body key");
-  assert.equal(parsed.entries[0].branch, "dev", "branch must be inside each entry");
+  assert.equal(opts.mode, "needsDataview");
+  if (opts.mode !== "needsDataview") throw new Error("expected needsDataview");
+  assert.equal(opts.entry.branch, "dev");
+  assert.equal(opts.dataviewId, "dv-1");
+  assert.equal("data_properties" in opts.entry, false);
 });
 
-test("parseObjectTypeCreateArgs defaults branch to main", () => {
+test("parseObjectTypeCreateArgs defaults branch to main (needsDataview)", () => {
   const opts = parseObjectTypeCreateArgs([
     "kn-001",
     "--name", "Player",
@@ -89,9 +91,31 @@ test("parseObjectTypeCreateArgs defaults branch to main", () => {
     "--primary-key", "id",
     "--display-key", "name",
   ]);
-  const parsed = JSON.parse(opts.body);
-  assert.equal(parsed.entries[0].branch, "main");
+  assert.equal(opts.mode, "needsDataview");
+  if (opts.mode !== "needsDataview") throw new Error("expected needsDataview");
+  assert.equal(opts.entry.branch, "main");
   assert.equal(opts.branch, "main");
+});
+
+test("parseObjectTypeCreateArgs adds mapped_field when --property omits it", () => {
+  const opts = parseObjectTypeCreateArgs([
+    "kn-001",
+    "--name", "Player",
+    "--dataview-id", "dv-1",
+    "--primary-key", "id",
+    "--display-key", "name",
+    "--property",
+    '{"name":"skill_id","display_name":"Skill ID","type":"string"}',
+  ]);
+  assert.equal(opts.mode, "complete");
+  if (opts.mode !== "complete") throw new Error("expected complete");
+  const parsed = JSON.parse(opts.body) as { entries: Array<{ data_properties: unknown[] }> };
+  const dp = parsed.entries[0].data_properties[0] as {
+    mapped_field: { name: string; type: string; display_name: string };
+  };
+  assert.equal(dp.mapped_field.name, "skill_id");
+  assert.equal(dp.mapped_field.type, "string");
+  assert.equal(dp.mapped_field.display_name, "Skill ID");
 });
 
 test("parseRelationTypeCreateArgs places branch inside entry, not top-level", () => {

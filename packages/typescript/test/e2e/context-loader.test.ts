@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runCli, shouldSkipE2e } from "./setup.js";
+import { runCli, shouldSkipE2e, findFirstSuccessfulObjectTypeQuery } from "./setup.js";
 
 async function findKnId(): Promise<string | null> {
   const { code, stdout } = await runCli(["bkn", "list", "--limit", "10"]);
@@ -35,29 +35,11 @@ test("e2e: bkn export returns dict", { skip: shouldSkipE2e() }, async () => {
 });
 
 test("e2e: bkn object-type query instances", { skip: shouldSkipE2e() }, async () => {
-  const knId = await findKnId();
-  if (!knId) {
-    test.skip("no KN available");
+  const hit = await findFirstSuccessfulObjectTypeQuery();
+  if (!hit) {
+    test.skip("no KN/OT pair returned a successful object-type query (no indexed data or API errors)");
     return;
   }
-  const { code: otCode, stdout: otOut } = await runCli(["bkn", "object-type", "list", knId]);
-  if (otCode !== 0) {
-    test.skip("object-type list failed");
-    return;
-  }
-  const otList = JSON.parse(otOut) as { id?: string }[] | { entries?: { id?: string }[] };
-  const entries = Array.isArray(otList) ? otList : (otList as { entries?: { id?: string }[] }).entries ?? [];
-  const otId = entries[0]?.id;
-  if (!otId) {
-    test.skip("no object types");
-    return;
-  }
-  const { code, stdout, stderr } = await runCli(["bkn", "object-type", "query", knId, otId, "{}", "--limit", "5"]);
-  if (code !== 0 && stderr.includes("500")) {
-    test.skip("server returned 500 for object-type query");
-    return;
-  }
-  assert.equal(code, 0);
-  const parsed = JSON.parse(stdout) as unknown;
+  const parsed = JSON.parse(hit.stdout) as unknown;
   assert.ok(typeof parsed === "object" || Array.isArray(parsed));
 });

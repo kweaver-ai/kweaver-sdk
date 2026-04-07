@@ -130,6 +130,8 @@ export async function runKnBuildCommand(args: string[]): Promise<number> {
     }
 
     console.error("Waiting for build to complete ...");
+    let lastBuildState = "running";
+    let lastBuildDetail: string | undefined;
     try {
       const { state, detail } = await pollWithBackoff<{ state: string; detail?: string }>({
         fn: async () => {
@@ -146,6 +148,8 @@ export async function runKnBuildCommand(args: string[]): Promise<number> {
           const job = jobs[0];
           const st = (job?.state ?? "running").toLowerCase();
           const dt = job?.state_detail;
+          lastBuildState = st;
+          lastBuildDetail = dt;
           if (TERMINAL_STATES.includes(st)) return { done: true, value: { state: st, detail: dt } };
           return { done: false, value: { state: st } };
         },
@@ -158,7 +162,9 @@ export async function runKnBuildCommand(args: string[]): Promise<number> {
       }
       return state === "failed" ? 1 : 0;
     } catch {
-      console.error(`Build did not complete within ${options.timeout}s`);
+      console.error(`Build did not complete within ${options.timeout}s.`);
+      console.error(`Current status: ${lastBuildState}${lastBuildDetail ? ` (${lastBuildDetail})` : ""}`);
+      console.error(`Run \`kweaver bkn stats ${options.knId}\` to check progress.`);
       return 1;
     }
   } catch (error) {
@@ -660,15 +666,33 @@ export async function runKnCreateFromDsCommand(
       businessDomain: options.businessDomain,
     };
 
-    const tablesBody = await listTablesWithColumns({ ...base, id: options.dsId });
-    const allTables = JSON.parse(tablesBody) as Array<{
+    const maxTableListAttempts = 3;
+    const tableRetryDelayMs = 4000;
+    let allTables: Array<{
       name: string;
       columns: Array<{ name: string; type: string }>;
-    }>;
+    }> = [];
+    let targetTables: typeof allTables = [];
 
-    const targetTables = options.tables.length > 0
-      ? allTables.filter((t) => options.tables.includes(t.name))
-      : allTables;
+    for (let attempt = 1; attempt <= maxTableListAttempts; attempt += 1) {
+      const tablesBody = await listTablesWithColumns({ ...base, id: options.dsId });
+      allTables = JSON.parse(tablesBody) as Array<{
+        name: string;
+        columns: Array<{ name: string; type: string }>;
+      }>;
+
+      targetTables = options.tables.length > 0
+        ? allTables.filter((t) => options.tables.includes(t.name))
+        : allTables;
+
+      if (targetTables.length > 0) break;
+      if (attempt < maxTableListAttempts) {
+        console.error(
+          `No tables available (attempt ${attempt}/${maxTableListAttempts}); retrying in ${tableRetryDelayMs / 1000}s...`,
+        );
+        await new Promise((r) => setTimeout(r, tableRetryDelayMs));
+      }
+    }
 
     if (targetTables.length === 0) {
       console.error("No tables available");

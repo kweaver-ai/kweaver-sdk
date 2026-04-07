@@ -172,10 +172,16 @@ def _normalize_field_type(raw: str | None) -> str:
 
 
 def _property_to_rest(p: Property) -> dict[str, Any]:
+    t = _normalize_field_type(p.type) if p.type else "string"
     d: dict[str, Any] = {
         "name": p.name,
         "display_name": p.display_name or p.name,
-        "type": _normalize_field_type(p.type) if p.type else "string",
+        "type": t,
+        "mapped_field": {
+            "name": p.name,
+            "type": t,
+            "display_name": p.display_name or p.name,
+        },
     }
     d["index_config"] = {
         "keyword_config": {"enabled": p.indexed},

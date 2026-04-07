@@ -27,6 +27,8 @@ import {
   actionTypeExecute,
   actionExecutionGet,
 } from "../api/ontology-query.js";
+import { getDataView } from "../api/dataviews.js";
+import type { ViewField } from "../api/dataviews.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import {
@@ -194,14 +196,108 @@ export function parseKnObjectTypeQueryArgs(args: string[]): KnObjectTypeQueryOpt
 
 // ── Object-type create/update/delete ───────────────────────────────────────────
 
+/** Map database / dataview field types to ADP-accepted types (aligned with Python SDK). */
+const ADP_FIELD_TYPE_MAP: Record<string, string> = {
+  varchar: "string",
+  char: "string",
+  nvarchar: "string",
+  longtext: "text",
+  mediumtext: "text",
+  tinytext: "text",
+  bigint: "integer",
+  int: "integer",
+  smallint: "integer",
+  tinyint: "integer",
+  double: "float",
+  real: "float",
+  numeric: "decimal",
+  number: "decimal",
+  blob: "binary",
+  longblob: "binary",
+  bit: "boolean",
+  bool: "boolean",
+};
+
+export function normalizeAdpFieldType(raw: string | undefined): string {
+  if (!raw) return "string";
+  const lower = raw.toLowerCase().trim();
+  return ADP_FIELD_TYPE_MAP[lower] ?? lower;
+}
+
+/**
+ * Ensure each data_property has mapped_field (same-name mapping) for build engine compatibility.
+ */
+export function ensureMappedFieldOnDataProperty(prop: Record<string, unknown>): Record<string, unknown> {
+  const name = String(prop.name ?? "");
+  const ptype = normalizeAdpFieldType(prop.type != null ? String(prop.type) : undefined);
+  const display = String(prop.display_name ?? name);
+  const existing = prop.mapped_field;
+  if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+    const mf = existing as Record<string, unknown>;
+    const mfName = String(mf.name ?? name);
+    const mfType = normalizeAdpFieldType(mf.type != null ? String(mf.type) : undefined) || ptype;
+    const mfDisplay = String(mf.display_name ?? display);
+    return {
+      ...prop,
+      type: ptype,
+      mapped_field: { name: mfName, type: mfType, display_name: mfDisplay },
+    };
+  }
+  return {
+    ...prop,
+    type: ptype,
+    mapped_field: { name, type: ptype, display_name: display },
+  };
+}
+
+function dataPropertiesFromViewFields(fields: ViewField[]): Record<string, unknown>[] {
+  return fields.map((f) => {
+    const t = normalizeAdpFieldType(f.type);
+    const display = f.display_name?.trim() || f.name;
+    return {
+      name: f.name,
+      display_name: display,
+      type: t,
+      mapped_field: { name: f.name, type: t, display_name: display },
+    };
+  });
+}
+
+function fallbackDataPropertiesFromKeys(primaryKeys: string[], displayKey: string): Record<string, unknown>[] {
+  const names = [...new Set([...primaryKeys, displayKey])];
+  return names.map((n) => {
+    const t = "string";
+    return {
+      name: n,
+      display_name: n,
+      type: t,
+      mapped_field: { name: n, type: t, display_name: n },
+    };
+  });
+}
+
+/** Result of parsing `object-type create`; may require async dataview GET to fill properties. */
+export type ObjectTypeCreateParsed =
+  | {
+      mode: "complete";
+      knId: string;
+      body: string;
+      businessDomain: string;
+      branch: string;
+      pretty: boolean;
+    }
+  | {
+      mode: "needsDataview";
+      knId: string;
+      dataviewId: string;
+      entry: Record<string, unknown>;
+      businessDomain: string;
+      branch: string;
+      pretty: boolean;
+    };
+
 /** Parse object-type create args: --name --dataview-id --primary-key --display-key [--property '<json>' ...] */
-export function parseObjectTypeCreateArgs(args: string[]): {
-  knId: string;
-  body: string;
-  businessDomain: string;
-  branch: string;
-  pretty: boolean;
-} {
+export function parseObjectTypeCreateArgs(args: string[]): ObjectTypeCreateParsed {
   let name = "";
   let dataviewId = "";
   let primaryKey = "";
@@ -265,19 +361,53 @@ export function parseObjectTypeCreateArgs(args: string[]): {
     display_key: displayKey,
   };
   if (properties.length > 0) {
-    entry.data_properties = properties.map((p) => JSON.parse(p));
-  } else {
-    const autoProps = new Set([primaryKey, displayKey]);
-    entry.data_properties = Array.from(autoProps).map((n) => ({
-      name: n,
-      display_name: n,
-      type: "string",
-    }));
+    const raw = properties.map((p) => JSON.parse(p) as Record<string, unknown>);
+    entry.data_properties = raw.map((row) => ensureMappedFieldOnDataProperty(row));
+    const body = JSON.stringify({ entries: [entry] });
+    if (!businessDomain) businessDomain = resolveBusinessDomain();
+    return { mode: "complete", knId, body, businessDomain, branch, pretty };
   }
-  const body = JSON.stringify({ entries: [entry] });
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { knId, body, businessDomain, branch, pretty };
+  return {
+    mode: "needsDataview",
+    knId,
+    dataviewId,
+    entry,
+    businessDomain,
+    branch,
+    pretty,
+  };
+}
+
+/**
+ * Load dataview fields and build data_properties (with mapped_field). Used when no --property flags.
+ */
+export async function finalizeObjectTypeCreateFromDataview(options: {
+  baseUrl: string;
+  accessToken: string;
+  dataviewId: string;
+  entry: Record<string, unknown>;
+  businessDomain: string;
+}): Promise<string> {
+  const { baseUrl, accessToken, dataviewId, entry, businessDomain } = options;
+  const dv = await getDataView({
+    baseUrl,
+    accessToken,
+    id: dataviewId,
+    businessDomain,
+  });
+  const fields = dv.fields ?? [];
+  const primaryKeys = Array.isArray(entry.primary_keys)
+    ? (entry.primary_keys as string[])
+    : [];
+  const displayKey = String(entry.display_key ?? "");
+  const next = { ...entry };
+  next.data_properties =
+    fields.length > 0
+      ? dataPropertiesFromViewFields(fields)
+      : fallbackDataPropertiesFromKeys(primaryKeys, displayKey);
+  return JSON.stringify({ entries: [next] });
 }
 
 /** Fields merged via GET → modify → PUT (not raw body mode). */
@@ -891,11 +1021,28 @@ properties JSON format: {"_instance_identities":[{"<primary-key>":"<value>"}],"p
     if (action === "create") {
       const opts = parseObjectTypeCreateArgs(rest);
       const token = await ensureValidToken();
+      let bodyStr: string;
+      if (opts.mode === "needsDataview") {
+        try {
+          bodyStr = await finalizeObjectTypeCreateFromDataview({
+            baseUrl: token.baseUrl,
+            accessToken: token.accessToken,
+            dataviewId: opts.dataviewId,
+            entry: opts.entry,
+            businessDomain: opts.businessDomain,
+          });
+        } catch (e) {
+          console.error(formatHttpError(e));
+          return 1;
+        }
+      } else {
+        bodyStr = opts.body;
+      }
       const body = await createObjectTypes({
         baseUrl: token.baseUrl,
         accessToken: token.accessToken,
         knId: opts.knId,
-        body: opts.body,
+        body: bodyStr,
         businessDomain: opts.businessDomain,
         branch: opts.branch,
       });

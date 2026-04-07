@@ -48,6 +48,7 @@ test("parseAgentTraceArgs parses agent_id and conversation_id", () => {
 
 test("parseAgentTraceArgs supports --compact flag", () => {
   const result = parseAgentTraceArgs(["agent-abc", "conv-123", "--compact"]);
+  assert.equal(result.agentId, "agent-abc");
   assert.equal(result.conversationId, "conv-123");
   assert.equal(result.pretty, false);
 });

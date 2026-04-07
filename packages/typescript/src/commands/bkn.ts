@@ -51,6 +51,9 @@ export type { PollOptions } from "./bkn-utils.js";
 // Re-export schema types and parse functions for backward compatibility
 export {
   parseObjectTypeCreateArgs,
+  finalizeObjectTypeCreateFromDataview,
+  ensureMappedFieldOnDataProperty,
+  normalizeAdpFieldType,
   parseKnObjectTypeQueryArgs,
   parseKnActionTypeExecuteArgs,
   parseRelationTypeCreateArgs,
@@ -70,6 +73,7 @@ export type {
   KnActionTypeExecuteOptions,
   ObjectTypeMergeFields,
   ObjectTypeUpdateParsed,
+  ObjectTypeCreateParsed,
 } from "./bkn-schema.js";
 
 // Re-export query parse functions for backward compatibility (tests import from bkn.js)

@@ -61,6 +61,8 @@ def test_create_wraps_in_entries(capture: RequestCapture):
 
     # Check index_config transform
     props = entry["data_properties"]
+    assert props[0]["mapped_field"]["name"] == "material_number"
+    assert props[1]["mapped_field"]["name"] == "product_name"
     assert props[0]["index_config"]["keyword_config"]["enabled"] is True
     assert props[1]["index_config"]["fulltext_config"]["enabled"] is True
     assert props[1]["index_config"]["vector_config"]["enabled"] is True
@@ -111,9 +113,12 @@ def test_create_without_properties_sends_empty(capture: RequestCapture):
     )
     body = capture.last_body()
     # Auto-generated from primary_keys + display_key
-    prop_names = {p["name"] for p in body["entries"][0]["data_properties"]}
+    props = body["entries"][0]["data_properties"]
+    prop_names = {p["name"] for p in props}
     assert "id" in prop_names
     assert "name" in prop_names
+    for p in props:
+        assert p["mapped_field"]["name"] == p["name"]
 
 
 def test_get_object_type(capture: RequestCapture):

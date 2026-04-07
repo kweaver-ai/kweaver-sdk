@@ -42,7 +42,7 @@ export async function listAgents(options: ListAgentsOptions): Promise<string> {
 
   const response = await fetch(url, {
     method: "POST",
-    headers: buildHeaders(accessToken, businessDomain),
+    headers: { ...buildHeaders(accessToken, businessDomain), "content-type": "application/json" },
     body,
   });
 

@@ -53,12 +53,9 @@ class AgentsResource:
             "is_to_square": 1,
         }
 
-        # The agent-factory API requires text/plain content-type for this
-        # endpoint (application/json returns empty results — platform quirk).
         data = self._http.post(
             "/api/agent-factory/v3/published/agent",
             json=body,
-            headers={"content-type": "text/plain;charset=UTF-8"},
         )
         items = (
             data

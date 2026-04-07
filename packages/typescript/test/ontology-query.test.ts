@@ -13,6 +13,7 @@ import {
   actionLogsList,
   actionLogGet,
   actionLogCancel,
+  fetchWithRetry,
 } from "../src/api/ontology-query.js";
 
 const originalFetch = globalThis.fetch;
@@ -297,4 +298,78 @@ test("deleteActionTypes sends DELETE to /action-types/:atIds", async () => {
   try {
     await deleteActionTypes({ baseUrl: "https://host", accessToken: "t", knId: "kn-1", atIds: "at-1" });
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("fetchWithRetry retries on 503 then succeeds", { concurrency: false }, async () => {
+  let attempts = 0;
+  globalThis.fetch = async () => {
+    attempts++;
+    if (attempts === 1) return new Response("Service Unavailable", { status: 503 });
+    return new Response('{"ok":true}', { status: 200 });
+  };
+  try {
+    const body = await fetchWithRetry("https://example.com/test", { method: "POST" });
+    assert.equal(body, '{"ok":true}');
+    assert.equal(attempts, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchWithRetry throws on non-retryable 4xx immediately", { concurrency: false }, async () => {
+  let attempts = 0;
+  globalThis.fetch = async () => {
+    attempts++;
+    return new Response("Bad Request", { status: 400, statusText: "Bad Request" });
+  };
+  try {
+    await assert.rejects(
+      () => fetchWithRetry("https://example.com/test", { method: "POST" }),
+      (err: Error) => {
+        assert.ok(err.message.includes("400"));
+        return true;
+      },
+    );
+    assert.equal(attempts, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchWithRetry retries on transient network error", { concurrency: false }, async () => {
+  let attempts = 0;
+  globalThis.fetch = async () => {
+    attempts++;
+    if (attempts === 1) throw new Error("fetch failed", { cause: new Error("ECONNRESET") });
+    return new Response('{"ok":true}', { status: 200 });
+  };
+  try {
+    const body = await fetchWithRetry("https://example.com/test", { method: "POST" });
+    assert.equal(body, '{"ok":true}');
+    assert.equal(attempts, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("actionTypeQuery retries on 503", { concurrency: false }, async () => {
+  let attempts = 0;
+  globalThis.fetch = async () => {
+    attempts++;
+    if (attempts === 1) return new Response("Service Unavailable", { status: 503 });
+    return new Response('{"actions":[]}', { status: 200 });
+  };
+  try {
+    const body = await actionTypeQuery({
+      baseUrl: "https://dip.aishu.cn",
+      accessToken: "token-abc",
+      knId: "kn-1",
+      atId: "restart_pod",
+      body: "{}",
+    });
+    assert.equal(body, '{"actions":[]}');
+    assert.equal(attempts, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

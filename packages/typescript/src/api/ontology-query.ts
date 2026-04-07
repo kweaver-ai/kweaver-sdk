@@ -1,6 +1,66 @@
 import { HttpError } from "../utils/http.js";
 import { buildHeaders } from "./headers.js";
 
+const QUERY_TIMEOUT_MS = 30_000;
+const QUERY_MAX_RETRIES = 2;
+const QUERY_RETRY_BASE_MS = 500;
+
+function isRetryableStatus(status: number): boolean {
+  return status >= 500 || status === 429;
+}
+
+function isRetryableNetworkError(error: unknown): boolean {
+  if (error instanceof HttpError) return isRetryableStatus(error.status);
+  if (!(error instanceof Error)) return false;
+  const msg = error.message.toLowerCase();
+  const cause = "cause" in error && error.cause instanceof Error ? error.cause.message.toLowerCase() : "";
+  const combined = `${msg} ${cause}`;
+  return ["fetch failed", "econnreset", "econnrefused", "etimedout", "socket hang up", "network socket disconnected"].some(
+    (t) => combined.includes(t),
+  );
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Fetch with timeout + retry for idempotent (read-only) ontology-query endpoints.
+ * Retries on 5xx, 429, and transient network errors with exponential backoff.
+ */
+export async function fetchWithRetry(url: string, init: RequestInit): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= QUERY_MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, init);
+      const body = await response.text();
+      if (!response.ok) {
+        if (attempt < QUERY_MAX_RETRIES && isRetryableStatus(response.status)) {
+          lastError = new HttpError(response.status, response.statusText, body);
+          await new Promise((r) => setTimeout(r, QUERY_RETRY_BASE_MS * 2 ** attempt));
+          continue;
+        }
+        throw new HttpError(response.status, response.statusText, body);
+      }
+      return body;
+    } catch (error) {
+      lastError = error;
+      if (attempt < QUERY_MAX_RETRIES && isRetryableNetworkError(error)) {
+        await new Promise((r) => setTimeout(r, QUERY_RETRY_BASE_MS * 2 ** attempt));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
 export interface OntologyQueryBaseOptions {
   baseUrl: string;
   accessToken: string;
@@ -52,17 +112,7 @@ export async function objectTypeQuery(options: ObjectTypeQueryOptions): Promise<
     "X-HTTP-Method-Override": "GET",
   };
 
-  const response = await fetch(url.toString(), {
-    method: "POST",
-    headers,
-    body,
-  });
-
-  const responseBody = await response.text();
-  if (!response.ok) {
-    throw new HttpError(response.status, response.statusText, responseBody);
-  }
-  return responseBody;
+  return fetchWithRetry(url.toString(), { method: "POST", headers, body });
 }
 
 /** Object-type properties: POST with X-HTTP-Method-Override: GET */
@@ -99,17 +149,7 @@ export async function objectTypeProperties(options: ObjectTypePropertiesOptions)
     "X-HTTP-Method-Override": "GET",
   };
 
-  const response = await fetch(url.toString(), {
-    method: "POST",
-    headers,
-    body,
-  });
-
-  const responseBody = await response.text();
-  if (!response.ok) {
-    throw new HttpError(response.status, response.statusText, responseBody);
-  }
-  return responseBody;
+  return fetchWithRetry(url.toString(), { method: "POST", headers, body });
 }
 
 /** Subgraph: POST with X-HTTP-Method-Override: GET */
@@ -154,17 +194,7 @@ export async function subgraph(options: SubgraphOptions): Promise<string> {
     "X-HTTP-Method-Override": "GET",
   };
 
-  const response = await fetch(url.toString(), {
-    method: "POST",
-    headers,
-    body,
-  });
-
-  const responseBody = await response.text();
-  if (!response.ok) {
-    throw new HttpError(response.status, response.statusText, responseBody);
-  }
-  return responseBody;
+  return fetchWithRetry(url.toString(), { method: "POST", headers, body });
 }
 
 /** Action-type query: POST with X-HTTP-Method-Override: GET */
@@ -206,17 +236,7 @@ export async function actionTypeQuery(options: ActionTypeQueryOptions): Promise<
     "X-HTTP-Method-Override": "GET",
   };
 
-  const response = await fetch(url.toString(), {
-    method: "POST",
-    headers,
-    body,
-  });
-
-  const responseBody = await response.text();
-  if (!response.ok) {
-    throw new HttpError(response.status, response.statusText, responseBody);
-  }
-  return responseBody;
+  return fetchWithRetry(url.toString(), { method: "POST", headers, body });
 }
 
 /**

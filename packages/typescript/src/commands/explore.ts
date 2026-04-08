@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 import { ensureValidToken, with401RefreshRetry } from "../auth/oauth.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { registerBknRoutes, loadExploreMetaWithRetry, readBody, type ExploreMeta } from "./explore-bkn.js";
+import { registerChatRoutes } from "./explore-chat.js";
 import { listKnowledgeNetworks } from "../api/knowledge-networks.js";
 import { listAgents } from "../api/agent-list.js";
 import { listVegaCatalogs } from "../api/vega.js";
@@ -147,6 +148,10 @@ async function startServer(
       res.end(JSON.stringify({ error: String(err.message || err) }));
     }
   });
+
+  // Chat routes
+  const chatRoutes = registerChatRoutes(token, businessDomain);
+  for (const [key, handler] of chatRoutes) routes.set(key, handler);
 
   // 3. Resolve template directory
   const __filename = fileURLToPath(import.meta.url);

@@ -3,9 +3,12 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
-import { ensureValidToken } from "../auth/oauth.js";
+import { ensureValidToken, with401RefreshRetry } from "../auth/oauth.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { registerBknRoutes, loadExploreMetaWithRetry, type ExploreMeta } from "./explore-bkn.js";
+import { listKnowledgeNetworks } from "../api/knowledge-networks.js";
+import { listAgents } from "../api/agent-list.js";
+import { listVegaCatalogs } from "../api/vega.js";
 
 export interface ExploreOptions {
   knId: string;
@@ -79,10 +82,33 @@ async function startServer(
   // 2. Collect route handlers
   const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => void>();
 
-  // Dashboard stub (will be implemented in Task 5)
-  routes.set("GET /api/dashboard", (_req, res) => {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ kn: [], agents: [], catalogs: [] }));
+  // Dashboard route: aggregate KN, Agents, Vega Catalogs in parallel
+  routes.set("GET /api/dashboard", async (_req, res) => {
+    try {
+      const bd = businessDomain;
+      const [knRaw, agentsRaw, catalogsRaw] = await Promise.allSettled([
+        with401RefreshRetry(() =>
+          listKnowledgeNetworks({ baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain: bd })),
+        with401RefreshRetry(() =>
+          listAgents({ baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain: bd })),
+        with401RefreshRetry(() =>
+          listVegaCatalogs({ baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain: bd })),
+      ]);
+
+      const parseSettled = (r: PromiseSettledResult<string>) =>
+        r.status === "fulfilled" ? JSON.parse(r.value) : { error: String(r.reason) };
+
+      const payload = {
+        kn: parseSettled(knRaw),
+        agents: parseSettled(agentsRaw),
+        catalogs: parseSettled(catalogsRaw),
+      };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(payload));
+    } catch (err: any) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(err) }));
+    }
   });
 
   // BKN routes

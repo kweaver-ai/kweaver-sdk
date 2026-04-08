@@ -34,8 +34,6 @@ import {
   runKnActionScheduleCommand,
   runKnJobCommand,
 } from "./bkn-ops.js";
-import { runKnExploreCommand } from "./bkn-explore.js";
-
 // Re-export shared utils for backward compatibility (tests import from bkn.js)
 export {
   pollWithBackoff,
@@ -574,7 +572,6 @@ Subcommands:
   job list|get|tasks|delete <kn-id> ...
   relation-type-paths <kn-id> '<json>'   Query relation type paths between OTs
   resources                              List available resources
-  explore [kn-id] [--port n] [--no-open]   Launch browser-based KN explorer
 
 Use 'kweaver bkn <subcommand> --help' for subcommand options.`;
 
@@ -614,7 +611,6 @@ export async function runKnCommand(args: string[]): Promise<number> {
     if (subcommand === "job") return runKnJobCommand(rest);
     if (subcommand === "relation-type-paths") return runKnRelationTypePathsCommand(rest);
     if (subcommand === "resources") return runKnResourcesCommand(rest);
-    if (subcommand === "explore") return runKnExploreCommand(rest);
     return Promise.resolve(-1);
   };
 

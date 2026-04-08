@@ -6,6 +6,7 @@ import { runCallCommand } from "./commands/call.js";
 import { runConfigCommand } from "./commands/config.js";
 import { runContextLoaderCommand } from "./commands/context-loader.js";
 import { runDsCommand } from "./commands/ds.js";
+import { runExploreCommand } from "./commands/explore.js";
 import { runDataviewCommand } from "./commands/dataview.js";
 import { runSkillCommand } from "./commands/skill.js";
 import { runTokenCommand } from "./commands/token.js";
@@ -173,6 +174,10 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "agent") {
     return runAgentCommand(rest);
+  }
+
+  if (command === "explore") {
+    return runExploreCommand(rest);
   }
 
   if (command === "bkn") {

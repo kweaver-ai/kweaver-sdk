@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KWeaver Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header id="top-bar">
+    <div class="top-bar-left">
+      <span class="logo">⬡ KWeaver Explorer</span>
+    </div>
+    <nav id="tab-bar">
+      <a class="tab" href="#/" data-tab="dashboard">Dashboard</a>
+      <a class="tab" href="#/chat" data-tab="chat">Chat</a>
+      <a class="tab" href="#/bkn" data-tab="bkn">BKN</a>
+      <a class="tab" href="#/vega" data-tab="vega">Vega</a>
+    </nav>
+    <div class="top-bar-right">
+      <span id="env-label"></span>
+    </div>
+  </header>
+  <main id="content"></main>
+
+  <script src="/app.js"></script>
+  <script src="/dashboard.js"></script>
+  <script src="/bkn.js"></script>
+  <script src="/chat.js"></script>
+  <script src="/vega.js"></script>
+</body>
+</html>

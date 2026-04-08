@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { ensureValidToken, with401RefreshRetry } from "../auth/oauth.js";
 import { resolveBusinessDomain } from "../config/store.js";
-import { registerBknRoutes, loadExploreMetaWithRetry, type ExploreMeta } from "./explore-bkn.js";
+import { registerBknRoutes, loadExploreMetaWithRetry, readBody, type ExploreMeta } from "./explore-bkn.js";
 import { listKnowledgeNetworks } from "../api/knowledge-networks.js";
 import { listAgents } from "../api/agent-list.js";
 import { listVegaCatalogs } from "../api/vega.js";
@@ -116,6 +116,37 @@ async function startServer(
     const bknRoutes = registerBknRoutes(bknMeta, token, businessDomain);
     for (const [key, handler] of bknRoutes) routes.set(key, handler);
   }
+
+  // Dynamic KN loading: POST /api/bkn/load { knId }
+  routes.set("POST /api/bkn/load", async (req, res) => {
+    try {
+      const bodyStr = await readBody(req);
+      const { knId } = JSON.parse(bodyStr);
+      if (!knId) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "knId required" }));
+        return;
+      }
+      console.error(`Loading schema for KN ${knId}...`);
+      const meta = await loadExploreMetaWithRetry(token, knId, businessDomain);
+      console.error(`Loaded: ${meta.objectTypes.length} OTs, ${meta.relationTypes.length} RTs`);
+      // Replace BKN routes with new KN's routes
+      for (const key of [...routes.keys()]) {
+        if (key.startsWith("GET /api/bkn/") || key.startsWith("POST /api/bkn/")) {
+          if (key !== "POST /api/bkn/load") routes.delete(key);
+        }
+      }
+      const newRoutes = registerBknRoutes(meta, token, businessDomain);
+      for (const [key, handler] of newRoutes) routes.set(key, handler);
+      bknMeta = meta;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err: any) {
+      console.error("Failed to load KN:", err.message || err);
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(err.message || err) }));
+    }
+  });
 
   // 3. Resolve template directory
   const __filename = fileURLToPath(import.meta.url);

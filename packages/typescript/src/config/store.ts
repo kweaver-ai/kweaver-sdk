@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -12,6 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { listBusinessDomains } from "../api/business-domains.js";
+import { decodeJwtPayload, extractUserIdFromJwt } from "./jwt.js";
 
 export interface TokenConfig {
   baseUrl: string;
@@ -25,6 +27,8 @@ export interface TokenConfig {
   obtainedAt: string;
   /** When true, skip TLS certificate verification for this platform (saved by `kweaver auth --insecure`). */
   tlsInsecure?: boolean;
+  /** Human-readable display name fetched from userinfo at login time. */
+  displayName?: string;
 }
 
 /** OAuth2 client registration (per platform), used for refresh_token grant. */
@@ -61,6 +65,8 @@ function buildMcpUrl(baseUrl: string): string {
 interface StoreState {
   currentPlatform?: string;
   aliases?: Record<string, string>;
+  /** Maps baseUrl → active userId for multi-account support. */
+  activeUsers?: Record<string, string>;
 }
 
 export interface PlatformSummary {
@@ -68,9 +74,12 @@ export interface PlatformSummary {
   hasToken: boolean;
   isCurrent: boolean;
   alias?: string;
+  /** Active user ID for this platform (from id_token sub claim). */
+  userId?: string;
+  /** Human-readable name persisted from /oauth2/userinfo at login time. */
+  displayName?: string;
 }
 
-const CONFIG_DIR = process.env.KWEAVERC_CONFIG_DIR || join(homedir(), ".kweaver");
 function getConfigDirPath(): string {
   return process.env.KWEAVERC_CONFIG_DIR || join(homedir(), ".kweaver");
 }
@@ -118,6 +127,8 @@ function readJsonFile<T>(filePath: string): T | null {
 
 function writeJsonFile(filePath: string, value: unknown): void {
   ensureConfigDir();
+  const dir = join(filePath, "..");
+  ensureDir(dir);
   writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, IS_WIN32 ? {} : { mode: 0o600 });
   if (!IS_WIN32) chmodSync(filePath, 0o600);
 }
@@ -142,6 +153,62 @@ function ensurePlatformDir(baseUrl: string): void {
   ensureDir(getPlatformDir(baseUrl));
 }
 
+// ---------------------------------------------------------------------------
+// User-scoped file routing
+// ---------------------------------------------------------------------------
+
+/** Files that live under users/<userId>/ instead of at platform root. */
+const USER_SCOPED_FILES = new Set(["token.json", "config.json", "context-loader.json"]);
+
+function getUserDir(baseUrl: string, userId: string): string {
+  return join(getPlatformDir(baseUrl), "users", userId);
+}
+
+function getUsersDirPath(baseUrl: string): string {
+  return join(getPlatformDir(baseUrl), "users");
+}
+
+/**
+ * Resolve a per-platform file path, routing user-scoped files through the
+ * active user's subdirectory with auto-migration fallback.
+ */
+function resolveFile(baseUrl: string, filename: string): string {
+  if (!USER_SCOPED_FILES.has(filename)) {
+    return getPlatformFile(baseUrl, filename);
+  }
+
+  const userId = getActiveUserRaw(baseUrl);
+  if (userId) {
+    const userPath = join(getUserDir(baseUrl, userId), filename);
+    if (existsSync(userPath)) return userPath;
+  }
+
+  // Fallback: check platform root for legacy / partially-migrated files
+  const legacyPath = getPlatformFile(baseUrl, filename);
+  if (existsSync(legacyPath)) {
+    // If legacy token.json exists, trigger full on-demand migration
+    const legacyToken = getPlatformFile(baseUrl, "token.json");
+    if (existsSync(legacyToken)) {
+      migratePlatformToUserScoped(baseUrl);
+      const migratedUser = getActiveUserRaw(baseUrl);
+      if (migratedUser) {
+        const migratedPath = join(getUserDir(baseUrl, migratedUser), filename);
+        if (existsSync(migratedPath)) return migratedPath;
+      }
+    }
+    // File exists at legacy root but no migration possible (e.g. token already migrated).
+    // Return legacy path so the caller can still read it.
+    return legacyPath;
+  }
+
+  if (userId) return join(getUserDir(baseUrl, userId), filename);
+  return legacyPath;
+}
+
+// ---------------------------------------------------------------------------
+// State helpers
+// ---------------------------------------------------------------------------
+
 function readState(): StoreState {
   return readJsonFile<StoreState>(getStateFilePath()) ?? {};
 }
@@ -153,6 +220,10 @@ function writeState(state: StoreState): void {
 function normalizeAlias(value: string): string {
   return value.trim().toLowerCase();
 }
+
+// ---------------------------------------------------------------------------
+// Migration: legacy flat files → platforms/<encoded>/
+// ---------------------------------------------------------------------------
 
 function migrateLegacyFilesIfNeeded(): void {
   const legacyClientFile = getLegacyClientFilePath();
@@ -194,10 +265,205 @@ function migrateLegacyFilesIfNeeded(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Migration: flat platform dir → users/<userId>/ scoped layout
+// ---------------------------------------------------------------------------
+
+/** Extract userId from a TokenConfig (try idToken, then accessToken, fallback "default"). */
+export function extractUserId(token: TokenConfig): string {
+  if (token.idToken) {
+    const sub = extractUserIdFromJwt(token.idToken);
+    if (sub) return sub;
+  }
+  if (token.accessToken) {
+    const sub = extractUserIdFromJwt(token.accessToken);
+    if (sub) return sub;
+  }
+  return "default";
+}
+
+function migratePlatformToUserScoped(baseUrl: string): void {
+  const platformDir = getPlatformDir(baseUrl);
+  const usersDir = getUsersDirPath(baseUrl);
+  const rootTokenFile = join(platformDir, "token.json");
+
+  if (!existsSync(rootTokenFile) || existsSync(usersDir)) {
+    return;
+  }
+
+  const token = readJsonFile<TokenConfig>(rootTokenFile);
+  if (!token) return;
+
+  const userId = extractUserId(token);
+  const userDir = getUserDir(baseUrl, userId);
+  ensureDir(userDir);
+
+  renameSync(rootTokenFile, join(userDir, "token.json"));
+
+  const rootConfigFile = join(platformDir, "config.json");
+  if (existsSync(rootConfigFile)) {
+    renameSync(rootConfigFile, join(userDir, "config.json"));
+  }
+
+  const rootContextLoaderFile = join(platformDir, "context-loader.json");
+  if (existsSync(rootContextLoaderFile)) {
+    renameSync(rootContextLoaderFile, join(userDir, "context-loader.json"));
+  }
+
+  const resolvedUrl = token.baseUrl || baseUrl;
+  const state = readState();
+  const activeUsers = { ...(state.activeUsers ?? {}) };
+  activeUsers[resolvedUrl] = userId;
+  writeState({ ...state, activeUsers });
+}
+
+function migrateAllPlatformsToUserScoped(): void {
+  const platformsDir = getPlatformsDirPath();
+  if (!existsSync(platformsDir)) return;
+
+  for (const entry of readdirSync(platformsDir)) {
+    const dirPath = join(platformsDir, entry);
+    if (!statSync(dirPath).isDirectory()) continue;
+
+    const rootToken = join(dirPath, "token.json");
+    const usersDir = join(dirPath, "users");
+    if (!existsSync(rootToken) || existsSync(usersDir)) continue;
+
+    const token = readJsonFile<TokenConfig>(rootToken);
+    if (!token?.baseUrl) continue;
+
+    migratePlatformToUserScoped(token.baseUrl);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Store initialization
+// ---------------------------------------------------------------------------
+
 function ensureStoreReady(): void {
   ensureConfigDir();
   migrateLegacyFilesIfNeeded();
+  migrateAllPlatformsToUserScoped();
 }
+
+// ---------------------------------------------------------------------------
+// Active user management
+// ---------------------------------------------------------------------------
+
+/** Read active user from state without triggering ensureStoreReady (avoids recursion). */
+function getActiveUserRaw(baseUrl: string): string | null {
+  const state = readJsonFile<StoreState>(getStateFilePath()) ?? {};
+  const userId = state.activeUsers?.[baseUrl];
+  if (userId) return userId;
+
+  // Fallback: scan users/ dir and pick the first one
+  const usersDir = getUsersDirPath(baseUrl);
+  if (!existsSync(usersDir)) return null;
+  for (const entry of readdirSync(usersDir)) {
+    const entryPath = join(usersDir, entry);
+    if (statSync(entryPath).isDirectory() && existsSync(join(entryPath, "token.json"))) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+/** Get the active userId for a platform. */
+export function getActiveUser(baseUrl: string): string | null {
+  ensureStoreReady();
+  return getActiveUserRaw(baseUrl);
+}
+
+/** Set the active userId for a platform. */
+export function setActiveUser(baseUrl: string, userId: string): void {
+  ensureStoreReady();
+  const state = readState();
+  const activeUsers = { ...(state.activeUsers ?? {}) };
+  activeUsers[baseUrl] = userId;
+  writeState({ ...state, activeUsers });
+}
+
+/** List all user IDs stored under a platform. */
+export function listUsers(baseUrl: string): string[] {
+  ensureStoreReady();
+  const usersDir = getUsersDirPath(baseUrl);
+  if (!existsSync(usersDir)) return [];
+
+  const users: string[] = [];
+  for (const entry of readdirSync(usersDir)) {
+    const entryPath = join(usersDir, entry);
+    if (statSync(entryPath).isDirectory()) {
+      users.push(entry);
+    }
+  }
+  return users.sort();
+}
+
+/** Load a specific user's token (not necessarily the active user). */
+export function loadUserTokenConfig(baseUrl: string, userId: string): TokenConfig | null {
+  ensureStoreReady();
+  return readJsonFile<TokenConfig>(join(getUserDir(baseUrl, userId), "token.json"));
+}
+
+export interface UserProfile {
+  userId: string;
+  username?: string;
+  email?: string;
+}
+
+/**
+ * List all user profiles for a platform, enriched with display names.
+ *
+ * Resolution order for username:
+ *   1. ``displayName`` field persisted in token.json (set at login via /oauth2/userinfo)
+ *   2. ``preferred_username`` or ``name`` decoded from id_token JWT
+ */
+export function listUserProfiles(baseUrl: string): UserProfile[] {
+  const userIds = listUsers(baseUrl);
+  return userIds.map((userId) => {
+    const token = loadUserTokenConfig(baseUrl, userId);
+    let username: string | undefined;
+    let email: string | undefined;
+
+    if (token?.displayName) {
+      username = token.displayName;
+    }
+
+    if (token?.idToken) {
+      const payload = decodeJwtPayload(token.idToken);
+      if (payload) {
+        if (!username) {
+          if (typeof payload.preferred_username === "string") username = payload.preferred_username;
+          else if (typeof payload.name === "string") username = payload.name;
+        }
+        if (typeof payload.email === "string") email = payload.email;
+      }
+    }
+    return { userId, username, email };
+  });
+}
+
+/** Resolve a user identifier (userId, username, or email) to a userId for the given platform.
+ *  userId and username are matched case-sensitively; email is case-insensitive. */
+export function resolveUserId(baseUrl: string, identifier: string): string | null {
+  const users = listUsers(baseUrl);
+  if (users.includes(identifier)) return identifier;
+
+  const profiles = listUserProfiles(baseUrl);
+
+  // Exact match on username (case-sensitive)
+  const exact = profiles.find((p) => p.username === identifier);
+  if (exact) return exact.userId;
+
+  // Email match (case-insensitive per RFC 5321)
+  const lower = identifier.toLowerCase();
+  const byEmail = profiles.find((p) => p.email?.toLowerCase() === lower);
+  return byEmail?.userId ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Public API — platform & alias management
+// ---------------------------------------------------------------------------
 
 export function getConfigDir(): string {
   return getConfigDirPath();
@@ -282,20 +548,35 @@ export function resolvePlatformIdentifier(value: string): string | null {
   return normalized;
 }
 
+// ---------------------------------------------------------------------------
+// Token config (user-scoped)
+// ---------------------------------------------------------------------------
+
 export function loadTokenConfig(baseUrl?: string): TokenConfig | null {
   ensureStoreReady();
   const targetBaseUrl = baseUrl ?? getCurrentPlatform();
   if (!targetBaseUrl) {
     return null;
   }
-  return readJsonFile<TokenConfig>(getPlatformFile(targetBaseUrl, "token.json"));
+  return readJsonFile<TokenConfig>(resolveFile(targetBaseUrl, "token.json"));
 }
 
-export function saveTokenConfig(config: TokenConfig): void {
+export function saveTokenConfig(config: TokenConfig, userId?: string): void {
   ensureStoreReady();
-  ensurePlatformDir(config.baseUrl);
-  writeJsonFile(getPlatformFile(config.baseUrl, "token.json"), config);
+  const resolvedUser = userId ?? extractUserId(config);
+  const dir = getUserDir(config.baseUrl, resolvedUser);
+  ensureDir(dir);
+  writeJsonFile(join(dir, "token.json"), config);
+  // When KWEAVER_USER is set the caller is doing a one-off operation;
+  // don't change the persisted active user.
+  if (!process.env.KWEAVER_USER) {
+    setActiveUser(config.baseUrl, resolvedUser);
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Client config (platform-level — shared across users)
+// ---------------------------------------------------------------------------
 
 export function loadClientConfig(baseUrl?: string): ClientConfig | null {
   ensureStoreReady();
@@ -311,6 +592,15 @@ export function saveClientConfig(baseUrl: string, config: ClientConfig): void {
   ensurePlatformDir(baseUrl);
   writeJsonFile(getPlatformFile(baseUrl, "client.json"), { ...config, baseUrl });
 }
+
+export function deleteClientConfig(baseUrl: string): void {
+  const filePath = getPlatformFile(baseUrl, "client.json");
+  if (existsSync(filePath)) rmSync(filePath, { force: true });
+}
+
+// ---------------------------------------------------------------------------
+// Context-loader config (user-scoped)
+// ---------------------------------------------------------------------------
 
 /** Legacy format (pre-refactor). */
 interface LegacyContextLoaderConfig {
@@ -335,7 +625,7 @@ export function loadContextLoaderConfig(baseUrl?: string): ContextLoaderConfig |
   if (!targetBaseUrl) {
     return null;
   }
-  const raw = readJsonFile<unknown>(getPlatformFile(targetBaseUrl, "context-loader.json"));
+  const raw = readJsonFile<unknown>(resolveFile(targetBaseUrl, "context-loader.json"));
   if (!raw) return null;
 
   const migrated = migrateLegacyContextLoader(raw);
@@ -358,8 +648,15 @@ export function loadContextLoaderConfig(baseUrl?: string): ContextLoaderConfig |
 
 export function saveContextLoaderConfig(baseUrl: string, config: ContextLoaderConfig): void {
   ensureStoreReady();
-  ensurePlatformDir(baseUrl);
-  writeJsonFile(getPlatformFile(baseUrl, "context-loader.json"), config);
+  const userId = getActiveUser(baseUrl);
+  if (userId) {
+    const dir = getUserDir(baseUrl, userId);
+    ensureDir(dir);
+    writeJsonFile(join(dir, "context-loader.json"), config);
+  } else {
+    ensurePlatformDir(baseUrl);
+    writeJsonFile(getPlatformFile(baseUrl, "context-loader.json"), config);
+  }
 }
 
 export interface CurrentContextLoaderKn {
@@ -424,7 +721,7 @@ export function removeContextLoaderEntry(baseUrl: string, name: string): void {
 
   const newConfigs = config.configs.filter((c) => c.name !== name);
   if (newConfigs.length === 0) {
-    const file = getPlatformFile(baseUrl, "context-loader.json");
+    const file = resolveFile(baseUrl, "context-loader.json");
     if (existsSync(file)) rmSync(file, { force: true });
     return;
   }
@@ -436,19 +733,46 @@ export function removeContextLoaderEntry(baseUrl: string, name: string): void {
   saveContextLoaderConfig(baseUrl, { configs: newConfigs, current: newCurrent });
 }
 
+// ---------------------------------------------------------------------------
+// Platform existence / session management
+// ---------------------------------------------------------------------------
+
 export function hasPlatform(baseUrl: string): boolean {
   ensureStoreReady();
-  return existsSync(getPlatformFile(baseUrl, "token.json"));
+  const file = resolveFile(baseUrl, "token.json");
+  if (existsSync(file)) return true;
+  return listUsers(baseUrl).length > 0;
 }
 
-/**
- * Remove token for a platform so the next auth will do a full login.
- */
-export function clearPlatformSession(baseUrl: string): void {
+export function clearPlatformSession(baseUrl: string, userId?: string): void {
   ensureStoreReady();
-  const tokenFile = getPlatformFile(baseUrl, "token.json");
-  if (existsSync(tokenFile)) {
-    rmSync(tokenFile, { force: true });
+  const target = userId ?? getActiveUser(baseUrl);
+  if (target) {
+    const tokenFile = join(getUserDir(baseUrl, target), "token.json");
+    if (existsSync(tokenFile)) rmSync(tokenFile, { force: true });
+    return;
+  }
+  // Fallback: legacy flat layout
+  const legacyToken = getPlatformFile(baseUrl, "token.json");
+  if (existsSync(legacyToken)) rmSync(legacyToken, { force: true });
+}
+
+/** Delete a single user's profile directory under a platform. */
+export function deleteUser(baseUrl: string, userId: string): void {
+  ensureStoreReady();
+  const dir = getUserDir(baseUrl, userId);
+  if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+
+  const state = readState();
+  if (state.activeUsers?.[baseUrl] === userId) {
+    const remaining = listUsers(baseUrl);
+    const au = { ...(state.activeUsers ?? {}) };
+    if (remaining.length > 0) {
+      au[baseUrl] = remaining[0];
+    } else {
+      delete au[baseUrl];
+    }
+    writeState({ ...state, activeUsers: Object.keys(au).length > 0 ? au : undefined });
   }
 }
 
@@ -463,7 +787,11 @@ export function deletePlatform(baseUrl: string): void {
   rmSync(platformDir, { recursive: true, force: true });
 
   const state = readState();
+  const au = { ...(state.activeUsers ?? {}) };
+  delete au[baseUrl];
+
   if (state.currentPlatform !== baseUrl) {
+    writeState({ ...state, activeUsers: Object.keys(au).length > 0 ? au : undefined });
     return;
   }
 
@@ -471,6 +799,7 @@ export function deletePlatform(baseUrl: string): void {
   writeState({
     ...readState(),
     currentPlatform: remainingPlatforms[0]?.baseUrl,
+    activeUsers: Object.keys(au).length > 0 ? au : undefined,
   });
 }
 
@@ -479,28 +808,74 @@ export function listPlatforms(): PlatformSummary[] {
   const currentPlatform = getCurrentPlatform();
   const items: PlatformSummary[] = [];
 
-  for (const entry of readdirSync(getPlatformsDirPath())) {
-    const dirPath = join(getPlatformsDirPath(), entry);
+  const platformsDir = getPlatformsDirPath();
+  if (!existsSync(platformsDir)) return items;
+
+  for (const entry of readdirSync(platformsDir)) {
+    const dirPath = join(platformsDir, entry);
     if (!statSync(dirPath).isDirectory()) {
       continue;
     }
 
-    const token = readJsonFile<TokenConfig>(join(dirPath, "token.json"));
-    if (!token?.baseUrl) {
-      continue;
+    // Try to find the baseUrl from any available token
+    let baseUrl: string | null = null;
+
+    // Check users/ subdirectory first (new layout)
+    const usersDir = join(dirPath, "users");
+    if (existsSync(usersDir)) {
+      for (const userEntry of readdirSync(usersDir)) {
+        const userTokenPath = join(usersDir, userEntry, "token.json");
+        const userToken = readJsonFile<TokenConfig>(userTokenPath);
+        if (userToken?.baseUrl) {
+          baseUrl = userToken.baseUrl;
+          break;
+        }
+      }
+    }
+
+    // Fallback: legacy flat layout
+    if (!baseUrl) {
+      const token = readJsonFile<TokenConfig>(join(dirPath, "token.json"));
+      if (token?.baseUrl) {
+        baseUrl = token.baseUrl;
+      }
+    }
+
+    // Fallback: client.json
+    if (!baseUrl) {
+      const client = readJsonFile<ClientConfig>(join(dirPath, "client.json"));
+      if (client?.baseUrl) {
+        baseUrl = client.baseUrl;
+      }
+    }
+
+    if (!baseUrl) continue;
+
+    const hasToken = existsSync(resolveFile(baseUrl, "token.json"));
+    const activeUser = getActiveUserRaw(baseUrl);
+    let displayName: string | undefined;
+    if (activeUser) {
+      const tok = loadUserTokenConfig(baseUrl, activeUser);
+      if (tok?.displayName) displayName = tok.displayName;
     }
 
     items.push({
-      baseUrl: token.baseUrl,
-      hasToken: true,
-      isCurrent: token.baseUrl === currentPlatform,
-      alias: getPlatformAlias(token.baseUrl) ?? undefined,
+      baseUrl,
+      hasToken,
+      isCurrent: baseUrl === currentPlatform,
+      alias: getPlatformAlias(baseUrl) ?? undefined,
+      userId: activeUser ?? undefined,
+      displayName,
     });
   }
 
   items.sort((a, b) => a.baseUrl.localeCompare(b.baseUrl));
   return items;
 }
+
+// ---------------------------------------------------------------------------
+// Per-user platform config (businessDomain, etc.)
+// ---------------------------------------------------------------------------
 
 /** Per-platform config (not auth — general settings). */
 export interface PlatformConfig {
@@ -509,13 +884,20 @@ export interface PlatformConfig {
 
 function loadPlatformConfig(baseUrl: string): PlatformConfig | null {
   ensureStoreReady();
-  return readJsonFile<PlatformConfig>(getPlatformFile(baseUrl, "config.json"));
+  return readJsonFile<PlatformConfig>(resolveFile(baseUrl, "config.json"));
 }
 
 function savePlatformConfig(baseUrl: string, config: PlatformConfig): void {
   ensureStoreReady();
-  ensurePlatformDir(baseUrl);
-  writeJsonFile(getPlatformFile(baseUrl, "config.json"), config);
+  const userId = getActiveUser(baseUrl);
+  if (userId) {
+    const dir = getUserDir(baseUrl, userId);
+    ensureDir(dir);
+    writeJsonFile(join(dir, "config.json"), config);
+  } else {
+    ensurePlatformDir(baseUrl);
+    writeJsonFile(getPlatformFile(baseUrl, "config.json"), config);
+  }
 }
 
 export function loadPlatformBusinessDomain(baseUrl: string): string | null {

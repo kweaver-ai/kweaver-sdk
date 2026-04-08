@@ -2,17 +2,24 @@ import {
   autoSelectBusinessDomain,
   clearPlatformSession,
   deletePlatform,
+  deleteUser,
+  getActiveUser,
   getConfigDir,
   getCurrentPlatform,
   getPlatformAlias,
   hasPlatform,
   listPlatforms,
+  listUserProfiles,
+  listUsers,
   loadClientConfig,
   loadTokenConfig,
   resolvePlatformIdentifier,
+  resolveUserId,
+  setActiveUser,
   setCurrentPlatform,
   setPlatformAlias,
 } from "../config/store.js";
+import { decodeJwtPayload } from "../config/jwt.js";
 import {
   buildCopyCommand,
   formatHttpError,
@@ -32,10 +39,12 @@ kweaver auth <url>                   Login (shorthand; same options as login)
 kweaver auth whoami [url|alias]      Show current user identity (from id_token)
 kweaver auth export [url|alias] [--json]   Export credentials; run printed command on a headless host
 kweaver auth status [url|alias]      Show current auth status
-kweaver auth list                    List saved platforms
+kweaver auth list                    List all platforms and users (tree view)
 kweaver auth use <url|alias>         Switch active platform
-kweaver auth logout [url|alias]      Logout (clear local token)
-kweaver auth delete <url|alias>      Delete saved credentials
+kweaver auth users [url|alias]       List all user profiles (with usernames) for a platform
+kweaver auth switch [url|alias] --user <id|username>  Switch active user for a platform
+kweaver auth logout [url|alias] [--user <id>]  Logout (clear local token)
+kweaver auth delete <url|alias> [--user <id>]  Delete saved credentials
 
 Login options:
   --alias <name>         Save platform with a short alias (use with use / status / logout)
@@ -46,6 +55,10 @@ Login options:
   --refresh-token <t>    Use on a machine without a browser: exchange refresh token for access token.
                          Requires --client-id and --client-secret.
                          Get these from the callback page after browser login or \`auth export\`.
+  --port <n>             Local callback port (default: 9010). Use when 9010 is occupied.
+  --redirect-uri <uri>   Full OAuth2 redirect URI override. Localhost URIs start a local server;
+                         non-localhost URIs use a manual paste-the-callback-URL flow.
+                         Overrides --port. Example: http://127.0.0.1:8080/callback
   -u, --username         Username (with -p triggers Playwright headless login)
   -p, --password         Password
   --playwright           Force Playwright browser login even without -u/-p
@@ -77,7 +90,15 @@ Login options:
     return runAuthExportCommand(rest);
   }
 
-  const LOGIN_SUBCOMMANDS = new Set(["status", "list", "use", "delete", "logout", "export", "whoami"]);
+  if (target === "users") {
+    return runAuthUsersCommand(rest);
+  }
+
+  if (target === "switch") {
+    return runAuthSwitchCommand(rest);
+  }
+
+  const LOGIN_SUBCOMMANDS = new Set(["status", "list", "use", "delete", "logout", "export", "whoami", "users", "switch"]);
   if (target && !LOGIN_SUBCOMMANDS.has(target)) {
     try {
       const normalizedTarget = normalizeBaseUrl(target);
@@ -88,7 +109,15 @@ Login options:
       const clientId = readOption(args, "--client-id");
       const clientSecret = readOption(args, "--client-secret");
       const refreshToken = readOption(args, "--refresh-token");
+      const customRedirectUri = readOption(args, "--redirect-uri");
+      const customPortStr = readOption(args, "--port");
+      const customPort = customPortStr ? parseInt(customPortStr, 10) : undefined;
       const tlsInsecure = args.includes("--insecure") || args.includes("-k");
+
+      if (customPort !== undefined && (Number.isNaN(customPort) || customPort < 1 || customPort > 65535)) {
+        console.error("Invalid --port value. Expected a number between 1 and 65535.");
+        return 1;
+      }
 
       let token;
 
@@ -103,15 +132,18 @@ Login options:
           clientId, clientSecret, refreshToken, tlsInsecure,
         });
       } else if (username && password) {
-        // Headless Playwright login with credentials
         console.log("Logging in (headless)...");
-        token = await playwrightLogin(normalizedTarget, { username, password, tlsInsecure });
+        token = await playwrightLogin(normalizedTarget, {
+          username, password, tlsInsecure,
+          port: customPort, redirectUri: customRedirectUri ?? undefined,
+        });
       } else if (usePlaywright) {
-        // Explicit Playwright fallback
         console.log("Opening browser for login (Playwright)...");
-        token = await playwrightLogin(normalizedTarget, { tlsInsecure });
+        token = await playwrightLogin(normalizedTarget, {
+          tlsInsecure,
+          port: customPort, redirectUri: customRedirectUri ?? undefined,
+        });
       } else {
-        // Default: OAuth2 authorization code flow (supports refresh_token)
         if (clientId) {
           console.log(`Opening browser for OAuth2 login (client: ${clientId})...`);
         } else {
@@ -121,6 +153,7 @@ Login options:
           clientId: clientId ?? undefined,
           clientSecret: clientSecret ?? undefined,
           tlsInsecure,
+          port: customPort, redirectUri: customRedirectUri ?? undefined,
         });
       }
 
@@ -138,6 +171,11 @@ Login options:
         }
       }
       console.log(`Current platform: ${normalizedTarget}`);
+      const activeUser = getActiveUser(normalizedTarget);
+      if (activeUser) {
+        const userLabel = token.displayName ? `${token.displayName} (${activeUser})` : activeUser;
+        console.log(`User: ${userLabel}`);
+      }
       console.log(`Access token saved: yes`);
       if (token.refreshToken) {
         console.log(`Refresh token: yes (auto-refresh enabled)`);
@@ -182,9 +220,16 @@ Login options:
       `Config directory: ${getConfigDir()}`,
       `Platform: ${token.baseUrl}`,
       `Current platform: ${token.baseUrl === currentPlatform ? "yes" : "no"}`,
-      `Token present: yes`,
     ];
 
+    const statusActiveUser = getActiveUser(platform);
+    if (statusActiveUser) {
+      const statusDisplayName = token.displayName;
+      const userLabel = statusDisplayName ? `${statusDisplayName} (${statusActiveUser})` : statusActiveUser;
+      lines.push(`User: ${userLabel}`);
+    }
+
+    lines.push(`Token present: yes`);
     lines.push(`Refresh token: ${token.refreshToken ? "yes (auto-refresh enabled)" : "no"}`);
     if (token.tlsInsecure) {
       lines.push(`TLS: certificate verification disabled (saved; dev only)`);
@@ -220,8 +265,19 @@ Login options:
     console.log(`Config directory: ${getConfigDir()}`);
     for (const platform of platforms) {
       const marker = platform.baseUrl === currentPlatform ? "*" : "-";
-      const aliasPart = platform.alias ? ` alias=${platform.alias}` : "";
-      console.log(`${marker} ${platform.baseUrl}${aliasPart}  token=${platform.hasToken ? "yes" : "no"}`);
+      const aliasPart = platform.alias ? ` (${platform.alias})` : "";
+      console.log(`${marker} ${platform.baseUrl}${aliasPart}`);
+
+      const profiles = listUserProfiles(platform.baseUrl);
+      const activeUser = getActiveUser(platform.baseUrl);
+      for (let i = 0; i < profiles.length; i++) {
+        const p = profiles[i];
+        const isLast = i === profiles.length - 1;
+        const branch = isLast ? "└──" : "├──";
+        const activeMarker = p.userId === activeUser ? " *" : "";
+        const label = p.username ? `${p.username} (${p.userId})` : p.userId;
+        console.log(`  ${branch} ${label}${activeMarker}`);
+      }
     }
     return 0;
   }
@@ -244,16 +300,25 @@ Login options:
   }
 
   if (target === "delete") {
-    const resolvedTarget = args[1] ? resolvePlatformIdentifier(args[1]) : "";
+    const deleteUserArg = readOption(args, "--user");
+    const positionalArgs = args.slice(1).filter((a) => a !== "--user" && a !== deleteUserArg);
+    const resolvedTarget = positionalArgs[0] ? resolvePlatformIdentifier(positionalArgs[0]) : "";
     const deleteTarget =
       resolvedTarget && /^https?:\/\//.test(resolvedTarget) ? normalizeBaseUrl(resolvedTarget) : resolvedTarget;
     if (!deleteTarget) {
-      console.error("Usage: kweaver auth delete <platform-url|alias>");
+      console.error("Usage: kweaver auth delete <platform-url|alias> [--user <userId|username>]");
       return 1;
     }
     if (!hasPlatform(deleteTarget)) {
       console.error(`No saved token for ${deleteTarget}.`);
       return 1;
+    }
+
+    if (deleteUserArg) {
+      const deleteUserId = resolveUserId(deleteTarget, deleteUserArg) ?? deleteUserArg;
+      deleteUser(deleteTarget, deleteUserId);
+      console.log(`Deleted user ${deleteUserId} from ${deleteTarget}`);
+      return 0;
     }
 
     const wasCurrent = getCurrentPlatform() === deleteTarget;
@@ -267,11 +332,13 @@ Login options:
   }
 
   if (target === "logout") {
-    const resolvedTarget = args[1] ? resolvePlatformIdentifier(args[1]) : getCurrentPlatform();
+    const logoutUserArg = readOption(args, "--user");
+    const positionalArgs = args.slice(1).filter((a) => a !== "--user" && a !== logoutUserArg);
+    const resolvedTarget = positionalArgs[0] ? resolvePlatformIdentifier(positionalArgs[0]) : getCurrentPlatform();
     const logoutTarget =
       resolvedTarget && /^https?:\/\//.test(resolvedTarget) ? normalizeBaseUrl(resolvedTarget) : resolvedTarget;
     if (!logoutTarget) {
-      console.error("Usage: kweaver auth logout [platform-url|alias]");
+      console.error("Usage: kweaver auth logout [platform-url|alias] [--user <userId|username>]");
       console.error("No current platform. Specify a platform to logout.");
       return 1;
     }
@@ -279,8 +346,10 @@ Login options:
       console.error(`No saved token for ${logoutTarget}.`);
       return 1;
     }
-    clearPlatformSession(logoutTarget);
-    console.log(`Logged out: ${logoutTarget}`);
+    const logoutUserId = logoutUserArg ? resolveUserId(logoutTarget, logoutUserArg) ?? logoutUserArg : undefined;
+    clearPlatformSession(logoutTarget, logoutUserId);
+    const userHint = logoutUserId ? ` (user: ${logoutUserId})` : "";
+    console.log(`Logged out: ${logoutTarget}${userHint}`);
     console.log(`Run \`kweaver auth login ${logoutTarget}\` to sign in again.`);
     return 0;
   }
@@ -291,21 +360,91 @@ Login options:
   console.error("       kweaver auth status [platform-url|alias]");
   console.error("       kweaver auth list");
   console.error("       kweaver auth use <platform-url|alias>");
-  console.error("       kweaver auth logout [platform-url|alias]");
-  console.error("       kweaver auth delete <platform-url|alias>");
+  console.error("       kweaver auth users [platform-url|alias]");
+  console.error("       kweaver auth switch [platform-url|alias] --user <userId>");
+  console.error("       kweaver auth logout [platform-url|alias] [--user <userId>]");
+  console.error("       kweaver auth delete <platform-url|alias> [--user <userId>]");
   return 1;
 }
 
-function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
-  const parts = jwt.split(".");
-  if (parts.length !== 3) return null;
-  try {
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const json = Buffer.from(base64, "base64").toString("utf8");
-    return JSON.parse(json) as Record<string, unknown>;
-  } catch {
-    return null;
+function resolvePlatformArg(args: string[]): string | null {
+  const positional = args.find((a) => !a.startsWith("-"));
+  const resolved = positional ? resolvePlatformIdentifier(positional) : null;
+  if (resolved && /^https?:\/\//.test(resolved)) return normalizeBaseUrl(resolved);
+  return resolved ?? getCurrentPlatform();
+}
+
+function runAuthUsersCommand(args: string[]): number {
+  if (args[0] === "--help" || args[0] === "-h") {
+    console.log(`kweaver auth users [platform-url|alias]
+
+List all user profiles stored for a platform.
+Each line shows: userId (username) where username is decoded from the id_token.
+You can use either userId or username with --user in switch/logout/delete.`);
+    return 0;
   }
+
+  const platform = resolvePlatformArg(args);
+  if (!platform) {
+    console.error("No active platform. Run `kweaver auth login <platform-url>` first.");
+    return 1;
+  }
+
+  const profiles = listUserProfiles(platform);
+  if (profiles.length === 0) {
+    console.error(`No user profiles for ${platform}.`);
+    return 1;
+  }
+
+  const active = getActiveUser(platform);
+  console.log(`Platform: ${platform}`);
+  for (const p of profiles) {
+    const marker = p.userId === active ? "*" : "-";
+    const displayName = p.username ? ` (${p.username})` : "";
+    console.log(`${marker} ${p.userId}${displayName}`);
+  }
+  return 0;
+}
+
+function runAuthSwitchCommand(args: string[]): number {
+  if (args[0] === "--help" || args[0] === "-h") {
+    console.log(`kweaver auth switch [platform-url|alias] --user <userId|username>
+
+Switch the active user for a platform.
+You can specify either the userId (sub claim) or the username (preferred_username from id_token).`);
+    return 0;
+  }
+
+  const userArg = readOption(args, "--user");
+  if (!userArg) {
+    console.error("Usage: kweaver auth switch [platform-url|alias] --user <userId|username>");
+    return 1;
+  }
+
+  const filteredArgs = args.filter((a) => a !== "--user" && a !== userArg);
+  const platform = resolvePlatformArg(filteredArgs);
+  if (!platform) {
+    console.error("No active platform. Run `kweaver auth login <platform-url>` first.");
+    return 1;
+  }
+
+  const resolvedId = resolveUserId(platform, userArg);
+  if (!resolvedId) {
+    console.error(`User '${userArg}' not found for ${platform}.`);
+    const profiles = listUserProfiles(platform);
+    if (profiles.length > 0) {
+      const hints = profiles.map((p) => p.username ? `${p.userId} (${p.username})` : p.userId);
+      console.error(`Available users: ${hints.join(", ")}`);
+    }
+    return 1;
+  }
+
+  setActiveUser(platform, resolvedId);
+  const profiles = listUserProfiles(platform);
+  const profile = profiles.find((p) => p.userId === resolvedId);
+  const displayName = profile?.username ? ` (${profile.username})` : "";
+  console.log(`Switched to user ${resolvedId}${displayName} on ${platform}`);
+  return 0;
 }
 
 function runAuthWhoamiCommand(args: string[]): number {
@@ -346,12 +485,17 @@ Options:
     return 1;
   }
 
+  const displayNameValue = token.displayName ?? null;
+
   if (jsonOutput) {
-    console.log(JSON.stringify({ platform, ...payload }, null, 2));
+    const out: Record<string, unknown> = { platform, ...payload };
+    if (displayNameValue) out.displayName = displayNameValue;
+    console.log(JSON.stringify(out, null, 2));
     return 0;
   }
 
   console.log(`Platform: ${platform}`);
+  if (displayNameValue) console.log(`Username: ${displayNameValue}`);
   console.log(`User ID:  ${payload.sub ?? "(unknown)"}`);
   console.log(`Issuer:   ${payload.iss ?? "(unknown)"}`);
   if (payload.sid) console.log(`Session:  ${payload.sid}`);

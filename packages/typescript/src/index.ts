@@ -242,4 +242,18 @@ export type {
   ContextLoaderEntry,
   ContextLoaderConfig,
 } from "./config/store.js";
-export { autoSelectBusinessDomain, getConfigDir, getCurrentPlatform } from "./config/store.js";
+export type { UserProfile } from "./config/store.js";
+export {
+  autoSelectBusinessDomain,
+  getConfigDir,
+  getCurrentPlatform,
+  getActiveUser,
+  setActiveUser,
+  listUsers,
+  listUserProfiles,
+  resolveUserId,
+  extractUserId,
+} from "./config/store.js";
+
+// ── JWT utilities ─────────────────────────────────────────────────────────────
+export { decodeJwtPayload, extractUserIdFromJwt } from "./config/jwt.js";

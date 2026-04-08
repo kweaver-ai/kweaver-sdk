@@ -15,6 +15,7 @@ function printHelp(): void {
   console.log(`kweaver
 
 Usage:
+  kweaver [--user <userId|username>] <command> [options]
   kweaver --version | -V
   kweaver --help | -h
 
@@ -26,8 +27,10 @@ Usage:
   kweaver auth status [platform-url|alias]
   kweaver auth list
   kweaver auth use <platform-url|alias>
-  kweaver auth logout [platform-url|alias]
-  kweaver auth delete <platform-url|alias>
+  kweaver auth users [platform-url|alias]
+  kweaver auth switch [platform-url|alias] --user <userId|username>
+  kweaver auth logout [platform-url|alias] [--user <userId>]
+  kweaver auth delete <platform-url|alias> [--user <userId>]
   kweaver token
 
   kweaver call <url> [-X METHOD] [-H "Name: value"] [-d BODY] [--data-raw BODY]
@@ -103,6 +106,9 @@ Usage:
   kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info ...
   (alias: kweaver context ...)
 
+Global options:
+  --user <id|name>  Use a specific user's credentials for this command (env: KWEAVER_USER)
+
 Commands:
   auth           Login, list, inspect, and switch saved platform auth profiles
   token          Print the current access token, refreshing it first if needed
@@ -122,7 +128,15 @@ Commands:
 export async function run(argv: string[]): Promise<number> {
   applyTlsEnvFromSavedTokens();
 
-  const [command, ...rest] = argv;
+  // Global --user flag: override active user for this invocation
+  const userIdx = argv.indexOf("--user");
+  let filteredArgv = argv;
+  if (userIdx !== -1 && userIdx + 1 < argv.length) {
+    process.env.KWEAVER_USER = argv[userIdx + 1];
+    filteredArgv = [...argv.slice(0, userIdx), ...argv.slice(userIdx + 2)];
+  }
+
+  const [command, ...rest] = filteredArgv;
 
   if (command === "--version" || command === "-V" || command === "version") {
     const { createRequire } = await import("node:module");

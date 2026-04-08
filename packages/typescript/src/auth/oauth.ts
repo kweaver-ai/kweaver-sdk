@@ -2,9 +2,12 @@ import type { Server } from "node:http";
 import {
   type ClientConfig,
   type TokenConfig,
+  deleteClientConfig,
   getCurrentPlatform,
   loadClientConfig,
   loadTokenConfig,
+  loadUserTokenConfig,
+  resolveUserId,
   saveClientConfig,
   saveTokenConfig,
   setCurrentPlatform,
@@ -18,6 +21,29 @@ const REFRESH_THRESHOLD_SEC = 60;
 
 const DEFAULT_REDIRECT_PORT = 9010;
 const DEFAULT_SCOPE = "openid offline all";
+
+/** Best-effort fetch of display name via EACP userinfo (ShareServer). */
+async function fetchDisplayName(
+  baseUrl: string,
+  accessToken: string,
+  tlsInsecure?: boolean,
+): Promise<string | null> {
+  try {
+    const res = await runWithTlsInsecure(tlsInsecure, () =>
+      fetch(`${baseUrl}/api/eacp/v1/user/get`, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+      }),
+    );
+    if (!res.ok) return null;
+    const info = (await res.json()) as Record<string, unknown>;
+    if (typeof info.account === "string") return info.account;
+    if (typeof info.name === "string") return info.name;
+    if (typeof info.mail === "string") return info.mail;
+  } catch {
+    /* Non-critical — displayName will be absent. */
+  }
+  return null;
+}
 
 /** POSIX shell single-quote escaping for copy-paste commands. */
 export function shellQuoteForShell(value: string): string {
@@ -145,10 +171,151 @@ async function generatePkce(): Promise<{ verifier: string; challenge: string }> 
 }
 
 /**
+ * Pre-flight check: verify that a cached OAuth2 client is still recognised
+ * by the server. Fetches the authorization endpoint with `redirect: "manual"`
+ * and inspects the Location header. Returns false when Hydra redirects to an
+ * error page containing `invalid_client` or similar indicators.
+ */
+async function isClientStillValid(
+  baseUrl: string,
+  clientId: string,
+  redirectUri: string,
+): Promise<boolean> {
+  try {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: "code",
+      scope: "openid",
+      redirect_uri: redirectUri,
+      state: "preflight",
+    });
+    const resp = await fetch(`${baseUrl}/oauth2/auth?${params}`, {
+      redirect: "manual",
+    });
+    if (resp.status === 302) {
+      const location = resp.headers.get("location") ?? "";
+      if (
+        location.includes("error=invalid_client") ||
+        location.includes("error=error")
+      ) {
+        return false;
+      }
+      return true;
+    }
+    // Non-redirect — Hydra might serve an error page directly
+    if (resp.status >= 400) return false;
+    return true;
+  } catch {
+    // Network error — cannot pre-validate; let the real flow proceed
+    return true;
+  }
+}
+
+/**
+ * Resolve a cached client or register a new one. When a cached client fails
+ * pre-flight validation (stale registration after server reset), the local
+ * client.json is deleted and a fresh registration is performed.
+ */
+async function resolveOrRegisterClient(
+  baseUrl: string,
+  redirectUri: string,
+  scope: string,
+  options?: { clientId?: string; clientSecret?: string },
+): Promise<ClientConfig> {
+  if (options?.clientId) {
+    const client: ClientConfig = {
+      baseUrl,
+      clientId: options.clientId,
+      clientSecret: options.clientSecret ?? "",
+      redirectUri,
+      logoutRedirectUri: redirectUri.replace("/callback", "/successful-logout"),
+      scope,
+      lang: "zh-cn",
+      product: "adp",
+      xForwardedPrefix: "",
+    };
+    saveClientConfig(baseUrl, client);
+    return client;
+  }
+
+  let client = loadClientConfig(baseUrl);
+  if (client?.clientId) {
+    const valid = await isClientStillValid(baseUrl, client.clientId, redirectUri);
+    if (valid) return client;
+
+    process.stderr.write(
+      "Cached OAuth2 client is no longer valid on the server. Re-registering…\n",
+    );
+    deleteClientConfig(baseUrl);
+    client = null;
+  }
+
+  const registered = await registerOAuth2Client(baseUrl, redirectUri, scope);
+  saveClientConfig(baseUrl, registered);
+  return registered;
+}
+
+/**
+ * Parse a redirect URI to extract host, port, and pathname.
+ * Returns null if the URI is not a valid HTTP(S) URL.
+ */
+function parseRedirectUri(uri: string): { host: string; port: number; pathname: string; isLocalhost: boolean } | null {
+  try {
+    const parsed = new URL(uri);
+    const host = parsed.hostname;
+    const port = parsed.port ? Number(parsed.port) : (parsed.protocol === "https:" ? 443 : 80);
+    const isLocalhost = host === "127.0.0.1" || host === "localhost" || host === "::1";
+    return { host, port, pathname: parsed.pathname, isLocalhost };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Manual code flow for non-localhost redirect URIs.
+ * Prints the auth URL, then reads the full callback URL from stdin
+ * to extract the authorization code.
+ */
+async function waitForManualCode(authUrl: string, state: string): Promise<string> {
+  const { createInterface } = await import("node:readline");
+  process.stderr.write(
+    "\nSince the redirect URI is not localhost, you need to complete login manually.\n" +
+    "1. Open this URL in your browser:\n\n" +
+    `   ${authUrl}\n\n` +
+    "2. After login, the browser will redirect to your callback URL.\n" +
+    "3. Copy the full callback URL and paste it here:\n\n",
+  );
+
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  const callbackUrl = await new Promise<string>((resolve) => {
+    rl.question("Callback URL> ", (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+
+  const parsed = new URL(callbackUrl);
+  const receivedState = parsed.searchParams.get("state");
+  if (receivedState !== state) {
+    throw new Error("OAuth2 state mismatch — possible CSRF attack.");
+  }
+  const error = parsed.searchParams.get("error");
+  if (error) {
+    const desc = parsed.searchParams.get("error_description") ?? "";
+    throw new Error(desc ? `Authorization failed: ${error} — ${desc}` : `Authorization failed: ${error}`);
+  }
+  const code = parsed.searchParams.get("code");
+  if (!code) {
+    throw new Error("No authorization code found in the callback URL.");
+  }
+  return code;
+}
+
+/**
  * OAuth2 Authorization Code login flow.
  * 1. Register client (if not already registered), OR use a provided client ID
  * 2. Open browser to /oauth2/auth
- * 3. Receive authorization code via local HTTP callback
+ * 3. Receive authorization code via local HTTP callback (or manual paste for non-localhost)
  * 4. Exchange code for access_token + refresh_token
  * 5. Save token.json + client.json to ~/.kweaver/
  */
@@ -156,6 +323,8 @@ export async function oauth2Login(
   baseUrl: string,
   options?: {
     port?: number;
+    /** Full redirect URI override (e.g. "http://127.0.0.1:8080/callback" or a remote URL). */
+    redirectUri?: string;
     scope?: string;
     clientId?: string;
     clientSecret?: string;
@@ -170,29 +339,16 @@ export async function oauth2Login(
   const base = normalizeBaseUrl(baseUrl);
   const port = options?.port ?? DEFAULT_REDIRECT_PORT;
   const scope = options?.scope ?? DEFAULT_SCOPE;
-  const redirectUri = `http://127.0.0.1:${port}/callback`;
+
+  // Determine redirect URI: explicit option > port-based default
+  const redirectUri = options?.redirectUri ?? `http://127.0.0.1:${port}/callback`;
+  const parsedRedirect = parseRedirectUri(redirectUri);
+  const isLocalRedirect = parsedRedirect?.isLocalhost ?? true;
+  const listenPort = parsedRedirect?.port ?? port;
+  const callbackPathname = parsedRedirect?.pathname ?? "/callback";
 
   // Step 1: Determine client — use provided client ID or fall back to dynamic registration
-  let client = loadClientConfig(base);
-  if (options?.clientId) {
-    // Use the platform's existing client (e.g. the web app client).
-    // Persist it so future logins reuse it without re-registering.
-    client = {
-      baseUrl: base,
-      clientId: options.clientId,
-      clientSecret: options.clientSecret ?? "",
-      redirectUri,
-      logoutRedirectUri: redirectUri.replace("/callback", "/successful-logout"),
-      scope,
-      lang: "zh-cn",
-      product: "adp",
-      xForwardedPrefix: "",
-    };
-    saveClientConfig(base, client);
-  } else if (!client?.clientId) {
-    client = await registerOAuth2Client(base, redirectUri, scope);
-    saveClientConfig(base, client);
-  }
+  let client = await resolveOrRegisterClient(base, redirectUri, scope, options);
 
   // Use PKCE when no client secret is available (public client / platform client).
   const usePkce = !client.clientSecret;
@@ -218,91 +374,105 @@ export async function oauth2Login(
   }
   const authUrl = `${base}/oauth2/auth?${authParams.toString()}`;
 
-  // Step 4: Start local callback server; exchange code inside handler, then show credentials HTML
-  const token = await new Promise<TokenConfig>((resolve, reject) => {
-    let server: Server;
-    const timeoutId = setTimeout(() => {
-      server?.close();
-      reject(new Error("OAuth2 login timed out (120s). No authorization code received."));
-    }, 120_000);
+  let token: TokenConfig;
 
-    server = createServer((req, res) => {
-      void (async () => {
-        try {
-          const url = new URL(req.url ?? "/", `http://127.0.0.1:${port}`);
-          if (url.pathname !== "/callback") {
-            res.writeHead(404);
-            res.end();
-            return;
-          }
+  if (isLocalRedirect) {
+    // Step 4a: Local callback — start HTTP server to receive the authorization code
+    token = await new Promise<TokenConfig>((resolve, reject) => {
+      let server: Server;
+      const timeoutId = setTimeout(() => {
+        server?.close();
+        reject(new Error("OAuth2 login timed out (120s). No authorization code received."));
+      }, 120_000);
 
-          const receivedState = url.searchParams.get("state");
-          const receivedCode = url.searchParams.get("code");
-
-          if (receivedState !== state) {
-            res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-            res.end(buildCallbackExchangeErrorHtml("OAuth2 state mismatch — possible CSRF attack."));
-            clearTimeout(timeoutId);
-            server.close();
-            reject(new Error("OAuth2 state mismatch — possible CSRF attack."));
-            return;
-          }
-          if (!receivedCode) {
-            res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-            res.end(buildCallbackExchangeErrorHtml("No authorization code received in callback."));
-            clearTimeout(timeoutId);
-            server.close();
-            reject(new Error("No authorization code received in callback."));
-            return;
-          }
-
-          const exchanged = await exchangeCodeForToken(
-            base,
-            receivedCode,
-            client.clientId,
-            client.clientSecret,
-            redirectUri,
-            pkce?.verifier,
-            options?.tlsInsecure,
-          );
-
-          const copyCommand = buildCopyCommand(
-            base,
-            client.clientId,
-            client.clientSecret,
-            exchanged.refreshToken,
-            options?.tlsInsecure,
-          );
-
-          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-          res.end(buildCallbackHtml(copyCommand));
-
-          clearTimeout(timeoutId);
-          server.close();
-          resolve(exchanged);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+      server = createServer((req, res) => {
+        void (async () => {
           try {
-            res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
-            res.end(buildCallbackExchangeErrorHtml(message));
-          } catch {
-            /* response may already be sent */
-          }
-          clearTimeout(timeoutId);
-          server.close();
-          reject(err instanceof Error ? err : new Error(message));
-        }
-      })();
-    });
+            const url = new URL(req.url ?? "/", `http://127.0.0.1:${listenPort}`);
+            if (url.pathname !== callbackPathname) {
+              res.writeHead(404);
+              res.end();
+              return;
+            }
 
-    server.listen(port, "127.0.0.1", () => {
-      // Step 5: Open browser (uses spawn with proper Windows quoting)
-      import("../utils/browser.js").then(({ openBrowser }) => {
-        openBrowser(authUrl);
+            const receivedState = url.searchParams.get("state");
+            const code = url.searchParams.get("code");
+            const callbackError = url.searchParams.get("error");
+            const callbackErrorDesc = url.searchParams.get("error_description");
+
+            if (receivedState !== state) {
+              res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+              res.end(buildCallbackExchangeErrorHtml("OAuth2 state mismatch — possible CSRF attack."));
+              clearTimeout(timeoutId);
+              server.close();
+              reject(new Error("OAuth2 state mismatch — possible CSRF attack."));
+              return;
+            }
+            if (callbackError) {
+              const msg = callbackErrorDesc
+                ? `Authorization failed: ${callbackError} — ${callbackErrorDesc}`
+                : `Authorization failed: ${callbackError}`;
+              res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+              res.end(buildCallbackExchangeErrorHtml(msg));
+              clearTimeout(timeoutId);
+              server.close();
+              reject(new Error(msg));
+              return;
+            }
+            if (!code) {
+              res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+              res.end(buildCallbackExchangeErrorHtml("No authorization code received in callback."));
+              clearTimeout(timeoutId);
+              server.close();
+              reject(new Error("No authorization code received in callback."));
+              return;
+            }
+
+            const exchanged = await exchangeCodeForToken(
+              base, code, client.clientId, client.clientSecret,
+              redirectUri, pkce?.verifier, options?.tlsInsecure,
+            );
+            const copyCommand = buildCopyCommand(
+              base, client.clientId, client.clientSecret,
+              exchanged.refreshToken, options?.tlsInsecure,
+            );
+
+            res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+            res.end(buildCallbackHtml(copyCommand));
+
+            clearTimeout(timeoutId);
+            server.close();
+            resolve(exchanged);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            try {
+              res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+              res.end(buildCallbackExchangeErrorHtml(message));
+            } catch {
+              /* response may already be sent */
+            }
+            clearTimeout(timeoutId);
+            server.close();
+            reject(err instanceof Error ? err : new Error(message));
+          }
+        })();
       });
-      process.stderr.write(`If the wrong browser opens, copy this URL to your correct browser:\n  ${authUrl}\n`);
+
+      server.listen(listenPort, "127.0.0.1", () => {
+        import("../utils/browser.js").then(({ openBrowser }) => {
+          openBrowser(authUrl);
+        });
+        process.stderr.write(`If the wrong browser opens, copy this URL to your correct browser:\n  ${authUrl}\n`);
+      });
     });
-  });
+  } else {
+    // Step 4b: Non-localhost redirect — manual code entry flow
+    const code = await waitForManualCode(authUrl, state);
+    token = await exchangeCodeForToken(
+      base, code, client.clientId, client.clientSecret,
+      redirectUri, pkce?.verifier, options?.tlsInsecure,
+    );
+  }
 
   setCurrentPlatform(base);
   return token;
@@ -416,6 +586,10 @@ async function exchangeCodeForToken(
     obtainedAt: now.toISOString(),
     ...(tlsInsecure ? { tlsInsecure: true } : {}),
   };
+
+  const displayName = await fetchDisplayName(baseUrl, data.access_token, tlsInsecure);
+  if (displayName) token.displayName = displayName;
+
   saveTokenConfig(token);
   return token;
 }
@@ -437,6 +611,8 @@ export async function playwrightLogin(
     username?: string;
     password?: string;
     port?: number;
+    /** Full redirect URI override. */
+    redirectUri?: string;
     scope?: string;
     tlsInsecure?: boolean;
   },
@@ -459,15 +635,14 @@ export async function playwrightLogin(
   const base = normalizeBaseUrl(baseUrl);
   const port = options?.port ?? DEFAULT_REDIRECT_PORT;
   const scope = options?.scope ?? DEFAULT_SCOPE;
-  const redirectUri = `http://127.0.0.1:${port}/callback`;
+  const redirectUri = options?.redirectUri ?? `http://127.0.0.1:${port}/callback`;
+  const parsedRedirect = parseRedirectUri(redirectUri);
+  const listenPort = parsedRedirect?.port ?? port;
+  const callbackPathname = parsedRedirect?.pathname ?? "/callback";
   const hasCredentials = !!(options?.username && options?.password);
 
-  // Step 1: Ensure registered OAuth2 client
-  let client = loadClientConfig(base);
-  if (!client?.clientId) {
-    client = await registerOAuth2Client(base, redirectUri, scope);
-    saveClientConfig(base, client);
-  }
+  // Step 1: Ensure registered OAuth2 client (with stale-client auto-recovery)
+  let client = await resolveOrRegisterClient(base, redirectUri, scope);
 
   // Step 2: Generate CSRF state
   const state = randomBytes(12).toString("hex");
@@ -499,8 +674,8 @@ export async function playwrightLogin(
     server = createServer((req, res) => {
       void (async () => {
         try {
-          const url = new URL(req.url ?? "/", `http://127.0.0.1:${port}`);
-          if (url.pathname !== "/callback") {
+          const url = new URL(req.url ?? "/", `http://127.0.0.1:${listenPort}`);
+          if (url.pathname !== callbackPathname) {
             res.writeHead(404);
             res.end();
             return;
@@ -508,6 +683,8 @@ export async function playwrightLogin(
 
           const receivedState = url.searchParams.get("state");
           const receivedCode = url.searchParams.get("code");
+          const callbackError = url.searchParams.get("error");
+          const callbackErrorDesc = url.searchParams.get("error_description");
 
           if (receivedState !== state) {
             res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
@@ -516,6 +693,18 @@ export async function playwrightLogin(
             server.close();
             browser?.close();
             reject(new Error("OAuth2 state mismatch — possible CSRF attack."));
+            return;
+          }
+          if (callbackError) {
+            const msg = callbackErrorDesc
+              ? `Authorization failed: ${callbackError} — ${callbackErrorDesc}`
+              : `Authorization failed: ${callbackError}`;
+            res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+            res.end(buildCallbackExchangeErrorHtml(msg));
+            clearTimeout(timeoutId);
+            server.close();
+            browser?.close();
+            reject(new Error(msg));
             return;
           }
           if (!receivedCode) {
@@ -569,7 +758,7 @@ export async function playwrightLogin(
       })();
     });
 
-    server.listen(port, "127.0.0.1", async () => {
+    server.listen(listenPort, "127.0.0.1", async () => {
       try {
         browser = await chromium.launch({ headless: hasCredentials });
         const context = await browser.newContext({ ignoreHTTPSErrors: !!options?.tlsInsecure });
@@ -747,6 +936,11 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
 
   const now = new Date();
   const expiresIn = typeof data.expires_in === "number" ? data.expires_in : 3600;
+  let displayName = token.displayName;
+  if (!displayName) {
+    displayName = (await fetchDisplayName(baseUrl, data.access_token, token.tlsInsecure)) ?? undefined;
+  }
+
   const newToken: TokenConfig = {
     baseUrl,
     accessToken: data.access_token,
@@ -758,6 +952,7 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
     idToken: data.id_token ?? token.idToken ?? "",
     obtainedAt: now.toISOString(),
     ...(token.tlsInsecure ? { tlsInsecure: true } : {}),
+    ...(displayName ? { displayName } : {}),
   };
   saveTokenConfig(newToken);
   return newToken;
@@ -791,7 +986,22 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
     throw new Error("No active platform selected. Run `kweaver auth login <platform-url>` first.");
   }
 
-  let token = loadTokenConfig(currentPlatform);
+  // KWEAVER_USER: load a specific user's token without switching active user
+  const envUser = process.env.KWEAVER_USER;
+  let token: TokenConfig | null;
+  if (envUser) {
+    const userId = resolveUserId(currentPlatform, envUser);
+    if (!userId) {
+      throw new Error(
+        `User '${envUser}' not found for ${currentPlatform}. ` +
+          "Run `kweaver auth users` to see available users.",
+      );
+    }
+    token = loadUserTokenConfig(currentPlatform, userId);
+  } else {
+    token = loadTokenConfig(currentPlatform);
+  }
+
   if (!token) {
     throw new Error(
       `No saved token for ${currentPlatform}. Run \`kweaver auth login ${currentPlatform}\` first.`,
@@ -832,7 +1042,14 @@ export async function with401RefreshRetry<T>(fn: () => Promise<T>): Promise<T> {
         throw error;
       }
       const platformUrl = normalizeBaseUrl(currentPlatform);
-      const latest = loadTokenConfig(platformUrl);
+      const envUser = process.env.KWEAVER_USER;
+      let latest: TokenConfig | null;
+      if (envUser) {
+        const userId = resolveUserId(platformUrl, envUser);
+        latest = userId ? loadUserTokenConfig(platformUrl, userId) : null;
+      } else {
+        latest = loadTokenConfig(platformUrl);
+      }
       if (!latest) {
         throw error;
       }
@@ -865,7 +1082,15 @@ export async function withTokenRetry<T>(
   } catch (error) {
     if (error instanceof HttpError && error.status === 401) {
       const platformUrl = normalizeBaseUrl(token.baseUrl);
-      const latest = loadTokenConfig(platformUrl) ?? token;
+      const envUser = process.env.KWEAVER_USER;
+      let latest: TokenConfig | null;
+      if (envUser) {
+        const userId = resolveUserId(platformUrl, envUser);
+        latest = userId ? loadUserTokenConfig(platformUrl, userId) : null;
+      } else {
+        latest = loadTokenConfig(platformUrl);
+      }
+      if (!latest) latest = token;
       try {
         const refreshed = await refreshAccessToken(latest);
         return await fn(refreshed);

@@ -235,18 +235,105 @@ test("ensureValidToken: forceRefresh calls token endpoint", async () => {
     obtainedAt: new Date().toISOString(),
   });
 
-  let calls = 0;
+  let tokenCalls = 0;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
-    calls += 1;
-    return new Response(JSON.stringify({ access_token: "forced", expires_in: 3600 }), { status: 200 });
+  globalThis.fetch = async (input: any) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.includes("/oauth2/token")) {
+      tokenCalls += 1;
+      return new Response(JSON.stringify({ access_token: "forced", expires_in: 3600 }), { status: 200 });
+    }
+    return new Response("", { status: 404 });
   };
   try {
     const t = await oauth.ensureValidToken({ forceRefresh: true });
     assert.equal(t.accessToken, "forced");
-    assert.equal(calls, 1);
+    assert.equal(tokenCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// KWEAVER_USER env var: load a specific user's token
+// ---------------------------------------------------------------------------
+
+function makeJwt(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${header}.${body}.fake-signature`;
+}
+
+test("ensureValidToken: KWEAVER_USER loads specific user token", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://multi.example.com";
+  store.setCurrentPlatform(baseUrl);
+
+  // Save two users
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "token-alice",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-alice" }),
+    displayName: "alice",
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    obtainedAt: new Date().toISOString(),
+  });
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "token-bob",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-bob" }),
+    displayName: "bob",
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  // Active user is bob (last saved)
+  const defaultToken = await oauth.ensureValidToken();
+  assert.equal(defaultToken.accessToken, "token-bob");
+
+  // KWEAVER_USER=alice → loads alice's token
+  process.env.KWEAVER_USER = "alice";
+  try {
+    const aliceToken = await oauth.ensureValidToken();
+    assert.equal(aliceToken.accessToken, "token-alice");
+  } finally {
+    delete process.env.KWEAVER_USER;
+  }
+
+  // KWEAVER_USER=uid-alice also works (by userId)
+  process.env.KWEAVER_USER = "uid-alice";
+  try {
+    const aliceToken = await oauth.ensureValidToken();
+    assert.equal(aliceToken.accessToken, "token-alice");
+  } finally {
+    delete process.env.KWEAVER_USER;
+  }
+});
+
+test("ensureValidToken: KWEAVER_USER with unknown user throws", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://multi.example.com";
+  store.setCurrentPlatform(baseUrl);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "a",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-1" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  process.env.KWEAVER_USER = "nonexistent";
+  try {
+    await assert.rejects(() => oauth.ensureValidToken(), /not found/);
+  } finally {
+    delete process.env.KWEAVER_USER;
   }
 });
 
@@ -296,11 +383,15 @@ test("withTokenRetry: retries once after 401 when refresh succeeds", async () =>
     obtainedAt: new Date().toISOString(),
   });
 
-  let fetchCalls = 0;
+  let tokenCalls = 0;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
-    fetchCalls += 1;
-    return new Response(JSON.stringify({ access_token: "a2", expires_in: 3600 }), { status: 200 });
+  globalThis.fetch = async (input: any) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.includes("/oauth2/token")) {
+      tokenCalls += 1;
+      return new Response(JSON.stringify({ access_token: "a2", expires_in: 3600 }), { status: 200 });
+    }
+    return new Response("", { status: 404 });
   };
 
   try {
@@ -316,7 +407,7 @@ test("withTokenRetry: retries once after 401 when refresh succeeds", async () =>
     });
     assert.equal(r, "ok");
     assert.equal(attempts, 2);
-    assert.equal(fetchCalls, 1);
+    assert.equal(tokenCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }

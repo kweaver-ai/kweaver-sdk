@@ -29,7 +29,7 @@ npm install -g @kweaver-ai/kweaver-sdk
 ## 使用方式
 
 ```bash
-kweaver <command> [subcommand] [options]
+kweaver [--user <userId|username>] <command> [subcommand] [options]
 ```
 
 **完整子命令与参数以当前安装的 CLI 为准**：运行 `kweaver --help`（或 `-h`）查看与代码同步的用法列表；查版本用 `kweaver --version` / `-V` / `kweaver version`。子命令细节用 `kweaver <group> <subcommand> --help`（例如 `kweaver auth --help`、`kweaver bkn push --help`）。
@@ -48,6 +48,7 @@ kweaver <command> [subcommand] [options]
 
 1. `KWEAVER_TOKEN` + `KWEAVER_BASE_URL` 环境变量 → 静态 Token（如存在则优先使用，**不会**用 refresh 换发）
 2. `~/.kweaver/` 凭据（`kweaver auth login` 写入）→ **默认**用 refresh_token 换发 access_token（推荐）
+3. `KWEAVER_USER` 环境变量（或全局 `--user` 参数）→ 使用指定用户的凭证，不切换活跃用户
 
 ### 业务域优先级（与认证独立）
 
@@ -59,7 +60,7 @@ kweaver <command> [subcommand] [options]
 
 | 命令组 | 说明 | 常用命令 | 详细参考 |
 |--------|------|---------|---------|
-| `auth` | 认证管理 | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `-u`/`-p` 或 `--playwright`；`auth use` / `status` / `logout` / `delete` 支持平台 URL 或别名 | `references/auth.md` |
+| `auth` | 认证管理（支持多账号） | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `-u`/`-p` 或 `--playwright`；`auth list`（树形展示所有平台及用户）；`auth users`（列出用户名）；`auth switch --user <username>`（按用户名切换）；全局 `--user <name>` 可免切换使用指定用户凭证（env: `KWEAVER_USER`）；`auth use` / `status` / `logout` / `delete` 支持平台 URL 或别名 | `references/auth.md` |
 | `token` | 打印当前 access token（自动刷新） | `token` | — |
 | `config` | **平台业务域（优先于多数 bkn/agent/ds 操作）** | `config show`, `config list-bd`, `config set-bd <uuid>` | `references/config.md` |
 | `bkn` | BKN 知识网络管理、Schema、查询、Action | `bkn validate`/`push` 默认检测 `.bkn` 编码并规范为 UTF-8，可用 `--no-detect-encoding` 或 `--source-encoding gb18030`；另有 `pull`、`object-type`、`search`、`create-from-ds`/`create-from-csv` 等，见 `references/bkn.md` | `references/bkn.md` |

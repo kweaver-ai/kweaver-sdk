@@ -2,7 +2,7 @@
 
 平台认证管理。凭据存储在 `~/.kweaver/`。
 
-与 CLI 一致：运行 `kweaver auth` 或 `kweaver auth login --help` 可查看与当前版本同步的用法（含 `--alias`、`-u`/`-p`、`--playwright`）。
+与 CLI 一致：运行 `kweaver auth` 或 `kweaver auth login --help` 可查看与当前版本同步的用法。
 
 ## 前提
 
@@ -13,30 +13,91 @@ npm install playwright && npx playwright install chromium
 ## 命令
 
 ```bash
-kweaver auth login <url> [--alias <name>] [-u user] [-p pass] [--playwright] [--insecure|-k]
-kweaver auth <url> [--alias <name>] [-u user] [-p pass] [--playwright] [--insecure|-k]   # 同上（简写）
-kweaver auth logout [<url|alias>]              # 登出（清除本地 token）
-kweaver auth status [url|alias]                # 查看 token 状态
-kweaver auth list                              # 列出已保存的平台
-kweaver auth use <url|alias>                   # 切换平台
-kweaver auth delete <url|alias> [-y]           # 删除平台凭证
+kweaver auth login <url> [--alias <name>] [-u user] [-p pass] [--playwright]
+                         [--port <n>] [--redirect-uri <uri>] [--insecure|-k]
+kweaver auth <url> [--alias <name>] ...              # 同上（简写）
+kweaver auth whoami [url|alias] [--json]              # 显示当前用户身份
+kweaver auth export [url|alias] [--json]              # 导出凭据（用于无浏览器的服务器）
+kweaver auth status [url|alias]                       # 查看 token 状态
+kweaver auth list                                     # 树形列出所有平台及用户
+kweaver auth use <url|alias>                          # 切换平台
+kweaver auth users [url|alias]                        # 列出平台下所有用户
+kweaver auth switch [url|alias] --user <id|username>  # 切换活跃用户
+kweaver auth logout [url|alias] [--user <id|username>]
+kweaver auth delete <url|alias> [--user <id|username>]
+```
+
+## 多账号支持
+
+同一平台 URL 支持多个用户账号。登录时自动获取用户名，`--user` 参数支持用户名或 userId。
+
+### 免切换调用
+
+全局 `--user` 参数或 `KWEAVER_USER` 环境变量可直接使用指定用户的凭证，无需手动切换：
+
+```bash
+# 全局 --user 参数
+kweaver --user alice bkn list
+kweaver --user alice agent list
+
+# 环境变量（适合脚本/CI）
+export KWEAVER_USER=alice
+kweaver bkn list
+
+# Python SDK 同样支持
+KWEAVER_USER=alice python my_script.py
+```
+
+### 工作流示例
+
+```bash
+# 登录两个账号
+kweaver auth login https://kweaver.example.com --alias prod
+kweaver auth login https://kweaver.example.com
+
+# 树形列出所有平台及用户
+kweaver auth list
+# * https://kweaver.example.com (prod)
+#   ├── bob (bob-uuid) *
+#   └── alice (alice-uuid)
+
+# 用用户名切换（永久）
+kweaver auth switch prod --user alice
+
+# 或单次使用其他用户的凭证
+kweaver --user bob bkn list
+
+# 登出特定用户
+kweaver auth logout prod --user bob
+```
+
+## 回调地址
+
+默认回调地址为 `http://127.0.0.1:9010/callback`。
+
+| 选项 | 说明 |
+|------|------|
+| `--port <n>` | 修改本地回调端口（默认 9010）。端口被占用时使用。 |
+| `--redirect-uri <uri>` | 完整回调地址覆盖。覆盖 `--port`。 |
+
+- **Localhost URI**（如 `http://127.0.0.1:8080/callback`）：自动启动本地 HTTP 服务器接收回调。
+- **非 Localhost URI**（如 `https://my-proxy.example.com/callback`）：进入手动模式 — 打印授权 URL，等待用户粘贴完整的回调 URL 以提取授权码。适用于远程服务器或代理场景。
+
+```bash
+# 端口被占用
+kweaver auth login https://platform.example.com --port 8080
+
+# 自定义完整回调地址（本地）
+kweaver auth login https://platform.example.com --redirect-uri http://127.0.0.1:3000/oauth/callback
+
+# 非 localhost（手动粘贴模式）
+kweaver auth login https://platform.example.com --redirect-uri https://my-proxy.example.com/callback --client-id <id>
 ```
 
 ## 说明
 
-- `login` 支持两种方式：
-  - **OAuth2 授权码登录**（默认，平台支持时）：获取 `access_token` + `refresh_token`。**续期时的默认操作**是：用保存的 `refresh_token` 调用 OAuth2 `refresh_token` 授权换发新的 `access_token`（CLI / SDK 在 token 过期或临近过期时自动执行，无需手动开关）
-  - **Playwright cookie 登录**（回退方式）：通过 headless 浏览器提取 cookie token，通常**无** `refresh_token`，**不会**走上述换发，过期后需重新 `auth login`
+- **OAuth2 授权码登录**（默认）：获取 `access_token` + `refresh_token`，过期自动刷新
+- **Playwright cookie 登录**（`-u`/`-p` 或 `--playwright`）：无 `refresh_token`，过期需重新登录
 - Token 有效期 1 小时
-- 支持多平台，用 `--alias` 设置短名称方便切换
-- `--insecure` / `-k`：跳过 TLS 证书校验（仅用于自签名/内网 HTTPS）；会写入 `token.json`，后续 CLI 对该平台同样生效。生产环境请使用受信任证书
-
-## 示例
-
-```bash
-kweaver auth login https://kweaver.example.com --alias prod
-kweaver auth login https://kweaver-dev.example.com --alias dev
-kweaver auth list
-kweaver auth use prod
-kweaver auth status
-```
+- `--alias` 设置短名称方便切换
+- `--insecure` / `-k`：跳过 TLS 证书校验（仅用于自签名/内网开发环境）

@@ -234,6 +234,7 @@ def test_oauth2_browser_auth_register_client_tls_insecure():
         auth = OAuth2BrowserAuth.__new__(OAuth2BrowserAuth)
         auth._base_url = "https://example.com"
         auth._redirect_port = 9010
+        auth._redirect_uri = None
         auth._scope = "openid offline all"
         auth._lang = "zh-cn"
         auth._tls_insecure = True

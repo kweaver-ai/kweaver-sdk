@@ -112,3 +112,29 @@ describe("isRetryableExploreBootstrapError", () => {
     expect(isRetryableExploreBootstrapError(error)).toBe(false);
   });
 });
+
+describe("parseExploreArgs edge cases", () => {
+  it("--kn and --agent together", () => {
+    const opts = parseExploreArgs(["--kn", "kn-1", "--agent", "ag-2"]);
+    expect(opts.knId).toBe("kn-1");
+    expect(opts.agentId).toBe("ag-2");
+  });
+
+  it("all flags combined", () => {
+    const opts = parseExploreArgs(["--kn", "kn-1", "--agent", "ag-2", "--port", "5000", "--no-open", "-bd", "test"]);
+    expect(opts.knId).toBe("kn-1");
+    expect(opts.agentId).toBe("ag-2");
+    expect(opts.port).toBe(5000);
+    expect(opts.open).toBe(false);
+    expect(opts.businessDomain).toBe("test");
+  });
+
+  it("-h shorthand throws", () => {
+    expect(() => parseExploreArgs(["-h"])).toThrow("help");
+  });
+
+  it("--biz-domain longform", () => {
+    const opts = parseExploreArgs(["--biz-domain", "prod"]);
+    expect(opts.businessDomain).toBe("prod");
+  });
+});

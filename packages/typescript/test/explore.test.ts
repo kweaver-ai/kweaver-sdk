@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseExploreArgs } from "../src/commands/explore.js";
+import { buildMeta, isRetryableExploreBootstrapError } from "../src/commands/explore-bkn.js";
+import { HttpError } from "../src/utils/http.js";
 
 describe("parseExploreArgs", () => {
   it("defaults: no args", () => {
@@ -33,5 +35,80 @@ describe("parseExploreArgs", () => {
 
   it("--help throws", () => {
     expect(() => parseExploreArgs(["--help"])).toThrow("help");
+  });
+});
+
+describe("buildMeta", () => {
+  it("assembles schema from raw API responses (legacy keys)", () => {
+    const knRaw = JSON.stringify({
+      id: "kn-1", name: "Test KN",
+      statistics: { object_count: 10, relation_count: 5 },
+    });
+    const otRaw = JSON.stringify({
+      object_types: [
+        { id: "ot-1", name: "Person", display_key: "name", properties: [{ name: "a" }, { name: "b" }] },
+      ],
+    });
+    const rtRaw = JSON.stringify({
+      relation_types: [
+        { id: "rt-1", name: "knows", source_object_type_id: "ot-1", target_object_type_id: "ot-1",
+          source_object_type: { name: "Person" }, target_object_type: { name: "Person" } },
+      ],
+    });
+    const atRaw = JSON.stringify({
+      action_types: [{ id: "at-1", name: "Analyze" }],
+    });
+
+    const meta = buildMeta(knRaw, otRaw, rtRaw, atRaw);
+    expect(meta.bkn.id).toBe("kn-1");
+    expect(meta.bkn.name).toBe("Test KN");
+    expect(meta.objectTypes.length).toBe(1);
+    expect(meta.objectTypes[0].name).toBe("Person");
+    expect(meta.objectTypes[0].propertyCount).toBe(2);
+    expect(meta.relationTypes.length).toBe(1);
+    expect(meta.relationTypes[0].sourceOtName).toBe("Person");
+    expect(meta.actionTypes.length).toBe(1);
+  });
+
+  it("handles entries-wrapped API responses", () => {
+    const knRaw = JSON.stringify({
+      id: "kn-2", name: "Entries KN",
+      statistics: { object_count: 3, relation_count: 1 },
+    });
+    const otRaw = JSON.stringify({
+      entries: [
+        { id: "ot-1", name: "Player", display_key: "name", data_properties: [{ name: "name" }, { name: "age", type: "integer" }] },
+      ],
+    });
+    const rtRaw = JSON.stringify({
+      entries: [
+        { id: "rt-1", name: "plays_for", source_object_type_id: "ot-1", target_object_type_id: "ot-2",
+          source_object_type: { name: "Player" }, target_object_type: { name: "Team" } },
+      ],
+    });
+    const atRaw = JSON.stringify({ entries: [] });
+
+    const meta = buildMeta(knRaw, otRaw, rtRaw, atRaw);
+    expect(meta.objectTypes.length).toBe(1);
+    expect(meta.objectTypes[0].name).toBe("Player");
+    expect(meta.objectTypes[0].propertyCount).toBe(2);
+    expect(meta.objectTypes[0].properties[1].type).toBe("integer");
+    expect(meta.relationTypes.length).toBe(1);
+    expect(meta.relationTypes[0].name).toBe("plays_for");
+    expect(meta.actionTypes.length).toBe(0);
+  });
+});
+
+describe("isRetryableExploreBootstrapError", () => {
+  it("retries transient fetch failures", () => {
+    const error = new Error("fetch failed", {
+      cause: new Error("Client network socket disconnected before secure TLS connection was established"),
+    });
+    expect(isRetryableExploreBootstrapError(error)).toBe(true);
+  });
+
+  it("does not retry http errors", () => {
+    const error = new HttpError(404, "Not Found", "{\"message\":\"missing\"}");
+    expect(isRetryableExploreBootstrapError(error)).toBe(false);
   });
 });

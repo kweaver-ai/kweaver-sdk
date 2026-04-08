@@ -7,6 +7,7 @@ import { ensureValidToken, with401RefreshRetry } from "../auth/oauth.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { registerBknRoutes, loadExploreMetaWithRetry, readBody, type ExploreMeta } from "./explore-bkn.js";
 import { registerChatRoutes } from "./explore-chat.js";
+import { registerVegaRoutes } from "./explore-vega.js";
 import { listKnowledgeNetworks } from "../api/knowledge-networks.js";
 import { listAgents } from "../api/agent-list.js";
 import { listVegaCatalogs } from "../api/vega.js";
@@ -152,6 +153,10 @@ async function startServer(
   // Chat routes
   const chatRoutes = registerChatRoutes(token, businessDomain);
   for (const [key, handler] of chatRoutes) routes.set(key, handler);
+
+  // Vega routes
+  const vegaRoutes = registerVegaRoutes(token, businessDomain);
+  for (const [key, handler] of vegaRoutes) routes.set(key, handler);
 
   // 3. Resolve template directory
   const __filename = fileURLToPath(import.meta.url);

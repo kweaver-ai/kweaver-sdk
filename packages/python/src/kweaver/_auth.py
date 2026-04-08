@@ -15,6 +15,24 @@ def _env_tls_insecure() -> bool:
     return os.environ.get("KWEAVER_TLS_INSECURE", "") in ("1", "true")
 
 
+def _fetch_display_name(
+    base_url: str, access_token: str, *, verify: bool = True,
+) -> str | None:
+    """Best-effort fetch of display name via EACP userinfo (ShareServer)."""
+    try:
+        resp = httpx.get(
+            f"{base_url}/api/eacp/v1/user/get",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            verify=verify,
+        )
+        if resp.status_code != 200:
+            return None
+        info = resp.json()
+        return info.get("account") or info.get("name") or info.get("mail") or None
+    except Exception:
+        return None
+
+
 class AuthProvider(Protocol):
     """Protocol for authentication header injection."""
 
@@ -256,6 +274,11 @@ class ConfigAuth:
         }
         if token_data.get("tlsInsecure"):
             new_token["tlsInsecure"] = True
+        display_name = token_data.get("displayName")
+        if not display_name:
+            display_name = _fetch_display_name(url, data["access_token"], verify=verify)
+        if display_name:
+            new_token["displayName"] = display_name
         self._store.save_token(url, new_token)
         return new_token
 
@@ -296,11 +319,8 @@ class OAuth2BrowserAuth:
         from http.server import HTTPServer, BaseHTTPRequestHandler
         from urllib.parse import urlencode, urlparse, parse_qs
 
-        # Step 1: Ensure we have a registered client
-        client_data = self._store.load_client(self._base_url)
-        if not client_data.get("clientId"):
-            client_data = self._register_client()
-            self._store.save_client(self._base_url, client_data)
+        # Step 1: Ensure we have a registered client (with stale-client auto-recovery)
+        client_data = self._resolve_or_register_client()
 
         client_id = client_data["clientId"]
         client_secret = client_data["clientSecret"]
@@ -368,6 +388,57 @@ class OAuth2BrowserAuth:
 
         # Set as active platform
         self._store.use(self._base_url)
+
+    def _is_client_still_valid(self, client_id: str, redirect_uri: str) -> bool:
+        """Pre-flight check: verify cached client exists on the server."""
+        from urllib.parse import urlencode
+
+        try:
+            params = urlencode({
+                "client_id": client_id,
+                "response_type": "code",
+                "scope": "openid",
+                "redirect_uri": redirect_uri,
+                "state": "preflight",
+            })
+            resp = httpx.get(
+                f"{self._base_url}/oauth2/auth?{params}",
+                follow_redirects=False,
+                verify=not self._tls_insecure,
+            )
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("location", "")
+                if "error=invalid_client" in location or "error=error" in location:
+                    return False
+                return True
+            if resp.status_code >= 400:
+                return False
+            return True
+        except Exception:
+            return True
+
+    def _resolve_or_register_client(self) -> dict:
+        """Load cached client or register a new one, with stale-client recovery."""
+        import sys
+
+        client_data = self._store.load_client(self._base_url)
+        if client_data.get("clientId"):
+            redirect_uri = client_data.get(
+                "redirectUri",
+                f"http://127.0.0.1:{self._redirect_port}/callback",
+            )
+            if self._is_client_still_valid(client_data["clientId"], redirect_uri):
+                return client_data
+
+            print(
+                "Cached OAuth2 client is no longer valid on the server. Re-registering…",
+                file=sys.stderr,
+            )
+            self._store.delete_client(self._base_url)
+
+        client_data = self._register_client()
+        self._store.save_client(self._base_url, client_data)
+        return client_data
 
     def _register_client(self) -> dict:
         """Register OAuth2 client with the platform."""
@@ -450,6 +521,13 @@ class OAuth2BrowserAuth:
         }
         if self._tls_insecure:
             token_data["tlsInsecure"] = True
+
+        display_name = _fetch_display_name(
+            self._base_url, data["access_token"], verify=not self._tls_insecure,
+        )
+        if display_name:
+            token_data["displayName"] = display_name
+
         self._store.save_token(self._base_url, token_data)
 
     def auth_headers(self) -> dict[str, str]:
@@ -521,6 +599,12 @@ class OAuth2BrowserAuth:
         }
         if token_data.get("tlsInsecure") or self._tls_insecure:
             new_token["tlsInsecure"] = True
+        tls_verify = not (token_data.get("tlsInsecure") or self._tls_insecure or _env_tls_insecure())
+        display_name = token_data.get("displayName")
+        if not display_name:
+            display_name = _fetch_display_name(self._base_url, data["access_token"], verify=tls_verify)
+        if display_name:
+            new_token["displayName"] = display_name
         self._store.save_token(self._base_url, new_token)
 
     def logout(self) -> None:

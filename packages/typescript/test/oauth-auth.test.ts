@@ -235,16 +235,20 @@ test("ensureValidToken: forceRefresh calls token endpoint", async () => {
     obtainedAt: new Date().toISOString(),
   });
 
-  let calls = 0;
+  let tokenCalls = 0;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
-    calls += 1;
-    return new Response(JSON.stringify({ access_token: "forced", expires_in: 3600 }), { status: 200 });
+  globalThis.fetch = async (input: any) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.includes("/oauth2/token")) {
+      tokenCalls += 1;
+      return new Response(JSON.stringify({ access_token: "forced", expires_in: 3600 }), { status: 200 });
+    }
+    return new Response("", { status: 404 });
   };
   try {
     const t = await oauth.ensureValidToken({ forceRefresh: true });
     assert.equal(t.accessToken, "forced");
-    assert.equal(calls, 1);
+    assert.equal(tokenCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -296,11 +300,15 @@ test("withTokenRetry: retries once after 401 when refresh succeeds", async () =>
     obtainedAt: new Date().toISOString(),
   });
 
-  let fetchCalls = 0;
+  let tokenCalls = 0;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
-    fetchCalls += 1;
-    return new Response(JSON.stringify({ access_token: "a2", expires_in: 3600 }), { status: 200 });
+  globalThis.fetch = async (input: any) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.includes("/oauth2/token")) {
+      tokenCalls += 1;
+      return new Response(JSON.stringify({ access_token: "a2", expires_in: 3600 }), { status: 200 });
+    }
+    return new Response("", { status: 404 });
   };
 
   try {
@@ -316,7 +324,7 @@ test("withTokenRetry: retries once after 401 when refresh succeeds", async () =>
     });
     assert.equal(r, "ok");
     assert.equal(attempts, 2);
-    assert.equal(fetchCalls, 1);
+    assert.equal(tokenCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }

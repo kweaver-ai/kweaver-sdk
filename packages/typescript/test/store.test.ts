@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -273,4 +273,259 @@ test("store context-loader migrates legacy format", async () => {
   assert.equal(config.configs.length, 1);
   assert.equal(config.configs[0].name, "default");
   assert.equal(config.configs[0].knId, "legacy-kn");
+});
+
+// ---------------------------------------------------------------------------
+// Multi-account support tests
+// ---------------------------------------------------------------------------
+
+function makeJwt(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${header}.${body}.fake-signature`;
+}
+
+test("saveTokenConfig extracts userId from idToken and routes to user dir", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+
+  const idToken = makeJwt({ sub: "user-abc", iss: "https://auth.example.com" });
+  store.saveTokenConfig({
+    baseUrl: "https://platform.example.com",
+    accessToken: "at-1",
+    tokenType: "bearer",
+    scope: "openid",
+    idToken,
+    obtainedAt: new Date().toISOString(),
+  });
+
+  assert.equal(store.getActiveUser("https://platform.example.com"), "user-abc");
+
+  const loaded = store.loadTokenConfig("https://platform.example.com");
+  assert.ok(loaded);
+  assert.equal(loaded.accessToken, "at-1");
+  assert.equal(loaded.idToken, idToken);
+});
+
+test("saveTokenConfig falls back to accessToken sub when no idToken", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+
+  const accessToken = makeJwt({ sub: "user-xyz" });
+  store.saveTokenConfig({
+    baseUrl: "https://platform.example.com",
+    accessToken,
+    tokenType: "bearer",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+  });
+
+  assert.equal(store.getActiveUser("https://platform.example.com"), "user-xyz");
+});
+
+test("saveTokenConfig uses 'default' when no JWT sub available", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+
+  store.saveTokenConfig({
+    baseUrl: "https://platform.example.com",
+    accessToken: "opaque-token",
+    tokenType: "bearer",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+  });
+
+  assert.equal(store.getActiveUser("https://platform.example.com"), "default");
+});
+
+test("multiple users on same platform — listUsers, setActiveUser, switch", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+  const url = "https://multi.example.com";
+
+  store.saveTokenConfig({
+    baseUrl: url,
+    accessToken: "at-alice",
+    tokenType: "bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "alice" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  store.saveTokenConfig({
+    baseUrl: url,
+    accessToken: "at-bob",
+    tokenType: "bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "bob" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  const users = store.listUsers(url);
+  assert.deepEqual(users, ["alice", "bob"]);
+
+  assert.equal(store.getActiveUser(url), "bob");
+  assert.equal(store.loadTokenConfig(url)?.accessToken, "at-bob");
+
+  store.setActiveUser(url, "alice");
+  assert.equal(store.getActiveUser(url), "alice");
+  assert.equal(store.loadTokenConfig(url)?.accessToken, "at-alice");
+});
+
+test("deleteUser removes user profile and switches active user", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+  const url = "https://del.example.com";
+
+  store.saveTokenConfig({
+    baseUrl: url,
+    accessToken: "at-1",
+    tokenType: "bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "user-1" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  store.saveTokenConfig({
+    baseUrl: url,
+    accessToken: "at-2",
+    tokenType: "bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "user-2" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  assert.equal(store.getActiveUser(url), "user-2");
+  store.deleteUser(url, "user-2");
+  assert.deepEqual(store.listUsers(url), ["user-1"]);
+  assert.equal(store.getActiveUser(url), "user-1");
+});
+
+test("migration from flat layout to user-scoped", async () => {
+  const configDir = createStoreDir();
+  mkdirSync(configDir, { recursive: true });
+
+  const enc = (s: string) =>
+    Buffer.from(s, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+
+  const url = "https://migrate.example.com";
+  const platDir = join(configDir, "platforms", enc(url));
+  mkdirSync(platDir, { recursive: true });
+
+  const idToken = makeJwt({ sub: "migrated-user" });
+  writeFileSync(join(platDir, "token.json"), JSON.stringify({
+    baseUrl: url,
+    accessToken: "at-migrate",
+    tokenType: "bearer",
+    scope: "",
+    idToken,
+    obtainedAt: new Date().toISOString(),
+  }));
+  writeFileSync(join(platDir, "config.json"), JSON.stringify({ businessDomain: "bd_test" }));
+  writeFileSync(join(platDir, "client.json"), JSON.stringify({
+    baseUrl: url,
+    clientId: "cid",
+    clientSecret: "csec",
+  }));
+
+  const store = await importStoreModule(configDir);
+
+  // Flat layout should have been migrated
+  assert.equal(store.getActiveUser(url), "migrated-user");
+  assert.equal(store.loadTokenConfig(url)?.accessToken, "at-migrate");
+
+  // client.json stays at platform root
+  assert.ok(existsSync(join(platDir, "client.json")));
+  // token.json should have moved to users/migrated-user/
+  assert.ok(!existsSync(join(platDir, "token.json")));
+  assert.ok(existsSync(join(platDir, "users", "migrated-user", "token.json")));
+  assert.ok(existsSync(join(platDir, "users", "migrated-user", "config.json")));
+});
+
+test("listPlatforms includes userId", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+
+  store.saveTokenConfig({
+    baseUrl: "https://platform.example.com",
+    accessToken: "at-1",
+    tokenType: "bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "the-user" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  const platforms = store.listPlatforms();
+  assert.equal(platforms.length, 1);
+  assert.equal(platforms[0].userId, "the-user");
+});
+
+test("displayName is persisted and surfaced in listPlatforms and listUserProfiles", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+
+  store.saveTokenConfig({
+    baseUrl: "https://display.example.com",
+    accessToken: "at-display",
+    tokenType: "bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-42" }),
+    displayName: "alice",
+    obtainedAt: new Date().toISOString(),
+  });
+
+  // listPlatforms should surface displayName
+  const platforms = store.listPlatforms();
+  assert.equal(platforms.length, 1);
+  assert.equal(platforms[0].userId, "uid-42");
+  assert.equal(platforms[0].displayName, "alice");
+
+  // listUserProfiles should prefer displayName over id_token claims
+  const profiles = store.listUserProfiles("https://display.example.com");
+  assert.equal(profiles.length, 1);
+  assert.equal(profiles[0].userId, "uid-42");
+  assert.equal(profiles[0].username, "alice");
+
+  // loadUserTokenConfig should contain displayName
+  const token = store.loadUserTokenConfig("https://display.example.com", "uid-42");
+  assert.equal(token.displayName, "alice");
+});
+
+test("deleteClientConfig removes cached client.json", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+
+  const baseUrl = "https://del-client.example.com";
+  store.saveClientConfig(baseUrl, {
+    baseUrl,
+    clientId: "stale-cid",
+    clientSecret: "stale-secret",
+  });
+  assert.ok(store.loadClientConfig(baseUrl));
+  assert.equal(store.loadClientConfig(baseUrl)!.clientId, "stale-cid");
+
+  store.deleteClientConfig(baseUrl);
+  assert.equal(store.loadClientConfig(baseUrl), null);
+
+  // Idempotent — calling again on missing file does not throw
+  store.deleteClientConfig(baseUrl);
+});
+
+test("listUserProfiles falls back to id_token claims when no displayName", async () => {
+  const configDir = createStoreDir();
+  const store = await importStoreModule(configDir);
+
+  store.saveTokenConfig({
+    baseUrl: "https://fallback.example.com",
+    accessToken: "at-fb",
+    tokenType: "bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-99", preferred_username: "bob", email: "bob@example.com" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  const profiles = store.listUserProfiles("https://fallback.example.com");
+  assert.equal(profiles.length, 1);
+  assert.equal(profiles[0].username, "bob");
+  assert.equal(profiles[0].email, "bob@example.com");
 });

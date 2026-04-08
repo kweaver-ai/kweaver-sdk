@@ -26,8 +26,10 @@ Usage:
   kweaver auth status [platform-url|alias]
   kweaver auth list
   kweaver auth use <platform-url|alias>
-  kweaver auth logout [platform-url|alias]
-  kweaver auth delete <platform-url|alias>
+  kweaver auth users [platform-url|alias]
+  kweaver auth switch [platform-url|alias] --user <userId|username>
+  kweaver auth logout [platform-url|alias] [--user <userId>]
+  kweaver auth delete <platform-url|alias> [--user <userId>]
   kweaver token
 
   kweaver call <url> [-X METHOD] [-H "Name: value"] [-d BODY] [--data-raw BODY]

@@ -59,7 +59,7 @@ kweaver <command> [subcommand] [options]
 
 | 命令组 | 说明 | 常用命令 | 详细参考 |
 |--------|------|---------|---------|
-| `auth` | 认证管理 | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `-u`/`-p` 或 `--playwright`；`auth use` / `status` / `logout` / `delete` 支持平台 URL 或别名 | `references/auth.md` |
+| `auth` | 认证管理（支持多账号） | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `-u`/`-p` 或 `--playwright`；`auth list`（树形展示所有平台及用户）；`auth users`（列出用户名）；`auth switch --user <username>`（按用户名切换）；`auth use` / `status` / `logout` / `delete` 支持平台 URL 或别名 | `references/auth.md` |
 | `token` | 打印当前 access token（自动刷新） | `token` | — |
 | `config` | **平台业务域（优先于多数 bkn/agent/ds 操作）** | `config show`, `config list-bd`, `config set-bd <uuid>` | `references/config.md` |
 | `bkn` | BKN 知识网络管理、Schema、查询、Action | `bkn validate`/`push` 默认检测 `.bkn` 编码并规范为 UTF-8，可用 `--no-detect-encoding` 或 `--source-encoding gb18030`；另有 `pull`、`object-type`、`search`、`create-from-ds`/`create-from-csv` 等，见 `references/bkn.md` | `references/bkn.md` |

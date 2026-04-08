@@ -2,6 +2,7 @@ import type { Server } from "node:http";
 import {
   type ClientConfig,
   type TokenConfig,
+  deleteClientConfig,
   getCurrentPlatform,
   loadClientConfig,
   loadTokenConfig,
@@ -18,6 +19,29 @@ const REFRESH_THRESHOLD_SEC = 60;
 
 const DEFAULT_REDIRECT_PORT = 9010;
 const DEFAULT_SCOPE = "openid offline all";
+
+/** Best-effort fetch of display name via EACP userinfo (ShareServer). */
+async function fetchDisplayName(
+  baseUrl: string,
+  accessToken: string,
+  tlsInsecure?: boolean,
+): Promise<string | null> {
+  try {
+    const res = await runWithTlsInsecure(tlsInsecure, () =>
+      fetch(`${baseUrl}/api/eacp/v1/user/get`, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+      }),
+    );
+    if (!res.ok) return null;
+    const info = (await res.json()) as Record<string, unknown>;
+    if (typeof info.account === "string") return info.account;
+    if (typeof info.name === "string") return info.name;
+    if (typeof info.mail === "string") return info.mail;
+  } catch {
+    /* Non-critical — displayName will be absent. */
+  }
+  return null;
+}
 
 /** POSIX shell single-quote escaping for copy-paste commands. */
 export function shellQuoteForShell(value: string): string {
@@ -145,6 +169,91 @@ async function generatePkce(): Promise<{ verifier: string; challenge: string }> 
 }
 
 /**
+ * Pre-flight check: verify that a cached OAuth2 client is still recognised
+ * by the server. Fetches the authorization endpoint with `redirect: "manual"`
+ * and inspects the Location header. Returns false when Hydra redirects to an
+ * error page containing `invalid_client` or similar indicators.
+ */
+async function isClientStillValid(
+  baseUrl: string,
+  clientId: string,
+  redirectUri: string,
+): Promise<boolean> {
+  try {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: "code",
+      scope: "openid",
+      redirect_uri: redirectUri,
+      state: "preflight",
+    });
+    const resp = await fetch(`${baseUrl}/oauth2/auth?${params}`, {
+      redirect: "manual",
+    });
+    if (resp.status === 302) {
+      const location = resp.headers.get("location") ?? "";
+      if (
+        location.includes("error=invalid_client") ||
+        location.includes("error=error")
+      ) {
+        return false;
+      }
+      return true;
+    }
+    // Non-redirect — Hydra might serve an error page directly
+    if (resp.status >= 400) return false;
+    return true;
+  } catch {
+    // Network error — cannot pre-validate; let the real flow proceed
+    return true;
+  }
+}
+
+/**
+ * Resolve a cached client or register a new one. When a cached client fails
+ * pre-flight validation (stale registration after server reset), the local
+ * client.json is deleted and a fresh registration is performed.
+ */
+async function resolveOrRegisterClient(
+  baseUrl: string,
+  redirectUri: string,
+  scope: string,
+  options?: { clientId?: string; clientSecret?: string },
+): Promise<ClientConfig> {
+  if (options?.clientId) {
+    const client: ClientConfig = {
+      baseUrl,
+      clientId: options.clientId,
+      clientSecret: options.clientSecret ?? "",
+      redirectUri,
+      logoutRedirectUri: redirectUri.replace("/callback", "/successful-logout"),
+      scope,
+      lang: "zh-cn",
+      product: "adp",
+      xForwardedPrefix: "",
+    };
+    saveClientConfig(baseUrl, client);
+    return client;
+  }
+
+  let client = loadClientConfig(baseUrl);
+  if (client?.clientId) {
+    const valid = await isClientStillValid(baseUrl, client.clientId, redirectUri);
+    if (valid) return client;
+
+    process.stderr.write(
+      "Cached OAuth2 client is no longer valid on the server. Re-registering…\n",
+    );
+    deleteClientConfig(baseUrl);
+    client = null;
+  }
+
+  const registered = await registerOAuth2Client(baseUrl, redirectUri, scope);
+  saveClientConfig(baseUrl, registered);
+  return registered;
+}
+
+/**
  * OAuth2 Authorization Code login flow.
  * 1. Register client (if not already registered), OR use a provided client ID
  * 2. Open browser to /oauth2/auth
@@ -173,26 +282,7 @@ export async function oauth2Login(
   const redirectUri = `http://127.0.0.1:${port}/callback`;
 
   // Step 1: Determine client — use provided client ID or fall back to dynamic registration
-  let client = loadClientConfig(base);
-  if (options?.clientId) {
-    // Use the platform's existing client (e.g. the web app client).
-    // Persist it so future logins reuse it without re-registering.
-    client = {
-      baseUrl: base,
-      clientId: options.clientId,
-      clientSecret: options.clientSecret ?? "",
-      redirectUri,
-      logoutRedirectUri: redirectUri.replace("/callback", "/successful-logout"),
-      scope,
-      lang: "zh-cn",
-      product: "adp",
-      xForwardedPrefix: "",
-    };
-    saveClientConfig(base, client);
-  } else if (!client?.clientId) {
-    client = await registerOAuth2Client(base, redirectUri, scope);
-    saveClientConfig(base, client);
-  }
+  let client = await resolveOrRegisterClient(base, redirectUri, scope, options);
 
   // Use PKCE when no client secret is available (public client / platform client).
   const usePkce = !client.clientSecret;
@@ -238,6 +328,8 @@ export async function oauth2Login(
 
           const receivedState = url.searchParams.get("state");
           const receivedCode = url.searchParams.get("code");
+          const callbackError = url.searchParams.get("error");
+          const callbackErrorDesc = url.searchParams.get("error_description");
 
           if (receivedState !== state) {
             res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
@@ -245,6 +337,17 @@ export async function oauth2Login(
             clearTimeout(timeoutId);
             server.close();
             reject(new Error("OAuth2 state mismatch — possible CSRF attack."));
+            return;
+          }
+          if (callbackError) {
+            const msg = callbackErrorDesc
+              ? `Authorization failed: ${callbackError} — ${callbackErrorDesc}`
+              : `Authorization failed: ${callbackError}`;
+            res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+            res.end(buildCallbackExchangeErrorHtml(msg));
+            clearTimeout(timeoutId);
+            server.close();
+            reject(new Error(msg));
             return;
           }
           if (!receivedCode) {
@@ -416,6 +519,10 @@ async function exchangeCodeForToken(
     obtainedAt: now.toISOString(),
     ...(tlsInsecure ? { tlsInsecure: true } : {}),
   };
+
+  const displayName = await fetchDisplayName(baseUrl, data.access_token, tlsInsecure);
+  if (displayName) token.displayName = displayName;
+
   saveTokenConfig(token);
   return token;
 }
@@ -462,12 +569,8 @@ export async function playwrightLogin(
   const redirectUri = `http://127.0.0.1:${port}/callback`;
   const hasCredentials = !!(options?.username && options?.password);
 
-  // Step 1: Ensure registered OAuth2 client
-  let client = loadClientConfig(base);
-  if (!client?.clientId) {
-    client = await registerOAuth2Client(base, redirectUri, scope);
-    saveClientConfig(base, client);
-  }
+  // Step 1: Ensure registered OAuth2 client (with stale-client auto-recovery)
+  let client = await resolveOrRegisterClient(base, redirectUri, scope);
 
   // Step 2: Generate CSRF state
   const state = randomBytes(12).toString("hex");
@@ -508,6 +611,8 @@ export async function playwrightLogin(
 
           const receivedState = url.searchParams.get("state");
           const receivedCode = url.searchParams.get("code");
+          const callbackError = url.searchParams.get("error");
+          const callbackErrorDesc = url.searchParams.get("error_description");
 
           if (receivedState !== state) {
             res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
@@ -516,6 +621,18 @@ export async function playwrightLogin(
             server.close();
             browser?.close();
             reject(new Error("OAuth2 state mismatch — possible CSRF attack."));
+            return;
+          }
+          if (callbackError) {
+            const msg = callbackErrorDesc
+              ? `Authorization failed: ${callbackError} — ${callbackErrorDesc}`
+              : `Authorization failed: ${callbackError}`;
+            res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+            res.end(buildCallbackExchangeErrorHtml(msg));
+            clearTimeout(timeoutId);
+            server.close();
+            browser?.close();
+            reject(new Error(msg));
             return;
           }
           if (!receivedCode) {
@@ -747,6 +864,11 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
 
   const now = new Date();
   const expiresIn = typeof data.expires_in === "number" ? data.expires_in : 3600;
+  let displayName = token.displayName;
+  if (!displayName) {
+    displayName = (await fetchDisplayName(baseUrl, data.access_token, token.tlsInsecure)) ?? undefined;
+  }
+
   const newToken: TokenConfig = {
     baseUrl,
     accessToken: data.access_token,
@@ -758,6 +880,7 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
     idToken: data.id_token ?? token.idToken ?? "",
     obtainedAt: now.toISOString(),
     ...(token.tlsInsecure ? { tlsInsecure: true } : {}),
+    ...(displayName ? { displayName } : {}),
   };
   saveTokenConfig(newToken);
   return newToken;

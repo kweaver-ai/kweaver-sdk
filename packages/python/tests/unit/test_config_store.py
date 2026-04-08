@@ -317,3 +317,26 @@ def test_list_user_profiles_falls_back_to_id_token_claims(tmp_path: Path):
     assert len(profiles) == 1
     assert profiles[0]["username"] == "bob"
     assert profiles[0]["email"] == "bob@example.com"
+
+
+def test_resolve_user_id(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://resolve.example.com"
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-a",
+        "idToken": _make_jwt({"sub": "uid-alice"}),
+        "displayName": "alice",
+    })
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-b",
+        "idToken": _make_jwt({"sub": "uid-bob"}),
+        "displayName": "bob",
+    })
+
+    # Resolve by userId
+    assert store.resolve_user_id(url, "uid-alice") == "uid-alice"
+    # Resolve by displayName (username)
+    assert store.resolve_user_id(url, "alice") == "uid-alice"
+    assert store.resolve_user_id(url, "bob") == "uid-bob"
+    # Unknown
+    assert store.resolve_user_id(url, "nonexistent") is None

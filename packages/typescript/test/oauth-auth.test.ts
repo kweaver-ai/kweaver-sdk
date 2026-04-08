@@ -254,6 +254,89 @@ test("ensureValidToken: forceRefresh calls token endpoint", async () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// KWEAVER_USER env var: load a specific user's token
+// ---------------------------------------------------------------------------
+
+function makeJwt(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${header}.${body}.fake-signature`;
+}
+
+test("ensureValidToken: KWEAVER_USER loads specific user token", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://multi.example.com";
+  store.setCurrentPlatform(baseUrl);
+
+  // Save two users
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "token-alice",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-alice" }),
+    displayName: "alice",
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    obtainedAt: new Date().toISOString(),
+  });
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "token-bob",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-bob" }),
+    displayName: "bob",
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  // Active user is bob (last saved)
+  const defaultToken = await oauth.ensureValidToken();
+  assert.equal(defaultToken.accessToken, "token-bob");
+
+  // KWEAVER_USER=alice → loads alice's token
+  process.env.KWEAVER_USER = "alice";
+  try {
+    const aliceToken = await oauth.ensureValidToken();
+    assert.equal(aliceToken.accessToken, "token-alice");
+  } finally {
+    delete process.env.KWEAVER_USER;
+  }
+
+  // KWEAVER_USER=uid-alice also works (by userId)
+  process.env.KWEAVER_USER = "uid-alice";
+  try {
+    const aliceToken = await oauth.ensureValidToken();
+    assert.equal(aliceToken.accessToken, "token-alice");
+  } finally {
+    delete process.env.KWEAVER_USER;
+  }
+});
+
+test("ensureValidToken: KWEAVER_USER with unknown user throws", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://multi.example.com";
+  store.setCurrentPlatform(baseUrl);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "a",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-1" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  process.env.KWEAVER_USER = "nonexistent";
+  try {
+    await assert.rejects(() => oauth.ensureValidToken(), /not found/);
+  } finally {
+    delete process.env.KWEAVER_USER;
+  }
+});
+
 test("with401RefreshRetry: runs without saved token (no upfront auth)", async () => {
   const configDir = createConfigDir();
   const { oauth } = await importOauthAndStore(configDir);

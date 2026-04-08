@@ -443,16 +443,22 @@ export function listUserProfiles(baseUrl: string): UserProfile[] {
   });
 }
 
-/** Resolve a user identifier (userId, username, or email) to a userId for the given platform. */
+/** Resolve a user identifier (userId, username, or email) to a userId for the given platform.
+ *  userId and username are matched case-sensitively; email is case-insensitive. */
 export function resolveUserId(baseUrl: string, identifier: string): string | null {
   const users = listUsers(baseUrl);
   if (users.includes(identifier)) return identifier;
 
   const profiles = listUserProfiles(baseUrl);
-  const match = profiles.find(
-    (p) => p.username === identifier || p.email === identifier,
-  );
-  return match?.userId ?? null;
+
+  // Exact match on username (case-sensitive)
+  const exact = profiles.find((p) => p.username === identifier);
+  if (exact) return exact.userId;
+
+  // Email match (case-insensitive per RFC 5321)
+  const lower = identifier.toLowerCase();
+  const byEmail = profiles.find((p) => p.email?.toLowerCase() === lower);
+  return byEmail?.userId ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -561,7 +567,11 @@ export function saveTokenConfig(config: TokenConfig, userId?: string): void {
   const dir = getUserDir(config.baseUrl, resolvedUser);
   ensureDir(dir);
   writeJsonFile(join(dir, "token.json"), config);
-  setActiveUser(config.baseUrl, resolvedUser);
+  // When KWEAVER_USER is set the caller is doing a one-off operation;
+  // don't change the persisted active user.
+  if (!process.env.KWEAVER_USER) {
+    setActiveUser(config.baseUrl, resolvedUser);
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -264,6 +264,26 @@ class PlatformStore:
             profiles.append({"userId": uid, "username": username, "email": email})
         return profiles
 
+    def resolve_user_id(self, url: str, identifier: str) -> str | None:
+        """Resolve a user identifier (userId, username, or email) to a userId.
+
+        userId and username are matched case-sensitively; email is case-insensitive.
+        """
+        users = self.list_users(url)
+        if identifier in users:
+            return identifier
+        profiles = self.list_user_profiles(url)
+        # Exact match on username (case-sensitive)
+        for p in profiles:
+            if p.get("username") == identifier:
+                return p["userId"]
+        # Email match (case-insensitive per RFC 5321)
+        lower = identifier.lower()
+        for p in profiles:
+            if (p.get("email") or "").lower() == lower:
+                return p["userId"]
+        return None
+
     def delete_user(self, url: str, user_id: str) -> None:
         """Delete a single user's profile directory."""
         udir = self._user_dir(url, user_id)
@@ -446,7 +466,10 @@ class PlatformStore:
         if sys.platform != "win32":
             os.chmod(udir, 0o700)
         _write_json(udir / "token.json", data)
-        self.set_active_user(url, uid)
+        # When KWEAVER_USER is set the caller is doing a one-off operation;
+        # don't change the persisted active user.
+        if not os.environ.get("KWEAVER_USER"):
+            self.set_active_user(url, uid)
 
     # ------------------------------------------------------------------
     # Platform config — businessDomain etc. (user-scoped)

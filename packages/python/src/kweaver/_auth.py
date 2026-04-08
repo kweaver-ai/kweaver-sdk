@@ -202,7 +202,20 @@ class ConfigAuth:
     def auth_headers(self) -> dict[str, str]:
         with self._lock:
             url = self.base_url
-            token_data = self._store.load_token(url)
+
+            # KWEAVER_USER: load a specific user's token without switching active user
+            env_user = os.environ.get("KWEAVER_USER")
+            if env_user:
+                user_id = self._store.resolve_user_id(url, env_user)
+                if not user_id:
+                    raise RuntimeError(
+                        f"User '{env_user}' not found for {url}. "
+                        "Run 'kweaver auth users' to see available users."
+                    )
+                token_data = self._store.load_user_token(url, user_id)
+            else:
+                token_data = self._store.load_token(url)
+
             if not token_data:
                 raise RuntimeError(
                     f"No token found for {url}. Run 'kweaver auth login' first."

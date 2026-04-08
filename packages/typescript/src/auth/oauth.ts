@@ -6,6 +6,8 @@ import {
   getCurrentPlatform,
   loadClientConfig,
   loadTokenConfig,
+  loadUserTokenConfig,
+  resolveUserId,
   saveClientConfig,
   saveTokenConfig,
   setCurrentPlatform,
@@ -914,7 +916,22 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
     throw new Error("No active platform selected. Run `kweaver auth login <platform-url>` first.");
   }
 
-  let token = loadTokenConfig(currentPlatform);
+  // KWEAVER_USER: load a specific user's token without switching active user
+  const envUser = process.env.KWEAVER_USER;
+  let token: TokenConfig | null;
+  if (envUser) {
+    const userId = resolveUserId(currentPlatform, envUser);
+    if (!userId) {
+      throw new Error(
+        `User '${envUser}' not found for ${currentPlatform}. ` +
+          "Run `kweaver auth users` to see available users.",
+      );
+    }
+    token = loadUserTokenConfig(currentPlatform, userId);
+  } else {
+    token = loadTokenConfig(currentPlatform);
+  }
+
   if (!token) {
     throw new Error(
       `No saved token for ${currentPlatform}. Run \`kweaver auth login ${currentPlatform}\` first.`,
@@ -955,7 +972,14 @@ export async function with401RefreshRetry<T>(fn: () => Promise<T>): Promise<T> {
         throw error;
       }
       const platformUrl = normalizeBaseUrl(currentPlatform);
-      const latest = loadTokenConfig(platformUrl);
+      const envUser = process.env.KWEAVER_USER;
+      let latest: TokenConfig | null;
+      if (envUser) {
+        const userId = resolveUserId(platformUrl, envUser);
+        latest = userId ? loadUserTokenConfig(platformUrl, userId) : null;
+      } else {
+        latest = loadTokenConfig(platformUrl);
+      }
       if (!latest) {
         throw error;
       }
@@ -988,7 +1012,15 @@ export async function withTokenRetry<T>(
   } catch (error) {
     if (error instanceof HttpError && error.status === 401) {
       const platformUrl = normalizeBaseUrl(token.baseUrl);
-      const latest = loadTokenConfig(platformUrl) ?? token;
+      const envUser = process.env.KWEAVER_USER;
+      let latest: TokenConfig | null;
+      if (envUser) {
+        const userId = resolveUserId(platformUrl, envUser);
+        latest = userId ? loadUserTokenConfig(platformUrl, userId) : null;
+      } else {
+        latest = loadTokenConfig(platformUrl);
+      }
+      if (!latest) latest = token;
       try {
         const refreshed = await refreshAccessToken(latest);
         return await fn(refreshed);

@@ -30,6 +30,23 @@ kweaver auth delete <url|alias> [--user <id|username>]
 
 同一平台 URL 支持多个用户账号。登录时自动获取用户名，`--user` 参数支持用户名或 userId。
 
+### 免切换调用
+
+全局 `--user` 参数或 `KWEAVER_USER` 环境变量可直接使用指定用户的凭证，无需手动切换：
+
+```bash
+# 全局 --user 参数
+kweaver --user alice bkn list
+kweaver --user alice agent list
+
+# 环境变量（适合脚本/CI）
+export KWEAVER_USER=alice
+kweaver bkn list
+
+# Python SDK 同样支持
+KWEAVER_USER=alice python my_script.py
+```
+
 ### 工作流示例
 
 ```bash
@@ -43,8 +60,11 @@ kweaver auth list
 #   ├── bob (bob-uuid) *
 #   └── alice (alice-uuid)
 
-# 用用户名切换
+# 用用户名切换（永久）
 kweaver auth switch prod --user alice
+
+# 或单次使用其他用户的凭证
+kweaver --user bob bkn list
 
 # 登出特定用户
 kweaver auth logout prod --user bob

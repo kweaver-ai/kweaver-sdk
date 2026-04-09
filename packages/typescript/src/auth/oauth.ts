@@ -12,7 +12,7 @@ import {
   saveTokenConfig,
   setCurrentPlatform,
 } from "../config/store.js";
-import { HttpError, NetworkRequestError } from "../utils/http.js";
+import { HttpError, NetworkRequestError, fetchWithRetry } from "../utils/http.js";
 
 const TOKEN_TTL_SECONDS = 3600;
 
@@ -890,7 +890,7 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
   let response: Response;
   try {
     response = await runWithTlsInsecure(token.tlsInsecure, () =>
-      fetch(url, {
+      fetchWithRetry(url, {
         method: "POST",
         headers: {
           Authorization: `Basic ${credentials}`,

@@ -1,4 +1,4 @@
-import { fetchTextOrThrow, HttpError } from "../utils/http.js";
+import { fetchTextOrThrow, fetchWithRetry, HttpError } from "../utils/http.js";
 import { normalizeDisplayText } from "../utils/display-text.js";
 
 export interface SendChatRequestOptions {
@@ -52,6 +52,10 @@ interface StreamAccumulator {
   result: Record<string, unknown>;
   conversationId?: string;
   lastText: string;
+  /** Completed text segments from earlier steps (preserved when answer.text is cleared). */
+  completedSegments: string[];
+  /** The raw text from extractText in the previous tick — used to detect clears. */
+  prevRawText: string;
 }
 
 const CHAT_PATH = "/api/agent-factory/v1/app";
@@ -134,6 +138,19 @@ function stringFromAnswerObject(obj: Record<string, unknown>): string {
   return parts.join("\n");
 }
 
+/** Format answer_type_other which may be an array of strings or an object. */
+function stringFromAnswerTypeOther(other: unknown): string {
+  if (Array.isArray(other)) {
+    const strings = other.filter((s) => typeof s === "string" && s);
+    if (strings.length > 0) return JSON.stringify(strings);
+    return "";
+  }
+  if (other && typeof other === "object") {
+    return stringFromAnswerObject(other as Record<string, unknown>);
+  }
+  return "";
+}
+
 export function extractText(data: unknown): string {
   if (!data || typeof data !== "object") return "";
 
@@ -142,41 +159,41 @@ export function extractText(data: unknown): string {
   const fa = obj.final_answer as Record<string, unknown> | undefined;
   if (fa?.answer && typeof fa.answer === "object") {
     const ans = fa.answer as Record<string, unknown>;
-    if (typeof ans.text === "string") return ans.text;
+    if (typeof ans.text === "string" && ans.text) return ans.text;
   }
-  if (typeof fa?.text === "string") {
+  if (typeof fa?.text === "string" && fa.text) {
     return fa.text;
+  }
+  // Check answer_type_other at final_answer level (for content_type "other")
+  if (fa?.answer_type_other) {
+    const desc = stringFromAnswerTypeOther(fa.answer_type_other);
+    if (desc) return desc;
   }
 
   const msg = obj.message as Record<string, unknown> | undefined;
-  if (typeof msg?.text === "string") {
+  if (typeof msg?.text === "string" && msg.text) {
     return msg.text;
   }
   if (msg?.content && typeof msg.content === "object") {
     const content = msg.content as Record<string, unknown>;
-    if (typeof content.text === "string") return content.text;
+    if (typeof content.text === "string" && content.text) return content.text;
     const contentFinalAnswer = content.final_answer as Record<string, unknown> | undefined;
     if (contentFinalAnswer?.answer && typeof contentFinalAnswer.answer === "object") {
       const answer = contentFinalAnswer.answer as Record<string, unknown>;
-      if (typeof answer.text === "string") return answer.text;
+      if (typeof answer.text === "string" && answer.text) return answer.text;
     }
-    if (typeof contentFinalAnswer?.text === "string") {
+    if (typeof contentFinalAnswer?.text === "string" && contentFinalAnswer.text) {
       return contentFinalAnswer.text;
     }
-    const other = contentFinalAnswer?.answer_type_other as Record<string, unknown> | undefined;
-    if (other && typeof other === "object") {
-      const desc = stringFromAnswerObject(other);
+    // Check answer_type_other at content.final_answer level
+    if (contentFinalAnswer?.answer_type_other) {
+      const desc = stringFromAnswerTypeOther(contentFinalAnswer.answer_type_other);
       if (desc) return desc;
     }
   }
-  const topOther = fa?.answer_type_other as Record<string, unknown> | undefined;
-  if (topOther && typeof topOther === "object") {
-    const desc = stringFromAnswerObject(topOther);
-    if (desc) return desc;
-  }
 
   const answer = obj.answer as Record<string, unknown> | undefined;
-  if (typeof answer?.text === "string") {
+  if (typeof answer?.text === "string" && answer.text) {
     return answer.text;
   }
 
@@ -306,15 +323,28 @@ function applySseDataLine(
       onProgress(progress);
     }
 
-    const text = normalizeDisplayText(extractText(state.result));
-    if (text && text !== state.lastText) {
+    const rawText = normalizeDisplayText(extractText(state.result));
+
+    // Detect when the upstream clears text between steps: previous had content, now empty or
+    // significantly shorter (new segment starting). Save the completed segment.
+    if (state.prevRawText && (!rawText || rawText.length < state.prevRawText.length * 0.5)) {
+      state.completedSegments.push(state.prevRawText);
+    }
+    state.prevRawText = rawText;
+
+    // Build full text: completed segments + current segment
+    const fullText = state.completedSegments.length > 0
+      ? state.completedSegments.join("\n\n") + (rawText ? "\n\n" + rawText : "")
+      : rawText;
+
+    if (fullText && fullText !== state.lastText) {
       if (onTextDelta) {
-        onTextDelta(text);
+        onTextDelta(fullText);
       } else {
-        const delta = text.slice(state.lastText.length);
+        const delta = fullText.slice(state.lastText.length);
         process.stdout.write(delta);
       }
-      state.lastText = text;
+      state.lastText = fullText;
     }
   } catch {
     if (verbose) {
@@ -371,7 +401,7 @@ export async function sendChatRequest(options: SendChatRequestOptions): Promise<
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithRetry(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -462,7 +492,7 @@ export async function sendChatRequestStream(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithRetry(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -508,6 +538,8 @@ async function handleStreamResponse(
     result: {},
     conversationId: undefined,
     lastText: "",
+    completedSegments: [],
+    prevRawText: "",
   };
 
   const applyLine = (line: string): void => {
@@ -535,6 +567,9 @@ async function handleStreamResponse(
     process.stdout.write("\n");
   }
 
-  const finalText = normalizeDisplayText(extractText(state.result) || state.lastText);
+  const rawFinal = normalizeDisplayText(extractText(state.result));
+  const finalText = state.completedSegments.length > 0
+    ? state.completedSegments.join("\n\n") + (rawFinal ? "\n\n" + rawFinal : "")
+    : rawFinal || state.lastText;
   return { text: finalText, conversationId: state.conversationId };
 }

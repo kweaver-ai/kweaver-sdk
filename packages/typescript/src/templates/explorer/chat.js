@@ -9,6 +9,30 @@ const chatState = {
   streaming: false,
 };
 
+// ── Chat Settings & Agents Filter ────────────────────────────────────────────
+
+window.chatFilterAgents = function(query) {
+  const q = query.toLowerCase();
+  const items = document.querySelectorAll('.chat-agent-item');
+  items.forEach(el => {
+    const text = el.textContent.toLowerCase();
+    el.style.display = text.includes(q) ? 'flex' : 'none';
+  });
+};
+
+window.renderBubble = function(msg, agentName) {
+  const isUser = msg.role === "user";
+  const avatar = isUser ? "👤" : "🤖";
+  return `<div class="chat-message-row ${isUser ? 'user' : 'assistant'}">
+    ${!isUser ? `<div class="chat-avatar">${avatar}</div>` : ""}
+    <div class="chat-bubble chat-bubble-${esc(msg.role)}">
+      ${!isUser ? `<div class="chat-bubble-sender">${esc(agentName)}</div>` : ""}
+      <div class="chat-bubble-content">${chatMarkdown(msg.text)}</div>
+    </div>
+    ${isUser ? `<div class="chat-avatar">${avatar}</div>` : ""}
+  </div>`;
+};
+
 // ── Markdown renderer (minimal) ──────────────────────────────────────────────
 
 function chatMarkdown(text) {
@@ -45,8 +69,39 @@ function chatMarkdown(text) {
   // Bold **...**
   s = s.replace(/\*\*([^*]+)\*\*/g, (_m, c) => `<strong>${c}</strong>`);
 
-  // Line breaks
+  // Italic *...*
+  s = s.replace(/\*([^*]+)\*/g, (_m, c) => `<em>${c}</em>`);
+
+  // Headings ### / ## / #
+  s = s.replace(/^(#{1,4})\s+(.+)$/gm, (_m, hashes, content) => {
+    const level = hashes.length;
+    return `<h${level} class="chat-md-heading">${content}</h${level}>`;
+  });
+
+  // Horizontal rule ---
+  s = s.replace(/^-{3,}$/gm, '<hr class="chat-md-hr">');
+
+  // Unordered lists (- item or * item), consecutive lines
+  s = s.replace(/(?:^[\-\*]\s+.+$\n?)+/gm, (block) => {
+    const items = block.trim().split("\n").map(line =>
+      `<li>${line.replace(/^[\-\*]\s+/, "")}</li>`
+    ).join("");
+    return `<ul class="chat-md-list">${items}</ul>`;
+  });
+
+  // Ordered lists (1. item), consecutive lines
+  s = s.replace(/(?:^\d+\.\s+.+$\n?)+/gm, (block) => {
+    const items = block.trim().split("\n").map(line =>
+      `<li>${line.replace(/^\d+\.\s+/, "")}</li>`
+    ).join("");
+    return `<ol class="chat-md-list">${items}</ol>`;
+  });
+
+  // Line breaks (but not after block elements)
   s = s.replace(/\n/g, "<br>");
+  // Clean up <br> right after block elements
+  s = s.replace(/(<\/(?:ul|ol|li|pre|h[1-4]|hr|details|div)>)\s*<br>/g, "$1");
+  s = s.replace(/<br>\s*(<(?:ul|ol|pre|h[1-4]|hr|details)[\s>])/g, "$1");
 
   return s;
 }
@@ -57,15 +112,23 @@ async function loadChatAgents() {
   if (chatState.agents !== null) return chatState.agents;
   if (chatState.loading) return null;
   chatState.loading = true;
+  const MAX_RETRIES = 2;
+  const RETRY_DELAY = 1500;
   try {
-    const raw = await api("GET", "/api/chat/agents");
-    // API returns { res: [...] } or array directly
-    const list = extractList(raw.res ?? raw);
-    chatState.agents = list;
-    return list;
-  } catch (err) {
-    chatState.loading = false;
-    throw err;
+    let lastErr;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const raw = await api("GET", "/api/chat/agents");
+        // API returns { res: [...] } or array directly
+        const list = extractList(raw.res ?? raw);
+        chatState.agents = list;
+        return list;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, RETRY_DELAY));
+      }
+    }
+    throw lastErr;
   } finally {
     chatState.loading = false;
   }
@@ -169,20 +232,41 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
   $sendBtn.disabled = true;
   chatState.streaming = true;
 
+  // Remove welcome box if present
+  const welcome = $messagesEl.querySelector('.chat-welcome-box');
+  if (welcome) welcome.remove();
+
   // Append user bubble
-  const userDiv = document.createElement("div");
-  userDiv.className = "chat-bubble chat-bubble-user";
-  userDiv.innerHTML = `<div class="chat-bubble-content">${chatMarkdown(message)}</div>`;
-  $messagesEl.appendChild(userDiv);
+  const userRow = document.createElement("div");
+  userRow.className = "chat-message-row user";
+  userRow.innerHTML = `
+    <div class="chat-bubble chat-bubble-user">
+      <div class="chat-bubble-content">${chatMarkdown(message)}</div>
+    </div>
+    <div class="chat-avatar">👤</div>
+  `;
+  $messagesEl.appendChild(userRow);
 
   // Append assistant placeholder
+  const assistantRow = document.createElement("div");
+  assistantRow.className = "chat-message-row assistant";
+  assistantRow.innerHTML = `<div class="chat-avatar">🤖</div>`;
+
   const assistantDiv = document.createElement("div");
   assistantDiv.className = "chat-bubble chat-bubble-assistant";
+  
+  const agent = (chatState.agents ?? []).find(a => (a.id || a.agent_id) === agentId);
+  const agentName = agent ? (agent.name || agent.agent_name || agentId) : agentId;
+  assistantDiv.innerHTML = `<div class="chat-bubble-sender">${esc(agentName)}</div>`;
+
   const contentSpan = document.createElement("div");
   contentSpan.className = "chat-bubble-content";
   contentSpan.innerHTML = '<div class="chat-thinking-pulse"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+  
   assistantDiv.appendChild(contentSpan);
-  $messagesEl.appendChild(assistantDiv);
+  assistantRow.appendChild(assistantDiv);
+  
+  $messagesEl.appendChild(assistantRow);
   $messagesEl.scrollTop = $messagesEl.scrollHeight;
 
   // Persist user message
@@ -282,20 +366,25 @@ function renderChatConversation($el, agentId, agentName) {
     <div class="chat-pane">
       <div class="chat-header">
         <span class="chat-agent-name">${esc(agentName)}</span>
-        <button class="chat-clear-btn" onclick="chatClearConversation(${JSON.stringify(agentId)})">Clear</button>
+        <button class="chat-clear-btn" onclick="chatClearConversation(${JSON.stringify(agentId)})" title="Clear Conversation">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> 
+          Clear
+        </button>
       </div>
       <div class="chat-messages" id="chat-messages">
         ${history.length === 0
-          ? `<div class="chat-welcome">Send a message to start chatting with <strong>${esc(agentName)}</strong>.</div>`
-          : history.map(msg =>
-            `<div class="chat-bubble chat-bubble-${esc(msg.role)}">
-              <div class="chat-bubble-content">${chatMarkdown(msg.text)}</div>
-            </div>`
-          ).join("")}
+          ? `<div class="chat-welcome-box">
+               <div class="chat-welcome-icon">💭</div>
+               <div class="chat-welcome-text">Start a conversation with <strong>${esc(agentName)}</strong></div>
+             </div>`
+          : history.map(msg => window.renderBubble(msg, agentName)).join("")}
       </div>
       <div class="chat-input-bar">
         <textarea id="chat-input" class="chat-input" rows="1" placeholder="Type a message…" ${chatState.streaming ? "disabled" : ""}></textarea>
-        <button id="chat-send-btn" class="chat-send-btn" ${chatState.streaming ? "disabled" : ""}>Send</button>
+        <button id="chat-send-btn" class="chat-send-btn" ${chatState.streaming ? "disabled" : ""}>
+          Send
+          <svg style="vertical-align: middle; margin-left: 4px;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        </button>
       </div>
     </div>
   `;
@@ -384,15 +473,21 @@ async function renderChat($el, parts, _params) {
     <div class="chat-layout">
       <div class="chat-sidebar" id="chat-sidebar">
         <div class="chat-sidebar-header">Decision Agents</div>
+        <div class="chat-sidebar-search">
+          <input type="text" id="chat-agent-search" placeholder="Search agents..." oninput="chatFilterAgents(this.value)">
+        </div>
         <div class="chat-agent-list" id="chat-agent-list">
           ${agents.map(agent => {
             const id = agent.id || agent.agent_id;
             const name = agent.name || agent.agent_name || id;
             const desc = agent.description || "";
             const isActive = id === activeAgentId;
-            return `<div class="chat-agent-item${isActive ? " active" : ""}" data-agent-id="${esc(id)}" onclick="chatSelectAgent(${JSON.stringify(id)})">
-              <div class="chat-agent-item-name">${esc(name)}</div>
-              ${desc ? `<div class="chat-agent-item-desc">${esc(desc)}</div>` : ""}
+            return `<div class="chat-agent-item${isActive ? " active" : ""}" data-agent-id="${esc(id)}" onclick="chatSelectAgent(${esc(JSON.stringify(id))})">
+              <div class="chat-agent-item-icon">🤖</div>
+              <div class="chat-agent-item-content">
+                <div class="chat-agent-item-name">${esc(name)}</div>
+                ${desc ? `<div class="chat-agent-item-desc">${esc(desc)}</div>` : ""}
+              </div>
             </div>`;
           }).join("")}
         </div>

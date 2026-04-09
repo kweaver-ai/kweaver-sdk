@@ -286,6 +286,16 @@ export function handleApiError(res: ServerResponse, error: unknown): void {
       error: detail || error.message,
       upstream_status: error.status,
     });
+  } else if (
+    error instanceof Error &&
+    "causeMessage" in error &&
+    typeof (error as Record<string, unknown>).causeMessage === "string"
+  ) {
+    // NetworkRequestError — include cause and URL for diagnosis
+    const net = error as Error & { causeMessage: string; url?: string; hint?: string };
+    const detail = [net.causeMessage, net.url, net.hint].filter(Boolean).join(" | ");
+    console.error(`[network-error] ${detail}`);
+    jsonResponse(res, 502, { error: `Upstream unreachable: ${net.causeMessage}` });
   } else {
     const message = error instanceof Error ? error.message : String(error);
     jsonResponse(res, 500, { error: message });

@@ -60,13 +60,52 @@ function buildNetworkHint(causeMessage: string): string {
   return "Check whether the platform URL is correct and whether it exposes /oauth2/clients over HTTPS.";
 }
 
+function isTransientNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = (
+    "cause" in error && error.cause instanceof Error
+      ? error.cause.message
+      : error.message
+  ).toLowerCase();
+  return (
+    msg.includes("tls") ||
+    msg.includes("socket") ||
+    msg.includes("econnreset") ||
+    msg.includes("econnrefused") ||
+    msg.includes("certificate") ||
+    msg.includes("disconnect") ||
+    msg.includes("etimedout") ||
+    msg.includes("eai_again")
+  );
+}
+
+const RETRY_DELAYS = [300, 800];
+
+/** fetch() with automatic retry on transient network errors (TLS, socket, DNS). */
+export async function fetchWithRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientNetworkError(error) || attempt === RETRY_DELAYS.length) break;
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+    }
+  }
+  throw lastError;
+}
+
 export async function fetchTextOrThrow(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<{ response: Response; body: string }> {
   let response: Response;
   try {
-    response = await fetch(input, init);
+    response = await fetchWithRetry(input, init);
   } catch (error) {
     const url =
       typeof input === "string"

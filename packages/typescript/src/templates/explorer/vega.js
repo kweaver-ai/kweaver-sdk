@@ -3,7 +3,6 @@
 // Caches
 const vegaCatalogCache = {};
 const vegaResourcesCache = {};
-const vegaTasksCache = {};
 const vegaDataCache = {};
 
 // ── API wrappers ──────────────────────────────────────────────────────────────
@@ -16,10 +15,6 @@ async function vegaLoadResources(catalogId) {
   return cachedFetch(vegaResourcesCache, catalogId, () =>
     api("GET", `/api/vega/catalog-resources?catalogId=${enc(catalogId)}`),
   );
-}
-
-async function vegaLoadTasks() {
-  return cachedFetch(vegaTasksCache, "all", () => api("GET", "/api/vega/tasks"));
 }
 
 async function vegaQueryData(resourceId, query) {
@@ -92,47 +87,7 @@ function vegaRenderCatalogList($el, data) {
     <div class="vega-view">
       <h2>Vega Catalogs <span style="color:var(--text-secondary);font-weight:400">(${items.length})</span></h2>
       <div class="catalog-grid">${cards.join("")}</div>
-      <div id="vega-tasks-section"></div>
     </div>`;
-
-  // Render discover tasks in the same view
-  vegaRenderTasksSection(document.getElementById("vega-tasks-section"));
-}
-
-async function vegaRenderTasksSection($el) {
-  if (!$el) return;
-  let tasksData;
-  try {
-    tasksData = await vegaLoadTasks();
-  } catch {
-    return; // silently ignore tasks errors on catalog list
-  }
-  const tasks = extractList(tasksData);
-  if (tasks.length === 0) return;
-
-  const activeTasks = tasks.filter(t => {
-    const s = (t.status ?? "").toLowerCase();
-    return s === "running" || s === "pending" || s === "in_progress";
-  });
-
-  if (activeTasks.length === 0) return;
-
-  const rows = activeTasks.map(t => `
-    <tr>
-      <td>${esc(t.id)}</td>
-      <td>${esc(t.catalog_id ?? "—")}</td>
-      <td>${esc(t.status ?? "—")}</td>
-      <td>${esc(t.created_at ?? t.start_time ?? "—")}</td>
-    </tr>`).join("");
-
-  $el.innerHTML = `
-    <div class="section-header" style="margin-top:2rem">
-      <h3>Active Discover Tasks <span class="count">(${activeTasks.length})</span></h3>
-    </div>
-    <table>
-      <thead><tr><th>Task ID</th><th>Catalog ID</th><th>Status</th><th>Started</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
 }
 
 // ── Resource list view ────────────────────────────────────────────────────────

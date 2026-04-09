@@ -5,7 +5,6 @@ import {
   vegaCatalogHealthStatus,
   listVegaCatalogResources,
   queryVegaResourceData,
-  listVegaDiscoverTasks,
 } from "../api/vega.js";
 import { with401RefreshRetry } from "../auth/oauth.js";
 import { readBody, jsonResponse, handleApiError } from "./explore-bkn.js";
@@ -94,23 +93,6 @@ export function registerVegaRoutes(
           businessDomain,
           id: body.resourceId,
           body: JSON.stringify(body.query ?? {}),
-        }),
-      );
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(raw);
-    } catch (error) {
-      handleApiError(res, error);
-    }
-  });
-
-  // GET /api/vega/tasks — list discover tasks
-  routes.set("GET /api/vega/tasks", async (_req, res) => {
-    try {
-      const raw = await with401RefreshRetry(() =>
-        listVegaDiscoverTasks({
-          baseUrl: token.baseUrl,
-          accessToken: token.accessToken,
-          businessDomain,
         }),
       );
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });

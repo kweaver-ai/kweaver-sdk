@@ -274,6 +274,9 @@ pre {
   transition: var(--transition-smooth);
   position: relative;
   overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  display: block;
 }
 
 .summary-card::after {
@@ -493,6 +496,9 @@ pre {
   outline: none;
   transition: var(--transition-smooth);
   background: var(--bg);
+  resize: none;
+  max-height: 120px;
+  line-height: 1.4;
 }
 
 .chat-input:focus {
@@ -1386,4 +1392,76 @@ pre {
   .ot-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ===========================================================================
+   Chat Clear Button (C1 fix)
+   =========================================================================== */
+.chat-clear-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.chat-clear-btn:hover {
+  color: #dc2626;
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+/* ===========================================================================
+   Health Dots — CSS-styled (V1 fix)
+   =========================================================================== */
+.health-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health-dot.healthy {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+.health-dot.unhealthy {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+.health-dot.unknown {
+  background: #cbd5e1;
+  box-shadow: 0 0 0 3px rgba(203, 213, 225, 0.3);
+}
+
+/* ===========================================================================
+   Error Banner (B8 fix)
+   =========================================================================== */
+.error-banner {
+  padding: 16px 24px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-md);
+  color: #991b1b;
+  font-size: 14px;
+  text-align: center;
+  margin: 24px;
+}
+
+.error-banner a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.error-banner a:hover {
+  text-decoration: underline;
 }

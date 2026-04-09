@@ -32,11 +32,11 @@ async function vegaQueryData(resourceId, query) {
 // ── Health indicator ──────────────────────────────────────────────────────────
 
 function vegaHealthDot(status) {
-  if (!status) return '<span title="Unknown">⚪</span>';
+  if (!status) return '<span class="health-dot unknown" title="Unknown"></span>';
   const s = String(status).toLowerCase();
-  if (s === "healthy" || s === "ok" || s === "active") return '<span title="Healthy">🟢</span>';
-  if (s === "unhealthy" || s === "error" || s === "failed") return '<span title="Unhealthy">🔴</span>';
-  return `<span title="${esc(status)}">⚪</span>`;
+  if (s === "healthy" || s === "ok" || s === "active") return '<span class="health-dot healthy" title="Healthy"></span>';
+  if (s === "unhealthy" || s === "error" || s === "failed") return '<span class="health-dot unhealthy" title="Unhealthy"></span>';
+  return `<span class="health-dot unknown" title="${esc(status)}"></span>`;
 }
 
 function vegaGetHealth(health, catalogId) {

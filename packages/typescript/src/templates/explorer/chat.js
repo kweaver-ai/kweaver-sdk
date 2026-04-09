@@ -174,8 +174,8 @@ function renderChatConversation($el, agentId, agentName) {
             </div>`
           ).join("")}
       </div>
-      <div class="chat-input-row">
-        <textarea id="chat-input" class="chat-input" rows="2" placeholder="Type a message…" ${chatState.streaming ? "disabled" : ""}></textarea>
+      <div class="chat-input-bar">
+        <textarea id="chat-input" class="chat-input" rows="1" placeholder="Type a message…" ${chatState.streaming ? "disabled" : ""}></textarea>
         <button id="chat-send-btn" class="chat-send-btn" ${chatState.streaming ? "disabled" : ""}>Send</button>
       </div>
     </div>

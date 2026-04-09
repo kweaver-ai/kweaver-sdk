@@ -192,7 +192,7 @@ function renderBknHome($el, knId) {
       '<div class="stat-card"><div class="number">' + (m.statistics.relation_count || "\u2014") + '</div><div class="label">Relations</div></div>' +
     '</div>' +
 
-    '<div class="search-bar" style="margin-bottom:24px;">' +
+    '<div class="search-box" style="margin-bottom:24px;">' +
       '<input type="text" id="bkn-search-input" placeholder="Semantic search..." />' +
       '<button id="bkn-search-btn">Search</button>' +
     '</div>' +
@@ -251,7 +251,29 @@ async function renderBknOtList($el, knId, otId, gen) {
 }
 
 async function bknLoadInstances(knId, otId, displayKey, gen, searchAfter) {
-  var data = await bknQueryInstancesCached(otId, { searchAfter: searchAfter });
+  var data;
+  try {
+    // Timeout wrapper: abort loading after 15 seconds
+    data = await Promise.race([
+      bknQueryInstancesCached(otId, { searchAfter: searchAfter }),
+      new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error("Request timed out")); }, 15000);
+      }),
+    ]);
+  } catch (err) {
+    if (navGeneration !== gen) return;
+    var errContainer = document.getElementById("instance-container");
+    if (errContainer) {
+      errContainer.innerHTML =
+        '<div class="error-banner">' +
+        'Failed to load instances: ' + esc(err.message || String(err)) +
+        ' <a href="javascript:void(0)" id="retry-instances" style="margin-left:12px;color:var(--accent);">Retry</a>' +
+        '</div>';
+      var retryBtn = document.getElementById("retry-instances");
+      if (retryBtn) retryBtn.onclick = function() { bknLoadInstances(knId, otId, displayKey, gen, searchAfter); };
+    }
+    return;
+  }
   if (navGeneration !== gen) return;
 
   var container = document.getElementById("instance-container");

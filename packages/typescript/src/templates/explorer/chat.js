@@ -71,6 +71,93 @@ async function loadChatAgents() {
   }
 }
 
+// ── Trace rendering ─────────────────────────────────────────────────────────
+
+function renderProgressSteps(items) {
+  if (!items || items.length === 0) return "";
+  const steps = items.map(function(item) {
+    var name = (item.skill_info && item.skill_info.name) || item.agent_name || "Step";
+    var status = (item.status || "running").toLowerCase();
+    var icon = status === "completed" || status === "success" ? "✅"
+             : status === "failed" || status === "error" ? "❌"
+             : '<span class="trace-spinner"></span>';
+    var desc = item.description || "";
+    return '<div class="trace-step trace-status-' + esc(status) + '">' +
+      '<span class="trace-step-icon">' + icon + '</span>' +
+      '<span class="trace-step-name">' + esc(name) + '</span>' +
+      (desc ? '<span class="trace-step-desc">' + esc(desc) + '</span>' : "") +
+    '</div>';
+  });
+  return '<div class="trace-steps">' + steps.join("") + '</div>';
+}
+
+async function fetchAndRenderTrace(bubbleEl, agentId, conversationId, $messagesEl) {
+  try {
+    var data = await api("GET", "/api/chat/trace?agentId=" + enc(agentId) + "&conversationId=" + enc(conversationId));
+    var sessions = extractList(data);
+    if (!sessions || sessions.length === 0) return;
+
+    var latestSession = sessions[sessions.length - 1];
+    var spans = latestSession.spans || latestSession.steps || latestSession.traces || [];
+    if (spans.length === 0) return;
+
+    var totalDuration = spans.reduce(function(sum, s) { return sum + (s.duration_ms || s.duration || 0); }, 0);
+    var totalSec = (totalDuration / 1000).toFixed(1);
+
+    var $trace = bubbleEl.querySelector(".trace-section");
+    if (!$trace) {
+      $trace = document.createElement("div");
+      $trace.className = "trace-section trace-expanded";
+      bubbleEl.appendChild($trace);
+    }
+
+    $trace.innerHTML =
+      '<div class="trace-header" onclick="this.parentElement.classList.toggle(\'trace-expanded\')">' +
+        '<span class="trace-toggle">▶</span> ' +
+        '执行过程 (' + spans.length + ' 步, ' + totalSec + 's)' +
+      '</div>' +
+      '<div class="trace-body">' +
+        spans.map(renderTraceSpan).join("") +
+      '</div>';
+
+    if ($messagesEl) $messagesEl.scrollTop = $messagesEl.scrollHeight;
+  } catch (e) {
+    // Trace is best-effort, don't break the conversation
+  }
+}
+
+function renderTraceSpan(span) {
+  var name = span.name || span.skill_name || span.operation_name || "Step";
+  var status = (span.status || "completed").toLowerCase();
+  var icon = status === "completed" || status === "success" || status === "ok" ? "✅"
+           : status === "failed" || status === "error" ? "❌"
+           : "⏳";
+  var durationMs = span.duration_ms || span.duration || 0;
+  var durationLabel = durationMs >= 1000 ? (durationMs / 1000).toFixed(1) + "s" : durationMs + "ms";
+
+  var hasDetail = span.input || span.output || span.args || span.result;
+  var detailHtml = "";
+  if (hasDetail) {
+    detailHtml =
+      '<div class="trace-detail">' +
+        '<div class="trace-detail-toggle" onclick="this.parentElement.classList.toggle(\'trace-detail-expanded\')">▶ 查看详情</div>' +
+        '<div class="trace-detail-content">' +
+          (span.input ? '<div class="trace-kv"><span class="trace-kv-label">输入:</span><pre>' + esc(typeof span.input === "string" ? span.input : JSON.stringify(span.input, null, 2)) + '</pre></div>' : "") +
+          (span.args ? '<div class="trace-kv"><span class="trace-kv-label">参数:</span><pre>' + esc(typeof span.args === "string" ? span.args : JSON.stringify(span.args, null, 2)) + '</pre></div>' : "") +
+          (span.output ? '<div class="trace-kv"><span class="trace-kv-label">输出:</span><pre>' + esc(typeof span.output === "string" ? span.output : JSON.stringify(span.output, null, 2)) + '</pre></div>' : "") +
+          (span.result ? '<div class="trace-kv"><span class="trace-kv-label">结果:</span><pre>' + esc(typeof span.result === "string" ? span.result : JSON.stringify(span.result, null, 2)) + '</pre></div>' : "") +
+        '</div>' +
+      '</div>';
+  }
+
+  return '<div class="trace-step trace-status-' + esc(status) + '">' +
+    '<span class="trace-step-icon">' + icon + '</span>' +
+    '<span class="trace-step-name">' + esc(name) + '</span>' +
+    '<span class="trace-step-duration">' + esc(durationLabel) + '</span>' +
+    detailHtml +
+  '</div>';
+}
+
 // ── Send message ─────────────────────────────────────────────────────────────
 
 async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
@@ -147,10 +234,24 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
           lastText = evt.fullText ?? "";
           contentSpan.innerHTML = chatMarkdown(lastText);
           $messagesEl.scrollTop = $messagesEl.scrollHeight;
+        } else if (evt.type === "progress" && Array.isArray(evt.items)) {
+          let $trace = assistantDiv.querySelector(".trace-section");
+          if (!$trace) {
+            $trace = document.createElement("div");
+            $trace.className = "trace-section trace-expanded";
+            assistantDiv.appendChild($trace);
+          }
+          $trace.innerHTML = renderProgressSteps(evt.items);
+          $messagesEl.scrollTop = $messagesEl.scrollHeight;
         } else if (evt.type === "done") {
           chatState.currentConversationId = evt.conversationId || chatState.currentConversationId;
           if (lastText) {
             chatState.conversations[agentId].push({ role: "assistant", text: lastText });
+          }
+          // Fetch full trace after completion
+          const traceConvId = evt.conversationId || chatState.currentConversationId;
+          if (traceConvId) {
+            fetchAndRenderTrace(assistantDiv, agentId, traceConvId, $messagesEl);
           }
         } else if (evt.type === "error") {
           contentSpan.innerHTML = `<span class="chat-error">${esc(evt.error)}</span>`;

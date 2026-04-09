@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -71,6 +71,9 @@ test("dataflow list renders selected summary fields", async () => {
   try {
     const result = await runCommand(["list"]);
     assert.equal(result.code, 0);
+    assert.match(result.stdout, /\bID\b/);
+    assert.match(result.stdout, /\bTitle\b/);
+    assert.match(result.stdout, /\bStatus\b/);
     assert.match(result.stdout, /dag-001/);
     assert.match(result.stdout, /Demo/);
     assert.match(result.stdout, /normal/);
@@ -164,11 +167,14 @@ test("dataflow run rejects invalid source argument combinations", async () => {
 test("dataflow runs renders selected run summary fields", async () => {
   const configDir = createConfigDir();
   await setupToken(configDir);
+  const seenUrls: string[] = [];
 
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () =>
-    new Response(
+  globalThis.fetch = async (input) => {
+    seenUrls.push(typeof input === "string" ? input : input.toString());
+    return new Response(
       JSON.stringify({
+        total: 1,
         results: [
           {
             id: "run-001",
@@ -186,10 +192,18 @@ test("dataflow runs renders selected run summary fields", async () => {
       }),
       { status: 200 },
     );
+  };
 
   try {
     const result = await runCommand(["runs", "dag-001"]);
     assert.equal(result.code, 0);
+    assert.equal(
+      seenUrls[0],
+      "https://mock.kweaver.test/api/automation/v2/dag/dag-001/results?page=0&limit=20&sortBy=started_at&order=desc",
+    );
+    assert.match(result.stdout, /\bID\b/);
+    assert.match(result.stdout, /Started At/);
+    assert.match(result.stdout, /Content Type/);
     assert.match(result.stdout, /run-001/);
     assert.match(result.stdout, /success/);
     assert.match(result.stdout, /1775616539/);
@@ -202,10 +216,15 @@ test("dataflow runs renders selected run summary fields", async () => {
   }
 });
 
-test("dataflow logs fetches pages internally and prints compact log blocks", async () => {
+test("dataflow runs with valid --since requests one natural-day range and merges two responses", async () => {
   const configDir = createConfigDir();
   await setupToken(configDir);
   const seenUrls: string[] = [];
+  const day = new Date("2026-04-01");
+  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
+  const end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+  const startTime = Math.floor(start.getTime() / 1000);
+  const endTime = Math.floor(end.getTime() / 1000);
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
@@ -214,18 +233,14 @@ test("dataflow logs fetches pages internally and prints compact log blocks", asy
     if (url.includes("page=0")) {
       return new Response(
         JSON.stringify({
-          total: 2,
+          total: 25,
           results: [
             {
-              id: "0",
-              operator: "@trigger/dataflow-doc",
-              started_at: 1775616541,
-              updated_at: 1775616541,
+              id: "run-001",
               status: "success",
-              inputs: {},
-              outputs: { _type: "file", name: "Lewis_Hamilton.pdf" },
-              taskId: "0",
-              metadata: { duration: 0 },
+              started_at: 1775616541,
+              ended_at: 1775616542,
+              source: { name: "A.pdf", content_type: "application/pdf", size: 1 },
             },
           ],
         }),
@@ -236,18 +251,14 @@ test("dataflow logs fetches pages internally and prints compact log blocks", asy
     if (url.includes("page=1")) {
       return new Response(
         JSON.stringify({
-          total: 2,
+          total: 25,
           results: [
             {
-              id: "1",
-              operator: "@content/file_parse",
-              started_at: 1775616542,
-              updated_at: 1775616545,
+              id: "run-025",
               status: "success",
-              inputs: { name: "Lewis_Hamilton.pdf" },
-              outputs: { text: "parsed" },
-              taskId: "1",
-              metadata: { duration: 3 },
+              started_at: 1775617542,
+              ended_at: 1775617545,
+              source: { name: "B.pdf", content_type: "application/pdf", size: 2 },
             },
           ],
         }),
@@ -255,17 +266,136 @@ test("dataflow logs fetches pages internally and prints compact log blocks", asy
       );
     }
 
-    return new Response(JSON.stringify({ total: 2, results: [] }), { status: 200 });
+    return new Response(JSON.stringify({ total: 25, results: [] }), { status: 200 });
+  };
+
+  try {
+    const result = await runCommand(["runs", "dag-001", "--since", "2026-04-01"]);
+    assert.equal(result.code, 0);
+    assert.equal(
+      seenUrls[0],
+      `https://mock.kweaver.test/api/automation/v2/dag/dag-001/results?page=0&limit=20&sortBy=started_at&order=desc&start_time=${startTime}&end_time=${endTime}`,
+    );
+    assert.equal(
+      seenUrls[1],
+      `https://mock.kweaver.test/api/automation/v2/dag/dag-001/results?page=1&limit=5&sortBy=started_at&order=desc&start_time=${startTime}&end_time=${endTime}`,
+    );
+    assert.match(result.stdout, /run-001/);
+    assert.match(result.stdout, /run-025/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("dataflow runs with invalid --since falls back to recent-20 behavior", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+  const seenUrls: string[] = [];
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    seenUrls.push(typeof input === "string" ? input : input.toString());
+    return new Response(JSON.stringify({ total: 0, results: [] }), { status: 200 });
+  };
+
+  try {
+    const result = await runCommand(["runs", "dag-001", "--since", "not-a-date"]);
+    assert.equal(result.code, 0);
+    assert.equal(
+      seenUrls[0],
+      "https://mock.kweaver.test/api/automation/v2/dag/dag-001/results?page=0&limit=20&sortBy=started_at&order=desc",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("dataflow logs defaults to git-log style summary output", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+  const seenUrls: string[] = [];
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    seenUrls.push(typeof input === "string" ? input : input.toString());
+    if (seenUrls.length > 1) {
+      return new Response(JSON.stringify({ total: 1, results: [] }), { status: 200 });
+    }
+    return new Response(
+      JSON.stringify({
+        total: 1,
+        results: [
+          {
+            id: "0",
+            operator: "@trigger/dataflow-doc",
+            started_at: 1775616541,
+            updated_at: 1775616541,
+            status: "success",
+            inputs: {},
+            outputs: { _type: "file", name: "Lewis_Hamilton.pdf" },
+            taskId: "0",
+            metadata: { duration: 0 },
+          },
+        ],
+      }),
+      { status: 200 },
+    );
   };
 
   try {
     const result = await runCommand(["logs", "dag-001", "ins-001"]);
     assert.equal(result.code, 0);
-    assert.equal(seenUrls.length, 3);
-    assert.match(result.stdout, /\[0\] success @trigger\/dataflow-doc started_at=1775616541 updated_at=1775616541 duration=0 taskId=0/);
-    assert.match(result.stdout, /input: \{\}/);
-    assert.match(result.stdout, /output: \{"_type":"file","name":"Lewis_Hamilton\.pdf"\}/);
-    assert.match(result.stdout, /\[1\] success @content\/file_parse started_at=1775616542 updated_at=1775616545 duration=3 taskId=1/);
+    assert.equal(seenUrls[0], "https://mock.kweaver.test/api/automation/v2/dag/dag-001/result/ins-001?page=0&limit=-1");
+    assert.match(result.stdout, /^commit 0/m);
+    assert.match(result.stdout, /^Author: @trigger\/dataflow-doc$/m);
+    assert.match(result.stdout, /^Status: success$/m);
+    assert.doesNotMatch(result.stdout, /input:/);
+    assert.doesNotMatch(result.stdout, /output:/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("dataflow logs --detail prints indented pretty json payloads", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+  let callCount = 0;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    callCount += 1;
+    if (callCount > 1) {
+      return new Response(JSON.stringify({ total: 1, results: [] }), { status: 200 });
+    }
+    return new Response(
+      JSON.stringify({
+        total: 1,
+        results: [
+          {
+            id: "0",
+            operator: "@trigger/dataflow-doc",
+            started_at: 1775616541,
+            updated_at: 1775616541,
+            status: "success",
+            inputs: { name: "Lewis_Hamilton.pdf" },
+            outputs: { _type: "file", name: "Lewis_Hamilton.pdf" },
+            taskId: "0",
+            metadata: { duration: 0 },
+          },
+        ],
+      }),
+      { status: 200 },
+    );
+  };
+
+  try {
+    const result = await runCommand(["logs", "dag-001", "ins-001", "--detail"]);
+    assert.equal(result.code, 0);
+    assert.match(result.stdout, /^commit 0/m);
+    assert.match(result.stdout, /^    input:$/m);
+    assert.match(result.stdout, /^        \{$/m);
+    assert.match(result.stdout, /^            "name": "Lewis_Hamilton\.pdf"$/m);
+    assert.match(result.stdout, /^    output:$/m);
   } finally {
     globalThis.fetch = originalFetch;
   }

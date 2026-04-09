@@ -65,13 +65,11 @@ function parseSinceToLocalDayRange(value: string): { startTime: number; endTime:
 function formatDataflowLogSummary(item: DataflowLogItem): string {
   const duration = item.metadata?.duration ?? "-";
   return [
-    `commit ${item.id}`,
-    `Author: ${item.operator ?? ""}`,
+    `[${item.id}] ${item.taskId ?? ""} ${item.operator ?? ""}`,
     `Status: ${item.status ?? ""}`,
     `Started At: ${item.started_at ?? ""}`,
     `Updated At: ${item.updated_at ?? ""}`,
-    `Duration: ${duration}`,
-    `Task ID: ${item.taskId ?? ""}`,
+    `Duration: ${duration}`
   ].join("\n");
 }
 
@@ -261,16 +259,22 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
       async (argv: any) => {
         exitCode = await with401RefreshRetry(async () => {
           const base = await requireTokenAndBusinessDomain(argv.bizDomain);
-          const body = await getDataflowLogsPage({
-            ...base,
-            dagId: argv.dagId,
-            instanceId: argv.instanceId,
-            page: 0,
-            limit: -1,
-          });
-          for (const item of body.results) {
-            console.log(formatDataflowLogOutput(item, argv.detail === true));
-            console.log("");
+          let seen = 0;
+          for (let page = 0; ; page += 1) {
+            const body = await getDataflowLogsPage({
+              ...base,
+              dagId: argv.dagId,
+              instanceId: argv.instanceId,
+              page,
+              limit: 100,
+            });
+            if (body.results.length === 0) break;
+            for (const item of body.results) {
+              console.log(formatDataflowLogOutput(item, argv.detail === true));
+              console.log("");
+            }
+            seen += body.results.length;
+            if ((body.total ?? 0) > 0 && seen >= (body.total ?? 0)) break;
           }
           return 0;
         });

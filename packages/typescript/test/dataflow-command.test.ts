@@ -318,9 +318,6 @@ test("dataflow logs defaults to git-log style summary output", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     seenUrls.push(typeof input === "string" ? input : input.toString());
-    if (seenUrls.length > 1) {
-      return new Response(JSON.stringify({ total: 1, results: [] }), { status: 200 });
-    }
     return new Response(
       JSON.stringify({
         total: 1,
@@ -345,10 +342,11 @@ test("dataflow logs defaults to git-log style summary output", async () => {
   try {
     const result = await runCommand(["logs", "dag-001", "ins-001"]);
     assert.equal(result.code, 0);
-    assert.equal(seenUrls[0], "https://mock.kweaver.test/api/automation/v2/dag/dag-001/result/ins-001?page=0&limit=-1");
-    assert.match(result.stdout, /^commit 0/m);
-    assert.match(result.stdout, /^Author: @trigger\/dataflow-doc$/m);
+    assert.equal(seenUrls[0], "https://mock.kweaver.test/api/automation/v2/dag/dag-001/result/ins-001?page=0&limit=100");
+    assert.equal(seenUrls.length, 1);
+    assert.match(result.stdout, /^\[0\] 0 @trigger\/dataflow-doc$/m);
     assert.match(result.stdout, /^Status: success$/m);
+    assert.match(result.stdout, /^Duration: 0$/m);
     assert.doesNotMatch(result.stdout, /input:/);
     assert.doesNotMatch(result.stdout, /output:/);
   } finally {
@@ -391,11 +389,70 @@ test("dataflow logs --detail prints indented pretty json payloads", async () => 
   try {
     const result = await runCommand(["logs", "dag-001", "ins-001", "--detail"]);
     assert.equal(result.code, 0);
-    assert.match(result.stdout, /^commit 0/m);
+    assert.match(result.stdout, /^\[0\] 0 @trigger\/dataflow-doc$/m);
     assert.match(result.stdout, /^    input:$/m);
     assert.match(result.stdout, /^        \{$/m);
     assert.match(result.stdout, /^            "name": "Lewis_Hamilton\.pdf"$/m);
     assert.match(result.stdout, /^    output:$/m);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("dataflow logs paginates with limit=100 until all results are fetched", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+  const seenUrls: string[] = [];
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = typeof input === "string" ? input : input.toString();
+    seenUrls.push(url);
+    if (url.includes("page=0")) {
+      return new Response(
+        JSON.stringify({
+          total: 101,
+          results: [
+            {
+              id: "0",
+              operator: "@trigger/dataflow-doc",
+              started_at: 1775616541,
+              updated_at: 1775616541,
+              status: "success",
+              taskId: "0",
+              metadata: { duration: 0 },
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        total: 101,
+        results: [
+          {
+            id: "100",
+            operator: "@content/file_parse",
+            started_at: 1775617541,
+            updated_at: 1775617542,
+            status: "success",
+            taskId: "100",
+            metadata: { duration: 1 },
+          },
+        ],
+      }),
+      { status: 200 },
+    );
+  };
+
+  try {
+    const result = await runCommand(["logs", "dag-001", "ins-001"]);
+    assert.equal(result.code, 0);
+    assert.equal(seenUrls[0], "https://mock.kweaver.test/api/automation/v2/dag/dag-001/result/ins-001?page=0&limit=100");
+    assert.equal(seenUrls[1], "https://mock.kweaver.test/api/automation/v2/dag/dag-001/result/ins-001?page=1&limit=100");
+    assert.match(result.stdout, /^\[0\] 0 @trigger\/dataflow-doc$/m);
+    assert.match(result.stdout, /^\[100\] 100 @content\/file_parse$/m);
   } finally {
     globalThis.fetch = originalFetch;
   }

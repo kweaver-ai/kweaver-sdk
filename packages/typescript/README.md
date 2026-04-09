@@ -150,6 +150,7 @@ kweaver config show / list-bd / set-bd <value>   # platform business domain — 
 kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
+kweaver dataflow list/run/runs/logs
 kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
@@ -167,6 +168,16 @@ kweaver vega health/stats/inspect/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]
+```
+
+### Dataflow CLI examples
+
+```bash
+kweaver dataflow list
+kweaver dataflow run <dagId> --file ./demo.pdf
+kweaver dataflow run <dagId> --url https://example.com/demo.pdf --name demo.pdf
+kweaver dataflow runs <dagId>
+kweaver dataflow logs <dagId> <instanceId>
 ```
 
 ## Environment Variables

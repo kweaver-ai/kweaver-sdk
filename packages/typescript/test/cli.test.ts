@@ -729,18 +729,35 @@ test("parseKnObjectTypeQueryArgs validates --search-after json array", () => {
   );
 });
 
-test("parseKnObjectTypeQueryArgs rejects unrecognized top-level keys", () => {
+test("parseKnObjectTypeQueryArgs rejects misplaced filter fields", () => {
   assert.throws(
     () => parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"material_number":"130-000238"}']),
-    /Unrecognized top-level key.*"material_number"/
+    /Likely misplaced filter field.*"material_number"/
   );
 });
 
-test("parseKnObjectTypeQueryArgs rejects multiple unrecognized keys with hint", () => {
+test("parseKnObjectTypeQueryArgs rejects multiple misplaced filter fields", () => {
   assert.throws(
     () => parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"status":"active","price":100}']),
-    /Unrecognized top-level key.*"status".*"price"/
+    /Likely misplaced filter field.*"status".*"price"/
   );
+});
+
+test("parseKnObjectTypeQueryArgs rejects mixed valid and misplaced keys", () => {
+  assert.throws(
+    () => parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"limit":20,"material_number":"130-000238"}']),
+    /Likely misplaced filter field.*"material_number"/
+  );
+});
+
+test("parseKnObjectTypeQueryArgs allows unknown keys when condition is present", () => {
+  const opts = parseKnObjectTypeQueryArgs([
+    "kn-123",
+    "pod",
+    '{"condition":{"field":"name","operation":"==","value":"test"},"some_future_param":"x"}',
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.strictEqual(body.some_future_param, "x");
 });
 
 test("parseKnObjectTypeQueryArgs accepts valid top-level keys", () => {

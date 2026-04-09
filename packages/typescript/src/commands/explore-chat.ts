@@ -1,15 +1,13 @@
 import { IncomingMessage, ServerResponse } from "node:http";
 
-import { HttpError } from "../utils/http.js";
 import { listAgents } from "../api/agent-list.js";
 import { fetchAgentInfo, sendChatRequestStream } from "../api/agent-chat.js";
-import { with401RefreshRetry } from "../auth/oauth.js";
-import { readBody, handleApiError } from "./explore-bkn.js";
+import { readBody, handleApiError, type TokenProvider } from "./explore-bkn.js";
 
 // ── Chat route handlers ──────────────────────────────────────────────────────
 
 export function registerChatRoutes(
-  token: { baseUrl: string; accessToken: string },
+  getToken: TokenProvider,
   businessDomain: string,
 ): Map<string, (req: IncomingMessage, res: ServerResponse) => void> {
   const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => void>();
@@ -17,13 +15,12 @@ export function registerChatRoutes(
   // GET /api/chat/agents — list published agents
   routes.set("GET /api/chat/agents", async (_req, res) => {
     try {
-      const raw = await with401RefreshRetry(() =>
-        listAgents({
-          baseUrl: token.baseUrl,
-          accessToken: token.accessToken,
-          businessDomain,
-        }),
-      );
+      const t = await getToken();
+      const raw = await listAgents({
+        baseUrl: t.baseUrl,
+        accessToken: t.accessToken,
+        businessDomain,
+      });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(raw);
     } catch (error) {
@@ -71,17 +68,16 @@ export function registerChatRoutes(
     }
 
     // Fetch agent info to get key + version
+    const t = await getToken();
     let agentInfo: { id: string; key: string; version: string };
     try {
-      agentInfo = await with401RefreshRetry(() =>
-        fetchAgentInfo({
-          baseUrl: token.baseUrl,
-          accessToken: token.accessToken,
-          agentId,
-          version: version ?? "v0",
-          businessDomain,
-        }),
-      );
+      agentInfo = await fetchAgentInfo({
+        baseUrl: t.baseUrl,
+        accessToken: t.accessToken,
+        agentId,
+        version: version ?? "v0",
+        businessDomain,
+      });
     } catch (error) {
       handleApiError(res, error);
       return;
@@ -99,8 +95,8 @@ export function registerChatRoutes(
     try {
       const result = await sendChatRequestStream(
         {
-          baseUrl: token.baseUrl,
-          accessToken: token.accessToken,
+          baseUrl: t.baseUrl,
+          accessToken: t.accessToken,
           agentId: agentInfo.id,
           agentKey: agentInfo.key,
           agentVersion: agentInfo.version,

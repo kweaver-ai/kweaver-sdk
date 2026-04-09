@@ -6,13 +6,12 @@ import {
   listVegaCatalogResources,
   queryVegaResourceData,
 } from "../api/vega.js";
-import { with401RefreshRetry } from "../auth/oauth.js";
-import { readBody, jsonResponse, handleApiError } from "./explore-bkn.js";
+import { readBody, jsonResponse, handleApiError, type TokenProvider } from "./explore-bkn.js";
 
 // ── Vega route handlers ──────────────────────────────────────────────────────
 
 export function registerVegaRoutes(
-  token: { baseUrl: string; accessToken: string },
+  getToken: TokenProvider,
   businessDomain: string,
 ): Map<string, (req: IncomingMessage, res: ServerResponse) => void> {
   const routes = new Map<string, (req: IncomingMessage, res: ServerResponse) => void>();
@@ -20,22 +19,14 @@ export function registerVegaRoutes(
   // GET /api/vega/catalogs — list catalogs + health status in parallel
   routes.set("GET /api/vega/catalogs", async (_req, res) => {
     try {
+      const t = await getToken();
       const [catalogsResult, healthResult] = await Promise.allSettled([
-        with401RefreshRetry(() =>
-          listVegaCatalogs({
-            baseUrl: token.baseUrl,
-            accessToken: token.accessToken,
-            businessDomain,
-          }),
-        ),
-        with401RefreshRetry(() =>
-          vegaCatalogHealthStatus({
-            baseUrl: token.baseUrl,
-            accessToken: token.accessToken,
-            businessDomain,
-            ids: "all",
-          }),
-        ),
+        listVegaCatalogs({
+          baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain,
+        }),
+        vegaCatalogHealthStatus({
+          baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain, ids: "all",
+        }),
       ]);
 
       const catalogs =
@@ -62,14 +53,10 @@ export function registerVegaRoutes(
         jsonResponse(res, 400, { error: "catalogId query parameter is required" });
         return;
       }
-      const raw = await with401RefreshRetry(() =>
-        listVegaCatalogResources({
-          baseUrl: token.baseUrl,
-          accessToken: token.accessToken,
-          businessDomain,
-          id: catalogId,
-        }),
-      );
+      const t = await getToken();
+      const raw = await listVegaCatalogResources({
+        baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain, id: catalogId,
+      });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(raw);
     } catch (error) {
@@ -86,15 +73,11 @@ export function registerVegaRoutes(
         jsonResponse(res, 400, { error: "resourceId is required" });
         return;
       }
-      const raw = await with401RefreshRetry(() =>
-        queryVegaResourceData({
-          baseUrl: token.baseUrl,
-          accessToken: token.accessToken,
-          businessDomain,
-          id: body.resourceId,
-          body: JSON.stringify(body.query ?? {}),
-        }),
-      );
+      const t = await getToken();
+      const raw = await queryVegaResourceData({
+        baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain,
+        id: body.resourceId, body: JSON.stringify(body.query ?? {}),
+      });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(raw);
     } catch (error) {

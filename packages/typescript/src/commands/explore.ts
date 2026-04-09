@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
-import { ensureValidToken, with401RefreshRetry } from "../auth/oauth.js";
+import { ensureValidToken } from "../auth/oauth.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { registerBknRoutes, loadExploreMetaWithRetry, readBody, type ExploreMeta } from "./explore-bkn.js";
 import { registerChatRoutes } from "./explore-chat.js";
@@ -68,6 +68,15 @@ const MIME: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
+/**
+ * Returns a fresh token, re-reading from disk each time.
+ * This ensures long-running server processes always use the latest
+ * access token after a refresh, rather than a stale snapshot.
+ */
+async function freshToken(): Promise<{ baseUrl: string; accessToken: string }> {
+  return ensureValidToken();
+}
+
 async function startServer(
   opts: ExploreOptions,
   token: { baseUrl: string; accessToken: string },
@@ -87,14 +96,12 @@ async function startServer(
   // Dashboard route: aggregate KN, Agents, Vega Catalogs in parallel
   routes.set("GET /api/dashboard", async (_req, res) => {
     try {
+      const t = await freshToken();
       const bd = businessDomain;
       const [knRaw, agentsRaw, catalogsRaw] = await Promise.allSettled([
-        with401RefreshRetry(() =>
-          listKnowledgeNetworks({ baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain: bd })),
-        with401RefreshRetry(() =>
-          listAgents({ baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain: bd })),
-        with401RefreshRetry(() =>
-          listVegaCatalogs({ baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain: bd })),
+        listKnowledgeNetworks({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd }),
+        listAgents({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd }),
+        listVegaCatalogs({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd }),
       ]);
 
       const parseSettled = (r: PromiseSettledResult<string>) =>
@@ -115,7 +122,7 @@ async function startServer(
 
   // BKN routes
   if (bknMeta) {
-    const bknRoutes = registerBknRoutes(bknMeta, token, businessDomain);
+    const bknRoutes = registerBknRoutes(bknMeta, freshToken, businessDomain);
     for (const [key, handler] of bknRoutes) routes.set(key, handler);
   }
 
@@ -130,7 +137,8 @@ async function startServer(
         return;
       }
       console.error(`Loading schema for KN ${knId}...`);
-      const meta = await loadExploreMetaWithRetry(token, knId, businessDomain);
+      const t = await freshToken();
+      const meta = await loadExploreMetaWithRetry(t, knId, businessDomain);
       console.error(`Loaded: ${meta.objectTypes.length} OTs, ${meta.relationTypes.length} RTs`);
       // Replace BKN routes with new KN's routes
       for (const key of [...routes.keys()]) {
@@ -138,7 +146,7 @@ async function startServer(
           if (key !== "POST /api/bkn/load") routes.delete(key);
         }
       }
-      const newRoutes = registerBknRoutes(meta, token, businessDomain);
+      const newRoutes = registerBknRoutes(meta, freshToken, businessDomain);
       for (const [key, handler] of newRoutes) routes.set(key, handler);
       bknMeta = meta;
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -151,11 +159,11 @@ async function startServer(
   });
 
   // Chat routes
-  const chatRoutes = registerChatRoutes(token, businessDomain);
+  const chatRoutes = registerChatRoutes(freshToken, businessDomain);
   for (const [key, handler] of chatRoutes) routes.set(key, handler);
 
   // Vega routes
-  const vegaRoutes = registerVegaRoutes(token, businessDomain);
+  const vegaRoutes = registerVegaRoutes(freshToken, businessDomain);
   for (const [key, handler] of vegaRoutes) routes.set(key, handler);
 
   // 3. Resolve template directory

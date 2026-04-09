@@ -9,7 +9,6 @@ import {
 } from "../api/knowledge-networks.js";
 import { objectTypeQuery, objectTypeProperties, subgraph } from "../api/ontology-query.js";
 import { semanticSearch } from "../api/semantic-search.js";
-import { with401RefreshRetry } from "../auth/oauth.js";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -295,9 +294,11 @@ export function handleApiError(res: ServerResponse, error: unknown): void {
 
 // ── BKN route handlers ──────────────────────────────────────────────────────
 
+export type TokenProvider = () => Promise<{ baseUrl: string; accessToken: string }>;
+
 export function registerBknRoutes(
   meta: ExploreMeta,
-  token: { baseUrl: string; accessToken: string },
+  getToken: TokenProvider,
   businessDomain: string,
 ): Map<string, (req: IncomingMessage, res: ServerResponse) => void> {
   const knId = meta.bkn.id;
@@ -323,11 +324,11 @@ export function registerBknRoutes(
         ...(body.condition ? { condition: body.condition } : {}),
         ...(body._instance_identities ? { _instance_identities: body._instance_identities } : {}),
       });
-      const result = await with401RefreshRetry(() =>
-        objectTypeQuery({
-          baseUrl: token.baseUrl, accessToken: token.accessToken,
-          knId, otId: body.otId, body: queryBody, businessDomain,
-        }));
+      const t = await getToken();
+      const result = await objectTypeQuery({
+        baseUrl: t.baseUrl, accessToken: t.accessToken,
+        knId, otId: body.otId, body: queryBody, businessDomain,
+      });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(result);
     } catch (error) {
@@ -340,12 +341,12 @@ export function registerBknRoutes(
       const bodyStr = await readBody(req);
       const parsed = JSON.parse(bodyStr);
       const hasRelationPaths = Array.isArray(parsed.relation_type_paths);
-      const result = await with401RefreshRetry(() =>
-        subgraph({
-          baseUrl: token.baseUrl, accessToken: token.accessToken,
-          knId, body: bodyStr, businessDomain,
-          ...(hasRelationPaths ? { queryType: "relation_path" } : {}),
-        }));
+      const t = await getToken();
+      const result = await subgraph({
+        baseUrl: t.baseUrl, accessToken: t.accessToken,
+        knId, body: bodyStr, businessDomain,
+        ...(hasRelationPaths ? { queryType: "relation_path" } : {}),
+      });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(result);
     } catch (error) {
@@ -357,12 +358,12 @@ export function registerBknRoutes(
     try {
       const bodyStr = await readBody(req);
       const body = JSON.parse(bodyStr) as { query: string; maxConcepts?: number };
-      const result = await with401RefreshRetry(() =>
-        semanticSearch({
-          baseUrl: token.baseUrl, accessToken: token.accessToken,
-          knId, query: body.query, businessDomain,
-          maxConcepts: body.maxConcepts,
-        }));
+      const t = await getToken();
+      const result = await semanticSearch({
+        baseUrl: t.baseUrl, accessToken: t.accessToken,
+        knId, query: body.query, businessDomain,
+        maxConcepts: body.maxConcepts,
+      });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(result);
     } catch (error) {
@@ -375,11 +376,11 @@ export function registerBknRoutes(
       const bodyStr = await readBody(req);
       const body = JSON.parse(bodyStr) as { otId: string; [key: string]: unknown };
       const { otId, ...rest } = body;
-      const result = await with401RefreshRetry(() =>
-        objectTypeProperties({
-          baseUrl: token.baseUrl, accessToken: token.accessToken,
-          knId, otId, body: JSON.stringify(rest), businessDomain,
-        }));
+      const t = await getToken();
+      const result = await objectTypeProperties({
+        baseUrl: t.baseUrl, accessToken: t.accessToken,
+        knId, otId, body: JSON.stringify(rest), businessDomain,
+      });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(result);
     } catch (error) {

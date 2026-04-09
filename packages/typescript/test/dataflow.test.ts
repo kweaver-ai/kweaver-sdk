@@ -385,18 +385,54 @@ test("runDataflowWithRemoteUrl posts JSON body and returns dag_instance_id", asy
   }
 });
 
-test("listDataflowRuns sends GET to the v2 runs endpoint and returns results", async () => {
+test("listDataflowRuns sends GET to the v2 runs endpoint with recent-20 query parameters", async () => {
   const originalFetch = globalThis.fetch;
   try {
     globalThis.fetch = async (input, init) => {
       const url = typeof input === "string" ? input : (input as URL).toString();
       assert.equal(init?.method, "GET");
-      assert.equal(url, `${BASE}/api/automation/v2/dag/dag-001/results?page=0&limit=-1`);
+      assert.equal(url, `${BASE}/api/automation/v2/dag/dag-001/results?page=0&limit=20&sortBy=started_at&order=desc`);
       return new Response(JSON.stringify({ results: [{ id: "run-001", status: "success" }] }), { status: 200 });
     };
 
-    const body = await listDataflowRuns({ ...COMMON_OPTS, dagId: "dag-001" });
+    const body = await listDataflowRuns({
+      ...COMMON_OPTS,
+      dagId: "dag-001",
+      page: 0,
+      limit: 20,
+      sortBy: "started_at",
+      order: "desc",
+    });
     assert.equal(body.results[0]?.id, "run-001");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("listDataflowRuns sends start_time and end_time when date-window parameters are provided", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : (input as URL).toString();
+      assert.equal(init?.method, "GET");
+      assert.equal(
+        url,
+        `${BASE}/api/automation/v2/dag/dag-001/results?page=0&limit=20&sortBy=started_at&order=desc&start_time=1775059200&end_time=1775750399`,
+      );
+      return new Response(JSON.stringify({ results: [{ id: "run-002", status: "success" }] }), { status: 200 });
+    };
+
+    const body = await listDataflowRuns({
+      ...COMMON_OPTS,
+      dagId: "dag-001",
+      page: 0,
+      limit: 20,
+      sortBy: "started_at",
+      order: "desc",
+      startTime: 1775059200,
+      endTime: 1775750399,
+    });
+    assert.equal(body.results[0]?.id, "run-002");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -408,7 +444,7 @@ test("getDataflowLogsPage sends GET to the confirmed logs endpoint with paging",
     globalThis.fetch = async (input, init) => {
       const url = typeof input === "string" ? input : (input as URL).toString();
       assert.equal(init?.method, "GET");
-      assert.equal(url, `${BASE}/api/automation/v1/dag/dag-001/result/ins-001?page=0&limit=10`);
+      assert.equal(url, `${BASE}/api/automation/v2/dag/dag-001/result/ins-001?page=0&limit=10`);
       return new Response(JSON.stringify({ results: [{ id: "0", status: "success" }], total: 1 }), { status: 200 });
     };
 

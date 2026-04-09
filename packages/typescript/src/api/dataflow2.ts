@@ -153,7 +153,7 @@ export async function runDataflowWithRemoteUrl(options: RunDataflowWithRemoteUrl
 export async function listDataflowRuns(options: ListDataflowRunsOptions): Promise<DataflowRunsResponse> {
   const { baseUrl, accessToken, businessDomain = "bd_public", dagId } = options;
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/automation/v2/dag/${encodeURIComponent(dagId)}/results?page=0&limit=-1`;
+  const url = `${base}/api/automation/v2/dag/${encodeURIComponent(dagId)}/results?page=0&limit=100`;
   const response = await fetch(url, {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
@@ -164,7 +164,7 @@ export async function listDataflowRuns(options: ListDataflowRunsOptions): Promis
 export async function getDataflowLogsPage(options: GetDataflowLogsPageOptions): Promise<DataflowLogsResponse> {
   const { baseUrl, accessToken, businessDomain = "bd_public", dagId, instanceId, page, limit = 10 } = options;
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/automation/v1/dag/${encodeURIComponent(dagId)}/result/${encodeURIComponent(instanceId)}?page=${page}&limit=${limit}`;
+  const url = `${base}/api/automation/v2/dag/${encodeURIComponent(dagId)}/result/${encodeURIComponent(instanceId)}?page=${page}&limit=${limit}`;
   const response = await fetch(url, {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),

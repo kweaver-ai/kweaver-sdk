@@ -199,7 +199,7 @@ async function vegaRenderResourceDetail($el, catalogId, resourceId) {
       <strong>${esc(resourceId)}</strong>
     </div>`;
 
-  $el.innerHTML = `${breadcrumb}<div class="loading">Loading resource data...</div>`;
+  $el.innerHTML = `${breadcrumb}<div class="loading-skeleton"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div></div>`;
 
   // Load resources list to get schema for this resource
   let schemaFields = [];
@@ -218,7 +218,13 @@ async function vegaRenderResourceDetail($el, catalogId, resourceId) {
     const rawData = await vegaQueryData(resourceId, { limit: 20 });
     dataPreviewHtml = vegaRenderDataPreview(rawData, schemaFields);
   } catch (e) {
-    dataPreviewHtml = `<div class="error-banner">Failed to load data: ${esc(String(e))}</div>`;
+    dataPreviewHtml = `
+      <div class="error-boundary">
+        <div class="error-icon">⚠️</div>
+        <h3>Failed to load data</h3>
+        <p>${esc(String(e))}</p>
+        <button class="retry-btn" onclick="location.reload()">Retry</button>
+      </div>`;
   }
 
   $el.innerHTML = `
@@ -238,14 +244,20 @@ async function renderVega($el, parts, _params) {
   // parts = [catalogId, resourceId] → resource detail + data preview
 
   if (parts.length === 0) {
-    $el.innerHTML = '<div class="loading">Loading Vega catalogs...</div>';
+    $el.innerHTML = '<div class="loading-skeleton"><div class="skeleton skeleton-title"></div><div class="loading-skeleton grid"><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div></div></div>';
     try {
       const data = await vegaLoadCatalogs();
       if (navGeneration !== myGen) return;
       vegaRenderCatalogList($el, data);
     } catch (e) {
       if (navGeneration !== myGen) return;
-      $el.innerHTML = `<div class="error-banner">Failed to load catalogs: ${esc(String(e))}</div>`;
+      $el.innerHTML = `
+        <div class="error-boundary">
+          <div class="error-icon">⚠️</div>
+          <h3>Failed to load catalogs</h3>
+          <p>${esc(String(e))}</p>
+          <button class="retry-btn" onclick="location.reload()">Retry</button>
+        </div>`;
     }
     return;
   }
@@ -253,14 +265,23 @@ async function renderVega($el, parts, _params) {
   const [catalogId, resourceId] = parts;
 
   if (!resourceId) {
-    $el.innerHTML = '<div class="loading">Loading resources...</div>';
+    $el.innerHTML = `
+      <div class="breadcrumb"><a href="#/vega">Catalogs</a> / <strong>${esc(catalogId)}</strong></div>
+      <div class="loading-skeleton"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div></div>`;
     try {
       const data = await vegaLoadResources(catalogId);
       if (navGeneration !== myGen) return;
       vegaRenderResourceList($el, catalogId, data);
     } catch (e) {
       if (navGeneration !== myGen) return;
-      $el.innerHTML = `<div class="error-banner">Failed to load resources: ${esc(String(e))}</div>`;
+      $el.innerHTML = `
+        <div class="breadcrumb"><a href="#/vega">Catalogs</a> / <strong>${esc(catalogId)}</strong></div>
+        <div class="error-boundary">
+          <div class="error-icon">🔒</div>
+          <h3>Permission Denied or Failed to Load Resources</h3>
+          <p>${esc(String(e))}</p>
+          <button class="retry-btn" onclick="location.reload()">Retry</button>
+        </div>`;
     }
     return;
   }

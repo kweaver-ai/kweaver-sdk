@@ -110,7 +110,7 @@ async function renderBkn($el, parts, params) {
 
   // Load BKN meta for this KN
   try {
-    $el.innerHTML = '<div class="loading">Loading knowledge network...</div>';
+    $el.innerHTML = '<div class="loading-skeleton"><div class="skeleton skeleton-title"></div><div class="loading-skeleton grid"><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div></div></div>';
     await loadBknForKn(knId);
   } catch (err) {
     $el.innerHTML = '<div class="error-banner">Failed to load KN: ' + esc(String(err.message || err)) + '</div>';
@@ -136,7 +136,7 @@ async function renderBkn($el, parts, params) {
 // ── KN list view (NEW) ─────────────────────────────────────────────────────
 
 async function renderBknKnList($el, gen) {
-  $el.innerHTML = '<div class="loading">Loading knowledge networks...</div>';
+  $el.innerHTML = '<div class="loading-skeleton"><div class="skeleton skeleton-title"></div><div class="loading-skeleton grid"><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div></div></div>';
 
   let data;
   try {
@@ -244,7 +244,7 @@ async function renderBknOtList($el, knId, otId, gen) {
     '<h1 class="page-title">' + esc(ot.name) + '</h1>' +
     '<p class="page-subtitle">Display key: ' + esc(ot.displayKey) + ' \u00B7 ' + ot.propertyCount + ' properties</p>' +
     '<div id="field-picker"></div>' +
-    '<div id="instance-container"><div class="loading">Loading instances...</div></div>' +
+    '<div id="instance-container"><div class="loading-skeleton"><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div></div></div>' +
     '<div id="pagination-container"></div>';
 
   await bknLoadInstances(knId, otId, ot.displayKey, gen);
@@ -432,7 +432,7 @@ async function renderBknInstance($el, knId, otId, instanceId, gen) {
 
     '<div class="detail-section" id="relations-section">' +
       '<h2>Relations</h2>' +
-      '<div id="relations-loading">Loading relations...</div>' +
+      '<div id="relations-loading"><div class="loading-skeleton"><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div></div></div>' +
     '</div>';
 
   bknLoadRelations(knId, otId, instance, gen);
@@ -507,7 +507,7 @@ async function renderBknSearchView($el, knId, query, gen) {
   $el.innerHTML =
     '<div class="breadcrumb"><a href="#/bkn">BKN</a> / <a href="#/bkn/' + enc(knId) + '">' + esc(knName) + '</a> / Search</div>' +
     '<h1 class="page-title">Search: ' + esc(query) + '</h1>' +
-    '<div id="search-results"><div class="loading">Searching...</div></div>';
+    '<div id="search-results"><div class="loading-skeleton"><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div></div></div>';
 
   if (!query) {
     document.getElementById("search-results").innerHTML = '<p style="color:#666;">Enter a search query.</p>';
@@ -567,7 +567,7 @@ async function renderBknRtDetail($el, knId, rtId, gen) {
       '<a href="#/bkn/' + enc(knId) + '/ot/' + enc(rt.sourceOtId) + '" style="color:var(--accent);text-decoration:none;">' + esc(srcName) + '</a>' +
       ' \u2192 <a href="#/bkn/' + enc(knId) + '/ot/' + enc(rt.targetOtId) + '" style="color:var(--accent);text-decoration:none;">' + esc(tgtName) + '</a>' +
     '</p>' +
-    '<div id="rt-instances"><div class="loading">Loading relations...</div></div>';
+    '<div id="rt-instances"><div class="loading-skeleton"><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div></div></div>';
 
   // Use cached RT results if available
   var results;

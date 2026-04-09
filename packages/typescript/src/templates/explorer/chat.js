@@ -21,6 +21,24 @@ function chatMarkdown(text) {
     return `<pre><code>${inner}</code></pre>`;
   });
 
+  // Agent thoughts
+  s = s.replace(/&lt;(think|thought|thinking)&gt;([\s\S]*?)&lt;\/\1&gt;/gi, function(m, p1, inner) {
+    return `<details class="agent-thoughts"><summary>Agent Thoughts</summary><div class="agent-thoughts-content">${inner}</div></details>`;
+  });
+
+  // Raw JSON array of thoughts
+  s = s.replace(/\[\s*(?:&quot;|")[^\]]+(?:&quot;|")\s*\]/g, (match) => {
+    try {
+      let unescaped = match.replace(/&quot;/g, '"');
+      let arr = JSON.parse(unescaped);
+      if (Array.isArray(arr) && arr.length > 0 && typeof arr[0] === 'string') {
+        let listStr = arr.map(step => `<li>${esc(step)}</li>`).join('');
+        return `<details class="agent-thoughts" open><summary>Decision Process</summary><ul class="agent-thoughts-content">${listStr}</ul></details>`;
+      }
+    } catch(e) {}
+    return match;
+  });
+
   // Inline code `...`
   s = s.replace(/`([^`]+)`/g, (_m, c) => `<code>${c}</code>`);
 
@@ -75,7 +93,7 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
   assistantDiv.className = "chat-bubble chat-bubble-assistant";
   const contentSpan = document.createElement("div");
   contentSpan.className = "chat-bubble-content";
-  contentSpan.innerHTML = '<span class="chat-thinking">Thinking…</span>';
+  contentSpan.innerHTML = '<div class="chat-thinking-pulse"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
   assistantDiv.appendChild(contentSpan);
   $messagesEl.appendChild(assistantDiv);
   $messagesEl.scrollTop = $messagesEl.scrollHeight;
@@ -235,7 +253,7 @@ async function renderChat($el, parts, _params) {
   // Determine target agent from URL parts
   const urlAgentId = parts && parts[0] ? decodeURIComponent(parts[0]) : null;
 
-  $el.innerHTML = '<div class="loading">Loading agents…</div>';
+  $el.innerHTML = '<div class="loading-skeleton"><div class="skeleton skeleton-title"></div><div class="loading-skeleton grid"><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div></div></div>';
 
   let agents;
   try {
@@ -249,7 +267,7 @@ async function renderChat($el, parts, _params) {
   if (navGeneration !== gen) return;
 
   if (!agents || agents.length === 0) {
-    $el.innerHTML = '<div class="error-banner">No published agents found. Publish an agent in KWeaver first.</div>';
+    $el.innerHTML = '<div class="error-banner">No published decision agents found. Publish an agent in KWeaver Core first.</div>';
     return;
   }
 
@@ -264,7 +282,7 @@ async function renderChat($el, parts, _params) {
   $el.innerHTML = `
     <div class="chat-layout">
       <div class="chat-sidebar" id="chat-sidebar">
-        <div class="chat-sidebar-header">Agents</div>
+        <div class="chat-sidebar-header">Decision Agents</div>
         <div class="chat-agent-list" id="chat-agent-list">
           ${agents.map(agent => {
             const id = agent.id || agent.agent_id;

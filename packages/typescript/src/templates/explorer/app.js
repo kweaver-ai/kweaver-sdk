@@ -113,5 +113,22 @@ function navigate() {
 // ---------------------------------------------------------------------------
 window.addEventListener("hashchange", navigate);
 window.addEventListener("DOMContentLoaded", () => {
+  // Theme Toggle
+  const themeToggle = document.getElementById("theme-toggle");
+  if (themeToggle) {
+    const savedTheme = localStorage.getItem("kweaver-theme");
+    if (savedTheme) {
+      document.documentElement.setAttribute("data-theme", savedTheme);
+      themeToggle.textContent = savedTheme === "dark" ? "☀️" : "🌙";
+    }
+    themeToggle.addEventListener("click", () => {
+      const currentTheme = document.documentElement.getAttribute("data-theme");
+      const newTheme = currentTheme === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", newTheme);
+      localStorage.setItem("kweaver-theme", newTheme);
+      themeToggle.textContent = newTheme === "dark" ? "☀️" : "🌙";
+    });
+  }
+
   navigate();
 });

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KWeaver Explorer</title>
+  <title>KWeaver Core</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
@@ -11,15 +11,16 @@
 <body>
   <header id="top-bar">
     <div class="top-bar-left">
-      <span class="logo">⬡ KWeaver Explorer</span>
+      <span class="logo">⬡ KWeaver Core</span>
     </div>
     <nav id="tab-bar">
       <a class="tab" href="#/" data-tab="dashboard">Dashboard</a>
-      <a class="tab" href="#/chat" data-tab="chat">Chat</a>
+      <a class="tab" href="#/chat" data-tab="chat">Decision Agents</a>
       <a class="tab" href="#/bkn" data-tab="bkn">BKN</a>
       <a class="tab" href="#/vega" data-tab="vega">Vega</a>
     </nav>
     <div class="top-bar-right">
+      <button id="theme-toggle" class="theme-toggle" style="background: none; border: none; cursor: pointer; font-size: 16px; margin-right: 12px;" title="Toggle Dark Mode">🌙</button>
       <span id="env-label"></span>
     </div>
   </header>

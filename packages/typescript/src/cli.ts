@@ -5,6 +5,7 @@ import { runKnCommand } from "./commands/bkn.js";
 import { runCallCommand } from "./commands/call.js";
 import { runConfigCommand } from "./commands/config.js";
 import { runContextLoaderCommand } from "./commands/context-loader.js";
+import { runDataflowCommand } from "./commands/dataflow.js";
 import { runDsCommand } from "./commands/ds.js";
 import { runDataviewCommand } from "./commands/dataview.js";
 import { runSkillCommand } from "./commands/skill.js";
@@ -55,6 +56,11 @@ Usage:
   kweaver ds delete <id> [-y]
   kweaver ds tables <id> [--keyword X] [--pretty]
   kweaver ds connect <db_type> <host> <port> <database> --account X --password Y [--schema S] [--name N]
+
+  kweaver dataflow list [-bd value]
+  kweaver dataflow run <dagId> (--file <path> | --url <remote-url> --name <filename>) [-bd value]
+  kweaver dataflow runs <dagId> [-bd value]
+  kweaver dataflow logs <dagId> <instanceId> [-bd value]
 
   kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value] [--pretty]
   kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value] [--pretty]
@@ -115,6 +121,7 @@ Commands:
   call (curl)    Call an API with curl-style flags and auto-injected token headers
   agent          Agent CRUD, chat, sessions, history, publish/unpublish
   ds             Manage datasources (list, get, delete, tables, connect)
+  dataflow       Dataflow document workflows (list, run, runs, logs)
   dataview|dv    List, find, get, query (SQL), delete data views (atomic / custom)
   bkn            Knowledge network (CRUD, build, validate, export, stats, push/pull,
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
@@ -161,6 +168,10 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "ds") {
     return runDsCommand(rest);
+  }
+
+  if (command === "dataflow") {
+    return runDataflowCommand(rest);
   }
 
   if (command === "dataview" || command === "dv") {

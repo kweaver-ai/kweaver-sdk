@@ -122,7 +122,7 @@ export async function runDataflowWithFile(options: RunDataflowWithFileOptions): 
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/automation/v2/dataflow-doc/trigger/${encodeURIComponent(dagId)}`;
   const form = new FormData();
-  form.set("file", new Blob([fileBytes]), fileName);
+  form.set("file", new Blob([fileBytes as unknown as ArrayBufferView<ArrayBuffer>]), fileName);
   const response = await fetch(url, {
     method: "POST",
     headers: buildHeaders(accessToken, businessDomain),

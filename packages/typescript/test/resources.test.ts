@@ -355,12 +355,3 @@ test("vega.getResource returns parsed object", async () => {
   }
 });
 
-test("vega.listDiscoverTasks returns array", async () => {
-  const mock = mockFetch({ entries: [{ id: "task-1", status: "success" }] });
-  try {
-    const result = await makeClient().vega.listDiscoverTasks();
-    assert.deepEqual(result, [{ id: "task-1", status: "success" }]);
-  } finally {
-    mock.restore();
-  }
-});

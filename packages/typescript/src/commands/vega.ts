@@ -23,8 +23,6 @@ import {
   updateVegaConnectorType,
   deleteVegaConnectorType,
   setVegaConnectorTypeEnabled,
-  listVegaDiscoverTasks,
-  getVegaDiscoverTask,
   createVegaDatasetDocs,
   updateVegaDatasetDocs,
   deleteVegaDatasetDocs,
@@ -77,9 +75,6 @@ Subcommands:
   connector-type update <type> -d <json>  Update connector type
   connector-type delete <type> [-y]   Delete connector type
   connector-type enable <type> --enabled <bool>  Enable/disable connector type
-  discovery-task list [--status X] [--limit N]
-  discovery-task get <id>
-
 Common flags:
   -bd, --biz-domain <s>   Business domain (default: bd_public)
   --pretty                Pretty-print JSON (default)`);
@@ -147,7 +142,6 @@ export async function runVegaCommand(args: string[]): Promise<number> {
     if (subcommand === "dataset") return runVegaDatasetCommand(rest);
     if (subcommand === "query") return runVegaQueryCommand(rest);
     if (subcommand === "connector-type") return runVegaConnectorTypeCommand(rest);
-    if (subcommand === "discovery-task") return runVegaDiscoveryTaskCommand(rest);
     return Promise.resolve(-1);
   };
 
@@ -226,7 +220,7 @@ async function runVegaStatsCommand(args: string[]): Promise<number> {
 
 async function runVegaInspectCommand(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega inspect\n\nHealth + catalog summary + running discover tasks.");
+    console.log("kweaver vega inspect\n\nHealth + catalog summary.");
     return 0;
   }
 
@@ -254,17 +248,6 @@ async function runVegaInspectCommand(args: string[]): Promise<number> {
   } catch (err) {
     console.error(`warn: catalog list failed: ${err instanceof Error ? err.message : String(err)}`);
     result.catalog_count = null;
-  }
-
-  // Running discover tasks — best-effort
-  try {
-    const tasksBody = await listVegaDiscoverTasks({ ...base, status: "running" });
-    const parsed = JSON.parse(tasksBody) as Record<string, unknown>;
-    const entries = Array.isArray(parsed) ? parsed : (parsed.entries ?? parsed.data ?? parsed.items ?? parsed.tasks ?? []);
-    result.running_discover_tasks = Array.isArray(entries) ? entries.length : 0;
-  } catch (err) {
-    console.error(`warn: discover tasks query failed: ${err instanceof Error ? err.message : String(err)}`);
-    result.running_discover_tasks = null;
   }
 
   console.log(pretty ? JSON.stringify(result, null, 2) : JSON.stringify(result));
@@ -1683,91 +1666,3 @@ async function runConnectorTypeEnable(args: string[]): Promise<number> {
   return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Discovery-task router
-// ---------------------------------------------------------------------------
-
-async function runVegaDiscoveryTaskCommand(args: string[]): Promise<number> {
-  const [sub, ...rest] = args;
-
-  if (!sub || sub === "--help" || sub === "-h") {
-    console.log(`kweaver vega discovery-task
-
-Subcommands:
-  list [--status X] [--limit N]
-  get <id>`);
-    return 0;
-  }
-
-  if (sub === "list") return await runDiscoveryTaskList(rest);
-  if (sub === "get") return await runDiscoveryTaskGet(rest);
-
-  console.error(`Unknown discovery-task subcommand: ${sub}`);
-  return 1;
-}
-
-// ---------------------------------------------------------------------------
-// discovery-task list
-// ---------------------------------------------------------------------------
-
-async function runDiscoveryTaskList(args: string[]): Promise<number> {
-  if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega discovery-task list [options]
-
-Options:
-  --catalog-id <cid>  Filter by catalog (reserved)
-  --status <s>        Filter by status
-  --limit <n>         Max results`);
-    return 0;
-  }
-
-  let status: string | undefined;
-  let limit: number | undefined;
-  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
-
-  for (let i = 0; i < remaining.length; i += 1) {
-    const arg = remaining[i];
-    if (arg === "--status" && remaining[i + 1]) { status = remaining[++i]; continue; }
-    if (arg === "--limit" && remaining[i + 1]) { limit = parseInt(remaining[++i], 10); continue; }
-    if (arg === "--catalog-id" && remaining[i + 1]) { remaining[++i]; continue; }
-  }
-
-  const token = await ensureValidToken();
-  const body = await listVegaDiscoverTasks({
-    baseUrl: token.baseUrl,
-    accessToken: token.accessToken,
-    status,
-    limit,
-    businessDomain,
-  });
-  console.log(formatCallOutput(body, pretty));
-  return 0;
-}
-
-// ---------------------------------------------------------------------------
-// discovery-task get
-// ---------------------------------------------------------------------------
-
-async function runDiscoveryTaskGet(args: string[]): Promise<number> {
-  if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega discovery-task get <id>");
-    return 0;
-  }
-
-  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
-  const id = remaining.find((a) => !a.startsWith("-"));
-  if (!id) {
-    console.error("Usage: kweaver vega discovery-task get <id>");
-    return 1;
-  }
-
-  const token = await ensureValidToken();
-  const body = await getVegaDiscoverTask({
-    baseUrl: token.baseUrl,
-    accessToken: token.accessToken,
-    id,
-    businessDomain,
-  });
-  console.log(formatCallOutput(body, pretty));
-  return 0;
-}

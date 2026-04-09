@@ -3,7 +3,7 @@ from kweaver.types import (
     VegaServerInfo, VegaCatalog, VegaResource, VegaResourceProperty,
     VegaConnectorType, VegaMetricModel, VegaEventModel, VegaTraceModel,
     VegaDataView, VegaDataDict, VegaDataDictItem, VegaObjectiveModel,
-    VegaDiscoverTask, VegaMetricTask, VegaSpan,
+    VegaMetricTask, VegaSpan,
     VegaQueryResult, VegaDslResult, VegaPromqlResult,
     VegaHealthReport, VegaPlatformStats, VegaInspectReport,
 )
@@ -31,10 +31,6 @@ def test_vega_model_types():
     VegaDataView(id="dv-1", name="view1")
     VegaDataDict(id="dd-1", name="status_codes")
     VegaObjectiveModel(id="om-1", name="sla")
-
-def test_vega_discover_task():
-    t = VegaDiscoverTask(id="dt-1", catalog_id="c-1", status="running")
-    assert t.progress is None
 
 def test_vega_query_results():
     VegaQueryResult(entries=[{"a": 1}], total_count=1)

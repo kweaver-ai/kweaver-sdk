@@ -28,8 +28,6 @@
     "start": "node ./dist/cli.js",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",
-    "test:e2e": "node --import tsx test/e2e/ensure-token.ts && node --import tsx --test --test-concurrency=1 test/e2e/**/*.test.ts",
-    "test:e2e:strict": "node test/e2e/run-e2e-strict.mjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

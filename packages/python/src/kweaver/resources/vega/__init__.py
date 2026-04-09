@@ -96,14 +96,7 @@ class VegaNamespace:
         except Exception as exc:
             logger.debug("inspect: failed to fetch catalogs: %s", exc)
 
-        active_tasks = []
-        try:
-            active_tasks = self.tasks.list_discover(status="running")
-        except Exception as exc:
-            logger.debug("inspect: failed to fetch tasks: %s", exc)
-
         return VegaInspectReport(
             server_info=server_info,
             catalog_health=catalog_health,
-            active_tasks=active_tasks,
         )

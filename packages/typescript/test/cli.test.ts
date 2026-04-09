@@ -729,6 +729,31 @@ test("parseKnObjectTypeQueryArgs validates --search-after json array", () => {
   );
 });
 
+test("parseKnObjectTypeQueryArgs rejects unrecognized top-level keys", () => {
+  assert.throws(
+    () => parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"material_number":"130-000238"}']),
+    /Unrecognized top-level key.*"material_number"/
+  );
+});
+
+test("parseKnObjectTypeQueryArgs rejects multiple unrecognized keys with hint", () => {
+  assert.throws(
+    () => parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"status":"active","price":100}']),
+    /Unrecognized top-level key.*"status".*"price"/
+  );
+});
+
+test("parseKnObjectTypeQueryArgs accepts valid top-level keys", () => {
+  const opts = parseKnObjectTypeQueryArgs([
+    "kn-123",
+    "pod",
+    '{"limit":20,"condition":{"field":"name","operation":"==","value":"test"}}',
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.strictEqual(body.limit, 20);
+  assert.deepEqual(body.condition, { field: "name", operation: "==", value: "test" });
+});
+
 test("parseAgentListArgs parses flags with defaults", () => {
   const opts = parseAgentListArgs([]);
   assert.equal(opts.name, "");

@@ -174,6 +174,32 @@ export function parseKnObjectTypeQueryArgs(args: string[]): KnObjectTypeQueryOpt
   }
 
   const body = parseJsonObject(bodyText, "object-type query body must be a JSON object.");
+
+  // Reject unrecognized top-level keys to prevent silent wrong results (#49)
+  const KNOWN_QUERY_KEYS = new Set([
+    "limit",
+    "condition",
+    "search_after",
+    "fields",
+    "order_by",
+    "include_type_info",
+    "include_logic_params",
+    "exclude_system_properties",
+  ]);
+  const unknownKeys = Object.keys(body).filter((k) => !KNOWN_QUERY_KEYS.has(k));
+  if (unknownKeys.length > 0) {
+    const keyList = unknownKeys.map((k) => `"${k}"`).join(", ");
+    const hint =
+      unknownKeys.length === 1
+        ? `Example: {"limit":20,"condition":{"field":${JSON.stringify(unknownKeys[0])},"operation":"==","value":"<your-value>"}}`
+        : `Example: {"limit":20,"condition":{"operation":"and","sub_conditions":[${unknownKeys.map((k) => `{"field":${JSON.stringify(k)},"operation":"==","value":"<value>"}`).join(",")}]}}`;
+    throw new Error(
+      `Unrecognized top-level key(s) ${keyList} in query body.\n` +
+        `Did you mean to use a condition filter?\n` +
+        hint
+    );
+  }
+
   if (limit !== undefined) {
     body.limit = limit;
   }

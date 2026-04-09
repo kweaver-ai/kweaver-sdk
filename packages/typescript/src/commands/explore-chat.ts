@@ -85,7 +85,7 @@ export function registerChatRoutes(
           baseUrl: token.baseUrl,
           accessToken: token.accessToken,
           agentId,
-          version: version ?? "1",
+          version: version ?? "v0",
           businessDomain,
         }),
       );

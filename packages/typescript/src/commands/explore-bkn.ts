@@ -9,6 +9,7 @@ import {
 } from "../api/knowledge-networks.js";
 import { objectTypeQuery, objectTypeProperties, subgraph } from "../api/ontology-query.js";
 import { semanticSearch } from "../api/semantic-search.js";
+import { with401RefreshRetry } from "../auth/oauth.js";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -249,19 +250,47 @@ export async function loadExploreMetaWithRetry(
 
 // ── HTTP helpers ────────────────────────────────────────────────────────────
 
+const MAX_BODY_BYTES = 1024 * 1024; // 1 MB
+
 export function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let size = 0;
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
   });
 }
 
-function jsonResponse(res: ServerResponse, status: number, data: unknown): void {
+export function jsonResponse(res: ServerResponse, status: number, data: unknown): void {
   const body = JSON.stringify(data);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(body);
+}
+
+export function handleApiError(res: ServerResponse, error: unknown): void {
+  if (error instanceof HttpError) {
+    let detail = "";
+    try {
+      const parsed = JSON.parse(error.body) as Record<string, unknown>;
+      detail = typeof parsed.description === "string" ? parsed.description : "";
+    } catch { /* ignore */ }
+    jsonResponse(res, error.status, {
+      error: detail || error.message,
+      upstream_status: error.status,
+    });
+  } else {
+    const message = error instanceof Error ? error.message : String(error);
+    jsonResponse(res, 500, { error: message });
+  }
 }
 
 // ── BKN route handlers ──────────────────────────────────────────────────────
@@ -294,57 +323,33 @@ export function registerBknRoutes(
         ...(body.condition ? { condition: body.condition } : {}),
         ...(body._instance_identities ? { _instance_identities: body._instance_identities } : {}),
       });
-      const result = await objectTypeQuery({
-        baseUrl: token.baseUrl,
-        accessToken: token.accessToken,
-        knId,
-        otId: body.otId,
-        body: queryBody,
-        businessDomain,
-      });
+      const result = await with401RefreshRetry(() =>
+        objectTypeQuery({
+          baseUrl: token.baseUrl, accessToken: token.accessToken,
+          knId, otId: body.otId, body: queryBody, businessDomain,
+        }));
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(result);
     } catch (error) {
-      if (error instanceof HttpError) {
-        let detail = "";
-        try {
-          const parsed = JSON.parse(error.body) as Record<string, unknown>;
-          detail = typeof parsed.description === "string" ? parsed.description : "";
-        } catch { /* ignore */ }
-        jsonResponse(res, error.status, {
-          error: detail || error.message,
-          upstream_status: error.status,
-        });
-      } else {
-        const message = error instanceof Error ? error.message : String(error);
-        jsonResponse(res, 500, { error: message });
-      }
+      handleApiError(res, error);
     }
   });
 
   routes.set("POST /api/bkn/subgraph", async (req, res) => {
-    const bodyStr = await readBody(req);
-    console.error("[subgraph] request body:", bodyStr);
     try {
+      const bodyStr = await readBody(req);
       const parsed = JSON.parse(bodyStr);
       const hasRelationPaths = Array.isArray(parsed.relation_type_paths);
-      const result = await subgraph({
-        baseUrl: token.baseUrl,
-        accessToken: token.accessToken,
-        knId,
-        body: bodyStr,
-        businessDomain,
-        ...(hasRelationPaths ? { queryType: "relation_path" } : {}),
-      });
+      const result = await with401RefreshRetry(() =>
+        subgraph({
+          baseUrl: token.baseUrl, accessToken: token.accessToken,
+          knId, body: bodyStr, businessDomain,
+          ...(hasRelationPaths ? { queryType: "relation_path" } : {}),
+        }));
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(result);
-    } catch (err: unknown) {
-      const e = err as { status?: number; body?: string; message?: string };
-      console.error("[subgraph] error:", e.status, e.body ?? e.message);
-      const status = e.status ?? 500;
-      const errBody = e.body ?? e.message ?? "subgraph error";
-      res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ error: typeof errBody === "string" ? errBody : JSON.stringify(errBody) }));
+    } catch (error) {
+      handleApiError(res, error);
     }
   });
 
@@ -352,31 +357,16 @@ export function registerBknRoutes(
     try {
       const bodyStr = await readBody(req);
       const body = JSON.parse(bodyStr) as { query: string; maxConcepts?: number };
-      const result = await semanticSearch({
-        baseUrl: token.baseUrl,
-        accessToken: token.accessToken,
-        knId,
-        query: body.query,
-        businessDomain,
-        maxConcepts: body.maxConcepts,
-      });
+      const result = await with401RefreshRetry(() =>
+        semanticSearch({
+          baseUrl: token.baseUrl, accessToken: token.accessToken,
+          knId, query: body.query, businessDomain,
+          maxConcepts: body.maxConcepts,
+        }));
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(result);
     } catch (error) {
-      if (error instanceof HttpError) {
-        let detail = "";
-        try {
-          const parsed = JSON.parse(error.body) as Record<string, unknown>;
-          detail = typeof parsed.description === "string" ? parsed.description : "";
-        } catch { /* ignore */ }
-        jsonResponse(res, error.status, {
-          error: detail || error.message,
-          upstream_status: error.status,
-        });
-      } else {
-        const message = error instanceof Error ? error.message : String(error);
-        jsonResponse(res, 500, { error: message });
-      }
+      handleApiError(res, error);
     }
   });
 
@@ -385,31 +375,15 @@ export function registerBknRoutes(
       const bodyStr = await readBody(req);
       const body = JSON.parse(bodyStr) as { otId: string; [key: string]: unknown };
       const { otId, ...rest } = body;
-      const result = await objectTypeProperties({
-        baseUrl: token.baseUrl,
-        accessToken: token.accessToken,
-        knId,
-        otId,
-        body: JSON.stringify(rest),
-        businessDomain,
-      });
+      const result = await with401RefreshRetry(() =>
+        objectTypeProperties({
+          baseUrl: token.baseUrl, accessToken: token.accessToken,
+          knId, otId, body: JSON.stringify(rest), businessDomain,
+        }));
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(result);
     } catch (error) {
-      if (error instanceof HttpError) {
-        let detail = "";
-        try {
-          const parsed = JSON.parse(error.body) as Record<string, unknown>;
-          detail = typeof parsed.description === "string" ? parsed.description : "";
-        } catch { /* ignore */ }
-        jsonResponse(res, error.status, {
-          error: detail || error.message,
-          upstream_status: error.status,
-        });
-      } else {
-        const message = error instanceof Error ? error.message : String(error);
-        jsonResponse(res, 500, { error: message });
-      }
+      handleApiError(res, error);
     }
   });
 

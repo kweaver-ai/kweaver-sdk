@@ -4,7 +4,7 @@ import { HttpError } from "../utils/http.js";
 import { listAgents } from "../api/agent-list.js";
 import { fetchAgentInfo, sendChatRequestStream } from "../api/agent-chat.js";
 import { with401RefreshRetry } from "../auth/oauth.js";
-import { readBody } from "./explore-bkn.js";
+import { readBody, handleApiError } from "./explore-bkn.js";
 
 // ── Chat route handlers ──────────────────────────────────────────────────────
 
@@ -27,14 +27,7 @@ export function registerChatRoutes(
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(raw);
     } catch (error) {
-      if (error instanceof HttpError) {
-        res.writeHead(error.status, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: error.message, upstream_status: error.status }));
-      } else {
-        const message = error instanceof Error ? error.message : String(error);
-        res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: message }));
-      }
+      handleApiError(res, error);
     }
   });
 
@@ -90,14 +83,7 @@ export function registerChatRoutes(
         }),
       );
     } catch (error) {
-      if (error instanceof HttpError) {
-        res.writeHead(error.status, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: error.message, upstream_status: error.status }));
-      } else {
-        const message2 = error instanceof Error ? error.message : String(error);
-        res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: message2 }));
-      }
+      handleApiError(res, error);
       return;
     }
 

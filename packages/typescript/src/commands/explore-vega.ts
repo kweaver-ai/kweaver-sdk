@@ -1,6 +1,5 @@
 import { IncomingMessage, ServerResponse } from "node:http";
 
-import { HttpError } from "../utils/http.js";
 import {
   listVegaCatalogs,
   vegaCatalogHealthStatus,
@@ -9,32 +8,7 @@ import {
   listVegaDiscoverTasks,
 } from "../api/vega.js";
 import { with401RefreshRetry } from "../auth/oauth.js";
-import { readBody } from "./explore-bkn.js";
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function jsonResponse(res: ServerResponse, status: number, data: unknown): void {
-  const body = JSON.stringify(data);
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  res.end(body);
-}
-
-function handleError(res: ServerResponse, error: unknown): void {
-  if (error instanceof HttpError) {
-    let detail = "";
-    try {
-      const parsed = JSON.parse(error.body) as Record<string, unknown>;
-      detail = typeof parsed.description === "string" ? parsed.description : "";
-    } catch { /* ignore */ }
-    jsonResponse(res, error.status, {
-      error: detail || error.message,
-      upstream_status: error.status,
-    });
-  } else {
-    const message = error instanceof Error ? error.message : String(error);
-    jsonResponse(res, 500, { error: message });
-  }
-}
+import { readBody, jsonResponse, handleApiError } from "./explore-bkn.js";
 
 // ── Vega route handlers ──────────────────────────────────────────────────────
 
@@ -77,7 +51,7 @@ export function registerVegaRoutes(
 
       jsonResponse(res, 200, { catalogs, health });
     } catch (error) {
-      handleError(res, error);
+      handleApiError(res, error);
     }
   });
 
@@ -100,7 +74,7 @@ export function registerVegaRoutes(
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(raw);
     } catch (error) {
-      handleError(res, error);
+      handleApiError(res, error);
     }
   });
 
@@ -125,7 +99,7 @@ export function registerVegaRoutes(
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(raw);
     } catch (error) {
-      handleError(res, error);
+      handleApiError(res, error);
     }
   });
 
@@ -142,7 +116,7 @@ export function registerVegaRoutes(
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(raw);
     } catch (error) {
-      handleError(res, error);
+      handleApiError(res, error);
     }
   });
 

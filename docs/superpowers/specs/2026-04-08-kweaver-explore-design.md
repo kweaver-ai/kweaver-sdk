@@ -61,14 +61,13 @@ HTTP Server (:3721)
 │
 ├── Chat endpoints (new)
 │   ├── GET  /api/chat/agents             → Agent list
-│   ├── POST /api/chat/send               → Send message (streaming SSE)
-│   └── GET  /api/chat/history            → Conversation history
+│   └── POST /api/chat/send               → Send message (streaming SSE)
+│   (Chat history managed in-memory on frontend, no backend endpoint)
 │
 └── Vega endpoints (new)
     ├── GET  /api/vega/catalogs           → Catalog list + health status
-    ├── GET  /api/vega/catalogs/:id/resources → Resource list
-    ├── POST /api/vega/query              → Data preview query
-    └── GET  /api/vega/tasks              → Discover task progress
+    ├── GET  /api/vega/catalog-resources?catalogId=<id> → Resource list
+    └── POST /api/vega/query              → Data preview query
 ```
 
 ### Token Management

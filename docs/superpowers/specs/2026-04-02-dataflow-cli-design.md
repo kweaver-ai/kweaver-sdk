@@ -135,7 +135,7 @@ GET /api/automation/v2/dag/{dag_id}/results?page=0&limit=-1
 
 ### Get run logs
 
-The logs subcommand will call the run-log endpoint for a single `dagId` and `instanceId`, always requesting the full result set with `page=0&limit=-1`.
+The logs subcommand will call the run-log endpoint for a single `dagId` and `instanceId`, fetching logs page by page with a fixed backend page size of `10` until all results are consumed.
 
 The exact path should be confirmed against the backend contract during implementation and documented in the command help and tests.
 
@@ -273,14 +273,43 @@ Source response example:
 Behavior:
 
 - fetch all logs for one run
-- fixed request parameters: `page=0`, `limit=-1`
-- print raw JSON through the existing pretty JSON formatter path
+- do not expose pagination flags to the user
+- fetch logs internally with fixed paging, `limit=10`
+- increment `page` until all log entries are printed
+- print each log entry as a compact three-line block instead of raw JSON
 
 Output mode:
 
-- keep the full response body
-- do not reduce it to a list summary
+- print one summary line
+- print one `input:` line
+- print one `output:` line
+- separate log entries with a blank line
 - do not add `--follow` in the first version
+
+Suggested display format:
+
+```text
+[0] success @trigger/dataflow-doc started_at=1775616541 updated_at=1775616541 duration=0 taskId=0
+input: {}
+output: {"_type":"file","content_type":"application/pdf","name":"Lewis_Hamilton.pdf","size":5930061,"status":"ready"}
+```
+
+Summary line fields:
+
+- `id`
+- `status`
+- `operator`
+- `started_at`
+- `updated_at`
+- `duration`, from `metadata.duration`, fallback to `-`
+- `taskId`
+
+Additional formatting rules:
+
+- serialize `inputs` as single-line JSON after `input: `
+- serialize `outputs` as single-line JSON after `output: `
+- do not pretty-print nested JSON blocks for logs output
+- preserve field values without reducing the `inputs` or `outputs` objects
 
 Source response example:
 
@@ -365,7 +394,7 @@ Avoid large shared abstractions or attempts to unify old and new dataflow protoc
 
 - `run` prints only `dag_instance_id` on success
 - `list` and `runs` print concise list summaries
-- `logs` prints full JSON
+- `logs` prints compact three-line log blocks assembled from paged results
 
 ## Testing Plan
 
@@ -381,8 +410,9 @@ Unit tests should cover:
 - `run` rejects unreadable local files
 - `list` renders the selected list fields from `dags`
 - `runs` renders the selected list fields from `results`
-- `logs` prints the full JSON response
-- request builders use fixed `page=0&limit=-1` for list, runs, and logs
+- `logs` renders summary, input, and output lines for each log record
+- logs fetching loops over backend pages with fixed `limit=10`
+- request builders use fixed `page=0&limit=-1` for list and runs
 
 ## Documentation Impact
 

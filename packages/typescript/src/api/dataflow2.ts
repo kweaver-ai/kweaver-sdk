@@ -89,6 +89,12 @@ export interface RunDataflowWithRemoteUrlOptions extends BaseOptions {
 
 export interface ListDataflowRunsOptions extends BaseOptions {
   dagId: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  order?: string;
+  startTime?: number;
+  endTime?: number;
 }
 
 export interface GetDataflowLogsPageOptions extends BaseOptions {
@@ -151,10 +157,28 @@ export async function runDataflowWithRemoteUrl(options: RunDataflowWithRemoteUrl
 }
 
 export async function listDataflowRuns(options: ListDataflowRunsOptions): Promise<DataflowRunsResponse> {
-  const { baseUrl, accessToken, businessDomain = "bd_public", dagId } = options;
+  const {
+    baseUrl,
+    accessToken,
+    businessDomain = "bd_public",
+    dagId,
+    page = 0,
+    limit = 100,
+    sortBy,
+    order,
+    startTime,
+    endTime,
+  } = options;
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/automation/v2/dag/${encodeURIComponent(dagId)}/results?page=0&limit=100`;
-  const response = await fetch(url, {
+  const url = new URL(`${base}/api/automation/v2/dag/${encodeURIComponent(dagId)}/results`);
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("limit", String(limit));
+  if (sortBy) url.searchParams.set("sortBy", sortBy);
+  if (order) url.searchParams.set("order", order);
+  if (startTime != null) url.searchParams.set("start_time", String(startTime));
+  if (endTime != null) url.searchParams.set("end_time", String(endTime));
+
+  const response = await fetch(url.toString(), {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
   });

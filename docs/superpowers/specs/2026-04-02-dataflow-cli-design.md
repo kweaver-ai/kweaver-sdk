@@ -137,7 +137,11 @@ GET /api/automation/v2/dag/{dag_id}/results?page=0&limit=-1
 
 The logs subcommand will call the run-log endpoint for a single `dagId` and `instanceId`, fetching logs page by page with a fixed backend page size of `10` until all results are consumed.
 
-The exact path should be confirmed against the backend contract during implementation and documented in the command help and tests.
+Confirmed endpoint:
+
+```http
+GET /api/automation/v1/dag/{dag_id}/result/{dag_ins_id}?page={page}&limit=10
+```
 
 ## Command Contracts
 

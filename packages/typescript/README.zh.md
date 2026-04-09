@@ -138,6 +138,7 @@ kweaver auth status/list/use/delete/logout
 kweaver config show / list-bd / set-bd <value>   # 平台业务域，登录后优先
 kweaver token
 kweaver ds list/get/delete/tables/connect
+kweaver dataflow list/run/runs/logs
 kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
@@ -151,6 +152,16 @@ kweaver skill list/market/get/register/status/delete/content/read-file/download/
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]
+```
+
+### Dataflow CLI 示例
+
+```bash
+kweaver dataflow list
+kweaver dataflow run <dagId> --file ./demo.pdf
+kweaver dataflow run <dagId> --url https://example.com/demo.pdf --name demo.pdf
+kweaver dataflow runs <dagId>
+kweaver dataflow logs <dagId> <instanceId>
 ```
 
 ## 环境变量

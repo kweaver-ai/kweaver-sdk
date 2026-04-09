@@ -3,11 +3,13 @@ name: kweaver-core
 description: >-
   操作 KWeaver 知识网络与 Decision Agent — 构建知识网络、查询 Schema/实例、
   语义搜索、执行 Action、Agent CRUD 与对话、Trace 数据分析。
+  操作 Dataflow 文档流程 — 列出流程、触发运行、查询运行历史、查看步骤日志。
   操作 Skill 管理模块 — 注册 Skill、市场查找、渐进式读取、下载与安装。
   操作 Vega 可观测平台 — 查询 Catalog/资源/连接器类型、健康巡检。
   当用户提到"知识网络"、"知识图谱"、"查询对象类"、
   "执行 Action"、"有哪些 Agent"、"创建 Agent"、"跟 Agent 对话"、"列出所有 Agent 模板"、"列出我创建的Agent"、
-  "列出私人空间的Agent"、"Skill"、"技能包"、"注册 Skill"、"安装 Skill"、"读取 SKILL.md"、
+  "列出私人空间的Agent"、"dataflow"、"数据流"、"流程编排"、"流程运行记录"、"流程日志"、
+  "触发 dataflow"、"查看 dataflow 运行历史"、"Skill"、"技能包"、"注册 Skill"、"安装 Skill"、"读取 SKILL.md"、
   "数据源"、"数据视图"、"原子视图"、"Catalog"、"Vega"、
   "健康检查"、"巡检"、"trace"、"证据链"、"数据流追踪"、"数据来源"、"数据怎么得到的"等意图时自动使用。
 allowed-tools: Bash(kweaver *), Bash(npx kweaver *)
@@ -67,6 +69,7 @@ kweaver [--user <userId|username>] <command> [subcommand] [options]
 | `agent` | Agent CRUD、发布、对话、Trace、模板、分类 | `agent list`, `agent get <id>`, `agent create --name <n> --profile <p> --config <json>`, `agent publish <id> --category-id <cid>`, `agent chat <id> -m "..."`、`agent category-list`, `agent template-list`, `agent template-get <tpl_id>`、`agent sessions <agent_id>`、`agent history <conversation_id>`、`agent trace <conversation_id>` | `references/agent.md` |
 | `ds` | 数据源管理 | `ds list`, `ds get <id>`, `ds import-csv <ds_id> --files <glob> [--recreate]` | `references/ds.md` |
 | `dataview` | 原子/自定义数据视图（mdl-data-model） | `dataview list`、`find --name`、`get`、`query`（SQL / mdl-uniquery）、`delete` | `references/dataview.md` |
+| `dataflow` | Dataflow 文档流程 | `dataflow list`, `dataflow run <dagId> --file <path>`, `dataflow run <dagId> --url <remote-url> --name <filename>`, `dataflow runs <dagId> [--since <date-like>]`, `dataflow logs <dagId> <instanceId> [--detail]` | `references/dataflow.md` |
 | `skill` | Skill 注册、市场查找、渐进式读取、下载与安装 | `skill list`、`market`、`register --zip-file`、`content`、`read-file`、`install` | `references/skill.md` |
 | `vega` | Vega 可观测平台 | `vega health`, `vega catalog list`, `vega resource list` | `references/vega.md` |
 | `context-loader` | MCP 分层检索 | `context-loader config show`, `context-loader kn-search <query>` | `references/context-loader.md` |
@@ -80,6 +83,7 @@ kweaver [--user <userId|username>] <command> [subcommand] [options]
 | 从数据库/CSV 构建 KN | 连接数据源 → CSV 导入 → 创建 KN → 构建索引 → 查询验证 → 绑定 Agent | [references/build-kn-from-db.md](references/build-kn-from-db.md) |
 | CLI 排障速查 | 权限、pull、build、import、dataview SQL 等 | [references/troubleshooting.md](references/troubleshooting.md) |
 | 列/查数据视图 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 对视图跑 SQL | [references/dataview.md](references/dataview.md) |
+| 管理 Dataflow 文档流程 | `list` 看 DAG；`run` 触发本地文件或远程 URL；`runs --since` 看自然日运行记录；`logs --detail` 查步骤载荷 | [references/dataflow.md](references/dataflow.md) |
 | Trace 数据分析 | `agent trace <conversation_id>` 获取 trace 数据，构建证据链 | — |
 | 管理 Skill | `list` / `market` 查找 Skill；`content` / `read-file` 渐进式读取；`install` 下载并解压本地使用 | [references/skill.md](references/skill.md) |
 
@@ -94,6 +98,10 @@ kweaver [--user <userId|username>] <command> [subcommand] [options]
 /kweaver-core 跟 Agent xxx 对话，问他"今天库存情况"
 /kweaver-core 搜索知识网络 xxx 中关于"供应链"的内容
 /kweaver-core 用 dataview find 模糊搜索名字含 BOM 的数据视图
+/kweaver-core 列出所有 dataflow
+/kweaver-core 触发 dataflow 123，上传本地文件 ./demo.pdf
+/kweaver-core 查看 dataflow 123 在 2026-04-01 的运行记录
+/kweaver-core 查看 dataflow 123 的实例 456 日志，并展开 input output
 /kweaver-core 列出所有 Agent 模板
 /kweaver-core 基于 "数据分析助手" 模板创建一个新的 Agent
 /kweaver-core 在 skill market 里查找名字包含 kweaver 的 skill

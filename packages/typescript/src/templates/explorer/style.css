@@ -1696,3 +1696,150 @@ ul.agent-thoughts-content {
 ul.agent-thoughts-content li {
   margin-bottom: 6px;
 }
+
+/* ── Trace Section ────────────────────────────────────────────────────────── */
+
+.trace-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  font-size: 13px;
+}
+
+.trace-header {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.trace-header:hover {
+  color: var(--text);
+}
+
+.trace-toggle {
+  display: inline-block;
+  transition: transform 0.2s;
+  margin-right: 4px;
+  font-size: 10px;
+}
+
+.trace-expanded .trace-toggle {
+  transform: rotate(90deg);
+}
+
+.trace-body {
+  display: none;
+  padding: 4px 0 4px 8px;
+}
+
+.trace-expanded .trace-body {
+  display: block;
+}
+
+.trace-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trace-step {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.trace-step-icon {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.trace-step-name {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.trace-step-desc {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.trace-step-duration {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.trace-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: trace-spin 0.8s linear infinite;
+}
+
+@keyframes trace-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Trace Detail (Level 2) ──────────────────────────────────────────────── */
+
+.trace-detail {
+  width: 100%;
+  margin-top: 4px;
+  margin-left: 24px;
+}
+
+.trace-detail-toggle {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 12px;
+  user-select: none;
+}
+
+.trace-detail-toggle:hover {
+  text-decoration: underline;
+}
+
+.trace-detail-content {
+  display: none;
+  margin-top: 4px;
+}
+
+.trace-detail-expanded .trace-detail-content {
+  display: block;
+}
+
+.trace-kv {
+  margin-bottom: 6px;
+}
+
+.trace-kv-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.trace-kv pre {
+  margin: 2px 0 0 0;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-x: auto;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

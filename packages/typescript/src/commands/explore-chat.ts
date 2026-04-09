@@ -2,7 +2,8 @@ import { IncomingMessage, ServerResponse } from "node:http";
 
 import { listAgents } from "../api/agent-list.js";
 import { fetchAgentInfo, sendChatRequestStream } from "../api/agent-chat.js";
-import { readBody, handleApiError, type TokenProvider } from "./explore-bkn.js";
+import { getTracesByConversation } from "../api/conversations.js";
+import { readBody, handleApiError, jsonResponse, type TokenProvider } from "./explore-bkn.js";
 
 // ── Chat route handlers ──────────────────────────────────────────────────────
 
@@ -110,6 +111,10 @@ export function registerChatRoutes(
             const event = JSON.stringify({ type: "text", fullText });
             res.write(`data: ${event}\n\n`);
           },
+          onProgress: (items) => {
+            const event = JSON.stringify({ type: "progress", items });
+            res.write(`data: ${event}\n\n`);
+          },
         },
       );
 
@@ -131,6 +136,31 @@ export function registerChatRoutes(
         res.write(`data: ${errEvent}\n\n`);
         res.end();
       }
+    }
+  });
+
+  // GET /api/chat/trace?agentId=X&conversationId=Y — fetch trace data
+  routes.set("GET /api/chat/trace", async (req, res) => {
+    try {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      const agentId = url.searchParams.get("agentId") || "";
+      const conversationId = url.searchParams.get("conversationId") || "";
+      if (!agentId || !conversationId) {
+        jsonResponse(res, 400, { error: "agentId and conversationId are required" });
+        return;
+      }
+      const t = await getToken();
+      const raw = await getTracesByConversation({
+        baseUrl: t.baseUrl,
+        accessToken: t.accessToken,
+        agentId,
+        conversationId,
+        businessDomain,
+      });
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(raw);
+    } catch (error) {
+      handleApiError(res, error);
     }
   });
 

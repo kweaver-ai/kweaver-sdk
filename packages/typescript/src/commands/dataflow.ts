@@ -1,5 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
+import columnify from "columnify";
+import stringWidth from "string-width";
 import yargs from "yargs";
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -14,37 +16,83 @@ import {
   type DataflowRunItem,
 } from "../api/dataflow2.js";
 
-function formatDataflowListRow(item: DataflowListItem): string {
-  return [
-    item.id,
-    item.title ?? "",
-    item.status ?? "",
-    item.trigger ?? "",
-    item.creator ?? "",
-    item.updated_at ?? "",
-    item.version_id ?? "",
-  ].join(" ");
+function renderTable(rows: Array<Record<string, string>>): string {
+  if (rows.length === 0) return "";
+  return columnify(rows, {
+    showHeaders: true,
+    preserveNewLines: true,
+    stringLength: stringWidth,
+    headingTransform: (heading: string) => heading,
+  });
 }
 
-function formatDataflowRunRow(item: DataflowRunItem): string {
-  return [
-    item.id,
-    item.status ?? "",
-    item.started_at ?? "",
-    item.ended_at ?? "",
-    item.source?.name ?? "",
-    item.source?.content_type ?? "",
-    item.source?.size ?? "",
-    item.reason ?? "",
-  ].join(" ");
+function buildListTableRows(items: DataflowListItem[]): Array<Record<string, string>> {
+  return items.map((item) => ({
+    "ID": item.id,
+    "Title": item.title ?? "",
+    "Status": item.status ?? "",
+    "Trigger": item.trigger ?? "",
+    "Creator": item.creator ?? "",
+    "Updated At": item.updated_at != null ? String(item.updated_at) : "",
+    "Version ID": item.version_id ?? "",
+  }));
 }
 
-function formatDataflowLogBlock(item: DataflowLogItem): string {
+function buildRunTableRows(items: DataflowRunItem[]): Array<Record<string, string>> {
+  return items.map((item) => ({
+    "ID": item.id,
+    "Status": item.status ?? "",
+    "Started At": item.started_at != null ? String(item.started_at) : "",
+    "Ended At": item.ended_at != null ? String(item.ended_at) : "",
+    "Source Name": item.source?.name != null ? String(item.source.name) : "",
+    "Content Type": item.source?.content_type != null ? String(item.source.content_type) : "",
+    "Size": item.source?.size != null ? String(item.source.size) : "",
+    "Reason": item.reason ?? "",
+  }));
+}
+
+function parseSinceToLocalDayRange(value: string): { startTime: number; endTime: number } | null {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const start = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0);
+  const end = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 23, 59, 59);
+  return {
+    startTime: Math.floor(start.getTime() / 1000),
+    endTime: Math.floor(end.getTime() / 1000),
+  };
+}
+
+function formatDataflowLogSummary(item: DataflowLogItem): string {
   const duration = item.metadata?.duration ?? "-";
-  const summary = `[${item.id}] ${item.status ?? ""} ${item.operator ?? ""} started_at=${item.started_at ?? ""} updated_at=${item.updated_at ?? ""} duration=${duration} taskId=${item.taskId ?? ""}`;
-  const input = `input: ${JSON.stringify(item.inputs ?? {})}`;
-  const output = `output: ${JSON.stringify(item.outputs ?? {})}`;
-  return `${summary}\n${input}\n${output}`;
+  return [
+    `commit ${item.id}`,
+    `Author: ${item.operator ?? ""}`,
+    `Status: ${item.status ?? ""}`,
+    `Started At: ${item.started_at ?? ""}`,
+    `Updated At: ${item.updated_at ?? ""}`,
+    `Duration: ${duration}`,
+    `Task ID: ${item.taskId ?? ""}`,
+  ].join("\n");
+}
+
+function formatIndentedJsonBlock(label: string, value: unknown): string {
+  const pretty = JSON.stringify(value ?? {}, null, 4) ?? "{}";
+  const indented = pretty
+    .split("\n")
+    .map((line) => `        ${line}`)
+    .join("\n");
+  return `    ${label}:\n${indented}`;
+}
+
+function formatDataflowLogOutput(item: DataflowLogItem, detail: boolean): string {
+  const parts = [formatDataflowLogSummary(item)];
+  if (detail) {
+    parts.push("");
+    parts.push(formatIndentedJsonBlock("input", item.inputs ?? {}));
+    parts.push("");
+    parts.push(formatIndentedJsonBlock("output", item.outputs ?? {}));
+  }
+  return parts.join("\n");
 }
 
 async function requireTokenAndBusinessDomain(businessDomain?: string): Promise<{
@@ -84,8 +132,9 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
         exitCode = await with401RefreshRetry(async () => {
           const base = await requireTokenAndBusinessDomain(argv.bizDomain);
           const body = await listDataflows(base);
-          for (const item of body.dags) {
-            console.log(formatDataflowListRow(item));
+          const table = renderTable(buildListTableRows(body.dags));
+          if (table) {
+            console.log(table);
           }
           return 0;
         });
@@ -146,13 +195,55 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
       (command: any) =>
         command
           .positional("dagId", { type: "string" })
+          .option("since", { type: "string" })
           .option("biz-domain", { alias: "bd", type: "string" }),
       async (argv: any) => {
         exitCode = await with401RefreshRetry(async () => {
           const base = await requireTokenAndBusinessDomain(argv.bizDomain);
-          const body = await listDataflowRuns({ ...base, dagId: argv.dagId });
-          for (const item of body.results) {
-            console.log(formatDataflowRunRow(item));
+          const dayRange = typeof argv.since === "string" ? parseSinceToLocalDayRange(argv.since) : null;
+          let results: DataflowRunItem[] = [];
+
+          if (!dayRange) {
+            const body = await listDataflowRuns({
+              ...base,
+              dagId: argv.dagId,
+              page: 0,
+              limit: 20,
+              sortBy: "started_at",
+              order: "desc",
+            });
+            results = body.results;
+          } else {
+            const first = await listDataflowRuns({
+              ...base,
+              dagId: argv.dagId,
+              page: 0,
+              limit: 20,
+              sortBy: "started_at",
+              order: "desc",
+              startTime: dayRange.startTime,
+              endTime: dayRange.endTime,
+            });
+            results = [...first.results];
+            const total = first.total ?? first.results.length;
+            if (total > 20) {
+              const second = await listDataflowRuns({
+                ...base,
+                dagId: argv.dagId,
+                page: 1,
+                limit: total - 20,
+                sortBy: "started_at",
+                order: "desc",
+                startTime: dayRange.startTime,
+                endTime: dayRange.endTime,
+              });
+              results = results.concat(second.results);
+            }
+          }
+
+          const table = renderTable(buildRunTableRows(results));
+          if (table) {
+            console.log(table);
           }
           return 0;
         });
@@ -160,28 +251,26 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
     )
     .command(
       "logs <dagId> <instanceId>",
-      "Fetch paged logs for one run",
+      "Show logs for one run in summary or detail mode",
       (command: any) =>
         command
           .positional("dagId", { type: "string" })
           .positional("instanceId", { type: "string" })
+          .option("detail", { type: "boolean", default: false })
           .option("biz-domain", { alias: "bd", type: "string" }),
       async (argv: any) => {
         exitCode = await with401RefreshRetry(async () => {
           const base = await requireTokenAndBusinessDomain(argv.bizDomain);
-          for (let page = 0; ; page += 1) {
-            const body = await getDataflowLogsPage({
-              ...base,
-              dagId: argv.dagId,
-              instanceId: argv.instanceId,
-              page,
-              limit: 10,
-            });
-            if (body.results.length === 0) break;
-            for (const item of body.results) {
-              console.log(formatDataflowLogBlock(item));
-              console.log("");
-            }
+          const body = await getDataflowLogsPage({
+            ...base,
+            dagId: argv.dagId,
+            instanceId: argv.instanceId,
+            page: 0,
+            limit: -1,
+          });
+          for (const item of body.results) {
+            console.log(formatDataflowLogOutput(item, argv.detail === true));
+            console.log("");
           }
           return 0;
         });

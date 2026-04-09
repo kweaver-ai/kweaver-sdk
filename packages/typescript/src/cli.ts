@@ -59,8 +59,8 @@ Usage:
 
   kweaver dataflow list [-bd value]
   kweaver dataflow run <dagId> (--file <path> | --url <remote-url> --name <filename>) [-bd value]
-  kweaver dataflow runs <dagId> [-bd value]
-  kweaver dataflow logs <dagId> <instanceId> [-bd value]
+  kweaver dataflow runs <dagId> [--since <date-like>] [-bd value]
+  kweaver dataflow logs <dagId> <instanceId> [--detail] [-bd value]
 
   kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value] [--pretty]
   kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value] [--pretty]

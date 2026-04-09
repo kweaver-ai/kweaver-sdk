@@ -161,8 +161,12 @@ kweaver dataflow list
 kweaver dataflow run <dagId> --file ./demo.pdf
 kweaver dataflow run <dagId> --url https://example.com/demo.pdf --name demo.pdf
 kweaver dataflow runs <dagId>
+kweaver dataflow runs <dagId> --since 2026-04-01
 kweaver dataflow logs <dagId> <instanceId>
+kweaver dataflow logs <dagId> <instanceId> --detail
 ```
+
+`kweaver dataflow runs --since` 会按本地自然日过滤；如果参数无法被 `new Date(...)` 解析，CLI 会回退到最近 20 条运行记录。`kweaver dataflow logs` 默认输出摘要；加上 `--detail` 会打印带缩进的 `input` 和 `output` 载荷。
 
 ## 环境变量
 

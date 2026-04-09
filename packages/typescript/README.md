@@ -177,8 +177,12 @@ kweaver dataflow list
 kweaver dataflow run <dagId> --file ./demo.pdf
 kweaver dataflow run <dagId> --url https://example.com/demo.pdf --name demo.pdf
 kweaver dataflow runs <dagId>
+kweaver dataflow runs <dagId> --since 2026-04-01
 kweaver dataflow logs <dagId> <instanceId>
+kweaver dataflow logs <dagId> <instanceId> --detail
 ```
+
+`kweaver dataflow runs --since` filters one local natural day. If the value cannot be parsed by `new Date(...)`, the CLI falls back to the most recent 20 runs. `kweaver dataflow logs` defaults to summary output; add `--detail` to print indented `input` and `output` payloads.
 
 ## Environment Variables
 

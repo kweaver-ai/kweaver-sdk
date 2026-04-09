@@ -77,22 +77,23 @@ function vegaRenderCatalogList($el, data) {
     const healthStatus = vegaGetHealth(health, cat.id);
     const dot = vegaHealthDot(healthStatus);
     const name = esc(cat.name ?? cat.id);
-    const id = esc(cat.id);
     const connType = esc(cat.connector_type ?? cat.type ?? "—");
-    const statusLabel = esc(cat.status ?? "");
     return `
-      <div class="card" style="cursor:pointer" onclick="location.hash='/vega/${enc(cat.id)}'">
-        <div class="card-title">${dot} ${name}</div>
-        <div class="card-meta">ID: ${id}</div>
-        <div class="card-meta">Connector: ${connType}</div>
-        ${statusLabel ? `<div class="card-meta">Status: ${statusLabel}</div>` : ""}
-      </div>`;
+      <a class="catalog-card" href="#/vega/${enc(cat.id)}">
+        <div class="catalog-card-header">
+          <span class="health-indicator">${dot}</span>
+          <span class="catalog-name">${name}</span>
+        </div>
+        <div class="catalog-meta">${connType}</div>
+      </a>`;
   });
 
   $el.innerHTML = `
-    <div class="section-header"><h2>Vega Catalogs <span class="count">(${items.length})</span></h2></div>
-    <div class="card-grid">${cards.join("")}</div>
-    <div id="vega-tasks-section"></div>`;
+    <div class="vega-view">
+      <h2>Vega Catalogs <span style="color:var(--text-secondary);font-weight:400">(${items.length})</span></h2>
+      <div class="catalog-grid">${cards.join("")}</div>
+      <div id="vega-tasks-section"></div>
+    </div>`;
 
   // Render discover tasks in the same view
   vegaRenderTasksSection(document.getElementById("vega-tasks-section"));

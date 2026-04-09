@@ -41,7 +41,11 @@ async function api(method, url, body) {
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(url, opts);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try { const err = await res.json(); if (err.error) msg = err.error; } catch {}
+    throw new Error(msg);
+  }
   return res.json();
 }
 

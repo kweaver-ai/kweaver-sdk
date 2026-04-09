@@ -9,7 +9,7 @@ from kweaver.types import (
     VegaDataView, VegaDataDict, VegaObjectiveModel,
     VegaQueryResult, VegaDslResult, VegaPromqlResult,
     VegaCatalog, VegaResource, VegaConnectorType,
-    VegaDiscoverTask, VegaServerInfo, VegaInspectReport,
+    VegaServerInfo, VegaInspectReport,
 )
 
 def _make_vega_http(handler):
@@ -211,61 +211,6 @@ def test_query_events():
     assert result.hits[0]["event"] == "login"
 
 
-# -- VegaTasksResource tests -------------------------------------------------
-
-_DISCOVER_TASK = {
-    "id": "dt-1",
-    "catalog_id": "cat-1",
-    "status": "completed",
-    "progress": 1.0,
-    "error": None,
-    "create_time": "2026-01-01T00:00:00Z",
-    "update_time": "2026-01-01T00:01:00Z",
-}
-
-
-def test_tasks_list_discover():
-    """list_discover() GETs /api/vega-backend/v1/discover-tasks and returns VegaDiscoverTask list."""
-    def handler(req):
-        assert req.url.path == "/api/vega-backend/v1/discover-tasks"
-        return httpx.Response(200, json={"entries": [_DISCOVER_TASK]})
-
-    from kweaver.resources.vega import VegaNamespace
-    ns = VegaNamespace(_make_vega_http(handler))
-    result = ns.tasks.list_discover()
-    assert len(result) == 1
-    assert isinstance(result[0], VegaDiscoverTask)
-    assert result[0].id == "dt-1"
-    assert result[0].status == "completed"
-
-
-def test_tasks_list_discover_with_status_filter():
-    """list_discover(status=...) passes status param in query string."""
-    captured = {}
-
-    def handler(req):
-        captured["params"] = dict(req.url.params)
-        return httpx.Response(200, json={"entries": []})
-
-    from kweaver.resources.vega import VegaNamespace
-    ns = VegaNamespace(_make_vega_http(handler))
-    result = ns.tasks.list_discover(status="running")
-    assert result == []
-    assert captured["params"].get("status") == "running"
-
-
-def test_tasks_list_discover_data_format():
-    """list_discover() handles {"data": [...]} response format."""
-    def handler(req):
-        return httpx.Response(200, json={"data": [_DISCOVER_TASK]})
-
-    from kweaver.resources.vega import VegaNamespace
-    ns = VegaNamespace(_make_vega_http(handler))
-    result = ns.tasks.list_discover()
-    assert len(result) == 1
-    assert isinstance(result[0], VegaDiscoverTask)
-
-
 # -- health() tests ----------------------------------------------------------
 
 _SERVER_INFO = {
@@ -296,7 +241,7 @@ def test_health_returns_server_info():
 
 
 def test_inspect_returns_report():
-    """inspect() assembles VegaInspectReport from health + catalogs + tasks."""
+    """inspect() assembles VegaInspectReport from health + catalogs."""
     _catalog = {
         "id": "cat-1", "name": "Prometheus", "type": "metrics",
         "connector_type": "prometheus", "status": "active", "health_status": "healthy",
@@ -308,8 +253,6 @@ def test_inspect_returns_report():
             return httpx.Response(200, json=_SERVER_INFO)
         if path == "/api/vega-backend/v1/catalogs":
             return httpx.Response(200, json={"entries": [_catalog]})
-        if path == "/api/vega-backend/v1/discover-tasks":
-            return httpx.Response(200, json={"entries": []})
         return httpx.Response(404, json={})
 
     from kweaver.resources.vega import VegaNamespace
@@ -319,7 +262,6 @@ def test_inspect_returns_report():
     assert isinstance(report.server_info, VegaServerInfo)
     assert report.server_info.server_name == "vega-backend"
     assert report.catalog_health.healthy_count == 1
-    assert report.active_tasks == []
 
 
 def test_inspect_partial_failure_still_returns_report():
@@ -329,8 +271,6 @@ def test_inspect_partial_failure_still_returns_report():
         if path == "/api/vega-backend/v1/health":
             return httpx.Response(500, json={"error": "internal server error"})
         if path == "/api/vega-backend/v1/catalogs":
-            return httpx.Response(200, json={"entries": []})
-        if path == "/api/vega-backend/v1/discover-tasks":
             return httpx.Response(200, json={"entries": []})
         return httpx.Response(404, json={})
 
@@ -566,7 +506,7 @@ def test_catalog_discover():
     from kweaver.resources.vega import VegaNamespace
     ns = VegaNamespace(_make_vega_http(handler))
     task = ns.catalogs.discover("c-1")
-    assert task.status == "pending"
+    assert task["status"] == "pending"
 
 def test_catalog_resources():
     def handler(req):
@@ -590,14 +530,6 @@ def test_resource_has_no_preview_method():
     """preview() was removed — the backend has no /resources/{id}/preview endpoint."""
     from kweaver.resources.vega.resources import VegaResourcesResource
     assert not hasattr(VegaResourcesResource, "preview")
-
-def test_task_get_discover():
-    def handler(req):
-        return httpx.Response(200, json={"id": "dt-1", "catalog_id": "c-1", "status": "completed"})
-    from kweaver.resources.vega import VegaNamespace
-    ns = VegaNamespace(_make_vega_http(handler))
-    task = ns.tasks.get_discover("dt-1")
-    assert task.id == "dt-1"
 
 def test_task_get_metric():
     def handler(req):

@@ -29,8 +29,6 @@ import {
   updateVegaConnectorType,
   deleteVegaConnectorType,
   setVegaConnectorTypeEnabled,
-  listVegaDiscoverTasks,
-  getVegaDiscoverTask,
 } from "../api/vega.js";
 import type { ClientContext } from "../client.js";
 
@@ -229,15 +227,4 @@ export class VegaResource {
     return raw ? JSON.parse(raw) : {};
   }
 
-  // ── Discover Tasks ──────────────────────────────────────────────────────────
-
-  async listDiscoverTasks(opts: { status?: string; limit?: number; offset?: number } = {}): Promise<unknown[]> {
-    const raw = await listVegaDiscoverTasks({ ...this.ctx.base(), ...opts });
-    return unwrapArray(raw);
-  }
-
-  async getDiscoverTask(id: string): Promise<unknown> {
-    const raw = await getVegaDiscoverTask({ ...this.ctx.base(), id });
-    return JSON.parse(raw);
-  }
 }

@@ -1604,8 +1604,6 @@ test("run vega --help shows all subcommands", async () => {
     assert.ok(help.includes("connector-type update"));
     assert.ok(help.includes("connector-type delete"));
     assert.ok(help.includes("connector-type enable"));
-    assert.ok(help.includes("discovery-task list"));
-    assert.ok(help.includes("discovery-task get"));
   } finally {
     console.log = originalLog;
   }
@@ -1934,61 +1932,6 @@ test("run vega connector-type enable without args exits 1", async () => {
   console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
   try {
     assert.equal(await run(["vega", "connector-type", "enable"]), 1);
-    assert.ok(errors.join("\n").includes("Usage:"));
-  } finally {
-    console.error = originalErr;
-  }
-});
-
-// -- discovery-task subcommands --
-
-test("run vega discovery-task --help shows subcommands", async () => {
-  const lines: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["vega", "discovery-task", "--help"]), 0);
-    const help = lines.join("\n");
-    assert.ok(help.includes("list"));
-    assert.ok(help.includes("get"));
-  } finally {
-    console.log = originalLog;
-  }
-});
-
-test("run vega discovery-task list --help shows options", async () => {
-  const lines: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["vega", "discovery-task", "list", "--help"]), 0);
-    const help = lines.join("\n");
-    assert.ok(help.includes("--status"));
-    assert.ok(help.includes("--limit"));
-  } finally {
-    console.log = originalLog;
-  }
-});
-
-test("run vega discovery-task get --help shows usage", async () => {
-  const lines: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["vega", "discovery-task", "get", "--help"]), 0);
-    const help = lines.join("\n");
-    assert.ok(help.includes("discovery-task get"));
-  } finally {
-    console.log = originalLog;
-  }
-});
-
-test("run vega discovery-task get without id exits 1", async () => {
-  const errors: string[] = [];
-  const originalErr = console.error;
-  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["vega", "discovery-task", "get"]), 1);
     assert.ok(errors.join("\n").includes("Usage:"));
   } finally {
     console.error = originalErr;

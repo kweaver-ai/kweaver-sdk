@@ -605,18 +605,6 @@ class VegaObjectiveModel(BaseModel):
 # ── Vega task types ───────────────────────────────────────────────────────
 
 
-class VegaDiscoverTask(BaseModel):
-    model_config = {"extra": "ignore"}
-
-    id: str
-    catalog_id: str
-    status: str  # pending | running | completed | failed
-    progress: float | None = None
-    error: str | None = None
-    create_time: str | None = None
-    update_time: str | None = None
-
-
 class VegaMetricTask(BaseModel):
     model_config = {"extra": "ignore"}
 
@@ -704,5 +692,5 @@ class VegaInspectReport(BaseModel):
     server_info: VegaServerInfo | None = None
     catalog_health: VegaHealthReport = Field(default_factory=VegaHealthReport)
     platform_stats: VegaPlatformStats | None = None
-    active_tasks: list[VegaDiscoverTask] = []
+    active_tasks: list[dict] = []
     errors: list[str] = []

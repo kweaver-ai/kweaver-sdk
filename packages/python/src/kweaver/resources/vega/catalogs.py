@@ -1,7 +1,7 @@
 """VegaCatalogsResource — catalog CRUD + discover/health operations."""
 from __future__ import annotations
 from typing import Any, TYPE_CHECKING
-from kweaver.types import VegaCatalog, VegaResource, VegaDiscoverTask
+from kweaver.types import VegaCatalog, VegaResource
 
 if TYPE_CHECKING:
     from kweaver._http import HttpClient
@@ -44,12 +44,12 @@ class VegaCatalogsResource:
         result = self._http.post(f"{self._BASE}/{id}/test-connection")
         return result if isinstance(result, dict) else {}
 
-    def discover(self, id: str, *, wait: bool = False) -> VegaDiscoverTask:
+    def discover(self, id: str, *, wait: bool = False) -> dict:
         params: dict[str, Any] = {}
         if wait:
             params["wait"] = "true"
         data = self._http.post(f"{self._BASE}/{id}/discover", params=params if params else None)
-        return VegaDiscoverTask(**data)
+        return data if isinstance(data, dict) else {}
 
     def resources(
         self,

@@ -199,34 +199,6 @@ test("setVegaConnectorTypeEnabled sends POST to /connector-types/:type/enabled",
   }
 });
 
-test("getVegaDiscoverTask sends GET to /discover-tasks/:id", async () => {
-  const mock = mockFetch({ id: "task-1", status: "completed" });
-  try {
-    const client = makeClient();
-    await client.vega.getDiscoverTask("task-1");
-    assert.equal(mock.calls[0].method, "GET");
-    const url = new URL(mock.calls[0].url);
-    assert.equal(url.pathname, "/api/vega-backend/v1/discover-tasks/task-1");
-  } finally {
-    mock.restore();
-  }
-});
-
-test("listVegaDiscoverTasks sends GET to /discover-tasks with query params", async () => {
-  const mock = mockFetch({ entries: [] });
-  try {
-    const client = makeClient();
-    await client.vega.listDiscoverTasks({ status: "running", limit: 10 });
-    assert.equal(mock.calls[0].method, "GET");
-    const url = new URL(mock.calls[0].url);
-    assert.equal(url.pathname, "/api/vega-backend/v1/discover-tasks");
-    assert.equal(url.searchParams.get("status"), "running");
-    assert.equal(url.searchParams.get("limit"), "10");
-  } finally {
-    mock.restore();
-  }
-});
-
 test("vega resource has no previewResource method (backend has no preview endpoint)", () => {
   const client = makeClient();
   assert.equal(

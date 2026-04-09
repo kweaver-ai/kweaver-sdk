@@ -136,9 +136,14 @@ test("help text shows dv alias", async () => {
     const text = lines.join("\n");
     assert.ok(text.includes("dataview|dv"), "help should mention dv alias");
     assert.ok(text.includes("skill"), "help should mention skill command");
+    assert.ok(text.includes("dataflow"), "help should mention dataflow command");
   } finally {
     console.log = orig;
   }
+});
+
+test("run dataflow --help shows subcommand help", async () => {
+  assert.equal(await run(["dataflow", "--help"]), 0);
 });
 
 test("run agent shows subcommand help", async () => {

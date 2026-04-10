@@ -63,7 +63,7 @@ function renderComposer($el, parts, params) {
 
 function composerGoTo(step) {
   composerState.step = step;
-  var $el = document.getElementById("app-content") || document.querySelector(".composer-wizard").parentElement;
+  var $el = document.getElementById("content");
   if ($el) renderComposer($el, [], new URLSearchParams());
 }
 
@@ -164,9 +164,10 @@ function renderComposerReview($content) {
   }
 
   // Right side: DPH script + mode
-  var dph = config.dph || {};
-  var rightHtml = '<div class="composer-mode-display"><strong>Mode:</strong> ' + esc(dph.mode || config.mode || "orchestrator") + '</div>' +
-    '<div class="composer-dph-editor"><pre>' + esc(dph.script || dph.content || "(no script)") + '</pre></div>';
+  var orch = config.orchestrator || {};
+  var rightHtml = '<h4>Orchestration Script (DPH)</h4>' +
+    '<pre class="composer-dph-editor">' + esc(orch.dolphin || "(no script)") + '</pre>' +
+    '<div class="composer-mode-display"><strong>Mode:</strong> ' + esc(orch.is_dolphin_mode ? "dolphin" : "react") + '</div>';
 
   $content.innerHTML =
     '<div class="composer-review-layout">' +
@@ -338,10 +339,9 @@ function runComposerStream(message) {
           try { evt = JSON.parse(dataStr); } catch(e) { continue; }
 
           if (evt.type === "text") {
-            fullText = evt.fullText || evt.currentText || fullText;
-            var displayText = evt.currentText || fullText;
-            if (displayText) {
-              $text.innerHTML = chatMarkdown(displayText);
+            fullText = evt.fullText || fullText;
+            if (fullText) {
+              $text.innerHTML = chatMarkdown(fullText);
             }
           } else if (evt.type === "progress" && Array.isArray(evt.items)) {
             $progress.style.display = "block";

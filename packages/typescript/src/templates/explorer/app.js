@@ -44,7 +44,9 @@ async function api(method, url, body) {
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
     try { const err = await res.json(); if (err.error) msg = err.error; } catch {}
-    throw new Error(msg);
+    const error = new Error(msg);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }

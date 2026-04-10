@@ -37,8 +37,8 @@ async function loadBknForKn(knId) {
   try {
     await api("POST", "/api/bkn/load", { knId });
   } catch (e) {
-    // /api/bkn/load may not exist yet (added in Task 7);
-    // fall through and try loading meta directly
+    // 404 means the endpoint isn't deployed yet — fall through to meta
+    if (e.status !== 404) throw e;
   }
   bknMeta = await api("GET", "/api/bkn/meta");
   bknCurrentKnId = knId;

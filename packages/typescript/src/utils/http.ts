@@ -81,18 +81,24 @@ function isTransientNetworkError(error: unknown): boolean {
 
 const RETRY_DELAYS = [300, 800];
 
-/** fetch() with automatic retry on transient network errors (TLS, socket, DNS). */
+const SAFE_RETRY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/** fetch() with automatic retry on transient network errors (TLS, socket, DNS).
+ *  Only retries safe (idempotent) HTTP methods by default. */
 export async function fetchWithRetry(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const canRetry = SAFE_RETRY_METHODS.has(method);
+
   let lastError: unknown;
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     try {
       return await fetch(input, init);
     } catch (error) {
       lastError = error;
-      if (!isTransientNetworkError(error) || attempt === RETRY_DELAYS.length) break;
+      if (!canRetry || !isTransientNetworkError(error) || attempt === RETRY_DELAYS.length) break;
       await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
     }
   }

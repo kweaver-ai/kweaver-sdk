@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "dev": "tsx watch src/cli.ts",
-    "build": "tsc -p tsconfig.json && cp -r src/templates dist/ 2>/dev/null || true",
+    "build": "tsc -p tsconfig.json && (cp -r src/templates dist/ 2>/dev/null || true)",
     "start": "node ./dist/cli.js",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",

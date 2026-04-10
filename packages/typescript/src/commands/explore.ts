@@ -8,6 +8,7 @@ import { resolveBusinessDomain } from "../config/store.js";
 import { registerBknRoutes, loadExploreMetaWithRetry, readBody, type ExploreMeta } from "./explore-bkn.js";
 import { registerChatRoutes } from "./explore-chat.js";
 import { registerVegaRoutes } from "./explore-vega.js";
+import { registerComposerRoutes } from "./explore-composer.js";
 import { listKnowledgeNetworks } from "../api/knowledge-networks.js";
 import { listAgents } from "../api/agent-list.js";
 import { listVegaCatalogs } from "../api/vega.js";
@@ -165,6 +166,10 @@ async function startServer(
   // Vega routes
   const vegaRoutes = registerVegaRoutes(freshToken, businessDomain);
   for (const [key, handler] of vegaRoutes) routes.set(key, handler);
+
+  // Composer routes
+  const composerRoutes = registerComposerRoutes(freshToken, businessDomain);
+  for (const [key, handler] of composerRoutes) routes.set(key, handler);
 
   // 3. Resolve template directory
   const __filename = fileURLToPath(import.meta.url);

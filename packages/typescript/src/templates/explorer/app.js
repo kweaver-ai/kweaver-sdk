@@ -105,6 +105,9 @@ function navigate() {
   } else if (route.tab === "vega") {
     if (typeof renderVega === "function") renderVega($content, route.parts, route.params);
     else $content.innerHTML = '<div class="loading">Vega loading...</div>';
+  } else if (route.tab === "composer") {
+    if (typeof renderComposer === "function") renderComposer($content, route.parts, route.params);
+    else $content.innerHTML = '<div class="loading">Composer loading...</div>';
   } else {
     $content.innerHTML = '<div class="error-banner">Unknown route</div>';
   }

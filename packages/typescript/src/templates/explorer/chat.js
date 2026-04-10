@@ -494,12 +494,35 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
     let lastText = "";
 
     const gen = navGeneration;
+    // Stall detection: if no data arrives for 30s, show warning; 90s = abort
+    const STALL_WARN_MS = 30000;
+    const STALL_ABORT_MS = 90000;
+    let lastDataTime = Date.now();
+    let stallWarningShown = false;
+    const stallInterval = setInterval(() => {
+      const elapsed = Date.now() - lastDataTime;
+      if (elapsed >= STALL_ABORT_MS) {
+        abortController.abort();
+      } else if (elapsed >= STALL_WARN_MS && !stallWarningShown) {
+        stallWarningShown = true;
+        var warn = document.createElement("div");
+        warn.className = "chat-stall-warning";
+        warn.textContent = "等待响应中…如长时间无响应，可点击 Stop 重试。";
+        currentBubble.appendChild(warn);
+      }
+    }, 3000);
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       if (navGeneration !== gen) { reader.cancel(); break; }
       if (abortController.signal.aborted) { reader.cancel(); aborted = true; break; }
+      lastDataTime = Date.now();
+      if (stallWarningShown) {
+        stallWarningShown = false;
+        var existingWarn = currentBubble.querySelector(".chat-stall-warning");
+        if (existingWarn) existingWarn.remove();
+      }
 
       buf += decoder.decode(value, { stream: true });
       const lines = buf.split("\n");
@@ -533,6 +556,7 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
           var currentText = evt.currentText ?? lastText;
           if (currentText) {
             contentSpan.innerHTML = chatMarkdown(currentText);
+            contentSpan.classList.add("chat-streaming-cursor");
             // Detect if text contains a terminal error — flag for auto-stop
             if (/event:error[\s\S]*?"code"/.test(currentText)) {
               chatState.conversations[agentId].push({ role: "assistant", text: lastText });
@@ -652,6 +676,11 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
       }
     }
 
+    clearInterval(stallInterval);
+    contentSpan.classList.remove("chat-streaming-cursor");
+    var leftoverWarn = currentBubble.querySelector(".chat-stall-warning");
+    if (leftoverWarn) leftoverWarn.remove();
+
     if (aborted) {
       if (lastText) {
         chatState.conversations[agentId].push({ role: "assistant", text: lastText });
@@ -662,6 +691,8 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
       contentSpan.innerHTML = '<span class="chat-error">No response received.</span>';
     }
   } catch (err) {
+    clearInterval(stallInterval);
+    contentSpan.classList.remove("chat-streaming-cursor");
     if (err.name === "AbortError") {
       contentSpan.innerHTML = '<span class="chat-stopped">Response stopped.</span>';
     } else {

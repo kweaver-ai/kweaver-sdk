@@ -2248,6 +2248,26 @@ ul.agent-thoughts-content li {
   color: var(--text-secondary);
   font-style: italic;
 }
+.chat-error {
+  color: #ef4444;
+}
+/* Blinking cursor shown at end of streaming text */
+.chat-streaming-cursor::after {
+  content: "▍";
+  animation: blink-cursor 0.8s steps(2) infinite;
+  color: var(--accent);
+  font-weight: bold;
+}
+@keyframes blink-cursor {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.chat-stall-warning {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  font-style: italic;
+  margin-top: 6px;
+}
 
 /* ── Trace Section ────────────────────────────────────────────────────────── */
 

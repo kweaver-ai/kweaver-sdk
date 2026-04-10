@@ -93,6 +93,11 @@ export function registerChatRoutes(
       "X-Accel-Buffering": "no",
     });
 
+    // SSE heartbeat — keeps connection alive and lets client detect stalls
+    const heartbeat = setInterval(() => {
+      try { res.write(": heartbeat\n\n"); } catch { /* connection gone */ }
+    }, 15000);
+
     // Stream chat response
     try {
       const result = await sendChatRequestStream(
@@ -127,6 +132,7 @@ export function registerChatRoutes(
         },
       );
 
+      clearInterval(heartbeat);
       const doneEvent = JSON.stringify({
         type: "done",
         conversationId: result.conversationId ?? conversationId ?? "",
@@ -134,6 +140,7 @@ export function registerChatRoutes(
       res.write(`data: ${doneEvent}\n\n`);
       res.end();
     } catch (error) {
+      clearInterval(heartbeat);
       if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));

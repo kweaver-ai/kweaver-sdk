@@ -508,6 +508,25 @@ pre {
   margin-top: 2px;
 }
 
+/* Test agent styling */
+.chat-agent-item.chat-agent-test {
+  opacity: 0.55;
+}
+.chat-agent-item.chat-agent-test:hover {
+  opacity: 0.8;
+}
+.chat-test-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 500;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
 .chat-main {
   flex: 1;
   display: flex;
@@ -711,6 +730,16 @@ h4.chat-md-heading { font-size: 1em; }
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+/* Stop button mode */
+.chat-send-btn.chat-stop-mode {
+  background: #ef4444;
+  opacity: 1;
+  cursor: pointer;
+}
+.chat-send-btn.chat-stop-mode:hover {
+  background: #dc2626;
 }
 
 .chat-placeholder {
@@ -1840,6 +1869,384 @@ ul.agent-thoughts-content {
 }
 ul.agent-thoughts-content li {
   margin-bottom: 6px;
+}
+
+/* ── Chat Assistant Container (segments + progress + text) ───────────────── */
+
+.chat-assistant-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.chat-segments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-segment-bubble {
+  opacity: 0.85;
+  border-left: 3px solid var(--accent);
+  font-size: 13px;
+}
+
+/* Step divider between segments */
+.chat-step-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+.chat-step-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.chat-step-divider-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* JSON data display */
+.chat-json-data {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin: 4px 0;
+  overflow: hidden;
+}
+.chat-json-data summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(0,0,0,0.02);
+  user-select: none;
+}
+.chat-json-data summary:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--text);
+}
+.chat-json-data pre {
+  margin: 0;
+  padding: 12px;
+  font-size: 11px;
+  max-height: 250px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Inline Tool Call Card (between segments) ────────────────────────────── */
+
+.chat-tool-call {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background 0.15s;
+}
+.chat-tool-call:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.chat-tool-call-icon {
+  flex-shrink: 0;
+}
+
+.chat-tool-call-name {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.chat-tool-call-args {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 350px;
+}
+
+.chat-tool-call-time {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* ── Tool Detail Slide-out Panel ─────────────────────────────────────────── */
+
+.tool-detail-panel {
+  position: fixed;
+  top: 0;
+  right: -420px;
+  width: 420px;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  transition: right 0.25s ease;
+}
+.tool-detail-panel-open {
+  right: 0;
+}
+
+.tool-detail-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.tool-detail-panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.tool-detail-panel-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.tool-detail-panel-close:hover {
+  background: rgba(0,0,0,0.06);
+  color: var(--text);
+}
+
+.tool-detail-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.tool-detail-section {
+  margin-bottom: 20px;
+}
+
+.tool-detail-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.tool-detail-kv {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+
+.tool-detail-key {
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.tool-detail-val {
+  color: var(--text);
+  word-break: break-word;
+}
+
+.tool-detail-section pre {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-detail-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+
+.chat-progress-inline {
+  padding: 4px 0;
+}
+
+.chat-trace-holder {
+  margin-top: 4px;
+}
+
+/* ── Chat Progress Card (legacy / progress events) ──────────────────────── */
+
+.chat-progress-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  font-size: 13px;
+}
+
+.chat-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+/* Tool call detail styles */
+.tool-detail {
+  width: 100%;
+  margin-top: 6px;
+  padding-left: 24px;
+  font-size: 12px;
+}
+
+.tool-args {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+}
+
+.tool-arg {
+  background: rgba(0,0,0,0.04);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.tool-arg-name {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.tool-type-badge {
+  background: var(--accent-glow);
+  color: var(--accent);
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tool-io {
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.tool-io-label {
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.tool-io-value {
+  font-family: monospace;
+  font-size: 11px;
+  word-break: break-word;
+}
+
+.tool-result-full pre {
+  margin: 4px 0 0;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-expand {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+.tool-expand:hover {
+  text-decoration: underline;
+}
+
+.tool-meta-info {
+  margin-top: 4px;
+}
+
+/* Auth error card */
+.chat-auth-error {
+  text-align: center;
+  padding: 16px 12px;
+}
+.chat-auth-error-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+.chat-auth-error-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.chat-auth-error-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.chat-auth-error-cmd code {
+  display: inline-block;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  user-select: all;
+}
+
+.chat-stopped {
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 /* ── Trace Section ────────────────────────────────────────────────────────── */

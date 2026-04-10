@@ -7,6 +7,7 @@ const chatState = {
   conversations: {},
   currentAgentId: null,
   streaming: false,
+  abortController: null, // AbortController for current stream
 };
 
 // ── Chat Settings & Agents Filter ────────────────────────────────────────────
@@ -35,8 +36,48 @@ window.renderBubble = function(msg, agentName) {
 
 // ── Markdown renderer (minimal) ──────────────────────────────────────────────
 
+function isJsonData(text) {
+  if (!text) return false;
+  var trimmed = text.trim();
+  if ((trimmed.startsWith('[{') || trimmed.startsWith('{"')) && trimmed.length > 200) {
+    try { JSON.parse(trimmed); return true; } catch(e) { return false; }
+  }
+  return false;
+}
+
+function renderJsonData(text) {
+  var trimmed = text.trim();
+  try {
+    var parsed = JSON.parse(trimmed);
+    var formatted = JSON.stringify(parsed, null, 2);
+    var preview = formatted.length > 150 ? formatted.substring(0, 150) + "..." : formatted;
+    var count = Array.isArray(parsed) ? ' (' + parsed.length + ' 条记录)' : '';
+    return '<details class="chat-json-data"><summary>📊 数据结果' + esc(count) + '</summary><pre><code>' + esc(formatted) + '</code></pre></details>';
+  } catch(e) {
+    return '<pre><code>' + esc(trimmed) + '</code></pre>';
+  }
+}
+
 function chatMarkdown(text) {
   if (!text) return "";
+
+  // Detect raw JSON data and render as collapsible
+  if (isJsonData(text)) return renderJsonData(text);
+
+  // Detect SSE error events embedded in text (various formats)
+  var errMatch = text.match(/event:error[\s\S]*?data:\s*(\{[\s\S]*\})\s*$/);
+  if (!errMatch) errMatch = text.match(/event:error[\s\S]*?data:\s*(\{[\s\S]*\})/);
+  if (errMatch) {
+    try {
+      var err = JSON.parse(errMatch[1]);
+      var errMsg = err.description || err.details || errMatch[1];
+      if (err.solution && err.solution !== "无") errMsg += "\n💡 " + err.solution;
+      // Keep text before the error
+      var beforeErr = text.substring(0, text.indexOf("event:error")).trim();
+      text = (beforeErr ? beforeErr + "\n\n" : "") + "⚠️ " + errMsg;
+    } catch(e) { /* keep original */ }
+  }
+
   let s = esc(text);
 
   // Fenced code blocks ```...```
@@ -140,18 +181,114 @@ function renderProgressSteps(items) {
   if (!items || items.length === 0) return "";
   const steps = items.map(function(item) {
     var name = (item.skill_info && item.skill_info.name) || item.agent_name || "Step";
+    var skillType = (item.skill_info && item.skill_info.type) || "";
     var status = (item.status || "running").toLowerCase();
     var icon = status === "completed" || status === "success" ? "✅"
              : status === "failed" || status === "error" ? "❌"
              : '<span class="trace-spinner"></span>';
     var desc = item.description || "";
+
+    // Tool call details
+    var detailParts = [];
+
+    // Show skill args
+    if (item.skill_info && item.skill_info.args && item.skill_info.args.length > 0) {
+      var argsHtml = item.skill_info.args.map(function(arg) {
+        var val = arg.value;
+        if (typeof val === "object" && val !== null) val = JSON.stringify(val);
+        return '<span class="tool-arg"><span class="tool-arg-name">' + esc(arg.name || "") + ':</span> ' + esc(String(val || "")) + '</span>';
+      }).join("");
+      detailParts.push('<div class="tool-args">' + argsHtml + '</div>');
+    }
+
+    // Show input_message
+    if (item.input_message) {
+      detailParts.push('<div class="tool-io"><span class="tool-io-label">输入:</span> ' + esc(item.input_message) + '</div>');
+    }
+
+    // Show result/answer
+    var resultText = item.result || "";
+    if (!resultText && item.answer) {
+      resultText = typeof item.answer === "string" ? item.answer : JSON.stringify(item.answer, null, 2);
+    }
+    if (resultText) {
+      var truncated = resultText.length > 200 ? resultText.substring(0, 200) + "..." : resultText;
+      detailParts.push(
+        '<div class="tool-io">' +
+          '<span class="tool-io-label">结果:</span>' +
+          '<span class="tool-io-value">' + esc(truncated) + '</span>' +
+          (resultText.length > 200 ? '<div class="tool-result-full" style="display:none"><pre>' + esc(resultText) + '</pre></div><span class="tool-expand" onclick="var el=this.previousElementSibling;el.style.display=el.style.display===\'none\'?\'block\':\'none\';this.textContent=el.style.display===\'none\'?\'展开\':\'收起\'">展开</span>' : '') +
+        '</div>'
+      );
+    }
+
+    var detailHtml = detailParts.length > 0
+      ? '<div class="tool-detail">' + detailParts.join("") + '</div>'
+      : "";
+
+    var typeLabel = skillType ? '<span class="tool-type-badge">' + esc(skillType) + '</span>' : '';
+
     return '<div class="trace-step trace-status-' + esc(status) + '">' +
       '<span class="trace-step-icon">' + icon + '</span>' +
       '<span class="trace-step-name">' + esc(name) + '</span>' +
+      typeLabel +
       (desc ? '<span class="trace-step-desc">' + esc(desc) + '</span>' : "") +
+      detailHtml +
     '</div>';
   });
   return '<div class="trace-steps">' + steps.join("") + '</div>';
+}
+
+// ── Tool Detail Slide-out Panel ──────────────────────────────────────────────
+
+function showToolDetailPanel(detail, toolName) {
+  // Toggle: if panel is already open for the same tool, close it
+  var existing = document.querySelector(".tool-detail-panel");
+  if (existing) {
+    var isSameTool = existing.getAttribute("data-panel-tool") === toolName;
+    existing.classList.remove("tool-detail-panel-open");
+    setTimeout(function() { existing.remove(); }, 250);
+    if (isSameTool) return;
+  }
+
+  var panel = document.createElement("div");
+  panel.className = "tool-detail-panel";
+  panel.setAttribute("data-panel-tool", toolName || "");
+
+  var sections = [];
+
+  // Args / Input
+  if (detail.args && detail.args.length > 0) {
+    var argsHtml = detail.args.map(function(a) {
+      var val = a.value;
+      if (typeof val === "object" && val !== null) val = JSON.stringify(val, null, 2);
+      return '<div class="tool-detail-kv"><span class="tool-detail-key">' + esc(a.name || "") + '</span><span class="tool-detail-val">' + esc(String(val || "")) + '</span></div>';
+    }).join("");
+    sections.push('<div class="tool-detail-section"><div class="tool-detail-section-title">参数</div>' + argsHtml + '</div>');
+  }
+  if (detail.input) {
+    var inputStr = typeof detail.input === "string" ? detail.input : JSON.stringify(detail.input, null, 2);
+    sections.push('<div class="tool-detail-section"><div class="tool-detail-section-title">输入</div><pre>' + esc(inputStr) + '</pre></div>');
+  }
+
+  // Output
+  if (detail.output) {
+    var outputStr = typeof detail.output === "string" ? detail.output : JSON.stringify(detail.output, null, 2);
+    sections.push('<div class="tool-detail-section"><div class="tool-detail-section-title">输出</div><pre>' + esc(outputStr) + '</pre></div>');
+  }
+
+  panel.innerHTML =
+    '<div class="tool-detail-panel-header">' +
+      '<span class="tool-detail-panel-title">🔧 ' + esc(toolName || "工具详情") + '</span>' +
+      '<button class="tool-detail-panel-close" onclick="this.closest(\'.tool-detail-panel\').remove()">✕</button>' +
+    '</div>' +
+    '<div class="tool-detail-panel-body">' +
+      (sections.length > 0 ? sections.join("") : '<div class="tool-detail-empty">暂无详细数据</div>') +
+    '</div>';
+
+  document.body.appendChild(panel);
+  // Animate in
+  requestAnimationFrame(function() { panel.classList.add("tool-detail-panel-open"); });
 }
 
 async function fetchAndRenderTrace(bubbleEl, agentId, conversationId, $messagesEl) {
@@ -223,14 +360,34 @@ function renderTraceSpan(span) {
 
 // ── Send message ─────────────────────────────────────────────────────────────
 
+function showStopButton($sendBtn) {
+  $sendBtn.classList.add("chat-stop-mode");
+  $sendBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+    Stop`;
+  $sendBtn.disabled = false;
+}
+
+function showSendButton($sendBtn) {
+  $sendBtn.classList.remove("chat-stop-mode");
+  $sendBtn.innerHTML = `
+    Send
+    <svg style="vertical-align: middle; margin-left: 4px;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
+  $sendBtn.disabled = false;
+}
+
 async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
   const message = $inputEl.value.trim();
   if (!message || chatState.streaming) return;
 
   $inputEl.value = "";
   $inputEl.disabled = true;
-  $sendBtn.disabled = true;
   chatState.streaming = true;
+
+  // Show stop button
+  const abortController = new AbortController();
+  chatState.abortController = abortController;
+  showStopButton($sendBtn);
 
   // Remove welcome box if present
   const welcome = $messagesEl.querySelector('.chat-welcome-box');
@@ -247,47 +404,87 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
   `;
   $messagesEl.appendChild(userRow);
 
-  // Append assistant placeholder
-  const assistantRow = document.createElement("div");
-  assistantRow.className = "chat-message-row assistant";
-  assistantRow.innerHTML = `<div class="chat-avatar">🤖</div>`;
-
-  const assistantDiv = document.createElement("div");
-  assistantDiv.className = "chat-bubble chat-bubble-assistant";
-  
   const agent = (chatState.agents ?? []).find(a => (a.id || a.agent_id) === agentId);
   const agentName = agent ? (agent.name || agent.agent_name || agentId) : agentId;
-  assistantDiv.innerHTML = `<div class="chat-bubble-sender">${esc(agentName)}</div>`;
+
+  // Container for the entire assistant response (interleaved: segment → tool → segment → tool → ...)
+  const assistantContainer = document.createElement("div");
+  assistantContainer.className = "chat-assistant-container";
+
+  // Current streaming bubble (always at the bottom)
+  const currentBubble = document.createElement("div");
+  currentBubble.className = "chat-bubble chat-bubble-assistant";
+  currentBubble.innerHTML = `<div class="chat-bubble-sender">${esc(agentName)}</div>`;
 
   const contentSpan = document.createElement("div");
   contentSpan.className = "chat-bubble-content";
   contentSpan.innerHTML = '<div class="chat-thinking-pulse"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
-  
-  assistantDiv.appendChild(contentSpan);
-  assistantRow.appendChild(assistantDiv);
-  
+  currentBubble.appendChild(contentSpan);
+  assistantContainer.appendChild(currentBubble);
+
+  // Wrap in a message row
+  const assistantRow = document.createElement("div");
+  assistantRow.className = "chat-message-row assistant";
+  assistantRow.innerHTML = `<div class="chat-avatar">🤖</div>`;
+  assistantRow.appendChild(assistantContainer);
+
   $messagesEl.appendChild(assistantRow);
   $messagesEl.scrollTop = $messagesEl.scrollHeight;
+
+  // Smart auto-scroll: only scroll if user is near the bottom
+  let userScrolledUp = false;
+  function onUserScroll() {
+    var threshold = 80;
+    userScrolledUp = ($messagesEl.scrollHeight - $messagesEl.scrollTop - $messagesEl.clientHeight) > threshold;
+  }
+  $messagesEl.addEventListener("scroll", onUserScroll);
+  function autoScroll() {
+    if (!userScrolledUp) {
+      $messagesEl.scrollTop = $messagesEl.scrollHeight;
+    }
+  }
 
   // Persist user message
   if (!chatState.conversations[agentId]) chatState.conversations[agentId] = [];
   chatState.conversations[agentId].push({ role: "user", text: message });
 
   const conversationId = chatState.currentConversationId ?? undefined;
+  let aborted = false;
+  let stepCount = 0;
 
   try {
     const res = await fetch("/api/chat/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ agentId, message, conversationId }),
+      signal: abortController.signal,
     });
 
     if (!res.ok || !res.body) {
       const errText = await res.text().catch(() => res.statusText);
-      contentSpan.innerHTML = `<span class="chat-error">Error ${res.status}: ${esc(errText)}</span>`;
+      // Detect auth errors and show friendly message
+      var isAuthError = res.status === 401 || res.status === 403;
+      if (!isAuthError) {
+        try {
+          var errObj = JSON.parse(errText);
+          isAuthError = errObj.upstream_status === 401 || errObj.upstream_status === 403
+            || (errObj.error && /认证|auth|token|expired|unauthorized/i.test(errObj.error));
+        } catch(e) {}
+      }
+      if (isAuthError) {
+        contentSpan.innerHTML = '<div class="chat-auth-error">' +
+          '<div class="chat-auth-error-icon">🔒</div>' +
+          '<div class="chat-auth-error-title">认证已过期</div>' +
+          '<div class="chat-auth-error-desc">登录凭证已失效，请在终端重新登录后刷新页面</div>' +
+          '<div class="chat-auth-error-cmd"><code>bkn login</code></div>' +
+          '</div>';
+      } else {
+        contentSpan.innerHTML = `<span class="chat-error">Error ${res.status}: ${esc(errText)}</span>`;
+      }
       chatState.streaming = false;
+      chatState.abortController = null;
       $inputEl.disabled = false;
-      $sendBtn.disabled = false;
+      showSendButton($sendBtn);
       return;
     }
 
@@ -302,6 +499,7 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
       const { done, value } = await reader.read();
       if (done) break;
       if (navGeneration !== gen) { reader.cancel(); break; }
+      if (abortController.signal.aborted) { reader.cancel(); aborted = true; break; }
 
       buf += decoder.decode(value, { stream: true });
       const lines = buf.split("\n");
@@ -314,28 +512,139 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
         let evt;
         try { evt = JSON.parse(dataStr); } catch { continue; }
 
-        if (evt.type === "text") {
-          lastText = evt.fullText ?? "";
-          contentSpan.innerHTML = chatMarkdown(lastText);
-          $messagesEl.scrollTop = $messagesEl.scrollHeight;
-        } else if (evt.type === "progress" && Array.isArray(evt.items)) {
-          let $trace = assistantDiv.querySelector(".trace-section");
-          if (!$trace) {
-            $trace = document.createElement("div");
-            $trace.className = "trace-section trace-expanded";
-            assistantDiv.appendChild($trace);
+        if (evt.type === "segment") {
+          var segText = (evt.text || "").trim();
+          // Skip trivial segments: too short, just agent name, or whitespace only
+          if (segText.length < 5 || segText === agentName) {
+            contentSpan.innerHTML = '<div class="chat-thinking-pulse"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+          } else {
+            stepCount++;
+            // Insert segment bubble before the current streaming bubble
+            var segBubble = document.createElement("div");
+            segBubble.className = "chat-bubble chat-bubble-assistant chat-segment-bubble";
+            segBubble.innerHTML = '<div class="chat-bubble-content">' + chatMarkdown(segText) + '</div>';
+            assistantContainer.insertBefore(segBubble, currentBubble);
+            // Reset streaming bubble for next phase
+            contentSpan.innerHTML = '<div class="chat-thinking-pulse"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
           }
-          $trace.innerHTML = renderProgressSteps(evt.items);
-          $messagesEl.scrollTop = $messagesEl.scrollHeight;
+          autoScroll();
+        } else if (evt.type === "text") {
+          lastText = evt.fullText ?? "";
+          var currentText = evt.currentText ?? lastText;
+          if (currentText) {
+            contentSpan.innerHTML = chatMarkdown(currentText);
+            // Detect if text contains a terminal error — flag for auto-stop
+            if (/event:error[\s\S]*?"code"/.test(currentText)) {
+              chatState.conversations[agentId].push({ role: "assistant", text: lastText });
+              reader.cancel();
+              aborted = true;
+            }
+          }
+          autoScroll();
+        } else if (evt.type === "step_meta") {
+          // Tool call metadata — dedup by tool id, update in place
+          var meta = evt.meta || {};
+          if (!meta || meta === null) { /* null meta = reset, skip */ }
+          else {
+            var statusText = meta.status || "";
+            var toolId = meta.id || (meta.skill_info && meta.skill_info.name) || meta.agent_name || "";
+            var toolName = (meta.skill_info && meta.skill_info.name) || meta.agent_name || "";
+            if (!toolName && meta.description) toolName = meta.description;
+            if (!toolId) toolId = toolName;
+            // Skip if no meaningful info
+            if (toolName || statusText) {
+              var isRunning = statusText === "running" || statusText === "processing";
+              var isCompleted = statusText === "completed" || statusText === "success";
+              var isFailed = statusText === "failed" || statusText === "error";
+
+              // Build brief args string from skill_info.args
+              var argsStr = "";
+              if (meta.skill_info && meta.skill_info.args && meta.skill_info.args.length > 0) {
+                argsStr = meta.skill_info.args.map(function(a) {
+                  var v = a.value;
+                  if (typeof v === "string" && v.length > 30) v = v.substring(0, 30) + "…";
+                  if (typeof v === "object" && v !== null) v = JSON.stringify(v).substring(0, 30) + "…";
+                  return (a.name || "") + "=" + v;
+                }).join(", ");
+              } else if (meta.input_message) {
+                argsStr = meta.input_message.length > 60 ? meta.input_message.substring(0, 60) + "…" : meta.input_message;
+              }
+
+              // Format time
+              var timeStr = "";
+              var tsRaw = meta.end_time || meta.start_time;
+              if (tsRaw) {
+                var ts = parseFloat(String(tsRaw));
+                if (ts > 1e9 && ts < 1e12) timeStr = new Date(ts * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                else if (ts > 1e12) timeStr = new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+              }
+
+              var icon = isRunning ? '<span class="trace-spinner"></span>' : isCompleted ? "✅" : isFailed ? "❌" : "🔧";
+
+              // Build tool card HTML
+              var cardHtml = '<span class="chat-tool-call-icon">' + icon + '</span>' +
+                '<span class="chat-tool-call-name">' + esc(toolName || statusText) + '</span>' +
+                (argsStr ? '<span class="chat-tool-call-args">(' + esc(argsStr) + ')</span>' : '') +
+                (timeStr ? '<span class="chat-tool-call-time">' + esc(timeStr) + '</span>' : '');
+
+              // Store full I/O data for detail panel
+              var detailData = {};
+              if (meta.input_message) detailData.input = meta.input_message;
+              if (meta.skill_info && meta.skill_info.args) detailData.args = meta.skill_info.args;
+              if (meta.block_answer) detailData.output = meta.block_answer;
+
+              // Dedup: find existing card for same tool id
+              var existingCard = assistantContainer.querySelector('.chat-tool-call[data-tool-id="' + esc(toolId) + '"]');
+              if (existingCard) {
+                // Update existing card
+                existingCard.innerHTML = cardHtml;
+                existingCard.className = "chat-tool-call" + (isRunning ? " chat-tool-call-running" : "");
+                if (Object.keys(detailData).length > 0) {
+                  existingCard.setAttribute("data-tool-detail", JSON.stringify(detailData));
+                }
+              } else {
+                var toolCard = document.createElement("div");
+                toolCard.className = "chat-tool-call" + (isRunning ? " chat-tool-call-running" : "");
+                toolCard.setAttribute("data-tool-id", toolId);
+                toolCard.innerHTML = cardHtml;
+                if (Object.keys(detailData).length > 0) {
+                  toolCard.setAttribute("data-tool-detail", JSON.stringify(detailData));
+                }
+                // Click to show detail panel
+                toolCard.addEventListener("click", function() {
+                  var raw = this.getAttribute("data-tool-detail");
+                  if (!raw) return;
+                  showToolDetailPanel(JSON.parse(raw), this.querySelector(".chat-tool-call-name").textContent);
+                });
+                toolCard.style.cursor = "pointer";
+                toolCard.title = "点击查看详情";
+                assistantContainer.insertBefore(toolCard, currentBubble);
+              }
+              autoScroll();
+            }
+          }
+        } else if (evt.type === "progress" && Array.isArray(evt.items)) {
+          // Insert/update progress steps before the streaming bubble
+          var existingProgress = assistantContainer.querySelector(".chat-progress-inline");
+          if (!existingProgress) {
+            existingProgress = document.createElement("div");
+            existingProgress.className = "chat-progress-inline";
+            assistantContainer.insertBefore(existingProgress, currentBubble);
+          }
+          existingProgress.innerHTML = renderProgressSteps(evt.items);
+          autoScroll();
         } else if (evt.type === "done") {
           chatState.currentConversationId = evt.conversationId || chatState.currentConversationId;
           if (lastText) {
             chatState.conversations[agentId].push({ role: "assistant", text: lastText });
           }
-          // Fetch full trace after completion
+          // Fetch full trace after completion — append at end of container
           const traceConvId = evt.conversationId || chatState.currentConversationId;
           if (traceConvId) {
-            fetchAndRenderTrace(assistantDiv, agentId, traceConvId, $messagesEl);
+            var traceHolder = document.createElement("div");
+            traceHolder.className = "chat-trace-holder";
+            assistantContainer.appendChild(traceHolder);
+            fetchAndRenderTrace(traceHolder, agentId, traceConvId, $messagesEl);
           }
         } else if (evt.type === "error") {
           contentSpan.innerHTML = `<span class="chat-error">${esc(evt.error)}</span>`;
@@ -343,17 +652,29 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
       }
     }
 
-    if (!lastText) {
+    if (aborted) {
+      if (lastText) {
+        chatState.conversations[agentId].push({ role: "assistant", text: lastText });
+      } else {
+        contentSpan.innerHTML = '<span class="chat-stopped">Response stopped.</span>';
+      }
+    } else if (!lastText) {
       contentSpan.innerHTML = '<span class="chat-error">No response received.</span>';
     }
   } catch (err) {
-    contentSpan.innerHTML = `<span class="chat-error">${esc(err.message || String(err))}</span>`;
+    if (err.name === "AbortError") {
+      contentSpan.innerHTML = '<span class="chat-stopped">Response stopped.</span>';
+    } else {
+      contentSpan.innerHTML = `<span class="chat-error">${esc(err.message || String(err))}</span>`;
+    }
   }
 
   chatState.streaming = false;
+  chatState.abortController = null;
   $inputEl.disabled = false;
-  $sendBtn.disabled = false;
+  showSendButton($sendBtn);
   $inputEl.focus();
+  $messagesEl.removeEventListener("scroll", onUserScroll);
   $messagesEl.scrollTop = $messagesEl.scrollHeight;
 }
 
@@ -396,9 +717,20 @@ function renderChatConversation($el, agentId, agentName) {
   // Scroll to bottom
   if ($messages) $messages.scrollTop = $messages.scrollHeight;
 
-  // Wire up send
+  // Wire up send / stop
   const doSend = () => chatSend($messages, $input, $sendBtn, agentId);
-  $sendBtn.addEventListener("click", doSend);
+  const doStop = () => {
+    if (chatState.abortController) {
+      chatState.abortController.abort();
+    }
+  };
+  $sendBtn.addEventListener("click", () => {
+    if (chatState.streaming) {
+      doStop();
+    } else {
+      doSend();
+    }
+  });
   $input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -461,6 +793,24 @@ async function renderChat($el, parts, _params) {
     return;
   }
 
+  // Detect test agents and sort them to the end
+  function isTestAgent(agent) {
+    const name = (agent.name || agent.agent_name || "").toLowerCase();
+    const key = (agent.key || "").toLowerCase();
+    const byName = (agent.published_by_name || "").toLowerCase();
+    return byName === "testbot"
+      || /测试智能体/.test(name)
+      || /test[_-]agent/.test(key)
+      || /^(api|chat|publish|unpublish)[_-]test/.test(key);
+  }
+
+  // Sort: non-test first, then test; within each group keep original order
+  agents.sort((a, b) => {
+    const aTest = isTestAgent(a) ? 1 : 0;
+    const bTest = isTestAgent(b) ? 1 : 0;
+    return aTest - bTest;
+  });
+
   // Pick active agent
   let activeAgentId = urlAgentId || chatState.currentAgentId;
   if (!activeAgentId || !agents.find(a => (a.id || a.agent_id) === activeAgentId)) {
@@ -482,10 +832,11 @@ async function renderChat($el, parts, _params) {
             const name = agent.name || agent.agent_name || id;
             const desc = agent.description || "";
             const isActive = id === activeAgentId;
-            return `<div class="chat-agent-item${isActive ? " active" : ""}" data-agent-id="${esc(id)}" onclick="chatSelectAgent(${esc(JSON.stringify(id))})">
-              <div class="chat-agent-item-icon">🤖</div>
+            const testFlag = isTestAgent(agent);
+            return `<div class="chat-agent-item${isActive ? " active" : ""}${testFlag ? " chat-agent-test" : ""}" data-agent-id="${esc(id)}" onclick="chatSelectAgent(${esc(JSON.stringify(id))})">
+              <div class="chat-agent-item-icon">${testFlag ? "🧪" : "🤖"}</div>
               <div class="chat-agent-item-content">
-                <div class="chat-agent-item-name">${esc(name)}</div>
+                <div class="chat-agent-item-name">${esc(name)}${testFlag ? ' <span class="chat-test-badge">测试</span>' : ""}</div>
                 ${desc ? `<div class="chat-agent-item-desc">${esc(desc)}</div>` : ""}
               </div>
             </div>`;

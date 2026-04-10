@@ -21,6 +21,7 @@ export function registerChatRoutes(
         baseUrl: t.baseUrl,
         accessToken: t.accessToken,
         businessDomain,
+        limit: 200,
       });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(raw);
@@ -107,12 +108,20 @@ export function registerChatRoutes(
           businessDomain,
         },
         {
-          onTextDelta: (fullText: string) => {
-            const event = JSON.stringify({ type: "text", fullText });
+          onTextDelta: (fullText: string, currentSegmentText: string) => {
+            const event = JSON.stringify({ type: "text", fullText, currentText: currentSegmentText });
             res.write(`data: ${event}\n\n`);
           },
           onProgress: (items) => {
             const event = JSON.stringify({ type: "progress", items });
+            res.write(`data: ${event}\n\n`);
+          },
+          onSegmentComplete: (segmentText: string, segmentIndex: number) => {
+            const event = JSON.stringify({ type: "segment", text: segmentText, index: segmentIndex });
+            res.write(`data: ${event}\n\n`);
+          },
+          onStepMeta: (meta: Record<string, unknown>) => {
+            const event = JSON.stringify({ type: "step_meta", meta });
             res.write(`data: ${event}\n\n`);
           },
         },

@@ -292,8 +292,10 @@ function applySseDataLine(
   line: string,
   state: StreamAccumulator,
   verbose?: boolean,
-  onTextDelta?: (fullText: string) => void,
-  onProgress?: (progress: ProgressItem[]) => void
+  onTextDelta?: (fullText: string, currentSegmentText: string) => void,
+  onProgress?: (progress: ProgressItem[]) => void,
+  onSegmentComplete?: (segmentText: string, segmentIndex: number) => void,
+  onStepMeta?: (meta: Record<string, unknown>) => void,
 ): void {
   if (!line.startsWith("data: ")) {
     return;
@@ -318,6 +320,15 @@ function applySseDataLine(
         typeof data.content === "string" ? data.content : String(data.content ?? "");
     }
 
+    // Detect answer_type_other changes (step metadata: status, end_time, etc.)
+    if (data.key && data.key.join(".").includes("answer_type_other") && data.action === "upsert") {
+      const ato = getByPath(state.result, ["message", "content", "final_answer", "answer_type_other"]);
+      console.error(`[STEP_META] ${JSON.stringify(ato).slice(0, 500)}`);
+      if (ato && typeof ato === "object" && onStepMeta) {
+        onStepMeta(ato as Record<string, unknown>);
+      }
+    }
+
     const progress = getProgressFromResult(state.result);
     if (progress.length > 0 && onProgress) {
       onProgress(progress);
@@ -329,6 +340,9 @@ function applySseDataLine(
     // significantly shorter (new segment starting). Save the completed segment.
     if (state.prevRawText && (!rawText || rawText.length < state.prevRawText.length * 0.5)) {
       state.completedSegments.push(state.prevRawText);
+      if (onSegmentComplete) {
+        onSegmentComplete(state.prevRawText, state.completedSegments.length - 1);
+      }
     }
     state.prevRawText = rawText;
 
@@ -339,7 +353,7 @@ function applySseDataLine(
 
     if (fullText && fullText !== state.lastText) {
       if (onTextDelta) {
-        onTextDelta(fullText);
+        onTextDelta(fullText, rawText);
       } else {
         const delta = fullText.slice(state.lastText.length);
         process.stdout.write(delta);
@@ -432,9 +446,13 @@ export async function sendChatRequest(options: SendChatRequestOptions): Promise<
 }
 
 export interface SendChatRequestStreamCallbacks {
-  onTextDelta: (fullText: string) => void;
+  onTextDelta: (fullText: string, currentSegmentText: string) => void;
   /** Optional: called when message.content.middle_answer.progress updates (tool/skill steps). */
   onProgress?: (progress: ProgressItem[]) => void;
+  /** Optional: called when a text segment is completed and a new phase starts. */
+  onSegmentComplete?: (segmentText: string, segmentIndex: number) => void;
+  /** Optional: called when answer_type_other changes (step metadata like status, tool info). */
+  onStepMeta?: (meta: Record<string, unknown>) => void;
 }
 
 /**
@@ -510,22 +528,24 @@ export async function sendChatRequestStream(
   }
 
   if (contentType.includes("text/event-stream")) {
-    return handleStreamResponse(response, verbose, callbacks.onTextDelta, callbacks.onProgress);
+    return handleStreamResponse(response, verbose, callbacks.onTextDelta, callbacks.onProgress, callbacks.onSegmentComplete, callbacks.onStepMeta);
   }
 
   const text = await response.text();
   const json = parseJsonResponse(text);
   const resultText = normalizeDisplayText(extractText(json));
   const convId = json.conversation_id as string | undefined;
-  callbacks.onTextDelta(resultText);
+  callbacks.onTextDelta(resultText, resultText);
   return { text: resultText, conversationId: convId, progress: getProgressFromResult(json) };
 }
 
 async function handleStreamResponse(
   response: Response,
   verbose?: boolean,
-  onTextDelta?: (fullText: string) => void,
-  onProgress?: (progress: ProgressItem[]) => void
+  onTextDelta?: (fullText: string, currentSegmentText: string) => void,
+  onProgress?: (progress: ProgressItem[]) => void,
+  onSegmentComplete?: (segmentText: string, segmentIndex: number) => void,
+  onStepMeta?: (meta: Record<string, unknown>) => void,
 ): Promise<ChatResult> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -534,6 +554,7 @@ async function handleStreamResponse(
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let pendingEventType = "";
   const state: StreamAccumulator = {
     result: {},
     conversationId: undefined,
@@ -543,7 +564,33 @@ async function handleStreamResponse(
   };
 
   const applyLine = (line: string): void => {
-    applySseDataLine(line, state, verbose, onTextDelta, onProgress);
+    // Track SSE event type (e.g., "event:error")
+    if (line.startsWith("event:")) {
+      pendingEventType = line.slice(6).trim();
+      return;
+    }
+    // If we have an error event type, handle the data line as an error
+    if (pendingEventType === "error" && line.startsWith("data: ")) {
+      pendingEventType = "";
+      const errStr = line.slice(6).trim();
+      // Emit as error text rather than processing as incremental update
+      if (onTextDelta) {
+        let errMsg = errStr;
+        try {
+          const errObj = JSON.parse(errStr) as Record<string, unknown>;
+          errMsg = (errObj.description as string) || (errObj.details as string) || errStr;
+          if (errObj.solution) errMsg += "\n" + (errObj.solution as string);
+        } catch { /* use raw string */ }
+        const fullText = state.completedSegments.length > 0
+          ? state.completedSegments.join("\n\n") + "\n\n⚠️ " + errMsg
+          : "⚠️ " + errMsg;
+        onTextDelta(fullText, "⚠️ " + errMsg);
+        state.lastText = fullText;
+      }
+      return;
+    }
+    pendingEventType = "";
+    applySseDataLine(line, state, verbose, onTextDelta, onProgress, onSegmentComplete, onStepMeta);
   };
 
   while (true) {

@@ -9,6 +9,7 @@ import { readBody, handleApiError, jsonResponse, type TokenProvider } from "./ex
 export interface ComposerAgentDef {
   ref: string;
   name: string;
+  profile: string;
   system_prompt: string;
 }
 
@@ -18,8 +19,9 @@ export interface ComposerConfig {
   agents: ComposerAgentDef[];
   orchestrator: {
     name: string;
+    profile: string;
     system_prompt: string;
-    dph_script: string;
+    dolphin: string;
     is_dolphin_mode?: number;
   };
 }
@@ -44,8 +46,9 @@ const TEMPLATES: ComposerTemplate[] = [
       agents: [],
       orchestrator: {
         name: "Orchestrator",
+        profile: "Orchestrates agent collaboration",
         system_prompt: "You are an orchestrator agent. Coordinate the sub-agents to accomplish the user's goal.",
-        dph_script: "",
+        dolphin: "",
         is_dolphin_mode: 1,
       },
     },
@@ -61,6 +64,7 @@ const TEMPLATES: ComposerTemplate[] = [
         {
           ref: "architect",
           name: "Architect",
+          profile: "Designs software architecture and specifications",
           system_prompt:
             "You are a senior software architect. Given a feature request or problem statement, " +
             "produce a clear technical design including component structure, API contracts, data models, " +
@@ -69,6 +73,7 @@ const TEMPLATES: ComposerTemplate[] = [
         {
           ref: "developer",
           name: "Developer",
+          profile: "Implements code based on architecture specs",
           system_prompt:
             "You are an expert software developer. Given a technical design document, implement the " +
             "solution in clean, well-documented code. Follow best practices for the target language, " +
@@ -77,6 +82,7 @@ const TEMPLATES: ComposerTemplate[] = [
         {
           ref: "reviewer",
           name: "Code Reviewer",
+          profile: "Reviews code for correctness, security, and quality",
           system_prompt:
             "You are a meticulous code reviewer. Analyze the provided code for correctness, security " +
             "vulnerabilities, performance issues, and adherence to best practices. Provide specific, " +
@@ -85,10 +91,11 @@ const TEMPLATES: ComposerTemplate[] = [
       ],
       orchestrator: {
         name: "Code Dev Orchestrator",
+        profile: "Orchestrates a three-stage code development pipeline",
         system_prompt:
           "You orchestrate a code development pipeline. Route the user's request through architect, " +
           "developer, and reviewer in sequence, passing each stage's output to the next.",
-        dph_script: [
+        dolphin: [
           "design = @architect(user_request)",
           "code = @developer(design)",
           "review = @reviewer(code)",
@@ -109,6 +116,7 @@ const TEMPLATES: ComposerTemplate[] = [
         {
           ref: "researcher_a",
           name: "Researcher A",
+          profile: "Researches from a technical/scientific perspective",
           system_prompt:
             "You are Research Analyst A. Investigate the given topic from a technical and quantitative " +
             "perspective. Focus on data, metrics, benchmarks, and empirical evidence. Provide structured " +
@@ -117,6 +125,7 @@ const TEMPLATES: ComposerTemplate[] = [
         {
           ref: "researcher_b",
           name: "Researcher B",
+          profile: "Researches from a practical/business perspective",
           system_prompt:
             "You are Research Analyst B. Investigate the given topic from a qualitative and strategic " +
             "perspective. Focus on market trends, user impact, competitive landscape, and expert opinions. " +
@@ -125,6 +134,7 @@ const TEMPLATES: ComposerTemplate[] = [
         {
           ref: "synthesizer",
           name: "Synthesizer",
+          profile: "Synthesizes multiple research perspectives into a unified report",
           system_prompt:
             "You are a research synthesizer. Given findings from multiple research analysts, merge them " +
             "into a coherent, comprehensive report. Highlight agreements, contradictions, and gaps. " +
@@ -133,10 +143,11 @@ const TEMPLATES: ComposerTemplate[] = [
       ],
       orchestrator: {
         name: "Research Orchestrator",
+        profile: "Orchestrates multi-perspective research and synthesis",
         system_prompt:
           "You orchestrate a research pipeline. Send the user's query to both researchers in parallel, " +
           "then pass their combined findings to the synthesizer for a final report.",
-        dph_script: [
+        dolphin: [
           "findings_a = @researcher_a(user_request)",
           "findings_b = @researcher_b(user_request)",
           "report = @synthesizer(findings_a + findings_b)",
@@ -150,16 +161,16 @@ const TEMPLATES: ComposerTemplate[] = [
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function buildAgentCreateBody(name: string, systemPrompt: string, extra?: Record<string, unknown>): string {
+function buildAgentCreateBody(name: string, profile: string, systemPrompt: string, extra?: Record<string, unknown>): string {
   return JSON.stringify({
     name,
-    profile: name,
+    profile,
     avatar_type: 1,
     avatar: "icon-dip-agent-default",
     product_key: "DIP",
     config: {
-      input: "text",
-      output: "text",
+      input: { fields: [{ name: "user_input", type: "string" }] },
+      output: { default_format: "markdown" },
       system_prompt: systemPrompt,
       ...extra,
     },
@@ -226,7 +237,7 @@ export function registerComposerRoutes(
     try {
       // 1. Create, publish, and fetch info for each sub-agent
       for (const agentDef of config.agents) {
-        const createBody = buildAgentCreateBody(agentDef.name, agentDef.system_prompt);
+        const createBody = buildAgentCreateBody(agentDef.name, agentDef.profile, agentDef.system_prompt);
         const createRaw = await createAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, body: createBody, businessDomain });
         const createResult = JSON.parse(createRaw) as { data?: { id?: string } };
         const agentId = createResult.data?.id;
@@ -243,7 +254,7 @@ export function registerComposerRoutes(
       }
 
       // 2. Process DPH script — replace @ref with actual @agent_key
-      let processedDphScript = config.orchestrator.dph_script;
+      let processedDphScript = config.orchestrator.dolphin;
       for (const [ref, key] of Object.entries(agentKeyMap)) {
         processedDphScript = processedDphScript.replace(
           new RegExp(`@${ref}\\b`, "g"),
@@ -255,9 +266,10 @@ export function registerComposerRoutes(
       const isDolphinMode = config.orchestrator.is_dolphin_mode ?? 1;
       const orchBody = buildAgentCreateBody(
         config.orchestrator.name,
+        config.orchestrator.profile,
         config.orchestrator.system_prompt,
         {
-          dph_script: processedDphScript,
+          dolphin: processedDphScript,
           is_dolphin_mode: isDolphinMode,
         },
       );

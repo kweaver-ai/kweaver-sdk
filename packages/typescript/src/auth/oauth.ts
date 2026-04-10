@@ -12,7 +12,7 @@ import {
   saveTokenConfig,
   setCurrentPlatform,
 } from "../config/store.js";
-import { HttpError, NetworkRequestError } from "../utils/http.js";
+import { HttpError, NetworkRequestError, fetchWithRetry } from "../utils/http.js";
 
 const TOKEN_TTL_SECONDS = 3600;
 
@@ -890,7 +890,7 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
   let response: Response;
   try {
     response = await runWithTlsInsecure(token.tlsInsecure, () =>
-      fetch(url, {
+      fetchWithRetry(url, {
         method: "POST",
         headers: {
           Authorization: `Basic ${credentials}`,
@@ -1131,6 +1131,14 @@ function formatOAuthErrorBody(body: string): string | null {
   return lines.join("\n");
 }
 
+function isTlsVerificationDisabledForProcess(): boolean {
+  return (
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" ||
+    process.env.KWEAVER_TLS_INSECURE === "1" ||
+    process.env.KWEAVER_TLS_INSECURE === "true"
+  );
+}
+
 export function formatHttpError(error: unknown): string {
   if (error instanceof HttpError) {
     const oauthMessage = formatOAuthErrorBody(error.body);
@@ -1154,7 +1162,10 @@ export function formatHttpError(error: unknown): string {
     const cause =
       "cause" in error && error.cause instanceof Error ? error.cause.message : "";
     if (cause && error.message === "fetch failed") {
-      return `${error.message}: ${cause}\nHint: use --insecure (-k) to skip TLS verification for self-signed certificates.`;
+      const hint = isTlsVerificationDisabledForProcess()
+        ? "Hint: TLS verification is already disabled for this process. Check network reachability, TLS termination, or proxy stability."
+        : "Hint: use --insecure (-k) to skip TLS verification for self-signed certificates.";
+      return `${error.message}: ${cause}\n${hint}`;
     }
     return error.message;
   }

@@ -72,11 +72,28 @@ function chatMarkdown(text) {
       var err = JSON.parse(errMatch[1]);
       var errMsg = err.description || err.details || errMatch[1];
       if (err.solution && err.solution !== "无") errMsg += "\n💡 " + err.solution;
+      // Show detailed error info (code, details, link) in a collapsible block
+      var errExtra = [];
+      if (err.code) errExtra.push("Code: " + err.code);
+      if (err.details && err.details !== err.description) errExtra.push("Details: " + err.details);
+      if (err.link && err.link !== "无") errExtra.push("Link: " + err.link);
+      var detailBlock = "";
+      if (errExtra.length > 0) {
+        detailBlock = "\n\n<details><summary>详细错误信息</summary>\n" + errExtra.join("\n") + "\n</details>";
+      }
       // Keep text before the error
       var beforeErr = text.substring(0, text.indexOf("event:error")).trim();
-      text = (beforeErr ? beforeErr + "\n\n" : "") + "⚠️ " + errMsg;
+      text = (beforeErr ? beforeErr + "\n\n" : "") + "⚠️ " + errMsg + detailBlock;
     } catch(e) { /* keep original */ }
   }
+
+  // Extract <details> blocks before escaping so they render as HTML
+  var detailsBlocks = [];
+  text = text.replace(/<details>([\s\S]*?)<\/details>/g, function(m) {
+    var idx = detailsBlocks.length;
+    detailsBlocks.push(m);
+    return "%%DETAILS_" + idx + "%%";
+  });
 
   let s = esc(text);
 
@@ -143,6 +160,24 @@ function chatMarkdown(text) {
   // Clean up <br> right after block elements
   s = s.replace(/(<\/(?:ul|ol|li|pre|h[1-4]|hr|details|div)>)\s*<br>/g, "$1");
   s = s.replace(/<br>\s*(<(?:ul|ol|pre|h[1-4]|hr|details)[\s>])/g, "$1");
+
+  // Restore <details> blocks
+  for (var di = 0; di < detailsBlocks.length; di++) {
+    // Render inner markdown of the details block
+    var block = detailsBlocks[di];
+    // Extract summary and body
+    var sumMatch = block.match(/<summary>([\s\S]*?)<\/summary>/);
+    var sumText = sumMatch ? sumMatch[1] : "";
+    var bodyContent = block.replace(/<\/?details>/g, "").replace(/<summary>[\s\S]*?<\/summary>/, "").trim();
+    // Render code blocks inside details
+    bodyContent = bodyContent.replace(/```json\n([\s\S]*?)\n```/g, function(_m, code) {
+      return '<pre class="chat-error-detail-code">' + esc(code) + '</pre>';
+    });
+    bodyContent = bodyContent.replace(/```([\s\S]*?)```/g, function(_m, code) {
+      return '<pre>' + esc(code) + '</pre>';
+    });
+    s = s.replace("%%DETAILS_" + di + "%%", '<details class="chat-error-detail"><summary>' + sumText + '</summary>' + bodyContent + '</details>');
+  }
 
   return s;
 }
@@ -292,13 +327,31 @@ function showToolDetailPanel(detail, toolName) {
 }
 
 async function fetchAndRenderTrace(bubbleEl, agentId, conversationId, $messagesEl) {
+  // Trace data may not be available immediately after chat ends — retry with backoff
+  var TRACE_RETRY_DELAYS = [2000, 4000];
+  var sessions = null;
+
+  for (var attempt = 0; attempt <= TRACE_RETRY_DELAYS.length; attempt++) {
+    if (attempt > 0) {
+      await new Promise(function(r) { setTimeout(r, TRACE_RETRY_DELAYS[attempt - 1]); });
+    }
+    try {
+      var data = await api("GET", "/api/chat/trace?agentId=" + enc(agentId) + "&conversationId=" + enc(conversationId));
+      sessions = Array.isArray(data) ? data
+        : Array.isArray(data?.sessions) ? data.sessions
+        : Array.isArray(data?.results) ? data.results
+        : extractList(data);
+      if (sessions && sessions.length > 0) break;
+    } catch (e) {
+      // Trace is best-effort
+    }
+  }
+
   try {
-    var data = await api("GET", "/api/chat/trace?agentId=" + enc(agentId) + "&conversationId=" + enc(conversationId));
-    var sessions = extractList(data);
     if (!sessions || sessions.length === 0) return;
 
     var latestSession = sessions[sessions.length - 1];
-    var spans = latestSession.spans || latestSession.steps || latestSession.traces || [];
+    var spans = latestSession.spans || latestSession.steps || latestSession.traces || latestSession.operations || [];
     if (spans.length === 0) return;
 
     var totalDuration = spans.reduce(function(sum, s) { return sum + (s.duration_ms || s.duration || 0); }, 0);
@@ -451,6 +504,7 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
   const conversationId = chatState.currentConversationId ?? undefined;
   let aborted = false;
   let stepCount = 0;
+  let receivedDone = false;
 
   try {
     const res = await fetch("/api/chat/send", {
@@ -479,7 +533,23 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
           '<div class="chat-auth-error-cmd"><code>bkn login</code></div>' +
           '</div>';
       } else {
-        contentSpan.innerHTML = `<span class="chat-error">Error ${res.status}: ${esc(errText)}</span>`;
+        var displayErr = errText;
+        try {
+          var parsedErr = JSON.parse(errText);
+          displayErr = parsedErr.error || errText;
+          if (parsedErr.detail) {
+            var detailContent = parsedErr.detail;
+            try { detailContent = JSON.stringify(JSON.parse(parsedErr.detail), null, 2); } catch(e2) {}
+            contentSpan.innerHTML = '<span class="chat-error">⚠️ ' + esc(displayErr) + '</span>' +
+              '<details class="chat-error-detail"><summary>详细信息</summary><pre>' + esc(detailContent) + '</pre></details>';
+            chatState.streaming = false;
+            chatState.abortController = null;
+            $inputEl.disabled = false;
+            showSendButton($sendBtn);
+            return;
+          }
+        } catch(e3) {}
+        contentSpan.innerHTML = `<span class="chat-error">⚠️ Error ${res.status}: ${esc(displayErr)}</span>`;
       }
       chatState.streaming = false;
       chatState.abortController = null;
@@ -658,6 +728,7 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
           existingProgress.innerHTML = renderProgressSteps(evt.items);
           autoScroll();
         } else if (evt.type === "done") {
+          receivedDone = true;
           chatState.currentConversationId = evt.conversationId || chatState.currentConversationId;
           if (lastText) {
             chatState.conversations[agentId].push({ role: "assistant", text: lastText });
@@ -670,8 +741,18 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
             assistantContainer.appendChild(traceHolder);
             fetchAndRenderTrace(traceHolder, agentId, traceConvId, $messagesEl);
           }
+        } else if (evt.type === "conversation_id") {
+          chatState.currentConversationId = evt.conversationId;
         } else if (evt.type === "error") {
-          contentSpan.innerHTML = `<span class="chat-error">${esc(evt.error)}</span>`;
+          var errHtml = '<span class="chat-error">⚠️ ' + esc(evt.error) + '</span>';
+          if (evt.detail) {
+            var detailStr = evt.detail;
+            try {
+              detailStr = JSON.stringify(JSON.parse(evt.detail), null, 2);
+            } catch(e) {}
+            errHtml += '<details class="chat-error-detail"><summary>详细信息</summary><pre>' + esc(detailStr) + '</pre></details>';
+          }
+          contentSpan.innerHTML = errHtml;
         }
       }
     }
@@ -689,6 +770,19 @@ async function chatSend($messagesEl, $inputEl, $sendBtn, agentId) {
       }
     } else if (!lastText) {
       contentSpan.innerHTML = '<span class="chat-error">No response received.</span>';
+    }
+
+    // Fallback: if stream ended without a "done" event (e.g. 502, connection reset),
+    // still attempt to fetch trace using whatever conversationId we have
+    if (!receivedDone && !aborted && lastText) {
+      chatState.conversations[agentId].push({ role: "assistant", text: lastText });
+      var fallbackConvId = chatState.currentConversationId;
+      if (fallbackConvId) {
+        var traceHolder = document.createElement("div");
+        traceHolder.className = "chat-trace-holder";
+        assistantContainer.appendChild(traceHolder);
+        fetchAndRenderTrace(traceHolder, agentId, fallbackConvId, $messagesEl);
+      }
     }
   } catch (err) {
     clearInterval(stallInterval);

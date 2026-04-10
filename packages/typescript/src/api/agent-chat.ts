@@ -296,6 +296,7 @@ function applySseDataLine(
   onProgress?: (progress: ProgressItem[]) => void,
   onSegmentComplete?: (segmentText: string, segmentIndex: number) => void,
   onStepMeta?: (meta: Record<string, unknown>) => void,
+  onConversationId?: (conversationId: string) => void,
 ): void {
   if (!line.startsWith("data: ")) {
     return;
@@ -318,6 +319,9 @@ function applySseDataLine(
     if (data.key?.length === 1 && data.key[0] === "conversation_id" && data.action === "upsert") {
       state.conversationId =
         typeof data.content === "string" ? data.content : String(data.content ?? "");
+      if (state.conversationId && onConversationId) {
+        onConversationId(state.conversationId);
+      }
     }
 
     // Detect answer_type_other changes (step metadata: status, end_time, etc.)
@@ -453,6 +457,8 @@ export interface SendChatRequestStreamCallbacks {
   onSegmentComplete?: (segmentText: string, segmentIndex: number) => void;
   /** Optional: called when answer_type_other changes (step metadata like status, tool info). */
   onStepMeta?: (meta: Record<string, unknown>) => void;
+  /** Optional: called as soon as conversationId is discovered in the stream. */
+  onConversationId?: (conversationId: string) => void;
 }
 
 /**
@@ -528,7 +534,7 @@ export async function sendChatRequestStream(
   }
 
   if (contentType.includes("text/event-stream")) {
-    return handleStreamResponse(response, verbose, callbacks.onTextDelta, callbacks.onProgress, callbacks.onSegmentComplete, callbacks.onStepMeta);
+    return handleStreamResponse(response, verbose, callbacks.onTextDelta, callbacks.onProgress, callbacks.onSegmentComplete, callbacks.onStepMeta, callbacks.onConversationId);
   }
 
   const text = await response.text();
@@ -546,6 +552,7 @@ async function handleStreamResponse(
   onProgress?: (progress: ProgressItem[]) => void,
   onSegmentComplete?: (segmentText: string, segmentIndex: number) => void,
   onStepMeta?: (meta: Record<string, unknown>) => void,
+  onConversationId?: (conversationId: string) => void,
 ): Promise<ChatResult> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -576,21 +583,33 @@ async function handleStreamResponse(
       // Emit as error text rather than processing as incremental update
       if (onTextDelta) {
         let errMsg = errStr;
+        let errDetail = "";
         try {
           const errObj = JSON.parse(errStr) as Record<string, unknown>;
           errMsg = (errObj.description as string) || (errObj.details as string) || errStr;
-          if (errObj.solution) errMsg += "\n" + (errObj.solution as string);
-        } catch { /* use raw string */ }
+          if (errObj.solution && errObj.solution !== "无") errMsg += "\n💡 " + (errObj.solution as string);
+          // Collect all remaining fields as detail context
+          const detailFields: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(errObj)) {
+            if (k !== "description" && k !== "solution" && v != null && v !== "") {
+              detailFields[k] = v;
+            }
+          }
+          if (Object.keys(detailFields).length > 0) {
+            errDetail = "\n\n<details><summary>详细错误信息</summary>\n\n```json\n" + JSON.stringify(detailFields, null, 2) + "\n```\n</details>";
+          }
+        } catch { if (verbose) console.error("Failed to parse SSE error JSON:", errStr); }
+        const errText = "⚠️ " + errMsg + errDetail;
         const fullText = state.completedSegments.length > 0
-          ? state.completedSegments.join("\n\n") + "\n\n⚠️ " + errMsg
-          : "⚠️ " + errMsg;
-        onTextDelta(fullText, "⚠️ " + errMsg);
+          ? state.completedSegments.join("\n\n") + "\n\n" + errText
+          : errText;
+        onTextDelta(fullText, errText);
         state.lastText = fullText;
       }
       return;
     }
     pendingEventType = "";
-    applySseDataLine(line, state, verbose, onTextDelta, onProgress, onSegmentComplete, onStepMeta);
+    applySseDataLine(line, state, verbose, onTextDelta, onProgress, onSegmentComplete, onStepMeta, onConversationId);
   };
 
   while (true) {
@@ -612,6 +631,19 @@ async function handleStreamResponse(
 
   if (!onTextDelta && state.lastText && !state.lastText.endsWith("\n")) {
     process.stdout.write("\n");
+  }
+
+  // Fallback: try to extract conversationId from accumulated result if not found in stream
+  if (!state.conversationId) {
+    const r = state.result as Record<string, unknown>;
+    const candidate =
+      r.conversation_id ??
+      (r.message as Record<string, unknown> | undefined)?.conversation_id ??
+      r.conversationId;
+    if (typeof candidate === "string" && candidate) {
+      state.conversationId = candidate;
+      if (onConversationId) onConversationId(candidate);
+    }
   }
 
   const rawFinal = normalizeDisplayText(extractText(state.result));

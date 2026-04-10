@@ -129,6 +129,10 @@ export function registerChatRoutes(
             const event = JSON.stringify({ type: "step_meta", meta });
             res.write(`data: ${event}\n\n`);
           },
+          onConversationId: (convId: string) => {
+            const event = JSON.stringify({ type: "conversation_id", conversationId: convId });
+            res.write(`data: ${event}\n\n`);
+          },
         },
       );
 
@@ -141,13 +145,30 @@ export function registerChatRoutes(
       res.end();
     } catch (error) {
       clearInterval(heartbeat);
+      // Extract detailed error info — HttpError carries the upstream response body
+      let errMsg = error instanceof Error ? error.message : String(error);
+      let errDetail: string | undefined;
+      if (error && typeof error === "object" && "body" in error) {
+        const body = (error as { body: string }).body;
+        if (body) {
+          errDetail = body;
+          // Try to extract a human-readable message from JSON body
+          try {
+            const parsed = JSON.parse(body) as Record<string, unknown>;
+            const desc = parsed.description || parsed.detail || parsed.message || parsed.error;
+            if (desc) errMsg += `: ${desc}`;
+            if (parsed.solution) errMsg += ` (${parsed.solution})`;
+          } catch { errMsg += `: ${body.slice(0, 500)}`; }
+        }
+      }
       if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+        res.end(JSON.stringify({ error: errMsg, detail: errDetail }));
       } else {
         const errEvent = JSON.stringify({
           type: "error",
-          error: error instanceof Error ? error.message : String(error),
+          error: errMsg,
+          detail: errDetail,
         });
         res.write(`data: ${errEvent}\n\n`);
         res.end();

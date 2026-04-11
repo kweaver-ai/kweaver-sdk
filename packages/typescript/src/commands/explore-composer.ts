@@ -3,7 +3,7 @@ import { IncomingMessage, ServerResponse } from "node:http";
 import { createAgent, publishAgent, deleteAgent } from "../api/agent-list.js";
 import { fetchAgentInfo, sendChatRequestStream } from "../api/agent-chat.js";
 import { readBody, handleApiError, jsonResponse, type TokenProvider } from "./explore-bkn.js";
-import { type FlowDo, compileToDph } from "./composer-flow.js";
+import { type FlowDo, compileToDph, validateFlow, validateDphSyntax } from "./composer-flow.js";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -266,52 +266,6 @@ function sanitizeAgentName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_\u4e00-\u9fff]/g, "_").replace(/^(\d)/, "_$1");
 }
 
-/**
- * Fix common DPH syntax errors produced by LLMs.
- * - Extracts `+` concatenation from inside @func() arguments into separate assignment lines.
- * - Removes unsupported constructs like @if, RETURN.
- */
-function fixDphSyntax(dolphin: string): string {
-  if (!dolphin) return dolphin;
-
-  const lines = dolphin.split("\n");
-  const fixed: string[] = [];
-  let tempCounter = 0;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    // Remove RETURN lines
-    if (/^RETURN\b/i.test(trimmed)) continue;
-
-    // Remove @if / if() lines and closing /end/ for conditionals
-    if (/^@if\b|^if\s*\(/i.test(trimmed)) continue;
-
-    // Fix: @func(query=$a + $b + ...) -> extract concat to a separate line
-    const funcMatch = trimmed.match(/^(@\w+)\(query=(.+\+.+)\)\s*->\s*(\w+)$/);
-    if (funcMatch) {
-      const [, funcCall, concatExpr, resultVar] = funcMatch;
-      const tempVar = `_concat_${++tempCounter}`;
-      fixed.push(`${concatExpr.trim()} -> ${tempVar}`);
-      fixed.push(`${funcCall}(query=$${tempVar}) -> ${resultVar}`);
-      continue;
-    }
-
-    // Fix: @func(query="literal" + $var) — string + var concat in args
-    const strConcatMatch = trimmed.match(/^(@\w+)\(query=(".*?"\s*\+\s*.+)\)\s*->\s*(\w+)$/);
-    if (strConcatMatch) {
-      const [, funcCall, concatExpr, resultVar] = strConcatMatch;
-      const tempVar = `_concat_${++tempCounter}`;
-      fixed.push(`${concatExpr.trim()} -> ${tempVar}`);
-      fixed.push(`${funcCall}(query=$${tempVar}) -> ${resultVar}`);
-      continue;
-    }
-
-    fixed.push(line);
-  }
-
-  return fixed.join("\n");
-}
 
 const DEFAULT_LLM_ID = "v3";
 const DEFAULT_LLMS = [{ is_default: true, llm_config: { id: DEFAULT_LLM_ID, name: DEFAULT_LLM_ID, max_tokens: 4096 } }];
@@ -344,108 +298,117 @@ function buildAgentCreateBody(
 
 // ── LLM-powered ComposerConfig generation ───────────────────────────────────
 
-const DPH_GENERATION_SYSTEM_PROMPT = `You are a multi-agent workflow designer. Given a user's natural language description, design a multi-agent workflow and output a ComposerConfig JSON.
+const FLOW_GENERATION_PROMPT_VERSION = "1.0";
 
-## DPH (Dolphin) Language Syntax
+const FLOW_GENERATION_SYSTEM_PROMPT = `You are a multi-agent workflow designer. Given a user's natural language description, design a multi-agent workflow and output a ComposerConfig JSON.
 
-DPH is a workflow orchestration language. Key rules:
-- Assignment: \`expression -> variable_name\` (NOT \`variable = expression\`)
-- Append: \`expression >> variable_name\`
-- Variables use \`$\` prefix: \`$variable_name\`
-- Function calls: \`@function_name(param=$value) -> result\`
-  - Arguments MUST use keyword form: \`query=$var\`, NOT positional
-  - \`+\` operator is NOT allowed inside function arguments
-- String concat: \`$a + $b -> combined\` (only in assign blocks, not inside @func())
-- Literal assignment: \`"some text" -> var_name\`
-- Loop: \`/for/ $item in $list:\\n    ...\\n/end/\`
-- LLM prompt: \`/prompt/(model="v3") instructions -> result\`
-- There is NO \`RETURN\` keyword. The last \`-> variable\` is the output.
-- Comments: lines starting with \`#\`
+## Flow Schema
+
+Instead of writing orchestration scripts, define the workflow as a structured "flow" JSON object.
+
+### Step Types
+
+1. **call** — invoke an agent:
+   { "call": "agent_ref", "input": "$variable" }
+
+2. **parallel** — run steps concurrently:
+   { "parallel": [ { "call": "a", "input": "$query" }, { "call": "b", "input": "$query" } ] }
+
+3. **switch** — conditional branching:
+   { "switch": [
+     { "if": "$var.field == 'value'", "do": [{ "call": "x", "input": "$var" }] },
+     { "default": true, "do": [{ "call": "y", "input": "$var" }] }
+   ] }
+
+### Rules
+
+- Each \`call\` value must match an agent \`ref\` in the agents array
+- \`input\` must be a \`$variable\` reference: \`$query\` (user input) or \`$agent_ref\` (output of a previous step)
+- To combine results: \`"input": "$agent_a + $agent_b"\`
+- Multi-param: \`"input": {"query": "$var1", "context": "$var2"}\`
+- Output variable name defaults to the agent ref (e.g. call "triage" → output is \`$triage\`)
+- \`switch\` conditions use Python comparison syntax
+- \`switch\` must have at least one \`if\` case; \`default\` must be last
 
 ## ComposerConfig JSON Schema
 
-\`\`\`json
+\\\`\\\`\\\`json
 {
   "name": "Workflow Name",
   "description": "What this workflow does",
   "agents": [
-    {
-      "ref": "snake_case_identifier",
-      "name": "Human Readable Name",
-      "profile": "One-line role description",
-      "system_prompt": "Detailed instructions for this agent"
-    }
+    { "ref": "snake_case_id", "name": "Display Name", "profile": "One-line role", "system_prompt": "Detailed instructions" }
   ],
   "orchestrator": {
     "name": "Orchestrator Name",
     "profile": "One-line description",
-    "system_prompt": "Instructions for how orchestrator coordinates",
-    "dolphin": "DPH script as a single string (newlines as \\n)",
-    "is_dolphin_mode": 1
+    "system_prompt": "How the orchestrator coordinates",
+    "flow": {
+      "do": [
+        { "call": "agent_ref", "input": "$query" }
+      ]
+    }
   }
 }
-\`\`\`
+\\\`\\\`\\\`
 
-## Example 1: Sequential pipeline
+## Example 1: Sequential Pipeline
 
-User: "Code development with architect, developer, and reviewer"
-\`\`\`json
+User: "Code review with architect, developer, reviewer"
+\\\`\\\`\\\`json
 {
-  "name": "Code Development Pipeline",
-  "description": "Architect designs, developer implements, reviewer validates",
+  "name": "Code Review Pipeline",
+  "description": "Sequential code development pipeline",
   "agents": [
-    { "ref": "architect", "name": "Architect", "profile": "Designs software architecture", "system_prompt": "You are a senior software architect. Produce a clear technical design." },
-    { "ref": "developer", "name": "Developer", "profile": "Implements code", "system_prompt": "You are an expert developer. Implement clean, well-documented code." },
-    { "ref": "reviewer", "name": "Reviewer", "profile": "Reviews code quality", "system_prompt": "You are a meticulous code reviewer. Provide actionable feedback." }
+    { "ref": "architect", "name": "Architect", "profile": "Designs architecture", "system_prompt": "You are a senior architect. Produce a clear design." },
+    { "ref": "developer", "name": "Developer", "profile": "Implements code", "system_prompt": "You are an expert developer. Implement clean code." },
+    { "ref": "reviewer", "name": "Reviewer", "profile": "Reviews quality", "system_prompt": "You are a code reviewer. Provide actionable feedback." }
   ],
   "orchestrator": {
-    "name": "Code Dev Orchestrator",
-    "profile": "Orchestrates sequential code development",
+    "name": "Pipeline Orchestrator",
+    "profile": "Coordinates sequential pipeline",
     "system_prompt": "Route through architect, developer, reviewer in sequence.",
-    "dolphin": "@architect(query=$query) -> design\\n@developer(query=$design) -> code\\n@reviewer(query=$code) -> review",
-    "is_dolphin_mode": 1
+    "flow": { "do": [
+      { "call": "architect", "input": "$query" },
+      { "call": "developer", "input": "$architect" },
+      { "call": "reviewer", "input": "$developer" }
+    ] }
   }
 }
-\`\`\`
+\\\`\\\`\\\`
 
-## Example 2: Fork-join pattern
+## Example 2: Parallel Research
 
-User: "Research from two perspectives then synthesize"
-\`\`\`json
+User: "Two researchers then synthesize"
+\\\`\\\`\\\`json
 {
-  "name": "Research & Synthesize",
-  "description": "Parallel research merged into synthesis",
+  "name": "Research Pipeline",
+  "description": "Parallel research with synthesis",
   "agents": [
-    { "ref": "researcher_a", "name": "Researcher A", "profile": "Technical perspective", "system_prompt": "Investigate from a technical/quantitative perspective." },
-    { "ref": "researcher_b", "name": "Researcher B", "profile": "Business perspective", "system_prompt": "Investigate from a strategic/qualitative perspective." },
-    { "ref": "synthesizer", "name": "Synthesizer", "profile": "Merges findings", "system_prompt": "Merge findings into a coherent report." }
+    { "ref": "researcher_a", "name": "Researcher A", "profile": "Technical analysis", "system_prompt": "Research from a technical perspective." },
+    { "ref": "researcher_b", "name": "Researcher B", "profile": "Business analysis", "system_prompt": "Research from a business perspective." },
+    { "ref": "synthesizer", "name": "Synthesizer", "profile": "Merges findings", "system_prompt": "Merge findings into a report." }
   ],
   "orchestrator": {
     "name": "Research Orchestrator",
-    "profile": "Orchestrates multi-perspective research",
-    "system_prompt": "Send query to both researchers, combine findings, synthesize.",
-    "dolphin": "@researcher_a(query=$query) -> findings_a\\n@researcher_b(query=$query) -> findings_b\\n$findings_a + $findings_b -> combined\\n@synthesizer(query=$combined) -> report",
-    "is_dolphin_mode": 1
+    "profile": "Coordinates parallel research",
+    "system_prompt": "Send to both researchers, then synthesize.",
+    "flow": { "do": [
+      { "parallel": [
+        { "call": "researcher_a", "input": "$query" },
+        { "call": "researcher_b", "input": "$query" }
+      ] },
+      { "call": "synthesizer", "input": "$researcher_a + $researcher_b" }
+    ] }
   }
 }
-\`\`\`
+\\\`\\\`\\\`
 
-## Rules
+## Output Rules
 
 1. Design 2-5 agents with clear, distinct roles
-2. Each agent ref must be a unique snake_case identifier
-3. The DPH script must reference each agent via \`@ref(query=$var) -> result\`
-4. \`$query\` is the built-in variable for user input — do NOT assign it manually
-5. Output ONLY a single JSON code block with the ComposerConfig. No other text before or after.
-6. The DPH dolphin field must use actual newline characters (not literal \\\\n) as line separators within the JSON string value
-7. System prompts should be detailed and specific to the agent's role
-
-## CRITICAL DPH Constraints — violations WILL cause runtime errors
-
-- NEVER use \`+\` inside @function arguments: \`@func(query=$a + $b)\` is ILLEGAL. Instead, concat first: \`$a + $b -> combined\` then \`@func(query=$combined)\`
-- NEVER use \`@if\`, \`if\`, or conditional branches — DPH has NO conditional syntax
-- NEVER use \`RETURN\` — the last \`-> variable\` is automatically the output
-- Keep scripts to sequential pipelines or fork-join patterns. Do NOT invent syntax.`;
+2. Output ONLY a single JSON code block. No other text.
+3. System prompts should be detailed and specific.`;
 
 /**
  * Extract JSON from an LLM response that may contain markdown code blocks.
@@ -488,7 +451,10 @@ function validateComposerConfig(obj: unknown): obj is ComposerConfig {
   }
   if (!c.orchestrator || typeof c.orchestrator !== "object") return false;
   const o = c.orchestrator as Record<string, unknown>;
-  if (typeof o.dolphin !== "string") return false;
+  // Accept either flow or dolphin (flow is preferred, dolphin is legacy)
+  const hasFlow = o.flow && typeof o.flow === "object" && Array.isArray((o.flow as Record<string, unknown>).do);
+  const hasDolphin = typeof o.dolphin === "string";
+  if (!hasFlow && !hasDolphin) return false;
   if (typeof o.name !== "string" || typeof o.system_prompt !== "string") return false;
   return true;
 }
@@ -525,9 +491,20 @@ async function findRelayAgent(
   return null;
 }
 
+function logBadCase(gate: string, prompt: string, llmOutput: unknown, error: string): void {
+  const entry = {
+    date: new Date().toISOString().slice(0, 10),
+    gate, prompt,
+    llm_output: typeof llmOutput === "string" ? llmOutput.slice(0, 500) : JSON.stringify(llmOutput).slice(0, 500),
+    error_message: error,
+    status: "open",
+  };
+  console.error(`[composer/badcase] ${JSON.stringify(entry)}`);
+}
+
 /**
  * Generate a ComposerConfig by calling an LLM via an existing published agent.
- * The system prompt is prepended to the query to guide generation.
+ * Uses Flow schema generation with Gate 1 (validateFlow) retry loop + Gate 2 (validateDphSyntax).
  * Falls back to buildGeneratedComposerConfig on failure.
  */
 async function generateComposerConfigViaLLM(
@@ -537,109 +514,106 @@ async function generateComposerConfigViaLLM(
   sendEvent: (payload: Record<string, unknown>) => void,
 ): Promise<ComposerConfig> {
   let t: { baseUrl: string; accessToken: string };
-
   try {
     t = await getToken();
   } catch {
-    console.error("[composer/generate] Failed to get token, falling back to template");
     return buildGeneratedComposerConfig(prompt);
   }
 
   try {
-    // Phase 1: Find a relay agent
-    sendEvent({
-      type: "progress",
-      items: [
-        { agent_name: "Initializing workflow designer...", status: "running", description: "Finding available agent" },
-        { agent_name: "Designing agent roles and DPH script...", status: "pending", description: "Waiting" },
-        { agent_name: "Finalizing configuration...", status: "pending", description: "Waiting" },
-      ],
-    });
+    // Phase 1: Find relay agent
+    sendEvent({ type: "progress", items: [
+      { agent_name: "Initializing...", status: "running", description: "Finding available agent" },
+      { agent_name: "Designing workflow...", status: "pending", description: "Waiting" },
+      { agent_name: "Validating...", status: "pending", description: "Waiting" },
+    ] });
 
     const relayAgent = await findRelayAgent(t.baseUrl, t.accessToken, businessDomain);
-    if (!relayAgent) {
-      throw new Error("No available agent found for LLM generation");
+    if (!relayAgent) throw new Error("No available agent found");
+
+    // Phase 2: LLM generation + Gate 1 retry loop
+    sendEvent({ type: "progress", items: [
+      { agent_name: "Initializing...", status: "completed", description: "Agent ready" },
+      { agent_name: "Designing workflow...", status: "running", description: "LLM is designing" },
+      { agent_name: "Validating...", status: "pending", description: "Waiting" },
+    ] });
+
+    let config: ComposerConfig | null = null;
+    let lastErrors: string[] = [];
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let fullQuery = `${FLOW_GENERATION_SYSTEM_PROMPT}\n\n---\n\nUser request: ${prompt}`;
+      if (attempt > 0 && lastErrors.length > 0) {
+        fullQuery += `\n\nYour previous output had these errors:\n${lastErrors.join("\n")}\n\nPlease fix and output again.`;
+        sendEvent({ type: "progress", items: [
+          { agent_name: "Initializing...", status: "completed", description: "Agent ready" },
+          { agent_name: "Designing workflow...", status: "running", description: `Retrying (attempt ${attempt + 1}/3)` },
+          { agent_name: "Validating...", status: "pending", description: "Waiting" },
+        ] });
+      }
+
+      let fullText = "";
+      await sendChatRequestStream(
+        { baseUrl: t.baseUrl, accessToken: t.accessToken, agentId: relayAgent.id, agentKey: relayAgent.key, agentVersion: relayAgent.version, query: fullQuery, stream: true, businessDomain },
+        { onTextDelta: (ft: string, seg: string) => { fullText = ft; sendEvent({ type: "text", fullText: ft, currentText: seg }); } },
+      );
+
+      const parsed = extractJsonFromLLMResponse(fullText);
+      if (!parsed || !validateComposerConfig(parsed)) {
+        lastErrors = ["Output is not a valid ComposerConfig JSON"];
+        logBadCase(`gate1-attempt${attempt}`, prompt, fullText, lastErrors[0]);
+        continue;
+      }
+
+      // Gate 1: Validate flow
+      if (parsed.orchestrator.flow) {
+        const agentRefs = parsed.agents.map((a) => a.ref);
+        const flowErrors = validateFlow(parsed.orchestrator.flow, agentRefs);
+        if (flowErrors.length > 0) {
+          lastErrors = flowErrors;
+          logBadCase(`gate1-attempt${attempt}`, prompt, parsed, flowErrors.join("; "));
+          continue;
+        }
+      }
+
+      config = parsed;
+      break;
     }
 
-    // Phase 2: Stream LLM response — embed system prompt in the query
-    sendEvent({
-      type: "progress",
-      items: [
-        { agent_name: "Initializing workflow designer...", status: "completed", description: "Agent ready" },
-        { agent_name: "Designing agent roles and DPH script...", status: "running", description: "LLM is designing your workflow" },
-        { agent_name: "Finalizing configuration...", status: "pending", description: "Waiting" },
-      ],
-    });
-
-    const fullQuery = `${DPH_GENERATION_SYSTEM_PROMPT}\n\n---\n\nUser request: ${prompt}`;
-    let fullText = "";
-    const result = await sendChatRequestStream(
-      {
-        baseUrl: t.baseUrl,
-        accessToken: t.accessToken,
-        agentId: relayAgent.id,
-        agentKey: relayAgent.key,
-        agentVersion: relayAgent.version,
-        query: fullQuery,
-        stream: true,
-        businessDomain,
-      },
-      {
-        onTextDelta: (ft: string, currentSegmentText: string) => {
-          fullText = ft;
-          sendEvent({ type: "text", fullText: ft, currentText: currentSegmentText });
-        },
-      },
-    );
-
-    // Use the accumulated fullText, falling back to result.text
-    const responseText = fullText || result.text || "";
-
-    // Phase 3: Parse JSON
-    sendEvent({
-      type: "progress",
-      items: [
-        { agent_name: "Initializing workflow designer...", status: "completed", description: "Agent ready" },
-        { agent_name: "Designing agent roles and DPH script...", status: "completed", description: "Design complete" },
-        { agent_name: "Finalizing configuration...", status: "running", description: "Parsing configuration" },
-      ],
-    });
-
-    const config = extractJsonFromLLMResponse(responseText);
-    if (!config || !validateComposerConfig(config)) {
-      console.error("[composer/generate] LLM returned invalid config, falling back to template");
-      console.error("[composer/generate] LLM response:", responseText.slice(0, 500));
-      sendEvent({ type: "text", fullText: responseText + "\n\n⚠️ Could not parse LLM output as a valid config. Using template-based fallback.", currentText: "" });
+    if (!config) {
+      sendEvent({ type: "text", fullText: "⚠️ Flow validation failed after 3 attempts.\n\nUsing template fallback.", currentText: "" });
       return buildGeneratedComposerConfig(prompt);
     }
 
-    // Normalize dolphin: some LLMs emit literal "\\n" instead of real newlines
-    if (config.orchestrator.dolphin && !config.orchestrator.dolphin.includes("\n") && config.orchestrator.dolphin.includes("\\n")) {
-      config.orchestrator.dolphin = config.orchestrator.dolphin.replace(/\\n/g, "\n");
+    // Phase 3: Gate 2 — compile flow → DPH + Dolphin syntax check
+    sendEvent({ type: "progress", items: [
+      { agent_name: "Initializing...", status: "completed", description: "Agent ready" },
+      { agent_name: "Designing workflow...", status: "completed", description: "Design complete" },
+      { agent_name: "Validating...", status: "running", description: "Compiling & validating" },
+    ] });
+
+    if (config.orchestrator.flow && config.orchestrator.flow.do.length > 0) {
+      const dph = compileToDph(config.orchestrator.flow);
+      const syntaxResult = await validateDphSyntax(dph);
+
+      if (!syntaxResult.is_valid) {
+        logBadCase("gate2", prompt, config, `DPH syntax error at line ${syntaxResult.line_number}: ${syntaxResult.error_message}`);
+        sendEvent({ type: "text", fullText: `⚠️ Compiled DPH failed syntax check: ${syntaxResult.error_message}\n\nUsing template fallback.`, currentText: "" });
+        return buildGeneratedComposerConfig(prompt);
+      }
+
+      config.orchestrator.dolphin = dph;
     }
 
-    // Fix common DPH syntax errors from LLM output
-    if (config.orchestrator.dolphin !== undefined) {
-      config.orchestrator.dolphin = fixDphSyntax(config.orchestrator.dolphin);
-    }
-
-    // Ensure is_dolphin_mode is set
     if (config.orchestrator.is_dolphin_mode === undefined) {
       config.orchestrator.is_dolphin_mode = 1;
     }
 
     return config;
   } catch (error) {
-    let errMsg = error instanceof Error ? error.message : String(error);
-    if (error && typeof error === "object" && "body" in error) {
-      const body = (error as { body: string }).body;
-      if (body) {
-        console.error(`[composer/generate] Error body: ${body.slice(0, 1000)}`);
-        errMsg += `: ${body.slice(0, 200)}`;
-      }
-    }
-    console.error(`[composer/generate] LLM generation failed: ${errMsg}, falling back to template`);
-    sendEvent({ type: "text", fullText: `⚠️ LLM generation failed: ${errMsg}\n\nUsing template-based fallback.`, currentText: "" });
+    const errMsg = error instanceof Error ? error.message : String(error);
+    logBadCase("exception", prompt, null, errMsg);
+    sendEvent({ type: "text", fullText: `⚠️ Generation failed: ${errMsg}\n\nUsing template fallback.`, currentText: "" });
     return buildGeneratedComposerConfig(prompt);
   }
 }

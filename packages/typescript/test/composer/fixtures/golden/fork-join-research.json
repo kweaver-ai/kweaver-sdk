@@ -1,0 +1,15 @@
+{
+  "id": "fork-join-research",
+  "prompt": "Research from two perspectives then synthesize",
+  "agents": ["researcher_a", "researcher_b", "synthesizer"],
+  "expected_flow": {
+    "do": [
+      { "parallel": [
+          { "call": "researcher_a", "input": "$query" },
+          { "call": "researcher_b", "input": "$query" }
+      ]},
+      { "call": "synthesizer", "input": "$researcher_a + $researcher_b" }
+    ]
+  },
+  "expected_dph": "/parallel/\n    @researcher_a(query=$query) -> researcher_a\n    @researcher_b(query=$query) -> researcher_b\n/end/\n$researcher_a + $researcher_b -> _merged_1\n@synthesizer(query=$_merged_1) -> synthesizer"
+}

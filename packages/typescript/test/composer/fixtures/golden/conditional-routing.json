@@ -1,0 +1,19 @@
+{
+  "id": "conditional-routing",
+  "prompt": "Customer support with triage routing to tech or billing specialist",
+  "agents": ["triage", "tech_specialist", "billing_specialist", "general_agent"],
+  "expected_flow": {
+    "do": [
+      { "call": "triage", "input": "$query" },
+      { "switch": [
+          { "if": "$triage.category == 'technical'",
+            "do": [{ "call": "tech_specialist", "input": "$triage" }] },
+          { "if": "$triage.category == 'billing'",
+            "do": [{ "call": "billing_specialist", "input": "$triage" }] },
+          { "default": true,
+            "do": [{ "call": "general_agent", "input": "$triage" }] }
+      ]}
+    ]
+  },
+  "expected_dph": "@triage(query=$query) -> triage\n/if/ $triage.category == 'technical':\n    @tech_specialist(query=$triage) -> tech_specialist\nelif $triage.category == 'billing':\n    @billing_specialist(query=$triage) -> billing_specialist\nelse:\n    @general_agent(query=$triage) -> general_agent\n/end/"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "sequential-pipeline",
+  "prompt": "Code development with architect, developer, and reviewer",
+  "agents": ["architect", "developer", "reviewer"],
+  "expected_flow": {
+    "do": [
+      { "call": "architect", "input": "$query" },
+      { "call": "developer", "input": "$architect" },
+      { "call": "reviewer", "input": "$developer" }
+    ]
+  },
+  "expected_dph": "@architect(query=$query) -> architect\n@developer(query=$architect) -> developer\n@reviewer(query=$developer) -> reviewer"
+}

@@ -2594,6 +2594,11 @@ ul.agent-thoughts-content li {
   line-height: 1.5;
 }
 
+.composer-choose-nav {
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
 .composer-template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -2641,6 +2646,41 @@ ul.agent-thoughts-content li {
   display: inline-block;
   align-self: flex-start;
   margin-top: 4px;
+}
+
+.composer-generate-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.composer-generate-summary {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.composer-generate-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.composer-generate-prompt {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.composer-generate-text {
+  min-height: 160px;
 }
 
 /* ── Step 3: Review ──────────────────────────────────────────────────────── */
@@ -2756,6 +2796,25 @@ ul.agent-thoughts-content li {
   max-height: 400px;
   overflow-y: auto;
   color: var(--text);
+}
+
+.composer-flow-preview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.composer-dph-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 12px;
 }
 
 .composer-mode-display {

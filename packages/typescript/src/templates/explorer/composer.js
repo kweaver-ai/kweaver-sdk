@@ -3,17 +3,19 @@
 // ── Composer state ──────────────────────────────────────────────────────────
 
 var composerState = {
-  step: 1,           // 1=Choose, 3=Review, 4=Run (step 2 is Phase 2)
+  step: 1,           // 1=Choose, 2=Generate, 3=Review, 4=Run
   config: null,      // ComposerConfig deep-cloned from template
   exec: null,        // { orchestratorId, agentIds, allAgentIds, conversationId, done }
   templates: null,   // cached templates array
+  promptDraft: "",   // persisted natural-language draft from step 1
+  generate: null,    // { prompt, fullText, progressItems, error, done, started }
 };
 
 // ── Stepper rendering ───────────────────────────────────────────────────────
 
 var COMPOSER_STEPS = [
   { num: 1, label: "Choose" },
-  { num: 2, label: "Generate", disabled: true },
+  { num: 2, label: "Generate" },
   { num: 3, label: "Review" },
   { num: 4, label: "Run" },
 ];
@@ -52,6 +54,8 @@ function renderComposer($el, parts, params) {
 
   if (composerState.step === 1) {
     renderComposerChoose($content);
+  } else if (composerState.step === 2) {
+    renderComposerGenerate($content);
   } else if (composerState.step === 3) {
     renderComposerReview($content);
   } else if (composerState.step === 4) {
@@ -74,8 +78,11 @@ function renderComposerChoose($content) {
     '<div class="composer-choose-layout">' +
       '<div class="composer-choose-left">' +
         '<h3>Natural Language</h3>' +
-        '<textarea class="composer-nl-input" disabled placeholder="Describe your multi-agent workflow..."></textarea>' +
-        '<div class="composer-hint">Natural language generation coming in Phase 2</div>' +
+        '<textarea class="composer-nl-input" id="composer-nl-input" placeholder="Describe your multi-agent workflow...">' + esc(composerState.promptDraft || "") + '</textarea>' +
+        '<div class="composer-hint">Describe the workflow you want, then generate a draft composition before reviewing it.</div>' +
+        '<div class="composer-nav composer-choose-nav">' +
+          '<button class="composer-btn composer-btn-primary" id="composer-nl-next-btn">Generate Draft &rarr;</button>' +
+        '</div>' +
       '</div>' +
       '<div class="composer-choose-right">' +
         '<h3>Templates</h3>' +
@@ -86,6 +93,170 @@ function renderComposerChoose($content) {
     '</div>';
 
   loadComposerTemplates();
+
+  var $input = document.getElementById("composer-nl-input");
+  var $nextBtn = document.getElementById("composer-nl-next-btn");
+  if ($input) {
+    $input.addEventListener("input", function() {
+      composerState.promptDraft = this.value;
+      if ($nextBtn) $nextBtn.disabled = !this.value.trim();
+    });
+    $input.focus();
+  }
+  if ($nextBtn) {
+    $nextBtn.disabled = !(composerState.promptDraft || "").trim();
+    $nextBtn.addEventListener("click", function() {
+      composerState.generate = {
+        prompt: composerState.promptDraft,
+        fullText: "",
+        progressItems: [],
+        error: "",
+        done: false,
+        started: false,
+      };
+      composerState.config = null;
+      composerState.exec = null;
+      composerGoTo(2);
+    });
+  }
+}
+
+// ── Step 2: Generate ────────────────────────────────────────────────────────
+
+function renderComposerGenerate($content) {
+  var state = composerState.generate;
+  if (!state || !state.prompt) { composerGoTo(1); return; }
+
+  $content.innerHTML =
+    '<div class="composer-generate-layout">' +
+      '<div class="composer-generate-summary">' +
+        '<div class="composer-generate-label">Prompt</div>' +
+        '<div class="composer-generate-prompt">' + esc(state.prompt) + '</div>' +
+      '</div>' +
+      '<div class="composer-stream-progress" id="composer-generate-progress"></div>' +
+      '<div class="composer-stream-text composer-generate-text" id="composer-generate-text"></div>' +
+      '<div id="composer-generate-error"></div>' +
+    '</div>' +
+    '<div class="composer-nav">' +
+      '<button class="composer-btn composer-btn-secondary" id="composer-generate-back-btn">&larr; Back</button>' +
+    '</div>';
+
+  document.getElementById("composer-generate-back-btn").addEventListener("click", function() {
+    if (composerState.generate && composerState.generate._abort) {
+      composerState.generate._abort.abort();
+    }
+    composerState.generate = null;
+    composerGoTo(1);
+  });
+
+  renderComposerGenerateState();
+  if (!state.started) startComposerGenerate();
+}
+
+function renderComposerGenerateState() {
+  var state = composerState.generate;
+  if (!state) return;
+
+  var $progress = document.getElementById("composer-generate-progress");
+  var $text = document.getElementById("composer-generate-text");
+  var $error = document.getElementById("composer-generate-error");
+
+  if ($progress) {
+    $progress.style.display = state.progressItems && state.progressItems.length ? "block" : "none";
+    $progress.innerHTML = state.progressItems && state.progressItems.length ? renderProgressSteps(state.progressItems) : "";
+  }
+
+  if ($text) {
+    $text.innerHTML = state.fullText ? chatMarkdown(state.fullText) : '<div class="chat-thinking-pulse"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+  }
+
+  if ($error) {
+    $error.innerHTML = state.error ? '<div class="error-banner">' + esc(state.error) + '</div>' : '';
+  }
+}
+
+function startComposerGenerate() {
+  var state = composerState.generate;
+  if (!state || state.started) return;
+  state.started = true;
+  state.error = "";
+  renderComposerGenerateState();
+
+  var controller = new AbortController();
+  state._abort = controller;
+
+  fetch("/api/composer/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: state.prompt }),
+    signal: controller.signal,
+  }).then(function(res) {
+    if (!res.ok || !res.body) {
+      return res.text().then(function(errText) {
+        state.error = errText || ("Error " + res.status);
+        renderComposerGenerateState();
+      });
+    }
+
+    var reader = res.body.getReader();
+    var decoder = new TextDecoder();
+    var buf = "";
+
+    function readChunk() {
+      return reader.read().then(function(result) {
+        if (result.done) {
+          if (composerState.config) {
+            composerGoTo(3);
+          } else if (!state.error) {
+            state.error = "Stream ended unexpectedly without producing a config.";
+            renderComposerGenerateState();
+          }
+          return;
+        }
+
+        buf += decoder.decode(result.value, { stream: true });
+        var lines = buf.split("\n");
+        buf = lines.pop() || "";
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          if (!line.startsWith("data: ")) continue;
+          var dataStr = line.slice(6).trim();
+          if (!dataStr) continue;
+
+          var evt;
+          try { evt = JSON.parse(dataStr); } catch(e) { continue; }
+
+          if (evt.type === "text") {
+            state.fullText = evt.fullText || state.fullText || "";
+          } else if (evt.type === "progress" && Array.isArray(evt.items)) {
+            state.progressItems = evt.items;
+          } else if (evt.type === "composer_config" && evt.config) {
+            composerState.config = evt.config;
+          } else if (evt.type === "error") {
+            state.error = evt.error || "Generate failed";
+          } else if (evt.type === "done") {
+            state.done = true;
+          }
+        }
+
+        renderComposerGenerateState();
+
+        if (state.done && composerState.config) {
+          composerGoTo(3);
+          return;
+        }
+
+        return readChunk();
+      });
+    }
+
+    return readChunk();
+  }).catch(function(err) {
+    if (err.name === "AbortError") return;
+    state.error = 'Generate failed: ' + err.message;
+    renderComposerGenerateState();
+  });
 }
 
 function loadComposerTemplates() {
@@ -163,11 +334,23 @@ function renderComposerReview($content) {
       '</details>';
   }
 
-  // Right side: DPH script + mode
+  // Right side: Flow + compiled DPH
   var orch = config.orchestrator || {};
-  var rightHtml = '<h4>Orchestration Script (DPH)</h4>' +
-    '<pre class="composer-dph-editor">' + esc(orch.dolphin || "(no script)") + '</pre>' +
-    '<div class="composer-mode-display"><strong>Mode:</strong> ' + esc(orch.is_dolphin_mode ? "dolphin" : "react") + '</div>';
+  var rightHtml = '';
+
+  if (orch.flow && orch.flow.do) {
+    rightHtml += '<h4>Workflow Flow</h4>' +
+      '<pre class="composer-flow-preview">' + esc(JSON.stringify(orch.flow, null, 2)) + '</pre>';
+  }
+
+  if (orch.dolphin) {
+    rightHtml += '<details class="composer-dph-details">' +
+      '<summary>Compiled DPH Script</summary>' +
+      '<pre class="composer-dph-editor">' + esc(orch.dolphin) + '</pre>' +
+      '</details>';
+  }
+
+  rightHtml += '<div class="composer-mode-display"><strong>Mode:</strong> ' + esc(orch.is_dolphin_mode ? "dolphin" : "react") + '</div>';
 
   $content.innerHTML =
     '<div class="composer-review-layout">' +

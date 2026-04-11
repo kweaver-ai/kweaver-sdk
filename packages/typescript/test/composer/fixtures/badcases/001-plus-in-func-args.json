@@ -1,0 +1,17 @@
+{
+  "id": "001-plus-in-func-args",
+  "date": "2026-04-11",
+  "category": "flow-validation",
+  "prompt": "Design a customer support workflow with triage and QA",
+  "llm_output": {
+    "flow": {
+      "do": [
+        { "call": "triage", "input": "$query" },
+        { "call": "qa", "input": "raw text without dollar sign" }
+      ]
+    }
+  },
+  "error_gate": "gate1",
+  "error_message": "input must be a $variable reference",
+  "status": "fixed"
+}

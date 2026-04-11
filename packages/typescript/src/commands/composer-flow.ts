@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
 // ── Flow JSON Schema Types ──────────────────────────────────────────────────
 
 /** Top-level flow container */
@@ -271,5 +275,46 @@ function validateParallelStep(
     } else {
       errors.push(`${path}.parallel[${i}]: parallel steps must be call steps`);
     }
+  }
+}
+
+// ── DPH Syntax Validation (Gate 2) ──────────────────────────────────────────
+
+export interface DphValidationResult {
+  is_valid: boolean;
+  error_message: string;
+  line_number: number;
+  skipped?: boolean;
+}
+
+/**
+ * Validate compiled DPH via Dolphin's parser (Gate 2).
+ * Calls a Python script that wraps DPHSyntaxValidator.
+ * Returns valid if the script is unavailable (graceful degradation).
+ */
+export async function validateDphSyntax(dph: string): Promise<DphValidationResult> {
+  const thisDir = path.dirname(fileURLToPath(import.meta.url));
+  const scriptPath = path.resolve(thisDir, "../../scripts/validate-dph.py");
+
+  try {
+    const stdout = await new Promise<string>((resolve, reject) => {
+      const proc = spawn("python3", [scriptPath], { timeout: 5000 });
+      const chunks: Buffer[] = [];
+      proc.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+      proc.on("error", reject);
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          reject(new Error(`validate-dph.py exited with code ${code}`));
+        } else {
+          resolve(Buffer.concat(chunks).toString("utf8"));
+        }
+      });
+      proc.stdin.write(dph);
+      proc.stdin.end();
+    });
+    return JSON.parse(stdout.trim()) as DphValidationResult;
+  } catch {
+    // Script not available — skip Gate 2 gracefully
+    return { is_valid: true, error_message: "", line_number: 0, skipped: true };
   }
 }

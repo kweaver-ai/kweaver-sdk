@@ -3,6 +3,7 @@ import { IncomingMessage, ServerResponse } from "node:http";
 import { createAgent, publishAgent, deleteAgent } from "../api/agent-list.js";
 import { fetchAgentInfo, sendChatRequestStream } from "../api/agent-chat.js";
 import { readBody, handleApiError, jsonResponse, type TokenProvider } from "./explore-bkn.js";
+import { type FlowDo, compileToDph } from "./composer-flow.js";
 
 // ── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -21,8 +22,9 @@ export interface ComposerConfig {
     name: string;
     profile: string;
     system_prompt: string;
-    dolphin: string;
+    dolphin?: string;         // computed from flow at create-time
     is_dolphin_mode?: number;
+    flow?: FlowDo;            // structured flow definition
   };
 }
 
@@ -49,6 +51,7 @@ const TEMPLATES: ComposerTemplate[] = [
         profile: "Orchestrates agent collaboration",
         system_prompt: "You are an orchestrator agent. Coordinate the sub-agents to accomplish the user's goal.",
         dolphin: "",
+        flow: { do: [] },
         is_dolphin_mode: 1,
       },
     },
@@ -95,12 +98,13 @@ const TEMPLATES: ComposerTemplate[] = [
         system_prompt:
           "You orchestrate a code development pipeline. Route the user's request through architect, " +
           "developer, and reviewer in sequence, passing each stage's output to the next.",
-        dolphin: [
-          "design = @architect(user_request)",
-          "code = @developer(design)",
-          "review = @reviewer(code)",
-          "RETURN review",
-        ].join("\n"),
+        flow: {
+          do: [
+            { call: "architect", input: "$query" },
+            { call: "developer", input: "$architect" },
+            { call: "reviewer", input: "$developer" },
+          ],
+        },
         is_dolphin_mode: 1,
       },
     },
@@ -147,12 +151,15 @@ const TEMPLATES: ComposerTemplate[] = [
         system_prompt:
           "You orchestrate a research pipeline. Send the user's query to both researchers in parallel, " +
           "then pass their combined findings to the synthesizer for a final report.",
-        dolphin: [
-          "findings_a = @researcher_a(user_request)",
-          "findings_b = @researcher_b(user_request)",
-          "report = @synthesizer(findings_a + findings_b)",
-          "RETURN report",
-        ].join("\n"),
+        flow: {
+          do: [
+            { parallel: [
+                { call: "researcher_a", input: "$query" },
+                { call: "researcher_b", input: "$query" },
+            ]},
+            { call: "synthesizer", input: "$researcher_a + $researcher_b" },
+          ],
+        },
         is_dolphin_mode: 1,
       },
     },
@@ -161,20 +168,480 @@ const TEMPLATES: ComposerTemplate[] = [
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function buildAgentCreateBody(name: string, profile: string, systemPrompt: string, extra?: Record<string, unknown>): string {
+function cloneComposerConfig(config: ComposerConfig): ComposerConfig {
+  return JSON.parse(JSON.stringify(config)) as ComposerConfig;
+}
+
+function slugifyWords(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join("-");
+}
+
+function titleCaseWords(input: string): string {
+  return input
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function pickTemplateForPrompt(prompt: string): ComposerTemplate {
+  const lower = prompt.toLowerCase();
+
+  if (/(research|compare|analy[sz]e|investigate|summary|summari[sz]e|report|trend|competitor|market|video|videos|youtube)/.test(lower)) {
+    return TEMPLATES.find((item) => item.id === "research-synthesize") ?? TEMPLATES[0];
+  }
+
+  if (/(code|develop|implement|feature|bug|fix|review|test|refactor|typescript|python|javascript|api|build|create|deploy|backend|frontend|server|endpoint|microservice|service|database)/.test(lower)) {
+    return TEMPLATES.find((item) => item.id === "code-development") ?? TEMPLATES[0];
+  }
+
+  // Default to research-synthesize as it provides a usable multi-agent config
+  return TEMPLATES.find((item) => item.id === "research-synthesize") ?? TEMPLATES[0];
+}
+
+function buildGeneratedComposerConfig(prompt: string): ComposerConfig {
+  const normalizedPrompt = prompt.replace(/\s+/g, " ").trim();
+  const template = pickTemplateForPrompt(normalizedPrompt);
+  const config = cloneComposerConfig(template.config);
+  const shortTitle = titleCaseWords(normalizedPrompt) || "Multi-Agent Workflow";
+  const workflowSlug = slugifyWords(normalizedPrompt) || "workflow";
+
+  config.name = `${shortTitle} Workflow`;
+  config.description = normalizedPrompt;
+  config.orchestrator.name = `${shortTitle} Orchestrator`;
+  config.orchestrator.profile = `Coordinates the workflow for: ${normalizedPrompt}`;
+  config.orchestrator.system_prompt += `\n\nUser request:\n${normalizedPrompt}`;
+
+  for (const agent of config.agents) {
+    agent.system_prompt += `\n\nPrimary task from user:\n${normalizedPrompt}`;
+  }
+
+  if (template.id === "research-synthesize") {
+    config.orchestrator.flow = {
+      do: [
+        { parallel: [
+            { call: "researcher_a", input: "$query" },
+            { call: "researcher_b", input: "$query" },
+        ]},
+        { call: "synthesizer", input: "$researcher_a + $researcher_b" },
+      ],
+    };
+    delete config.orchestrator.dolphin;
+  } else if (template.id === "code-development") {
+    config.orchestrator.flow = {
+      do: [
+        { call: "architect", input: "$query" },
+        { call: "developer", input: "$architect" },
+        { call: "reviewer", input: "$developer" },
+      ],
+    };
+    delete config.orchestrator.dolphin;
+  } else {
+    config.name = `${shortTitle || "Blank"} Composer`;
+    config.description = normalizedPrompt || "Generated from natural-language input.";
+    config.orchestrator.name = `${shortTitle || "Blank"} Orchestrator`;
+    config.orchestrator.profile = `Coordinates the workflow for ${workflowSlug}`;
+    config.orchestrator.system_prompt =
+      "You are an orchestrator agent. Coordinate the sub-agents to accomplish the user's goal." +
+      `\n\nUser request:\n${normalizedPrompt}`;
+    config.orchestrator.flow = { do: [] };
+    delete config.orchestrator.dolphin;
+  }
+
+  return config;
+}
+
+function sanitizeAgentName(name: string): string {
+  // API requires: 中英文、数字及下划线，且不能以数字开头
+  return name.replace(/[^a-zA-Z0-9_\u4e00-\u9fff]/g, "_").replace(/^(\d)/, "_$1");
+}
+
+/**
+ * Fix common DPH syntax errors produced by LLMs.
+ * - Extracts `+` concatenation from inside @func() arguments into separate assignment lines.
+ * - Removes unsupported constructs like @if, RETURN.
+ */
+function fixDphSyntax(dolphin: string): string {
+  if (!dolphin) return dolphin;
+
+  const lines = dolphin.split("\n");
+  const fixed: string[] = [];
+  let tempCounter = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Remove RETURN lines
+    if (/^RETURN\b/i.test(trimmed)) continue;
+
+    // Remove @if / if() lines and closing /end/ for conditionals
+    if (/^@if\b|^if\s*\(/i.test(trimmed)) continue;
+
+    // Fix: @func(query=$a + $b + ...) -> extract concat to a separate line
+    const funcMatch = trimmed.match(/^(@\w+)\(query=(.+\+.+)\)\s*->\s*(\w+)$/);
+    if (funcMatch) {
+      const [, funcCall, concatExpr, resultVar] = funcMatch;
+      const tempVar = `_concat_${++tempCounter}`;
+      fixed.push(`${concatExpr.trim()} -> ${tempVar}`);
+      fixed.push(`${funcCall}(query=$${tempVar}) -> ${resultVar}`);
+      continue;
+    }
+
+    // Fix: @func(query="literal" + $var) — string + var concat in args
+    const strConcatMatch = trimmed.match(/^(@\w+)\(query=(".*?"\s*\+\s*.+)\)\s*->\s*(\w+)$/);
+    if (strConcatMatch) {
+      const [, funcCall, concatExpr, resultVar] = strConcatMatch;
+      const tempVar = `_concat_${++tempCounter}`;
+      fixed.push(`${concatExpr.trim()} -> ${tempVar}`);
+      fixed.push(`${funcCall}(query=$${tempVar}) -> ${resultVar}`);
+      continue;
+    }
+
+    fixed.push(line);
+  }
+
+  return fixed.join("\n");
+}
+
+const DEFAULT_LLM_ID = "v3";
+const DEFAULT_LLMS = [{ is_default: true, llm_config: { id: DEFAULT_LLM_ID, name: DEFAULT_LLM_ID, max_tokens: 4096 } }];
+
+function buildAgentCreateBody(
+  name: string,
+  profile: string,
+  systemPrompt: string,
+  extra?: Record<string, unknown>,
+  llms?: unknown[],
+): string {
+  const config: Record<string, unknown> = {
+    input: { fields: [{ name: "user_input", type: "string" }] },
+    output: { default_format: "markdown" },
+    system_prompt: systemPrompt,
+    ...extra,
+  };
+  if (llms && llms.length > 0) {
+    config.llms = llms;
+  }
   return JSON.stringify({
-    name,
+    name: sanitizeAgentName(name),
     profile,
     avatar_type: 1,
     avatar: "icon-dip-agent-default",
     product_key: "DIP",
-    config: {
-      input: { fields: [{ name: "user_input", type: "string" }] },
-      output: { default_format: "markdown" },
-      system_prompt: systemPrompt,
-      ...extra,
-    },
+    config,
   });
+}
+
+// ── LLM-powered ComposerConfig generation ───────────────────────────────────
+
+const DPH_GENERATION_SYSTEM_PROMPT = `You are a multi-agent workflow designer. Given a user's natural language description, design a multi-agent workflow and output a ComposerConfig JSON.
+
+## DPH (Dolphin) Language Syntax
+
+DPH is a workflow orchestration language. Key rules:
+- Assignment: \`expression -> variable_name\` (NOT \`variable = expression\`)
+- Append: \`expression >> variable_name\`
+- Variables use \`$\` prefix: \`$variable_name\`
+- Function calls: \`@function_name(param=$value) -> result\`
+  - Arguments MUST use keyword form: \`query=$var\`, NOT positional
+  - \`+\` operator is NOT allowed inside function arguments
+- String concat: \`$a + $b -> combined\` (only in assign blocks, not inside @func())
+- Literal assignment: \`"some text" -> var_name\`
+- Loop: \`/for/ $item in $list:\\n    ...\\n/end/\`
+- LLM prompt: \`/prompt/(model="v3") instructions -> result\`
+- There is NO \`RETURN\` keyword. The last \`-> variable\` is the output.
+- Comments: lines starting with \`#\`
+
+## ComposerConfig JSON Schema
+
+\`\`\`json
+{
+  "name": "Workflow Name",
+  "description": "What this workflow does",
+  "agents": [
+    {
+      "ref": "snake_case_identifier",
+      "name": "Human Readable Name",
+      "profile": "One-line role description",
+      "system_prompt": "Detailed instructions for this agent"
+    }
+  ],
+  "orchestrator": {
+    "name": "Orchestrator Name",
+    "profile": "One-line description",
+    "system_prompt": "Instructions for how orchestrator coordinates",
+    "dolphin": "DPH script as a single string (newlines as \\n)",
+    "is_dolphin_mode": 1
+  }
+}
+\`\`\`
+
+## Example 1: Sequential pipeline
+
+User: "Code development with architect, developer, and reviewer"
+\`\`\`json
+{
+  "name": "Code Development Pipeline",
+  "description": "Architect designs, developer implements, reviewer validates",
+  "agents": [
+    { "ref": "architect", "name": "Architect", "profile": "Designs software architecture", "system_prompt": "You are a senior software architect. Produce a clear technical design." },
+    { "ref": "developer", "name": "Developer", "profile": "Implements code", "system_prompt": "You are an expert developer. Implement clean, well-documented code." },
+    { "ref": "reviewer", "name": "Reviewer", "profile": "Reviews code quality", "system_prompt": "You are a meticulous code reviewer. Provide actionable feedback." }
+  ],
+  "orchestrator": {
+    "name": "Code Dev Orchestrator",
+    "profile": "Orchestrates sequential code development",
+    "system_prompt": "Route through architect, developer, reviewer in sequence.",
+    "dolphin": "@architect(query=$query) -> design\\n@developer(query=$design) -> code\\n@reviewer(query=$code) -> review",
+    "is_dolphin_mode": 1
+  }
+}
+\`\`\`
+
+## Example 2: Fork-join pattern
+
+User: "Research from two perspectives then synthesize"
+\`\`\`json
+{
+  "name": "Research & Synthesize",
+  "description": "Parallel research merged into synthesis",
+  "agents": [
+    { "ref": "researcher_a", "name": "Researcher A", "profile": "Technical perspective", "system_prompt": "Investigate from a technical/quantitative perspective." },
+    { "ref": "researcher_b", "name": "Researcher B", "profile": "Business perspective", "system_prompt": "Investigate from a strategic/qualitative perspective." },
+    { "ref": "synthesizer", "name": "Synthesizer", "profile": "Merges findings", "system_prompt": "Merge findings into a coherent report." }
+  ],
+  "orchestrator": {
+    "name": "Research Orchestrator",
+    "profile": "Orchestrates multi-perspective research",
+    "system_prompt": "Send query to both researchers, combine findings, synthesize.",
+    "dolphin": "@researcher_a(query=$query) -> findings_a\\n@researcher_b(query=$query) -> findings_b\\n$findings_a + $findings_b -> combined\\n@synthesizer(query=$combined) -> report",
+    "is_dolphin_mode": 1
+  }
+}
+\`\`\`
+
+## Rules
+
+1. Design 2-5 agents with clear, distinct roles
+2. Each agent ref must be a unique snake_case identifier
+3. The DPH script must reference each agent via \`@ref(query=$var) -> result\`
+4. \`$query\` is the built-in variable for user input — do NOT assign it manually
+5. Output ONLY a single JSON code block with the ComposerConfig. No other text before or after.
+6. The DPH dolphin field must use actual newline characters (not literal \\\\n) as line separators within the JSON string value
+7. System prompts should be detailed and specific to the agent's role
+
+## CRITICAL DPH Constraints — violations WILL cause runtime errors
+
+- NEVER use \`+\` inside @function arguments: \`@func(query=$a + $b)\` is ILLEGAL. Instead, concat first: \`$a + $b -> combined\` then \`@func(query=$combined)\`
+- NEVER use \`@if\`, \`if\`, or conditional branches — DPH has NO conditional syntax
+- NEVER use \`RETURN\` — the last \`-> variable\` is automatically the output
+- Keep scripts to sequential pipelines or fork-join patterns. Do NOT invent syntax.`;
+
+/**
+ * Extract JSON from an LLM response that may contain markdown code blocks.
+ * Tries: ```json ... ```, ``` ... ```, or raw JSON parsing.
+ */
+function extractJsonFromLLMResponse(text: string): ComposerConfig | null {
+  // Try markdown code block (```json ... ``` or ``` ... ```)
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try {
+      return JSON.parse(codeBlockMatch[1].trim()) as ComposerConfig;
+    } catch { /* fall through */ }
+  }
+
+  // Try raw JSON (find first { ... last })
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      return JSON.parse(text.slice(firstBrace, lastBrace + 1)) as ComposerConfig;
+    } catch { /* fall through */ }
+  }
+
+  return null;
+}
+
+/**
+ * Validate that a parsed object has the required ComposerConfig structure.
+ */
+function validateComposerConfig(obj: unknown): obj is ComposerConfig {
+  if (!obj || typeof obj !== "object") return false;
+  const c = obj as Record<string, unknown>;
+  if (typeof c.name !== "string") return false;
+  if (!Array.isArray(c.agents)) return false;
+  for (const agent of c.agents) {
+    if (!agent || typeof agent !== "object") return false;
+    const a = agent as Record<string, unknown>;
+    if (typeof a.ref !== "string" || typeof a.name !== "string") return false;
+    if (typeof a.system_prompt !== "string" || typeof a.profile !== "string") return false;
+  }
+  if (!c.orchestrator || typeof c.orchestrator !== "object") return false;
+  const o = c.orchestrator as Record<string, unknown>;
+  if (typeof o.dolphin !== "string") return false;
+  if (typeof o.name !== "string" || typeof o.system_prompt !== "string") return false;
+  return true;
+}
+
+/**
+ * Find a usable published agent to relay LLM requests through.
+ * Picks the first published agent from the agent list.
+ */
+async function findRelayAgent(
+  baseUrl: string,
+  accessToken: string,
+  businessDomain: string,
+): Promise<{ id: string; key: string; version: string } | null> {
+  try {
+    const { listAgents } = await import("../api/agent-list.js");
+    const raw = await listAgents({ baseUrl, accessToken, businessDomain, limit: 20 });
+    const list = JSON.parse(raw) as { entries?: Array<{ id?: string; name?: string; is_built_in?: number }> };
+    const entries = list.entries ?? [];
+
+    // Prefer non-built-in agents (less likely to have special behavior like planning)
+    const sorted = [...entries].sort((a, b) => (a.is_built_in ?? 0) - (b.is_built_in ?? 0));
+
+    for (const entry of sorted) {
+      if (!entry.id) continue;
+      try {
+        const info = await fetchAgentInfo({ baseUrl, accessToken, agentId: entry.id, version: "v0", businessDomain });
+        console.error(`[composer] Using relay agent "${entry.name}" (${entry.id})`);
+        return info;
+      } catch { /* try next */ }
+    }
+  } catch (err) {
+    console.error(`[composer] findRelayAgent failed: ${err instanceof Error ? err.message : err}`);
+  }
+  return null;
+}
+
+/**
+ * Generate a ComposerConfig by calling an LLM via an existing published agent.
+ * The system prompt is prepended to the query to guide generation.
+ * Falls back to buildGeneratedComposerConfig on failure.
+ */
+async function generateComposerConfigViaLLM(
+  prompt: string,
+  getToken: TokenProvider,
+  businessDomain: string,
+  sendEvent: (payload: Record<string, unknown>) => void,
+): Promise<ComposerConfig> {
+  let t: { baseUrl: string; accessToken: string };
+
+  try {
+    t = await getToken();
+  } catch {
+    console.error("[composer/generate] Failed to get token, falling back to template");
+    return buildGeneratedComposerConfig(prompt);
+  }
+
+  try {
+    // Phase 1: Find a relay agent
+    sendEvent({
+      type: "progress",
+      items: [
+        { agent_name: "Initializing workflow designer...", status: "running", description: "Finding available agent" },
+        { agent_name: "Designing agent roles and DPH script...", status: "pending", description: "Waiting" },
+        { agent_name: "Finalizing configuration...", status: "pending", description: "Waiting" },
+      ],
+    });
+
+    const relayAgent = await findRelayAgent(t.baseUrl, t.accessToken, businessDomain);
+    if (!relayAgent) {
+      throw new Error("No available agent found for LLM generation");
+    }
+
+    // Phase 2: Stream LLM response — embed system prompt in the query
+    sendEvent({
+      type: "progress",
+      items: [
+        { agent_name: "Initializing workflow designer...", status: "completed", description: "Agent ready" },
+        { agent_name: "Designing agent roles and DPH script...", status: "running", description: "LLM is designing your workflow" },
+        { agent_name: "Finalizing configuration...", status: "pending", description: "Waiting" },
+      ],
+    });
+
+    const fullQuery = `${DPH_GENERATION_SYSTEM_PROMPT}\n\n---\n\nUser request: ${prompt}`;
+    let fullText = "";
+    const result = await sendChatRequestStream(
+      {
+        baseUrl: t.baseUrl,
+        accessToken: t.accessToken,
+        agentId: relayAgent.id,
+        agentKey: relayAgent.key,
+        agentVersion: relayAgent.version,
+        query: fullQuery,
+        stream: true,
+        businessDomain,
+      },
+      {
+        onTextDelta: (ft: string, currentSegmentText: string) => {
+          fullText = ft;
+          sendEvent({ type: "text", fullText: ft, currentText: currentSegmentText });
+        },
+      },
+    );
+
+    // Use the accumulated fullText, falling back to result.text
+    const responseText = fullText || result.text || "";
+
+    // Phase 3: Parse JSON
+    sendEvent({
+      type: "progress",
+      items: [
+        { agent_name: "Initializing workflow designer...", status: "completed", description: "Agent ready" },
+        { agent_name: "Designing agent roles and DPH script...", status: "completed", description: "Design complete" },
+        { agent_name: "Finalizing configuration...", status: "running", description: "Parsing configuration" },
+      ],
+    });
+
+    const config = extractJsonFromLLMResponse(responseText);
+    if (!config || !validateComposerConfig(config)) {
+      console.error("[composer/generate] LLM returned invalid config, falling back to template");
+      console.error("[composer/generate] LLM response:", responseText.slice(0, 500));
+      sendEvent({ type: "text", fullText: responseText + "\n\n⚠️ Could not parse LLM output as a valid config. Using template-based fallback.", currentText: "" });
+      return buildGeneratedComposerConfig(prompt);
+    }
+
+    // Normalize dolphin: some LLMs emit literal "\\n" instead of real newlines
+    if (config.orchestrator.dolphin && !config.orchestrator.dolphin.includes("\n") && config.orchestrator.dolphin.includes("\\n")) {
+      config.orchestrator.dolphin = config.orchestrator.dolphin.replace(/\\n/g, "\n");
+    }
+
+    // Fix common DPH syntax errors from LLM output
+    if (config.orchestrator.dolphin !== undefined) {
+      config.orchestrator.dolphin = fixDphSyntax(config.orchestrator.dolphin);
+    }
+
+    // Ensure is_dolphin_mode is set
+    if (config.orchestrator.is_dolphin_mode === undefined) {
+      config.orchestrator.is_dolphin_mode = 1;
+    }
+
+    return config;
+  } catch (error) {
+    let errMsg = error instanceof Error ? error.message : String(error);
+    if (error && typeof error === "object" && "body" in error) {
+      const body = (error as { body: string }).body;
+      if (body) {
+        console.error(`[composer/generate] Error body: ${body.slice(0, 1000)}`);
+        errMsg += `: ${body.slice(0, 200)}`;
+      }
+    }
+    console.error(`[composer/generate] LLM generation failed: ${errMsg}, falling back to template`);
+    sendEvent({ type: "text", fullText: `⚠️ LLM generation failed: ${errMsg}\n\nUsing template-based fallback.`, currentText: "" });
+    return buildGeneratedComposerConfig(prompt);
+  }
 }
 
 // ── Route registration ──────────────────────────────────────────────────────
@@ -188,6 +655,61 @@ export function registerComposerRoutes(
   // ── GET /api/composer/templates ─────────────────────────────────────────
   routes.set("GET /api/composer/templates", (_req, res) => {
     jsonResponse(res, 200, { templates: TEMPLATES });
+  });
+
+  // ── POST /api/composer/generate (SSE) ───────────────────────────────────
+  routes.set("POST /api/composer/generate", async (req, res) => {
+    let bodyStr: string;
+    try {
+      bodyStr = await readBody(req);
+    } catch {
+      jsonResponse(res, 400, { error: "Failed to read request body" });
+      return;
+    }
+
+    let prompt = "";
+    try {
+      const parsed = JSON.parse(bodyStr) as { prompt?: string };
+      prompt = (parsed.prompt ?? "").trim();
+    } catch {
+      jsonResponse(res, 400, { error: "Invalid JSON body" });
+      return;
+    }
+
+    if (!prompt) {
+      jsonResponse(res, 400, { error: "prompt is required" });
+      return;
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    const sendEvent = (payload: Record<string, unknown>): void => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    try {
+      const config = await generateComposerConfigViaLLM(prompt, getToken, businessDomain, sendEvent);
+      sendEvent({ type: "composer_config", config });
+      sendEvent({
+        type: "progress",
+        items: [
+          { agent_name: "Initializing workflow designer...", status: "completed", description: "Done" },
+          { agent_name: "Designing agent roles and DPH script...", status: "completed", description: "Done" },
+          { agent_name: "Finalizing configuration...", status: "completed", description: "Done" },
+        ],
+      });
+      sendEvent({ type: "done" });
+      res.end();
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      sendEvent({ type: "error", error: errMsg });
+      res.end();
+    }
   });
 
   // ── POST /api/composer/create ───────────────────────────────────────────
@@ -235,12 +757,14 @@ export function registerComposerRoutes(
     }
 
     try {
+      const defaultLlms = DEFAULT_LLMS;
+
       // 1. Create, publish, and fetch info for each sub-agent
       for (const agentDef of config.agents) {
-        const createBody = buildAgentCreateBody(agentDef.name, agentDef.profile, agentDef.system_prompt);
+        const createBody = buildAgentCreateBody(agentDef.name, agentDef.profile, agentDef.system_prompt, undefined, defaultLlms);
         const createRaw = await createAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, body: createBody, businessDomain });
-        const createResult = JSON.parse(createRaw) as { data?: { id?: string } };
-        const agentId = createResult.data?.id;
+        const createResult = JSON.parse(createRaw) as { id?: string; data?: { id?: string } };
+        const agentId = createResult.id ?? createResult.data?.id;
         if (!agentId) {
           throw new Error(`Failed to create agent "${agentDef.name}": no id in response`);
         }
@@ -254,7 +778,12 @@ export function registerComposerRoutes(
       }
 
       // 2. Process DPH script — replace @ref with actual @agent_key
-      let processedDphScript = config.orchestrator.dolphin;
+      let processedDphScript: string;
+      if (config.orchestrator.flow && config.orchestrator.flow.do.length > 0) {
+        processedDphScript = compileToDph(config.orchestrator.flow);
+      } else {
+        processedDphScript = config.orchestrator.dolphin ?? "";
+      }
       for (const [ref, key] of Object.entries(agentKeyMap)) {
         processedDphScript = processedDphScript.replace(
           new RegExp(`@${ref}\\b`, "g"),
@@ -272,10 +801,11 @@ export function registerComposerRoutes(
           dolphin: processedDphScript,
           is_dolphin_mode: isDolphinMode,
         },
+        defaultLlms,
       );
       const orchRaw = await createAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, body: orchBody, businessDomain });
-      const orchResult = JSON.parse(orchRaw) as { data?: { id?: string } };
-      const orchestratorId = orchResult.data?.id;
+      const orchResult = JSON.parse(orchRaw) as { id?: string; data?: { id?: string } };
+      const orchestratorId = orchResult.id ?? orchResult.data?.id;
       if (!orchestratorId) {
         throw new Error("Failed to create orchestrator agent: no id in response");
       }

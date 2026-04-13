@@ -38,13 +38,13 @@ describe("Golden case regression", () => {
     });
 
     it(`${c.id}: compiles to expected DPH`, () => {
-      const dph = compileToDph(c.expected_flow);
-      assert.equal(dph, c.expected_dph);
+      const compiled = compileToDph(c.expected_flow);
+      assert.equal(compiled.dph, c.expected_dph);
     });
 
     it(`${c.id}: compiled DPH passes Dolphin syntax check`, async () => {
-      const dph = compileToDph(c.expected_flow);
-      const result = await validateDphSyntax(dph);
+      const compiled = compileToDph(c.expected_flow);
+      const result = await validateDphSyntax(compiled.dph);
       if (result.skipped) return; // Dolphin not installed
       assert.ok(result.is_valid, `DPH syntax error: ${result.error_message} at line ${result.line_number}`);
     });

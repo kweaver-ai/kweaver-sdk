@@ -51,14 +51,28 @@ export function isParallelStep(step: FlowStep): step is ParallelStep {
 
 // ── Compiler: Flow JSON → DPH ───────────────────────────────────────────────
 
-export function compileToDph(flow: FlowDo): string {
-  const ctx: CompileContext = { mergeCounter: 0 };
+export interface CompileResult {
+  dph: string;
+  answerVar: string;
+}
+
+export function compileToDph(flow: FlowDo): CompileResult {
+  const ctx: CompileContext = { mergeCounter: 0, lastOutputVar: "" };
   const lines = compileSteps(flow.do, 0, ctx);
-  return lines.join("\n");
+
+  // answer_var must match the last output variable in the DPH script.
+  // We do NOT append "$lastVar -> answer" because DPH's assign_block
+  // evals expressions eagerly and will fail with "invalid syntax"
+  // if the variable doesn't exist yet at parse time.
+  return {
+    dph: lines.join("\n"),
+    answerVar: ctx.lastOutputVar || "answer",
+  };
 }
 
 interface CompileContext {
   mergeCounter: number;
+  lastOutputVar: string;
 }
 
 function compileSteps(steps: FlowStep[], indent: number, ctx: CompileContext): string[] {
@@ -97,11 +111,13 @@ function compileCallStep(step: CallStep, pad: string, ctx: CompileContext): stri
     lines.push(`${pad}@${step.call}(${params}) -> ${outputVar}`);
   }
 
+  ctx.lastOutputVar = outputVar;
   return lines;
 }
 
 function compileSwitchStep(step: SwitchStep, indent: number, ctx: CompileContext): string[] {
   const pad = "    ".repeat(indent);
+  const innerPad = "    ".repeat(indent + 1);
   const lines: string[] = [];
   let isFirst = true;
 
@@ -113,9 +129,14 @@ function compileSwitchStep(step: SwitchStep, indent: number, ctx: CompileContext
     } else if (branch.default) {
       lines.push(`${pad}else:`);
     }
-    lines.push(...compileSteps(branch.do, indent + 1, ctx));
+    const branchCtx: CompileContext = { ...ctx, lastOutputVar: "" };
+    lines.push(...compileSteps(branch.do, indent + 1, branchCtx));
+    // Track the last output var from any branch (used for answer_var)
+    if (branchCtx.lastOutputVar) {
+      ctx.lastOutputVar = branchCtx.lastOutputVar;
+    }
+    ctx.mergeCounter = branchCtx.mergeCounter;
   }
-
   lines.push(`${pad}/end/`);
   return lines;
 }

@@ -267,8 +267,44 @@ function sanitizeAgentName(name: string): string {
 }
 
 
-const DEFAULT_LLM_ID = "v3";
-const DEFAULT_LLMS = [{ is_default: true, llm_config: { id: DEFAULT_LLM_ID, name: DEFAULT_LLM_ID, max_tokens: 4096 } }];
+/**
+ * Fetch the first available LLM model from the model factory.
+ * Caches the result for the lifetime of the process.
+ */
+let cachedDefaultLlms: unknown[] | undefined;
+async function getDefaultLlms(baseUrl: string, accessToken: string, businessDomain: string): Promise<unknown[]> {
+  if (cachedDefaultLlms) return cachedDefaultLlms;
+
+  try {
+    const { fetchWithRetry } = await import("../utils/http.js");
+    const { buildHeaders } = await import("../api/headers.js");
+    const base = baseUrl.replace(/\/+$/, "");
+    const url = `${base}/api/mf-model-manager/v1/llm/list?page=1&size=50&order=desc&rule=update_time&series=all`;
+    const res = await fetchWithRetry(url, { method: "GET", headers: buildHeaders(accessToken, businessDomain) });
+    const body = await res.text();
+    const parsed = JSON.parse(body) as { data?: Array<{ model_name?: string; model_id?: string; model_type?: string }> };
+    const models = (parsed.data ?? []).filter((m) => m.model_type === "llm");
+    // Prefer known-good models, fall back to first available
+    const priority = ["qwen3-80b", "deepseek_v3", "deepseek"];
+    const picked = priority.reduce<(typeof models)[0] | undefined>(
+      (found, p) => found ?? models.find((m) => m.model_name === p),
+      undefined,
+    ) ?? models[0];
+    if (picked?.model_name) {
+      const name = picked.model_name;
+      const modelId = picked.model_id ?? name;
+      cachedDefaultLlms = [{ is_default: true, llm_config: { id: modelId, name, model_type: "llm", temperature: 0.7, top_p: 0.9, top_k: 1, max_tokens: 4096 } }];
+      console.error(`[composer] Using LLM model: ${name} (id=${modelId})`);
+      return cachedDefaultLlms;
+    }
+  } catch (err) {
+    console.error(`[composer] Failed to fetch LLM list: ${err instanceof Error ? err.message : err}`);
+  }
+
+  // Fallback to a generic name
+  cachedDefaultLlms = [{ is_default: true, llm_config: { id: "v3", name: "v3", max_tokens: 4096 } }];
+  return cachedDefaultLlms;
+}
 
 function buildAgentCreateBody(
   name: string,
@@ -277,10 +313,52 @@ function buildAgentCreateBody(
   extra?: Record<string, unknown>,
   llms?: unknown[],
 ): string {
+  const isDolphin = extra?.is_dolphin_mode === 1;
+  const answerVar = (extra?._answerVar as string) || "answer";
+  // Remove internal-only field from extra before spreading
+  if (extra?._answerVar) { delete extra._answerVar; }
+
+  // Build full agent config following kweaver platform conventions
   const config: Record<string, unknown> = {
-    input: { fields: [{ name: "user_input", type: "string" }] },
-    output: { default_format: "markdown" },
+    input: {
+      fields: [
+        { name: "query", type: "string", desc: "" },
+        { name: "history", type: "object", desc: "" },
+        { name: "tool", type: "object", desc: "" },
+        { name: "header", type: "object", desc: "" },
+        { name: "self_config", type: "object", desc: "" },
+      ],
+      is_temp_zone_enabled: 0,
+    },
+    output: {
+      default_format: "markdown",
+      variables: {
+        answer_var: answerVar,
+        doc_retrieval_var: "doc_retrieval_res",
+        graph_retrieval_var: "graph_retrieval_res",
+        related_questions_var: "related_questions",
+      },
+    },
     system_prompt: systemPrompt,
+    dolphin: "",
+    is_dolphin_mode: 0,
+    pre_dolphin: isDolphin ? [] : [
+      {
+        key: "context_organize",
+        name: "上下文组织模块",
+        value: '\n{"query": "用户的问题为: "+$query} -> context\n',
+        enabled: true,
+        edited: false,
+      },
+    ],
+    post_dolphin: [],
+    data_source: { kg: [], doc: [], metric: [], kn_entry: [], knowledge_network: [], advanced_config: { kg: null, doc: null } },
+    skills: { tools: [], agents: [], mcps: [] },
+    is_data_flow_set_enabled: 0,
+    memory: { is_enabled: false },
+    related_question: { is_enabled: false },
+    plan_mode: { is_enabled: false },
+    metadata: { config_version: "v1" },
     ...extra,
   };
   if (llms && llms.length > 0) {
@@ -292,6 +370,7 @@ function buildAgentCreateBody(
     avatar_type: 1,
     avatar: "icon-dip-agent-default",
     product_key: "DIP",
+    product_name: "DIP",
     config,
   });
 }
@@ -593,8 +672,8 @@ async function generateComposerConfigViaLLM(
     ] });
 
     if (config.orchestrator.flow && config.orchestrator.flow.do.length > 0) {
-      const dph = compileToDph(config.orchestrator.flow);
-      const syntaxResult = await validateDphSyntax(dph);
+      const compiled = compileToDph(config.orchestrator.flow);
+      const syntaxResult = await validateDphSyntax(compiled.dph);
 
       if (!syntaxResult.is_valid) {
         logBadCase("gate2", prompt, config, `DPH syntax error at line ${syntaxResult.line_number}: ${syntaxResult.error_message}`);
@@ -602,7 +681,7 @@ async function generateComposerConfigViaLLM(
         return buildGeneratedComposerConfig(prompt);
       }
 
-      config.orchestrator.dolphin = dph;
+      config.orchestrator.dolphin = compiled.dph;
     }
 
     if (config.orchestrator.is_dolphin_mode === undefined) {
@@ -731,11 +810,12 @@ export function registerComposerRoutes(
     }
 
     try {
-      const defaultLlms = DEFAULT_LLMS;
+      const defaultLlms = await getDefaultLlms(t.baseUrl, t.accessToken, businessDomain);
 
       // 1. Create, publish, and fetch info for each sub-agent
       for (const agentDef of config.agents) {
         const createBody = buildAgentCreateBody(agentDef.name, agentDef.profile, agentDef.system_prompt, undefined, defaultLlms);
+        console.error(`[composer/create] subAgentBody: ${createBody.slice(0, 600)}`);
         const createRaw = await createAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, body: createBody, businessDomain });
         const createResult = JSON.parse(createRaw) as { id?: string; data?: { id?: string } };
         const agentId = createResult.id ?? createResult.data?.id;
@@ -745,16 +825,25 @@ export function registerComposerRoutes(
         createdAgentIds.push(agentId);
         agentIdMap[agentDef.ref] = agentId;
 
-        await publishAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, businessDomain });
+        // Publish if permitted (non-fatal — unpublished agents can still be used)
+        try {
+          await publishAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, businessDomain });
+        } catch { /* permission may be restricted */ }
 
         const info = await fetchAgentInfo({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, version: "v0", businessDomain });
         agentKeyMap[agentDef.ref] = info.key;
       }
 
+      console.error(`[composer/create] agentIdMap: ${JSON.stringify(agentIdMap)}`);
+      console.error(`[composer/create] agentKeyMap: ${JSON.stringify(agentKeyMap)}`);
+
       // 2. Process DPH script — replace @ref with actual @agent_key
       let processedDphScript: string;
+      let answerVar = "answer";
       if (config.orchestrator.flow && config.orchestrator.flow.do.length > 0) {
-        processedDphScript = compileToDph(config.orchestrator.flow);
+        const compiled = compileToDph(config.orchestrator.flow);
+        processedDphScript = compiled.dph;
+        answerVar = compiled.answerVar;
       } else {
         processedDphScript = config.orchestrator.dolphin ?? "";
       }
@@ -767,6 +856,8 @@ export function registerComposerRoutes(
 
       // 3. Create orchestrator agent with processed DPH script
       const isDolphinMode = config.orchestrator.is_dolphin_mode ?? 1;
+      // Register sub-agents as callable skills in the orchestrator
+      const agentSkills = Object.values(agentKeyMap).map((key) => ({ agent_key: key }));
       const orchBody = buildAgentCreateBody(
         config.orchestrator.name,
         config.orchestrator.profile,
@@ -774,9 +865,14 @@ export function registerComposerRoutes(
         {
           dolphin: processedDphScript,
           is_dolphin_mode: isDolphinMode,
+          skills: { tools: [], agents: agentSkills, mcps: [] },
+          _answerVar: answerVar,
         },
         defaultLlms,
       );
+      const orchParsed = JSON.parse(orchBody);
+      console.error(`[composer/create] dolphin (${orchParsed.config.dolphin.split("\n").length} lines): ${JSON.stringify(orchParsed.config.dolphin)}`);
+      console.error(`[composer/create] answer_var: ${orchParsed.config.output?.variables?.answer_var}`);
       const orchRaw = await createAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, body: orchBody, businessDomain });
       const orchResult = JSON.parse(orchRaw) as { id?: string; data?: { id?: string } };
       const orchestratorId = orchResult.id ?? orchResult.data?.id;
@@ -785,8 +881,10 @@ export function registerComposerRoutes(
       }
       createdAgentIds.push(orchestratorId);
 
-      // 4. Publish orchestrator
-      await publishAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId: orchestratorId, businessDomain });
+      // 4. Publish orchestrator (non-fatal)
+      try {
+        await publishAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId: orchestratorId, businessDomain });
+      } catch { /* permission may be restricted */ }
 
       // 5. Return result
       jsonResponse(res, 200, {
@@ -795,6 +893,12 @@ export function registerComposerRoutes(
         allAgentIds: createdAgentIds,
       });
     } catch (error) {
+      // Log full error for debugging
+      if (error && typeof error === "object" && "body" in error) {
+        console.error(`[composer/create] Error: ${(error as { body: string }).body}`);
+      } else if (error instanceof Error) {
+        console.error(`[composer/create] Error: ${error.message}`);
+      }
       // Rollback all created agents on failure
       await rollback(t);
       handleApiError(res, error);
@@ -875,6 +979,7 @@ export function registerComposerRoutes(
           query: message,
           conversationId,
           stream: true,
+          verbose: true,
           businessDomain,
         },
         {

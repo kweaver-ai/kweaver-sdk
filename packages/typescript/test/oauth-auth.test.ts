@@ -254,6 +254,48 @@ test("ensureValidToken: forceRefresh calls token endpoint", async () => {
   }
 });
 
+test("ensureValidToken: no-auth token returns without calling fetch", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://plain.example.com";
+  store.saveNoAuthPlatform(baseUrl);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("fetch should not be called for no-auth ensureValidToken");
+  };
+  try {
+    const t = await oauth.ensureValidToken();
+    assert.ok(store.isNoAuth(t.accessToken));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("ensureValidToken: KWEAVER_TOKEN without KWEAVER_BASE_URL honors env over saved token", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://env-override.example.com";
+  store.setCurrentPlatform(baseUrl);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "saved-real-token",
+    tokenType: "Bearer",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+  });
+
+  const { NO_AUTH_TOKEN } = await import("../src/config/no-auth.js");
+  process.env.KWEAVER_TOKEN = NO_AUTH_TOKEN;
+  try {
+    const t = await oauth.ensureValidToken();
+    assert.equal(t.accessToken, NO_AUTH_TOKEN);
+    assert.equal(t.baseUrl.replace(/\/+$/, ""), baseUrl.replace(/\/+$/, ""));
+  } finally {
+    delete process.env.KWEAVER_TOKEN;
+  }
+});
+
 // ---------------------------------------------------------------------------
 // KWEAVER_USER env var: load a specific user's token
 // ---------------------------------------------------------------------------
@@ -365,6 +407,29 @@ test("withTokenRetry: returns on first success", async () => {
   });
   assert.equal(r, 42);
   assert.equal(n, 1);
+});
+
+test("withTokenRetry: no-auth session does not attempt refresh on 401", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://plain.example.com";
+  store.saveNoAuthPlatform(baseUrl);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("fetch should not be called");
+  };
+  try {
+    await assert.rejects(
+      () =>
+        oauth.withTokenRetry(async () => {
+          throw new HttpError(401, "Unauthorized", "{}");
+        }),
+      HttpError,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("withTokenRetry: retries once after 401 when refresh succeeds", async () => {

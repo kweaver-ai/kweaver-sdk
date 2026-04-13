@@ -244,6 +244,9 @@ export type {
 } from "./config/store.js";
 export type { UserProfile } from "./config/store.js";
 export {
+  NO_AUTH_TOKEN,
+  isNoAuth,
+  saveNoAuthPlatform,
   autoSelectBusinessDomain,
   getConfigDir,
   getCurrentPlatform,

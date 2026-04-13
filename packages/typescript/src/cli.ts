@@ -1,3 +1,4 @@
+import { NO_AUTH_TOKEN } from "./config/no-auth.js";
 import { applyTlsEnvFromSavedTokens } from "./config/tls-env.js";
 import { runAgentCommand } from "./commands/agent.js";
 import { runAuthCommand } from "./commands/auth.js";
@@ -21,7 +22,7 @@ Usage:
   kweaver --version | -V
   kweaver --help | -h
 
-  kweaver auth <platform-url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+  kweaver auth <platform-url> [--alias name] [--no-auth] [-u user] [-p pass] [--playwright] [--insecure|-k]
   kweaver auth login <platform-url>          (alias for auth <url>)
   kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (run on host without browser)
   kweaver auth whoami [platform-url|alias] [--json]
@@ -135,6 +136,14 @@ Commands:
 
 export async function run(argv: string[]): Promise<number> {
   applyTlsEnvFromSavedTokens();
+
+  const noAuthEnv = process.env.KWEAVER_NO_AUTH;
+  if (
+    (noAuthEnv === "1" || noAuthEnv === "true" || noAuthEnv === "yes") &&
+    !process.env.KWEAVER_TOKEN
+  ) {
+    process.env.KWEAVER_TOKEN = NO_AUTH_TOKEN;
+  }
 
   // Global --user flag: override active user for this invocation
   const userIdx = argv.indexOf("--user");

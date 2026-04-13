@@ -1,3 +1,4 @@
+import { isNoAuth } from "../config/no-auth.js";
 import { fetchTextOrThrow } from "../utils/http.js";
 
 /** Per-call options for context-loader MCP. */
@@ -20,10 +21,12 @@ function buildHeaders(options: ContextLoaderCallOptions, sessionId?: string): Re
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
-    Authorization: `Bearer ${options.accessToken}`,
     "X-Kn-ID": options.knId,
     "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
   };
+  if (!isNoAuth(options.accessToken)) {
+    headers.Authorization = `Bearer ${options.accessToken}`;
+  }
   if (sessionId) {
     headers["MCP-Session-Id"] = sessionId;
   }

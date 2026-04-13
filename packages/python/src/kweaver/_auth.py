@@ -39,6 +39,16 @@ class AuthProvider(Protocol):
     def auth_headers(self) -> dict[str, str]: ...
 
 
+class NoAuth:
+    """Send no credentials (platforms without API authentication)."""
+
+    def auth_headers(self) -> dict[str, str]:
+        return {}
+
+    def __repr__(self) -> str:
+        return "NoAuth()"
+
+
 class TokenAuth:
     """Static bearer-token authentication."""
 
@@ -220,6 +230,12 @@ class ConfigAuth:
                 raise RuntimeError(
                     f"No token found for {url}. Run 'kweaver auth login' first."
                 )
+
+            from kweaver.config.no_auth import is_no_auth
+
+            access_token = token_data.get("accessToken", "")
+            if is_no_auth(access_token):
+                return {}
 
             # Check expiration
             expires_at = token_data.get("expiresAt")

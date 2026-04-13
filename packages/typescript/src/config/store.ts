@@ -13,7 +13,31 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { listBusinessDomains } from "../api/business-domains.js";
+import { NO_AUTH_TOKEN } from "./no-auth.js";
 import { decodeJwtPayload, extractUserIdFromJwt } from "./jwt.js";
+
+export { NO_AUTH_TOKEN, isNoAuth } from "./no-auth.js";
+
+/**
+ * Persist a no-auth session for a platform (users/default/token.json) and set it as current.
+ * Used by `kweaver auth <url> --no-auth` and when OAuth registration returns 404.
+ */
+export function saveNoAuthPlatform(baseUrl: string, opts?: { tlsInsecure?: boolean }): TokenConfig {
+  const base = baseUrl.replace(/\/+$/, "");
+  const token: TokenConfig = {
+    baseUrl: base,
+    accessToken: NO_AUTH_TOKEN,
+    tokenType: "none",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+  };
+  if (opts?.tlsInsecure) {
+    token.tlsInsecure = true;
+  }
+  saveTokenConfig(token);
+  setCurrentPlatform(base);
+  return token;
+}
 
 export interface TokenConfig {
   baseUrl: string;

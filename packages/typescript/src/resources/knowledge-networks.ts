@@ -1,3 +1,4 @@
+import { buildHeaders } from "../api/headers.js";
 import {
   listKnowledgeNetworks,
   getKnowledgeNetwork,
@@ -91,9 +92,7 @@ export class KnowledgeNetworksResource {
     const { baseUrl, accessToken, businessDomain } = this.ctx.base();
     const headers = {
       "content-type": "application/json",
-      authorization: `Bearer ${accessToken}`,
-      token: accessToken,
-      "x-business-domain": businessDomain,
+      ...buildHeaders(accessToken, businessDomain),
     };
     await fetchTextOrThrow(
       `${baseUrl}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(bknId)}/jobs`,
@@ -108,11 +107,7 @@ export class KnowledgeNetworksResource {
   /** Poll build status for a BKN. */
   async buildStatus(bknId: string): Promise<BuildStatus> {
     const { baseUrl, accessToken, businessDomain } = this.ctx.base();
-    const headers = {
-      authorization: `Bearer ${accessToken}`,
-      token: accessToken,
-      "x-business-domain": businessDomain,
-    };
+    const headers = buildHeaders(accessToken, businessDomain);
     const { body } = await fetchTextOrThrow(
       `${baseUrl}/api/ontology-manager/v1/knowledge-networks/${encodeURIComponent(bknId)}/jobs?limit=1&direction=desc`,
       { headers }

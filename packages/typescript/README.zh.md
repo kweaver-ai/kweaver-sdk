@@ -131,7 +131,7 @@ const skillMd = await client.skills.fetchContent("skill-id");
 ## 命令速查
 
 ```
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-auth] [-u user] [-p pass] [--playwright] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (无浏览器登录)
 kweaver auth export [url|alias] [--json]   (导出在无浏览器机器上运行的命令)
 kweaver auth status/list/use/delete/logout
@@ -168,6 +168,8 @@ kweaver dataflow logs <dagId> <instanceId> --detail
 
 `kweaver dataflow runs --since` 会按本地自然日过滤；如果参数无法被 `new Date(...)` 解析，CLI 会回退到最近 20 条运行记录。`kweaver dataflow logs` 默认输出摘要；加上 `--detail` 会打印带缩进的 `input` 和 `output` 载荷。
 
+**无 OAuth 的平台：** 使用 `kweaver auth <url> --no-auth`，或照常 `auth login`；若 `POST /oauth2/clients` 返回 **404**，CLI 会提示并自动保存为 no-auth。凭据仍在 `~/.kweaver/`，可用 `auth use` / `auth list` 切换。可选环境变量 `KWEAVER_NO_AUTH=1`（未设置 `KWEAVER_TOKEN` 时）配合 `KWEAVER_BASE_URL`。SDK：`new KWeaverClient({ baseUrl, auth: false })` 或 `kweaver.configure({ baseUrl, auth: false })`。
+
 ## 环境变量
 
 | 变量 | 说明 |
@@ -175,6 +177,7 @@ kweaver dataflow logs <dagId> <instanceId> --detail
 | `KWEAVER_BASE_URL` | KWeaver 实例地址 |
 | `KWEAVER_BUSINESS_DOMAIN` | 业务域标识 |
 | `KWEAVER_TOKEN` | 访问令牌 |
+| `KWEAVER_NO_AUTH` | 设为 `1`/`true`/`yes` 且未设置 `KWEAVER_TOKEN` 时使用 no-auth 占位（需 `KWEAVER_BASE_URL` 或已选平台） |
 | `KWEAVER_TLS_INSECURE` | 设为 `1` 或 `true` 时跳过 TLS 证书校验（仅开发；更推荐 `kweaver auth … --insecure` 以按平台持久化） |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js 内置 TLS 开关：设为 `0` 时在本进程内跳过 HTTPS 证书校验。`kweaver` 在 `KWEAVER_TLS_INSECURE` 生效或已保存 token 为不安全 TLS 时会设置此项（范围同上；仅开发）。 |
 

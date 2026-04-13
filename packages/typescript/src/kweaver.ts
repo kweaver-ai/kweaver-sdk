@@ -51,6 +51,11 @@ export interface ConfigureOptions {
    * config, preventing accidental cross-environment credential leaks.
    */
   config?: boolean;
+  /**
+   * If false, use no-auth mode (no Authorization headers). Requires baseUrl or KWEAVER_BASE_URL.
+   * Incompatible with config=true.
+   */
+  auth?: boolean;
   /** Default BKN ID used by search() and weaver(). */
   bknId?: string;
   /** Default agent ID used by chat(). */
@@ -75,9 +80,26 @@ export function configure(opts: ConfigureOptions): void {
   _defaultBknId = null;
   _defaultAgentId = null;
 
-  const { bknId, agentId, businessDomain, config, baseUrl, accessToken } = opts;
+  const { bknId, agentId, businessDomain, config, baseUrl, accessToken, auth } = opts;
 
-  if (config) {
+  if (auth === false && config) {
+    throw new Error("Cannot use auth: false with config: true.");
+  }
+  if (auth === false && accessToken) {
+    throw new Error("Cannot use auth: false with accessToken.");
+  }
+
+  if (auth === false) {
+    const resolvedBase = baseUrl ?? process.env.KWEAVER_BASE_URL;
+    if (!resolvedBase) {
+      throw new Error("Provide baseUrl= or set KWEAVER_BASE_URL when auth is false.");
+    }
+    _client = new KWeaverClient({
+      baseUrl: resolvedBase,
+      auth: false,
+      businessDomain,
+    });
+  } else if (config) {
     // Use saved credentials — do NOT pass baseUrl to avoid cross-env leaks
     const platform = getCurrentPlatform();
     if (!platform) {
@@ -90,6 +112,24 @@ export function configure(opts: ConfigureOptions): void {
     _client = new KWeaverClient({
       baseUrl: platform,
       accessToken: stored.accessToken,
+      businessDomain,
+    });
+  } else if (
+    !accessToken &&
+    !process.env.KWEAVER_TOKEN &&
+    ["1", "true", "yes"].includes(
+      (process.env.KWEAVER_NO_AUTH ?? "").toLowerCase(),
+    )
+  ) {
+    const resolvedBase = baseUrl ?? process.env.KWEAVER_BASE_URL;
+    if (!resolvedBase) {
+      throw new Error(
+        "Provide baseUrl= or set KWEAVER_BASE_URL when KWEAVER_NO_AUTH is set.",
+      );
+    }
+    _client = new KWeaverClient({
+      baseUrl: resolvedBase,
+      auth: false,
       businessDomain,
     });
   } else {

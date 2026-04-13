@@ -13,7 +13,7 @@ npm install playwright && npx playwright install chromium
 ## 命令
 
 ```bash
-kweaver auth login <url> [--alias <name>] [-u user] [-p pass] [--playwright]
+kweaver auth login <url> [--alias <name>] [--no-auth] [-u user] [-p pass] [--playwright]
                          [--port <n>] [--redirect-uri <uri>] [--insecure|-k]
 kweaver auth <url> [--alias <name>] ...              # 同上（简写）
 kweaver auth whoami [url|alias] [--json]              # 显示当前用户身份
@@ -26,6 +26,14 @@ kweaver auth switch [url|alias] --user <id|username>  # 切换活跃用户
 kweaver auth logout [url|alias] [--user <id|username>]
 kweaver auth delete <url|alias> [--user <id|username>]
 ```
+
+## 无认证平台（no-auth）
+
+部分环境未启用 OAuth（例如内网开发机）。可显式保存为 no-auth 平台，或与正常登录一样执行 `kweaver auth login <url>`：若 `POST /oauth2/clients` 返回 **404**，CLI 会提示并自动保存为 no-auth 模式。
+
+- **`--no-auth`**：`kweaver auth <url> --no-auth` 与 `kweaver auth login <url> --no-auth` 等价，跳过浏览器/OAuth。
+- **环境变量**：`KWEAVER_NO_AUTH=1` 且未设置 `KWEAVER_TOKEN` 时，CLI 使用与磁盘 no-auth 相同的 sentinel（需配合 `KWEAVER_BASE_URL` 或已选平台）。
+- 凭据仍写入 `~/.kweaver/`，可用 `auth use` / `auth list` 切换；内置 **default** 用户目录（与 TS/Python SDK 一致）。
 
 ## 多账号支持
 

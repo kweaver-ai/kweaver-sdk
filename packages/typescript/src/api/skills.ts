@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import { buildHeaders as buildPlatformHeaders } from "./headers.js";
 import { HttpError, fetchTextOrThrow } from "../utils/http.js";
 
 const SKILL_API_PREFIX = "/api/agent-operator-integration/v1";
@@ -153,18 +154,8 @@ export interface InstallSkillArchiveOptions {
   force?: boolean;
 }
 
-function buildHeaders(accessToken: string, businessDomain: string): Record<string, string> {
-  return {
-    accept: "application/json, text/plain, */*",
-    authorization: `Bearer ${accessToken}`,
-    token: accessToken,
-    "x-business-domain": businessDomain,
-    "x-language": "zh-cn",
-  };
-}
-
 function baseHeaders(opts: SkillApiBaseOptions): Record<string, string> {
-  return buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public");
+  return buildPlatformHeaders(opts.accessToken, opts.businessDomain ?? "bd_public");
 }
 
 function buildUrl(baseUrl: string, path: string): string {

@@ -42,6 +42,17 @@ for chunk in kweaver.chat("Generate a risk report", stream=True):
     print(chunk.delta, end="", flush=True)
 ```
 
+### No-auth servers
+
+If the platform has no API authentication, use `configure(..., auth=False)` or pass `NoAuth()` to `KWeaverClient`. This matches the TypeScript CLI `kweaver auth <url> --no-auth` token stored in `~/.kweaver/` (`ConfigAuth` then sends no `Authorization` header when the saved token is the `__NO_AUTH__` sentinel).
+
+```python
+from kweaver import KWeaverClient, NoAuth
+
+client = KWeaverClient(base_url="http://localhost:8080", auth=NoAuth())
+# or: kweaver.configure("http://localhost:8080", auth=False)
+```
+
 ### Client API (full control)
 
 ```python

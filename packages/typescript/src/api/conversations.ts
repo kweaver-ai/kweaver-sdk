@@ -1,3 +1,5 @@
+import { buildHeaders } from "./headers.js";
+
 export interface ListConversationsOptions {
   baseUrl: string;
   accessToken: string;
@@ -47,9 +49,7 @@ export async function listConversations(opts: ListConversationsOptions): Promise
     method: "GET",
     headers: {
       accept: "application/json",
-      authorization: `Bearer ${accessToken}`,
-      token: accessToken,
-      "x-business-domain": businessDomain,
+      ...buildHeaders(accessToken, businessDomain),
     },
   });
 
@@ -75,9 +75,7 @@ export async function getTracesByConversation(opts: GetTracesOptions): Promise<s
     headers: {
       "Content-Type": "application/json",
       accept: "application/json",
-      authorization: `Bearer ${accessToken}`,
-      token: accessToken,
-      "x-business-domain": businessDomain,
+      ...buildHeaders(accessToken, businessDomain),
     },
     body: JSON.stringify({
       agent_id: agentId,
@@ -108,9 +106,7 @@ export async function listMessages(opts: ListMessagesOptions): Promise<string> {
     method: "GET",
     headers: {
       accept: "application/json",
-      authorization: `Bearer ${accessToken}`,
-      token: accessToken,
-      "x-business-domain": businessDomain,
+      ...buildHeaders(accessToken, businessDomain),
     },
   });
 

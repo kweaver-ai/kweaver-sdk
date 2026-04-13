@@ -9,6 +9,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { NO_AUTH_TOKEN } from "../src/config/no-auth.js";
+
 const BASE = "https://mock.kweaver.test";
 const TOKEN = "test-token-xyz";
 
@@ -85,6 +87,38 @@ test("configure reads accessToken from env", () => {
   } finally {
     delete process.env.KWEAVER_TOKEN;
   }
+});
+
+test("configure uses KWEAVER_NO_AUTH env with KWEAVER_BASE_URL", () => {
+  const origNoAuth = process.env.KWEAVER_NO_AUTH;
+  const origTok = process.env.KWEAVER_TOKEN;
+  const origBase = process.env.KWEAVER_BASE_URL;
+  process.env.KWEAVER_NO_AUTH = "1";
+  delete process.env.KWEAVER_TOKEN;
+  process.env.KWEAVER_BASE_URL = BASE;
+  try {
+    assert.doesNotThrow(() => kweaver.configure({}));
+    assert.equal(kweaver.getClient().base().accessToken, NO_AUTH_TOKEN);
+    assert.equal(kweaver.getClient().base().baseUrl, BASE);
+  } finally {
+    if (origNoAuth !== undefined) process.env.KWEAVER_NO_AUTH = origNoAuth;
+    else delete process.env.KWEAVER_NO_AUTH;
+    if (origTok !== undefined) process.env.KWEAVER_TOKEN = origTok;
+    if (origBase !== undefined) process.env.KWEAVER_BASE_URL = origBase;
+    else delete process.env.KWEAVER_BASE_URL;
+  }
+});
+
+test("configure rejects auth false with accessToken", () => {
+  assert.throws(
+    () =>
+      kweaver.configure({
+        baseUrl: BASE,
+        accessToken: TOKEN,
+        auth: false,
+      }),
+    /auth: false with accessToken/,
+  );
 });
 
 test("getClient throws before configure", () => {

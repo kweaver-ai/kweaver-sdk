@@ -1,4 +1,5 @@
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
+import { isNoAuth } from "../config/no-auth.js";
 import { HttpError } from "../utils/http.js";
 import { resolveBusinessDomain } from "../config/store.js";
 
@@ -97,12 +98,14 @@ export function parseCallArgs(args: string[]): CallInvocation {
 }
 
 function injectAuthHeaders(headers: Headers, accessToken: string, businessDomain: string): void {
-  if (!headers.has("authorization")) {
-    headers.set("authorization", `Bearer ${accessToken}`);
-  }
+  if (!isNoAuth(accessToken)) {
+    if (!headers.has("authorization")) {
+      headers.set("authorization", `Bearer ${accessToken}`);
+    }
 
-  if (!headers.has("token")) {
-    headers.set("token", accessToken);
+    if (!headers.has("token")) {
+      headers.set("token", accessToken);
+    }
   }
 
   if (!headers.has("x-business-domain")) {

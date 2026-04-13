@@ -142,7 +142,7 @@ const skillMd = await client.skills.fetchContent("skill-id");
 ## CLI Reference
 
 ```
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-auth] [-u user] [-p pass] [--playwright] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless login)
 kweaver auth export [url|alias] [--json]   (export command to run on a headless host)
 kweaver auth status/list/use/delete/logout
@@ -184,6 +184,8 @@ kweaver dataflow logs <dagId> <instanceId> --detail
 
 `kweaver dataflow runs --since` filters one local natural day. If the value cannot be parsed by `new Date(...)`, the CLI falls back to the most recent 20 runs. `kweaver dataflow logs` defaults to summary output; add `--detail` to print indented `input` and `output` payloads.
 
+**No-auth platforms:** If OAuth is not enabled, use `kweaver auth <url> --no-auth` (or run a normal `auth login`; a **404** on `POST /oauth2/clients` switches to no-auth automatically). Credentials are still saved under `~/.kweaver/` and work with `auth use` / `auth list`. Optional: `KWEAVER_NO_AUTH=1` with `KWEAVER_BASE_URL` when no token env is set. SDK: `new KWeaverClient({ baseUrl, auth: false })` or `kweaver.configure({ baseUrl, auth: false })`.
+
 ## Environment Variables
 
 | Variable | Description |
@@ -191,6 +193,7 @@ kweaver dataflow logs <dagId> <instanceId> --detail
 | `KWEAVER_BASE_URL` | KWeaver instance URL |
 | `KWEAVER_BUSINESS_DOMAIN` | Business domain identifier |
 | `KWEAVER_TOKEN` | Access token |
+| `KWEAVER_NO_AUTH` | Set to `1`/`true`/`yes` to use no-auth sentinel when `KWEAVER_TOKEN` is unset (with `KWEAVER_BASE_URL` or active platform) |
 | `KWEAVER_TLS_INSECURE` | Set to `1` or `true` to skip TLS certificate verification for all HTTPS in the process (dev only; prefer `kweaver auth … --insecure` which saves per platform) |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js built-in TLS switch: set to `0` to skip certificate verification for HTTPS in this process. The `kweaver` CLI sets this when `KWEAVER_TLS_INSECURE` is set or the saved token has insecure TLS (same scope as above; dev only). |
 

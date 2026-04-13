@@ -1,3 +1,4 @@
+import { buildHeaders } from "../api/headers.js";
 import {
   objectTypeQuery,
   objectTypeProperties,
@@ -50,9 +51,7 @@ export class BknResource {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${accessToken}`,
-        token: accessToken,
-        "x-business-domain": businessDomain,
+        ...buildHeaders(accessToken, businessDomain),
       },
       body: JSON.stringify({
         kn_id: bknId,

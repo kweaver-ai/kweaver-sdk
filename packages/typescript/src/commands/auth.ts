@@ -1,3 +1,4 @@
+import { isNoAuth } from "../config/no-auth.js";
 import {
   autoSelectBusinessDomain,
   clearPlatformSession,
@@ -13,8 +14,10 @@ import {
   listUsers,
   loadClientConfig,
   loadTokenConfig,
+  resolveBusinessDomain,
   resolvePlatformIdentifier,
   resolveUserId,
+  saveNoAuthPlatform,
   setActiveUser,
   setCurrentPlatform,
   setPlatformAlias,
@@ -62,14 +65,15 @@ Login options:
   -u, --username         Username (with -p triggers Playwright headless login)
   -p, --password         Password
   --playwright           Force Playwright browser login even without -u/-p
-  --insecure, -k         Skip TLS certificate verification (self-signed / dev HTTPS only)`);
+  --insecure, -k         Skip TLS certificate verification (self-signed / dev HTTPS only)
+  --no-auth              Save platform without OAuth (servers with no authentication). Same as detecting OAuth 404 during login.`);
 
     return 0;
   }
 
   if (target === "login") {
     if (rest[0] === "--help" || rest[0] === "-h") {
-      console.log(`kweaver auth login <platform-url> [--alias <name>] [-u user] [-p pass] [--playwright] [--refresh-token T --client-id ID --client-secret S]`);
+      console.log(`kweaver auth login <platform-url> [--alias <name>] [--no-auth] [-u user] [-p pass] [--playwright] [--refresh-token T --client-id ID --client-secret S]`);
       return 0;
     }
     const url = rest[0];
@@ -113,11 +117,12 @@ Login options:
       const customPortStr = readOption(args, "--port");
       const customPort = customPortStr ? parseInt(customPortStr, 10) : undefined;
       const tlsInsecure = args.includes("--insecure") || args.includes("-k");
+      const noAuth = args.includes("--no-auth");
 
       const KNOWN_LOGIN_FLAGS = new Set([
         "--alias", "--client-id", "--client-secret", "--refresh-token",
         "--port", "--redirect-uri", "--username", "-u", "--password", "-p",
-        "--playwright", "--insecure", "-k",
+        "--playwright", "--insecure", "-k", "--no-auth",
       ]);
       const KNOWN_VALUE_FLAGS = new Set([
         "--alias", "--client-id", "--client-secret", "--refresh-token",
@@ -138,9 +143,20 @@ Login options:
         return 1;
       }
 
+      if (noAuth && refreshToken) {
+        console.error("--no-auth cannot be used with --refresh-token.");
+        return 1;
+      }
+      if (noAuth && (username || password || usePlaywright)) {
+        console.error("--no-auth cannot be used with Playwright login or -u/-p.");
+        return 1;
+      }
+
       let token;
 
-      if (refreshToken) {
+      if (noAuth) {
+        token = saveNoAuthPlatform(normalizedTarget, { tlsInsecure });
+      } else if (refreshToken) {
         if (!clientId || !clientSecret) {
           console.error("--refresh-token requires --client-id and --client-secret.\n");
           console.error("Get these values from the callback page after a browser login or `kweaver auth export`.");
@@ -195,18 +211,24 @@ Login options:
         const userLabel = token.displayName ? `${token.displayName} (${activeUser})` : activeUser;
         console.log(`User: ${userLabel}`);
       }
-      console.log(`Access token saved: yes`);
-      if (token.refreshToken) {
-        console.log(`Refresh token: yes (auto-refresh enabled)`);
+      if (isNoAuth(token.accessToken)) {
+        console.log(`Authentication: none (no-auth mode)`);
       } else {
+        console.log(`Access token saved: yes`);
+      }
+      if (!isNoAuth(token.accessToken) && token.refreshToken) {
+        console.log(`Refresh token: yes (auto-refresh enabled)`);
+      } else if (!isNoAuth(token.accessToken)) {
         console.log(`Refresh token: no (token will expire in 1 hour)`);
       }
       if (token.expiresAt) {
         console.log(`Token expires at: ${token.expiresAt}`);
       }
-      const selectedBd = await autoSelectBusinessDomain(normalizedTarget, token.accessToken, {
-        tlsInsecure: token.tlsInsecure,
-      });
+      const selectedBd = isNoAuth(token.accessToken)
+        ? resolveBusinessDomain(normalizedTarget)
+        : await autoSelectBusinessDomain(normalizedTarget, token.accessToken, {
+            tlsInsecure: token.tlsInsecure,
+          });
       console.log(`Business domain: ${selectedBd}`);
       return 0;
     } catch (error) {
@@ -241,29 +263,34 @@ Login options:
       `Current platform: ${token.baseUrl === currentPlatform ? "yes" : "no"}`,
     ];
 
-    const statusActiveUser = getActiveUser(platform);
-    if (statusActiveUser) {
-      const statusDisplayName = token.displayName;
-      const userLabel = statusDisplayName ? `${statusDisplayName} (${statusActiveUser})` : statusActiveUser;
-      lines.push(`User: ${userLabel}`);
-    }
+    if (isNoAuth(token.accessToken)) {
+      lines.push(`Authentication: none (no-auth mode)`);
+      lines.push(`User: default (built-in profile for no-auth platforms)`);
+    } else {
+      const statusActiveUser = getActiveUser(platform);
+      if (statusActiveUser) {
+        const statusDisplayName = token.displayName;
+        const userLabel = statusDisplayName ? `${statusDisplayName} (${statusActiveUser})` : statusActiveUser;
+        lines.push(`User: ${userLabel}`);
+      }
 
-    lines.push(`Token present: yes`);
-    lines.push(`Refresh token: ${token.refreshToken ? "yes (auto-refresh enabled)" : "no"}`);
-    if (token.tlsInsecure) {
-      lines.push(`TLS: certificate verification disabled (saved; dev only)`);
-    }
+      lines.push(`Token present: yes`);
+      lines.push(`Refresh token: ${token.refreshToken ? "yes (auto-refresh enabled)" : "no"}`);
+      if (token.tlsInsecure) {
+        lines.push(`TLS: certificate verification disabled (saved; dev only)`);
+      }
 
-    if (token.expiresAt) {
-      const expiry = new Date(token.expiresAt);
-      const remainingMs = expiry.getTime() - Date.now();
-      if (remainingMs > 0) {
-        const remainingMin = Math.ceil(remainingMs / 60_000);
-        lines.push(`Token status: active (expires in ${remainingMin} min)`);
-      } else if (token.refreshToken) {
-        lines.push(`Token status: expired (will auto-refresh on next command)`);
-      } else {
-        lines.push(`Token status: expired (run \`kweaver auth login ${token.baseUrl}\` again)`);
+      if (token.expiresAt) {
+        const expiry = new Date(token.expiresAt);
+        const remainingMs = expiry.getTime() - Date.now();
+        if (remainingMs > 0) {
+          const remainingMin = Math.ceil(remainingMs / 60_000);
+          lines.push(`Token status: active (expires in ${remainingMin} min)`);
+        } else if (token.refreshToken) {
+          lines.push(`Token status: expired (will auto-refresh on next command)`);
+        } else {
+          lines.push(`Token status: expired (run \`kweaver auth login ${token.baseUrl}\` again)`);
+        }
       }
     }
 
@@ -285,7 +312,9 @@ Login options:
     for (const platform of platforms) {
       const marker = platform.baseUrl === currentPlatform ? "*" : "-";
       const aliasPart = platform.alias ? ` (${platform.alias})` : "";
-      console.log(`${marker} ${platform.baseUrl}${aliasPart}`);
+      const tok = loadTokenConfig(platform.baseUrl);
+      const noAuthPart = tok && isNoAuth(tok.accessToken) ? " (no-auth)" : "";
+      console.log(`${marker} ${platform.baseUrl}${aliasPart}${noAuthPart}`);
 
       const profiles = listUserProfiles(platform.baseUrl);
       const activeUser = getActiveUser(platform.baseUrl);

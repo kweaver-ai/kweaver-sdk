@@ -471,6 +471,26 @@ class PlatformStore:
         if not os.environ.get("KWEAVER_USER"):
             self.set_active_user(url, uid)
 
+    def save_no_auth_platform(self, url: str, *, tls_insecure: bool = False) -> dict[str, Any]:
+        """Persist a no-auth session (compatible with TS CLI ``saveNoAuthPlatform``)."""
+        from datetime import datetime, timezone
+
+        from kweaver.config.no_auth import NO_AUTH_TOKEN
+
+        base = url.rstrip("/")
+        data: dict[str, Any] = {
+            "baseUrl": base,
+            "accessToken": NO_AUTH_TOKEN,
+            "tokenType": "none",
+            "scope": "",
+            "obtainedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+        if tls_insecure:
+            data["tlsInsecure"] = True
+        self.save_token(base, data)
+        self.use(base)
+        return data
+
     # ------------------------------------------------------------------
     # Platform config — businessDomain etc. (user-scoped)
     # ------------------------------------------------------------------

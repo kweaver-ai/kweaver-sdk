@@ -11,7 +11,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kweaver._auth import ConfigAuth, OAuth2Auth, OAuth2BrowserAuth, PasswordAuth, TokenAuth
+from kweaver._auth import ConfigAuth, NoAuth, OAuth2Auth, OAuth2BrowserAuth, PasswordAuth, TokenAuth
+
+
+# ── NoAuth ───────────────────────────────────────────────────────────────────
+
+
+def test_no_auth_headers_empty():
+    assert NoAuth().auth_headers() == {}
+
+
+def test_no_auth_repr():
+    assert repr(NoAuth()) == "NoAuth()"
 
 
 # ── TokenAuth ────────────────────────────────────────────────────────────────

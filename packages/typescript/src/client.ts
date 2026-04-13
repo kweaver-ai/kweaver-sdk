@@ -1,8 +1,10 @@
 import { applyTlsEnvFromSavedTokens } from "./config/tls-env.js";
+import { NO_AUTH_TOKEN, isNoAuth } from "./config/no-auth.js";
 import {
   getCurrentPlatform,
   loadTokenConfig,
 } from "./config/store.js";
+import { buildHeaders } from "./api/headers.js";
 import { ensureValidToken } from "./auth/oauth.js";
 import { AgentsResource } from "./resources/agents.js";
 import { ConversationsResource } from "./resources/conversations.js";
@@ -51,8 +53,18 @@ export interface KWeaverClientOptions {
    * When true, read credentials exclusively from ~/.kweaver/ (saved by
    * `kweaver auth login`), ignoring KWEAVER_BASE_URL / KWEAVER_TOKEN env vars.
    * Useful when env vars hold stale tokens or are intended for other tooling.
+   * Incompatible with `auth: false` — the constructor throws if both are set.
    */
   config?: boolean;
+
+  /**
+   * When false, use no-auth mode: API requests omit Authorization / token headers.
+   * Requires a resolvable base URL: `baseUrl`, `KWEAVER_BASE_URL`, or the active
+   * platform from `kweaver auth login`. Incompatible with `config: true` — use
+   * saved `~/.kweaver/` credentials (including `__NO_AUTH__`) via `config: true`
+   * alone instead of passing `auth: false`.
+   */
+  auth?: boolean;
 }
 
 // ── KWeaverClient ─────────────────────────────────────────────────────────────
@@ -120,8 +132,44 @@ export class KWeaverClient implements ClientContext {
   constructor(opts: KWeaverClientOptions = {}) {
     const envDomain = process.env.KWEAVER_BUSINESS_DOMAIN;
 
+    if (opts.auth === false && opts.config) {
+      throw new Error(
+        "KWeaverClient: auth: false is incompatible with config: true.",
+      );
+    }
+
     let baseUrl: string | undefined;
     let accessToken: string | undefined;
+
+    if (opts.auth === false) {
+      {
+        const envUrl = process.env.KWEAVER_BASE_URL;
+        baseUrl = opts.baseUrl ?? envUrl;
+        if (!baseUrl) {
+          const platform = getCurrentPlatform();
+          if (platform) baseUrl = platform;
+        }
+      }
+      if (!baseUrl) {
+        throw new Error(
+          "KWeaverClient: baseUrl is required when auth is false. " +
+            "Pass it explicitly, set KWEAVER_BASE_URL, or run `kweaver auth login`.",
+        );
+      }
+      this._baseUrl = baseUrl.replace(/\/+$/, "");
+      this._accessToken = NO_AUTH_TOKEN;
+      this._businessDomain = opts.businessDomain ?? envDomain ?? "bd_public";
+      this.knowledgeNetworks = new KnowledgeNetworksResource(this);
+      this.agents = new AgentsResource(this);
+      this.bkn = new BknResource(this);
+      this.conversations = new ConversationsResource(this);
+      this.dataflows = new DataflowsResource(this);
+      this.datasources = new DataSourcesResource(this);
+      this.dataviews = new DataViewsResource(this);
+      this.vega = new VegaResource(this);
+      this.skills = new SkillsResource(this);
+      return;
+    }
 
     if (opts.config) {
       // config: true — read exclusively from ~/.kweaver/, ignore env vars
@@ -205,19 +253,28 @@ export class KWeaverClient implements ClientContext {
       ...opts,
     });
 
-    // Quick probe — if the token was revoked server-side, force refresh
-    try {
-      const probe = await fetch(
-        `${token.baseUrl.replace(/\/+$/, "")}/api/ontology-manager/v1/knowledge-networks?limit=1`,
-        { headers: { authorization: `Bearer ${token.accessToken}`, token: token.accessToken } },
-      );
-      if (probe.status === 401) {
-        throw new Error(
-          "Access token revoked. Run `kweaver auth login` to re-authenticate."
+    if (!isNoAuth(token.accessToken)) {
+      // Quick probe — if the token was revoked server-side, force refresh
+      try {
+        const bd = client.base().businessDomain;
+        const probe = await fetch(
+          `${token.baseUrl.replace(/\/+$/, "")}/api/ontology-manager/v1/knowledge-networks?limit=1`,
+          { headers: buildHeaders(token.accessToken, bd) },
         );
+        if (probe.status === 401) {
+          throw new Error(
+            "Access token revoked. Run `kweaver auth login` to re-authenticate."
+          );
+        }
+      } catch (e) {
+        if (
+          e instanceof Error &&
+          e.message.startsWith("Access token revoked")
+        ) {
+          throw e;
+        }
+        // Network error — return client as-is, let the caller deal with it
       }
-    } catch {
-      // Network error — return client as-is, let the caller deal with it
     }
     return client;
   }

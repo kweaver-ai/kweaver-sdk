@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
+import { NO_AUTH_TOKEN } from "../src/config/no-auth.js";
 import { KWeaverClient } from "../src/client.js";
 import { ContextLoaderResource } from "../src/resources/context-loader.js";
 
@@ -13,6 +14,119 @@ function makeClient(extra: Record<string, string> = {}): KWeaverClient {
 }
 
 // ── constructor ───────────────────────────────────────────────────────────────
+
+test("KWeaverClient auth false uses no-auth sentinel", () => {
+  const client = new KWeaverClient({ baseUrl: BASE, auth: false });
+  assert.equal(client.base().accessToken, NO_AUTH_TOKEN);
+  assert.equal(client.base().baseUrl, BASE);
+});
+
+test("KWeaverClient auth false with config true throws", () => {
+  assert.throws(
+    () => new KWeaverClient({ baseUrl: BASE, auth: false, config: true }),
+    /incompatible with config: true/,
+  );
+});
+
+test("KWeaverClient auth false falls back to active platform for baseUrl", async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+
+  const origUrl = process.env.KWEAVER_BASE_URL;
+  const origDir = process.env.KWEAVERC_CONFIG_DIR;
+  delete process.env.KWEAVER_BASE_URL;
+
+  const configDir = mkdtempSync(join(tmpdir(), "kweaver-client-noauth-"));
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const t = `${Date.now()}-${Math.random()}`;
+  const store = await import(`../src/config/store.ts?t=${t}`);
+  store.setCurrentPlatform("https://saved-platform.example.com");
+
+  const clientMod = await import(`../src/client.ts?t=${t}`);
+  try {
+    const client = new clientMod.KWeaverClient({ auth: false });
+    assert.equal(client.base().baseUrl, "https://saved-platform.example.com");
+    assert.equal(client.base().accessToken, NO_AUTH_TOKEN);
+  } finally {
+    if (origUrl !== undefined) process.env.KWEAVER_BASE_URL = origUrl;
+    else delete process.env.KWEAVER_BASE_URL;
+    if (origDir !== undefined) process.env.KWEAVERC_CONFIG_DIR = origDir;
+    else delete process.env.KWEAVERC_CONFIG_DIR;
+  }
+});
+
+test("KWeaverClient.connect throws when probe returns 401 (revoked token)", async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+
+  const origDir = process.env.KWEAVERC_CONFIG_DIR;
+  const origTok = process.env.KWEAVER_TOKEN;
+  const origUrl = process.env.KWEAVER_BASE_URL;
+  delete process.env.KWEAVER_TOKEN;
+  delete process.env.KWEAVER_BASE_URL;
+
+  const configDir = mkdtempSync(join(tmpdir(), "kweaver-connect-probe-"));
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const t = `${Date.now()}-${Math.random()}`;
+  const store = await import(`../src/config/store.ts?t=${t}`);
+  const baseUrl = "https://probe-platform.example.com";
+  store.setCurrentPlatform(baseUrl);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "live-access-token",
+    tokenType: "Bearer",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+  });
+
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/knowledge-networks") && url.includes("limit=1")) {
+      return new Response("unauthorized", { status: 401 });
+    }
+    return new Response("{}", { status: 200 });
+  };
+
+  const clientMod = await import(`../src/client.ts?t=${t}`);
+  try {
+    await assert.rejects(
+      () => clientMod.KWeaverClient.connect(),
+      (err: unknown) =>
+        err instanceof Error &&
+        err.message.startsWith("Access token revoked"),
+      "connect must surface revoked token from 401 probe",
+    );
+  } finally {
+    globalThis.fetch = origFetch;
+    if (origDir !== undefined) process.env.KWEAVERC_CONFIG_DIR = origDir;
+    else delete process.env.KWEAVERC_CONFIG_DIR;
+    if (origTok !== undefined) process.env.KWEAVER_TOKEN = origTok;
+    if (origUrl !== undefined) process.env.KWEAVER_BASE_URL = origUrl;
+  }
+});
+
+test("KWeaverClient auth false requires baseUrl when no env and no platform", () => {
+  const origUrl = process.env.KWEAVER_BASE_URL;
+  const origDir = process.env.KWEAVERC_CONFIG_DIR;
+  delete process.env.KWEAVER_BASE_URL;
+  process.env.KWEAVERC_CONFIG_DIR = fileURLToPath(new URL("../../.tmp-test-cfg", import.meta.url));
+  try {
+    assert.throws(
+      () => new KWeaverClient({ auth: false }),
+      /baseUrl is required when auth is false/,
+    );
+  } finally {
+    if (origUrl !== undefined) process.env.KWEAVER_BASE_URL = origUrl;
+    else delete process.env.KWEAVER_BASE_URL;
+    if (origDir !== undefined) process.env.KWEAVERC_CONFIG_DIR = origDir;
+    else delete process.env.KWEAVERC_CONFIG_DIR;
+  }
+});
 
 test("KWeaverClient throws when accessToken missing and env var absent", () => {
   // Point config dir to an empty temp directory so no saved token is found

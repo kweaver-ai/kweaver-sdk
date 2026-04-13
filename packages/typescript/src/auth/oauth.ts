@@ -1,4 +1,5 @@
 import type { Server } from "node:http";
+import { isNoAuth } from "../config/no-auth.js";
 import {
   type ClientConfig,
   type TokenConfig,
@@ -9,6 +10,7 @@ import {
   loadUserTokenConfig,
   resolveUserId,
   saveClientConfig,
+  saveNoAuthPlatform,
   saveTokenConfig,
   setCurrentPlatform,
 } from "../config/store.js";
@@ -348,7 +350,18 @@ export async function oauth2Login(
   const callbackPathname = parsedRedirect?.pathname ?? "/callback";
 
   // Step 1: Determine client — use provided client ID or fall back to dynamic registration
-  let client = await resolveOrRegisterClient(base, redirectUri, scope, options);
+  let client: ClientConfig;
+  try {
+    client = await resolveOrRegisterClient(base, redirectUri, scope, options);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) {
+      process.stderr.write(
+        "OAuth2 endpoint not found (404). Saving platform in no-auth mode.\n",
+      );
+      return saveNoAuthPlatform(base, { tlsInsecure: options?.tlsInsecure });
+    }
+    throw e;
+  }
 
   // Use PKCE when no client secret is available (public client / platform client).
   const usePkce = !client.clientSecret;
@@ -642,7 +655,18 @@ export async function playwrightLogin(
   const hasCredentials = !!(options?.username && options?.password);
 
   // Step 1: Ensure registered OAuth2 client (with stale-client auto-recovery)
-  let client = await resolveOrRegisterClient(base, redirectUri, scope);
+  let client: ClientConfig;
+  try {
+    client = await resolveOrRegisterClient(base, redirectUri, scope);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) {
+      process.stderr.write(
+        "OAuth2 endpoint not found (404). Saving platform in no-auth mode.\n",
+      );
+      return saveNoAuthPlatform(base, { tlsInsecure: options?.tlsInsecure });
+    }
+    throw e;
+  }
 
   // Step 2: Generate CSRF state
   const state = randomBytes(12).toString("hex");
@@ -847,6 +871,9 @@ export async function refreshTokenLogin(
 }
 
 function tokenNeedsRefresh(token: TokenConfig): boolean {
+  if (isNoAuth(token.accessToken)) {
+    return false;
+  }
   if (!token.expiresAt) {
     return false;
   }
@@ -864,6 +891,9 @@ function tokenNeedsRefresh(token: TokenConfig): boolean {
  */
 export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfig> {
   const baseUrl = normalizeBaseUrl(token.baseUrl);
+  if (isNoAuth(token.accessToken)) {
+    throw new Error(`Cannot refresh no-auth session for ${baseUrl}.`);
+  }
   const refreshToken = token.refreshToken?.trim();
   if (!refreshToken) {
     throw new Error(
@@ -975,10 +1005,24 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
     return {
       baseUrl: normalizeBaseUrl(envBaseUrl),
       accessToken: rawToken,
-      tokenType: "bearer",
+      tokenType: isNoAuth(rawToken) ? "none" : "bearer",
       scope: "",
       obtainedAt: new Date().toISOString(),
     };
+  }
+
+  if (!opts?.forceRefresh && envToken && !envBaseUrl) {
+    const currentPlatformForEnv = getCurrentPlatform();
+    if (currentPlatformForEnv) {
+      const rawToken = envToken.replace(/^Bearer\s+/i, "");
+      return {
+        baseUrl: normalizeBaseUrl(currentPlatformForEnv),
+        accessToken: rawToken,
+        tokenType: isNoAuth(rawToken) ? "none" : "bearer",
+        scope: "",
+        obtainedAt: new Date().toISOString(),
+      };
+    }
   }
 
   const currentPlatform = getCurrentPlatform();
@@ -1006,6 +1050,10 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
     throw new Error(
       `No saved token for ${currentPlatform}. Run \`kweaver auth login ${currentPlatform}\` first.`,
     );
+  }
+
+  if (isNoAuth(token.accessToken)) {
+    return token;
   }
 
   if (opts?.forceRefresh) {
@@ -1053,6 +1101,9 @@ export async function with401RefreshRetry<T>(fn: () => Promise<T>): Promise<T> {
       if (!latest) {
         throw error;
       }
+      if (isNoAuth(latest.accessToken)) {
+        throw error;
+      }
       try {
         await refreshAccessToken(latest);
       } catch (retryErr) {
@@ -1081,6 +1132,9 @@ export async function withTokenRetry<T>(
     return await fn(token);
   } catch (error) {
     if (error instanceof HttpError && error.status === 401) {
+      if (isNoAuth(token.accessToken)) {
+        throw error;
+      }
       const platformUrl = normalizeBaseUrl(token.baseUrl);
       const envUser = process.env.KWEAVER_USER;
       let latest: TokenConfig | null;

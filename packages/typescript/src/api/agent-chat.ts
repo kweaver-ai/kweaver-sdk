@@ -1,3 +1,4 @@
+import { isNoAuth } from "../config/no-auth.js";
 import { fetchTextOrThrow, fetchWithRetry, HttpError } from "../utils/http.js";
 import { normalizeDisplayText } from "../utils/display-text.js";
 
@@ -80,16 +81,19 @@ export async function fetchAgentInfo(options: {
 }): Promise<AgentInfo> {
   const { baseUrl, accessToken, agentId, version, businessDomain = "bd_public" } = options;
   const url = buildAgentInfoUrl(baseUrl, agentId, version);
+  const agentHeaders: Record<string, string> = {
+    accept: "application/json, text/plain, */*",
+    "x-business-domain": businessDomain,
+    "x-language": "zh-CN",
+    "x-requested-with": "XMLHttpRequest",
+  };
+  if (!isNoAuth(accessToken)) {
+    agentHeaders.Authorization = `Bearer ${accessToken}`;
+    agentHeaders.token = accessToken;
+  }
   const { body } = await fetchTextOrThrow(url, {
     method: "GET",
-    headers: {
-      accept: "application/json, text/plain, */*",
-      Authorization: `Bearer ${accessToken}`,
-      token: accessToken,
-      "x-business-domain": businessDomain,
-      "x-language": "zh-CN",
-      "x-requested-with": "XMLHttpRequest",
-    },
+    headers: agentHeaders,
   });
 
   const data = JSON.parse(body) as Partial<AgentInfo>;
@@ -400,11 +404,13 @@ export async function sendChatRequest(options: SendChatRequestOptions): Promise<
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     accept: stream ? "text/event-stream" : "application/json",
-    Authorization: `Bearer ${accessToken}`,
     "Accept-Language": "zh-CN",
     "x-Language": "zh-CN",
     "x-business-domain": businessDomain,
   };
+  if (!isNoAuth(accessToken)) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
 
   if (verbose) {
     console.error(`POST ${url}`);
@@ -497,11 +503,13 @@ export async function sendChatRequestStream(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     accept: "text/event-stream",
-    Authorization: `Bearer ${accessToken}`,
     "Accept-Language": "zh-CN",
     "x-Language": "zh-CN",
     "x-business-domain": businessDomain,
   };
+  if (!isNoAuth(accessToken)) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
 
   if (verbose) {
     console.error(`POST ${url}`);

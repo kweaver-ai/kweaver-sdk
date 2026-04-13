@@ -472,6 +472,85 @@ test("run auth login with --refresh-token exchanges and saves access token", asy
   assert.equal(client?.clientSecret, "h-sec");
 });
 
+test("run auth login --no-auth saves no-auth platform and exits 0", async () => {
+  const configDir = createConfigDir();
+  const store = await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const base = "https://noauth.example.com";
+  const code = await auth.runAuthCommand([base, "--no-auth"]);
+  assert.equal(code, 0);
+
+  assert.equal(store.getCurrentPlatform(), base);
+  const tok = store.loadTokenConfig(base);
+  assert.ok(tok, "token should be saved");
+  assert.equal(tok?.accessToken, "__NO_AUTH__");
+});
+
+test("run auth login --no-auth with --insecure persists tlsInsecure", async () => {
+  const configDir = createConfigDir();
+  const store = await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const base = "https://self-signed.example.com";
+  const code = await auth.runAuthCommand([base, "--no-auth", "-k"]);
+  assert.equal(code, 0);
+
+  const tok = store.loadTokenConfig(base);
+  assert.equal(tok?.tlsInsecure, true);
+});
+
+test("run auth login --no-auth with --refresh-token is rejected", async () => {
+  const configDir = createConfigDir();
+  await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const errors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
+  try {
+    const code = await auth.runAuthCommand([
+      "https://example.com", "--no-auth", "--refresh-token", "rt",
+      "--client-id", "cid", "--client-secret", "csec",
+    ]);
+    assert.equal(code, 1);
+    assert.ok(errors.some((e) => e.includes("--no-auth cannot be used with --refresh-token")));
+  } finally {
+    console.error = origError;
+  }
+});
+
+test("run auth login --no-auth with -u/-p is rejected", async () => {
+  const configDir = createConfigDir();
+  await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const errors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
+  try {
+    const code = await auth.runAuthCommand([
+      "https://example.com", "--no-auth", "-u", "user", "-p", "pass",
+    ]);
+    assert.equal(code, 1);
+    assert.ok(errors.some((e) => e.includes("--no-auth cannot be used with Playwright")));
+  } finally {
+    console.error = origError;
+  }
+});
+
+test("run auth login --no-auth with alias saves alias", async () => {
+  const configDir = createConfigDir();
+  const store = await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const base = "https://noauth-alias.example.com";
+  const code = await auth.runAuthCommand([base, "--no-auth", "--alias", "na"]);
+  assert.equal(code, 0);
+
+  assert.equal(store.getPlatformAlias(base), "na");
+});
+
 test("run auth login rejects unknown flags", async () => {
   const configDir = createConfigDir();
   await importStoreModule(configDir);
@@ -510,6 +589,7 @@ test("run auth login accepts all known flags without unknown-flag error", async 
       "--redirect-uri", "http://127.0.0.1:9010/callback",
       "--port", "9010",
       "--insecure",
+      "--no-auth",
     ]);
     assert.ok(!errors.some((e) => e.includes("Unknown option")));
   } finally {

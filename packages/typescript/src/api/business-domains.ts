@@ -1,3 +1,4 @@
+import { isNoAuth } from "../config/no-auth.js";
 import { HttpError } from "../utils/http.js";
 
 /** One business domain entry from GET /api/business-system/v1/business-domain */
@@ -46,13 +47,16 @@ export async function listBusinessDomains(
   const url = `${base}/api/business-system/v1/business-domain`;
 
   return withTlsInsecure(tlsInsecure, async () => {
+    const headers: Record<string, string> = {
+      accept: "application/json, text/plain, */*",
+    };
+    if (!isNoAuth(accessToken)) {
+      headers.authorization = `Bearer ${accessToken}`;
+      headers.token = accessToken;
+    }
     const response = await fetch(url, {
       method: "GET",
-      headers: {
-        accept: "application/json, text/plain, */*",
-        authorization: `Bearer ${accessToken}`,
-        token: accessToken,
-      },
+      headers,
     });
     const body = await response.text();
     if (!response.ok) {

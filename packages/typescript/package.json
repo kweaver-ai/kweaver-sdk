@@ -1,6 +1,6 @@
 {
   "name": "@kweaver-ai/kweaver-sdk",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "KWeaver TypeScript SDK — CLI tool and programmatic API for knowledge networks and Decision Agents.",
   "type": "module",
   "main": "./dist/index.js",
@@ -28,6 +28,8 @@
     "start": "node ./dist/cli.js",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",
+    "test:e2e": "node --import tsx --test test/e2e/*.test.ts",
+    "test:e2e:live": "KWEAVER_BASE_URL=${KWEAVER_BASE_URL:-https://43.129.210.161} KWEAVER_NO_AUTH=1 KWEAVER_TLS_INSECURE=1 node --import tsx --test test/e2e/*.test.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

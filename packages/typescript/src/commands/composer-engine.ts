@@ -299,8 +299,11 @@ export function buildConfigFromPrompt(prompt: string): ComposerConfig {
 }
 
 export function sanitizeAgentName(name: string): string {
-  // API requires: 中英文、数字及下划线，且不能以数字开头
-  return name.replace(/[^a-zA-Z0-9_\u4e00-\u9fff]/g, "_").replace(/^(\d)/, "_$1");
+  // API requires: 中英文、数字及下划线，且不能以数字开头，长度不超过50
+  return name
+    .replace(/[^a-zA-Z0-9_\u4e00-\u9fff]/g, "_")
+    .replace(/^(\d)/, "_$1")
+    .slice(0, 50);
 }
 
 // ── Agent body builder ───────────────────────────────────────────────────────

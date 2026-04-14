@@ -152,7 +152,7 @@ async function renderBknKnList($el, gen) {
   if (knList.length === 0) {
     $el.innerHTML = '<div class="breadcrumb"><a href="#/">Home</a> / BKN</div>' +
       '<h1 class="page-title">Knowledge Networks</h1>' +
-      '<p style="padding:20px;color:#666;">No knowledge networks found.</p>';
+      '<p class="text-muted bkn-empty-msg">No knowledge networks found.</p>';
     return;
   }
 
@@ -281,7 +281,7 @@ async function bknLoadInstances(knId, otId, displayKey, gen, searchAfter) {
   var items = data.datas ?? data.entries ?? [];
 
   if (items.length === 0) {
-    container.innerHTML = '<p style="padding:20px;color:#666;">No instances</p>';
+    container.innerHTML = '<p class="text-muted bkn-empty-msg">No instances</p>';
     return;
   }
 
@@ -446,7 +446,7 @@ async function bknLoadRelations(knId, otId, instance, gen) {
   });
 
   if (relatedRts.length === 0) {
-    container.innerHTML = '<p style="color:#666;">No relations</p>';
+    container.innerHTML = '<p class="text-muted">No relations</p>';
     return;
   }
 
@@ -496,7 +496,7 @@ async function bknLoadRelations(knId, otId, instance, gen) {
   }
 
   if (navGeneration !== gen) return;
-  container.innerHTML = html || '<p style="color:#666;">No related instances</p>';
+  container.innerHTML = html || '<p class="text-muted">No related instances</p>';
 }
 
 // ── Search ──────────────────────────────────────────────────────────────────
@@ -510,7 +510,7 @@ async function renderBknSearchView($el, knId, query, gen) {
     '<div id="search-results"><div class="loading-skeleton"><div class="skeleton skeleton-list-item"></div><div class="skeleton skeleton-list-item"></div></div></div>';
 
   if (!query) {
-    document.getElementById("search-results").innerHTML = '<p style="color:#666;">Enter a search query.</p>';
+    document.getElementById("search-results").innerHTML = '<p class="text-muted">Enter a search query.</p>';
     return;
   }
 
@@ -521,7 +521,7 @@ async function renderBknSearchView($el, knId, query, gen) {
     var container = document.getElementById("search-results");
 
     if (concepts.length === 0) {
-      container.innerHTML = '<p style="color:#666;">No results found</p>';
+      container.innerHTML = '<p class="text-muted">No results found</p>';
       return;
     }
 
@@ -581,7 +581,7 @@ async function renderBknRtDetail($el, knId, rtId, gen) {
 
     if (items.length === 0) {
       var c = document.getElementById("rt-instances");
-      if (c) c.innerHTML = '<p style="padding:20px;color:#666;">No instances</p>';
+      if (c) c.innerHTML = '<p class="text-muted bkn-empty-msg">No instances</p>';
       return;
     }
 
@@ -652,7 +652,7 @@ async function renderBknRtDetail($el, knId, rtId, gen) {
       }).join("") +
     '</div>';
   } else {
-    html += '<p style="padding:20px;color:#666;">No relation instances found</p>';
+    html += '<p class="text-muted bkn-empty-msg">No relation instances found</p>';
   }
 
   if (withoutLinks.length > 0) {

@@ -14,7 +14,7 @@ async function renderDashboard($el) {
   if (navGeneration !== gen) return;
 
   const knList = extractList(data.kn);
-  const agentList = extractList(data.agents);
+  const agentList = extractListFromAgentApiResponse(data.agents);
   const catalogList = extractList(data.catalogs);
 
   $el.innerHTML = `

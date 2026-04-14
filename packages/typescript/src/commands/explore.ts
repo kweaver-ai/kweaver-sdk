@@ -100,7 +100,13 @@ async function startServer(
       const bd = businessDomain;
       const [knRaw, agentsRaw, catalogsRaw] = await Promise.allSettled([
         listKnowledgeNetworks({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd }),
-        listAgents({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd }),
+        listAgents({
+          baseUrl: t.baseUrl,
+          accessToken: t.accessToken,
+          businessDomain: bd,
+          limit: 50,
+          is_to_square: 0,
+        }),
         listVegaCatalogs({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd }),
       ]);
 

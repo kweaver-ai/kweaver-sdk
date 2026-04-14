@@ -3,28 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KWeaver Core</title>
+  <title>KWeaver Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <a href="#content" class="visually-hidden">Skip to main content</a>
   <header id="top-bar">
     <div class="top-bar-left">
-      <span class="logo">⬡ KWeaver Core</span>
+      <span class="logo" aria-label="KWeaver Explorer">
+        <svg class="icon-svg logo-mark" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 2l8.66 5v10L12 22l-8.66-5V7z" />
+        </svg>
+        <span>KWeaver Explorer</span>
+      </span>
     </div>
-    <nav id="tab-bar">
+    <nav id="tab-bar" aria-label="Main navigation">
       <a class="tab" href="#/" data-tab="dashboard">Dashboard</a>
       <a class="tab" href="#/chat" data-tab="chat">Decision Agents</a>
       <a class="tab" href="#/bkn" data-tab="bkn">BKN</a>
       <a class="tab" href="#/vega" data-tab="vega">Vega</a>
     </nav>
     <div class="top-bar-right">
-      <button id="theme-toggle" class="theme-toggle" style="background: none; border: none; cursor: pointer; font-size: 16px; margin-right: 12px;" title="Toggle Dark Mode">🌙</button>
-      <span id="env-label"></span>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Switch to light theme"></button>
+      <span id="env-label" aria-live="polite"></span>
     </div>
   </header>
-  <main id="content"></main>
+  <main id="content" tabindex="-1"></main>
 
   <script src="/app.js"></script>
   <script src="/dashboard.js"></script>

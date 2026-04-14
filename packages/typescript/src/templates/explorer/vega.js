@@ -220,7 +220,7 @@ async function vegaRenderResourceDetail($el, catalogId, resourceId) {
   } catch (e) {
     dataPreviewHtml = `
       <div class="error-boundary">
-        <div class="error-icon">⚠️</div>
+        <div class="error-icon" aria-hidden="true">${exploreIcon("alert-triangle", 40)}</div>
         <h3>Failed to load data</h3>
         <p>${esc(String(e))}</p>
         <button class="retry-btn" onclick="location.reload()">Retry</button>
@@ -253,7 +253,7 @@ async function renderVega($el, parts, _params) {
       if (navGeneration !== myGen) return;
       $el.innerHTML = `
         <div class="error-boundary">
-          <div class="error-icon">⚠️</div>
+          <div class="error-icon" aria-hidden="true">${exploreIcon("alert-triangle", 40)}</div>
           <h3>Failed to load catalogs</h3>
           <p>${esc(String(e))}</p>
           <button class="retry-btn" onclick="location.reload()">Retry</button>
@@ -277,7 +277,7 @@ async function renderVega($el, parts, _params) {
       $el.innerHTML = `
         <div class="breadcrumb"><a href="#/vega">Catalogs</a> / <strong>${esc(catalogId)}</strong></div>
         <div class="error-boundary">
-          <div class="error-icon">🔒</div>
+          <div class="error-icon" aria-hidden="true">${exploreIcon("lock", 40)}</div>
           <h3>Permission Denied or Failed to Load Resources</h3>
           <p>${esc(String(e))}</p>
           <button class="retry-btn" onclick="location.reload()">Retry</button>

@@ -28,7 +28,6 @@
   --warning-bg: rgba(245, 158, 11, 0.12);
   --warning-fg: #fcd34d;
   --warning-border: rgba(245, 158, 11, 0.35);
-  --top-bar-bg: rgba(15, 23, 42, 0.88);
   --scrollbar-thumb: #475569;
   --scrollbar-thumb-hover: #64748b;
   --chat-messages-bg: var(--surface-alt);
@@ -70,7 +69,6 @@ html[data-theme='light'] {
   --warning-bg: #fffbeb;
   --warning-fg: #92400e;
   --warning-border: #fde68a;
-  --top-bar-bg: rgba(255, 255, 255, 0.88);
   --scrollbar-thumb: #cbd5e1;
   --scrollbar-thumb-hover: #94a3b8;
   --chat-messages-bg: #fafbfc;
@@ -139,48 +137,40 @@ a:focus:not(:focus-visible) {
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 /* ===========================================================================
-   Top Bar
+   Top Bar (classic light frosted strip — independent of page theme tokens)
    =========================================================================== */
 #top-bar {
   position: fixed;
   top: 0; left: 0; right: 0;
   height: var(--header-height);
-  background: var(--top-bar-bg);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   z-index: 100;
   box-shadow: var(--shadow-sm);
   display: flex;
   align-items: center;
   padding: 0 32px;
   gap: 32px;
+  color: #0f172a;
 }
 
 .theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  margin-right: 8px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text);
+  background: none;
+  border: none;
   cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  margin-right: 12px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: #0f172a;
   transition: var(--transition-smooth);
 }
 
 .theme-toggle:hover {
-  background: var(--accent-light);
-  border-color: var(--border);
-}
-
-.theme-toggle .icon-svg {
-  width: 20px;
-  height: 20px;
+  background: rgba(15, 23, 42, 0.06);
 }
 
 .top-bar-left {
@@ -192,17 +182,12 @@ a:focus:not(:focus-visible) {
 .logo {
   font-size: 20px;
   font-weight: 700;
-  color: var(--text);
+  color: #0f172a;
   text-decoration: none;
   letter-spacing: -0.5px;
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.logo .logo-mark {
-  color: var(--accent);
-  flex-shrink: 0;
+  gap: 8px;
 }
 
 #tab-bar {
@@ -212,28 +197,27 @@ a:focus:not(:focus-visible) {
   flex: 1;
 }
 
-.tab {
+#top-bar .tab {
   padding: 8px 18px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: #64748b;
   text-decoration: none;
   border-radius: var(--radius-sm);
   transition: var(--transition-smooth);
   position: relative;
 }
 
-.tab:hover {
-  color: var(--text);
-  background: var(--accent-light);
+#top-bar .tab:hover {
+  color: #0f172a;
+  background: rgba(59, 130, 246, 0.12);
 }
 
-.tab.active {
-  color: var(--accent);
-  background: var(--accent-light);
+#top-bar .tab.active {
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.14);
   font-weight: 600;
 }
-
 
 .top-bar-right {
   display: flex;
@@ -244,11 +228,11 @@ a:focus:not(:focus-visible) {
 #env-label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--bg);
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.95);
   padding: 4px 12px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(15, 23, 42, 0.1);
 }
 
 /* Hide until something sets the label (e.g. future env badge). */

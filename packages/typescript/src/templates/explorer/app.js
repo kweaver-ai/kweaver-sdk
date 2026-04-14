@@ -26,12 +26,6 @@ function exploreIcon(name, size) {
   return icons[name] || "";
 }
 
-function setThemeToggleButton(themeToggle, isDark) {
-  if (!themeToggle) return;
-  themeToggle.innerHTML = isDark ? exploreIcon("sun", 20) : exploreIcon("moon", 20);
-  themeToggle.setAttribute("aria-label", isDark ? "Switch to light theme" : "Switch to dark theme");
-}
-
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
@@ -166,6 +160,12 @@ window.addEventListener("hashchange", navigate);
 window.addEventListener("DOMContentLoaded", () => {
   const themeToggle = document.getElementById("theme-toggle");
   if (themeToggle) {
+    function syncThemeToggleUi() {
+      const isDark = document.documentElement.getAttribute("data-theme") !== "light";
+      themeToggle.textContent = isDark ? "☀️" : "🌙";
+      themeToggle.setAttribute("aria-label", isDark ? "Switch to light theme" : "Switch to dark theme");
+    }
+
     const savedTheme = localStorage.getItem("kweaver-theme");
     if (savedTheme === "light") {
       document.documentElement.setAttribute("data-theme", "light");
@@ -173,20 +173,18 @@ window.addEventListener("DOMContentLoaded", () => {
       document.documentElement.removeAttribute("data-theme");
       if (!savedTheme) localStorage.setItem("kweaver-theme", "dark");
     }
-    const isDark = document.documentElement.getAttribute("data-theme") !== "light";
-    setThemeToggleButton(themeToggle, isDark);
+    syncThemeToggleUi();
 
     themeToggle.addEventListener("click", () => {
       const isLight = document.documentElement.getAttribute("data-theme") === "light";
       if (isLight) {
         document.documentElement.removeAttribute("data-theme");
         localStorage.setItem("kweaver-theme", "dark");
-        setThemeToggleButton(themeToggle, true);
       } else {
         document.documentElement.setAttribute("data-theme", "light");
         localStorage.setItem("kweaver-theme", "light");
-        setThemeToggleButton(themeToggle, false);
       }
+      syncThemeToggleUi();
     });
   }
 

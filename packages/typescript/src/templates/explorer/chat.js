@@ -188,8 +188,8 @@ async function loadChatAgents() {
   if (chatState.agents !== null) return chatState.agents;
   if (chatState.loading) return null;
   chatState.loading = true;
-  const MAX_RETRIES = 2;
-  const RETRY_DELAY = 1500;
+  const MAX_RETRIES = 1;
+  const RETRY_DELAY = 500;
   try {
     let lastErr;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {

@@ -21,8 +21,7 @@ export function registerChatRoutes(
         baseUrl: t.baseUrl,
         accessToken: t.accessToken,
         businessDomain,
-        limit: 200,
-        // 0 = include published agents not only on the public square (matches typical Explorer use).
+        limit: 50,
         is_to_square: 0,
       });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });

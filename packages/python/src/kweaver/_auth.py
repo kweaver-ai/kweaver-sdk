@@ -15,6 +15,17 @@ def _env_tls_insecure() -> bool:
     return os.environ.get("KWEAVER_TLS_INSECURE", "") in ("1", "true")
 
 
+def _stderr_emphasis(text: str) -> str:
+    """Bold + bright yellow on stderr when TTY and NO_COLOR is unset (https://no-color.org/)."""
+    import sys
+
+    if os.environ.get("NO_COLOR", "") != "":
+        return text
+    if not sys.stderr.isatty():
+        return text
+    return f"\x1b[1;33m{text}\x1b[0m"
+
+
 def _fetch_display_name(
     base_url: str, access_token: str, *, verify: bool = True,
 ) -> str | None:
@@ -318,8 +329,12 @@ class ConfigAuth:
 class OAuth2BrowserAuth:
     """OAuth2 authorization code flow with local callback server.
 
-    Behavior matches kweaverc auth — opens browser, receives callback,
+    Behavior matches the TypeScript CLI — opens browser, receives callback,
     exchanges code for token, stores in ~/.kweaver/.
+
+    Use ``login(no_browser=True)`` on headless hosts: prints the auth URL and
+    reads the callback URL or authorization code from stdin (paste from any browser).
+    If the browser fails to open, the same paste flow is used automatically.
     """
 
     def __init__(
@@ -345,8 +360,79 @@ class OAuth2BrowserAuth:
         """Return the redirect URI based on port."""
         return f"http://localhost:{self._redirect_port}/callback"
 
-    def login(self) -> None:
-        """Run full OAuth2 browser login flow."""
+    @staticmethod
+    def _prompt_for_code(auth_url: str, state: str, port: int) -> str:
+        """Read authorization code from stdin (full callback URL or raw code)."""
+        import sys
+        from urllib.parse import parse_qs, urlparse
+
+        paste_instructions = (
+            "After login, the browser may show an error page (this is expected if nothing listens on localhost).\n"
+            "Copy the FULL URL from the address bar and paste it here, or paste only the authorization code.\n"
+            f"The URL looks like: http://localhost:{port}/callback?code=THIS_PART&state=...\n\n"
+        )
+        print(
+            "\nNo browser available. Open this URL on any device:\n\n"
+            f"  {auth_url}\n\n"
+            + _stderr_emphasis(paste_instructions),
+            file=sys.stderr,
+            end="",
+        )
+        line = input("Paste URL or code> ").strip()
+        if "code=" in line:
+            try:
+                if line.startswith("http"):
+                    q = urlparse(line).query
+                    params = parse_qs(q)
+                else:
+                    params = parse_qs(line)
+            except Exception as exc:
+                raise RuntimeError(
+                    "Could not parse the pasted URL. Paste the full callback URL or the code value.",
+                ) from exc
+            st = params.get("state", [None])[0]
+            if st and st != state:
+                raise RuntimeError("OAuth2 state mismatch — possible CSRF attack")
+            err = params.get("error", [None])[0]
+            if err:
+                desc = params.get("error_description", [""])[0]
+                msg = f"Authorization failed: {err} — {desc}" if desc else f"Authorization failed: {err}"
+                raise RuntimeError(msg)
+            code = params.get("code", [None])[0]
+            if not code:
+                raise RuntimeError("No authorization code found in the pasted URL.")
+            return code
+        if not line:
+            raise RuntimeError("No authorization code entered.")
+        return line
+
+    def _print_headless_copy_hint(self, client_id: str, client_secret: str) -> None:
+        """After paste-code login, print a one-line hint for other machines (matches TS stderr)."""
+        import sys
+
+        tok = self._store.load_token(self._base_url)
+        rt = (tok or {}).get("refreshToken") or ""
+        if not rt:
+            return
+        parts = [
+            "kweaver", "auth", "login", repr(self._base_url),
+            "--client-id", repr(client_id),
+        ]
+        if client_secret:
+            parts.extend(["--client-secret", repr(client_secret)])
+        parts.extend(["--refresh-token", repr(rt)])
+        if self._tls_insecure:
+            parts.append("--insecure")
+        print("\nOn a machine without a browser, run:\n\n  " + " ".join(parts) + "\n", file=sys.stderr)
+
+    def login(self, *, no_browser: bool = False) -> None:
+        """Run full OAuth2 browser login flow.
+
+        Args:
+            no_browser: If True, do not open a browser; print the auth URL and read the
+                callback URL or code from stdin. If False and :func:`webbrowser.open` fails,
+                the same paste flow is used automatically.
+        """
         import secrets
         import webbrowser
         from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -375,7 +461,17 @@ class OAuth2BrowserAuth:
         }
         auth_url = f"{self._base_url}/oauth2/auth?{urlencode(auth_params)}"
 
-        # Step 4: Start local callback server
+        def run_paste_flow() -> None:
+            code = self._prompt_for_code(auth_url, state, self._redirect_port)
+            self._exchange_code(code, client_id, client_secret, redirect_uri)
+            self._print_headless_copy_hint(client_id, client_secret)
+
+        if no_browser:
+            run_paste_flow()
+            self._store.use(self._base_url)
+            return
+
+        # Step 4: Local callback server + browser
         received: dict = {}
 
         class CallbackHandler(BaseHTTPRequestHandler):
@@ -399,7 +495,12 @@ class OAuth2BrowserAuth:
         server = HTTPServer(("127.0.0.1", self._redirect_port), CallbackHandler)
         server.timeout = 120
 
-        webbrowser.open(auth_url)
+        opened = webbrowser.open(auth_url)
+        if not opened:
+            server.server_close()
+            run_paste_flow()
+            self._store.use(self._base_url)
+            return
 
         while "code" not in received:
             server.handle_request()

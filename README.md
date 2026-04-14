@@ -234,7 +234,7 @@ result = client.dataflows.execute(
 ## CLI Quick Reference
 
 ```bash
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--playwright] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless host)
 kweaver auth export [url|alias] [--json]   auth status/list/use/delete/logout
 kweaver config show / list-bd / set-bd <value>   # platform business domain — run after login

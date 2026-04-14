@@ -257,6 +257,54 @@ def test_oauth2_browser_auth_register_client_tls_insecure():
         assert kwargs.get("verify") is False
 
 
+def test_oauth2_browser_auth_prompt_for_code_full_url():
+    """_prompt_for_code extracts code from pasted callback URL."""
+    with patch("builtins.input", return_value=(
+        "http://localhost:9010/callback?code=ory_ac_abc&state=st1&scope=openid"
+    )):
+        code = OAuth2BrowserAuth._prompt_for_code(
+            "https://example.com/oauth2/auth", "st1", 9010,
+        )
+    assert code == "ory_ac_abc"
+
+
+def test_oauth2_browser_auth_prompt_for_code_raw():
+    """_prompt_for_code accepts raw authorization code."""
+    with patch("builtins.input", return_value="ory_ac_raw_only"):
+        code = OAuth2BrowserAuth._prompt_for_code(
+            "https://example.com/oauth2/auth", "st", 9010,
+        )
+    assert code == "ory_ac_raw_only"
+
+
+def test_oauth2_browser_auth_login_no_browser():
+    """login(no_browser=True) uses paste flow without starting HTTP server."""
+    auth = OAuth2BrowserAuth.__new__(OAuth2BrowserAuth)
+    auth._base_url = "https://example.com"
+    auth._redirect_port = 9010
+    auth._scope = "openid offline all"
+    auth._lang = "zh-cn"
+    auth._tls_insecure = False
+    auth._lock = threading.Lock()
+    auth._store = MagicMock()
+
+    client = {
+        "clientId": "cid",
+        "clientSecret": "csec",
+        "redirectUri": "http://localhost:9010/callback",
+    }
+    with patch.object(auth, "_resolve_or_register_client", return_value=client):
+        with patch.object(auth, "_prompt_for_code", return_value="auth_code") as mock_prompt:
+            with patch.object(auth, "_exchange_code") as mock_ex:
+                with patch.object(auth, "_print_headless_copy_hint"):
+                    auth.login(no_browser=True)
+    mock_prompt.assert_called_once()
+    mock_ex.assert_called_once_with(
+        "auth_code", "cid", "csec", "http://localhost:9010/callback",
+    )
+    auth._store.use.assert_called_once_with("https://example.com")
+
+
 def test_config_auth_refresh_tls_insecure():
     """ConfigAuth._refresh passes verify=False when token has tlsInsecure."""
     token_data = {

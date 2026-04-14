@@ -258,10 +258,87 @@ async function resolveOrRegisterClient(
 }
 
 /**
+ * Emphasize text on stderr (bold + bright yellow) when stderr is a TTY and `NO_COLOR` is unset.
+ * See https://no-color.org/
+ */
+function stderrEmphasis(text: string): string {
+  const noColor = process.env.NO_COLOR;
+  if (noColor != null && noColor !== "") {
+    return text;
+  }
+  if (!process.stderr.isTTY) {
+    return text;
+  }
+  return `\x1b[1;33m${text}\x1b[0m`;
+}
+
+/**
+ * Headless login: read authorization code from stdin (full callback URL or raw code).
+ * Used with `--no-browser` or when automatic browser launch fails.
+ */
+async function promptForCode(
+  authUrl: string,
+  state: string,
+  port: number,
+  pasteMode: "explicit" | "fallback" = "explicit",
+): Promise<string> {
+  const { createInterface } = await import("node:readline");
+  const intro =
+    pasteMode === "explicit"
+      ? "Open this URL on any device (use a private/incognito window if you need the full sign-in form):\n\n"
+      : "Could not open a browser automatically. Open this URL on any device:\n\n";
+  const pasteInstructions =
+    "After login, the browser may show an error page (this is expected if nothing listens on localhost).\n" +
+    "Copy the FULL URL from the address bar and paste it here, or paste only the authorization code.\n" +
+    `The URL looks like: http://localhost:${port}/callback?code=THIS_PART&state=...\n\n`;
+  process.stderr.write(
+    "\n" +
+      intro +
+      `  ${authUrl}\n\n` +
+      stderrEmphasis(pasteInstructions),
+  );
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  const input = await new Promise<string>((resolve) => {
+    rl.question("Paste URL or code> ", (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+  if (input.includes("code=")) {
+    let url: URL;
+    try {
+      url = new URL(input.startsWith("http") ? input : `http://x/?${input}`);
+    } catch {
+      throw new Error("Could not parse the pasted URL. Paste the full callback URL or the code value.");
+    }
+    const receivedState = url.searchParams.get("state");
+    if (receivedState && receivedState !== state) {
+      throw new Error("OAuth2 state mismatch — possible CSRF attack.");
+    }
+    const err = url.searchParams.get("error");
+    if (err) {
+      const desc = url.searchParams.get("error_description") ?? "";
+      throw new Error(
+        desc ? `Authorization failed: ${err} — ${desc}` : `Authorization failed: ${err}`,
+      );
+    }
+    const code = url.searchParams.get("code");
+    if (!code) {
+      throw new Error("No authorization code found in the pasted URL.");
+    }
+    return code;
+  }
+  if (!input) {
+    throw new Error("No authorization code entered.");
+  }
+  return input;
+}
+
+/**
  * OAuth2 Authorization Code login flow.
  * 1. Register client (if not already registered), OR use a provided client ID
- * 2. Open browser to /oauth2/auth
- * 3. Receive authorization code via local HTTP callback
+ * 2. Open browser to /oauth2/auth (unless `noBrowser` or browser launch fails)
+ * 3. Receive authorization code via local HTTP callback, or stdin paste (`noBrowser` / fallback)
  * 4. Exchange code for access_token + refresh_token
  * 5. Save token.json + client.json to ~/.kweaver/
  */
@@ -274,6 +351,11 @@ export async function oauth2Login(
     clientSecret?: string;
     /** Skip TLS certificate verification (self-signed / dev servers only). */
     tlsInsecure?: boolean;
+    /**
+     * Do not open a browser; print the auth URL and prompt for the callback URL or code (stdin).
+     * For headless servers or when automatic browser launch is unavailable.
+     */
+    noBrowser?: boolean;
   },
 ): Promise<TokenConfig> {
   return runWithTlsInsecure(options?.tlsInsecure, async () => {
@@ -323,10 +405,28 @@ export async function oauth2Login(
   }
   const authUrl = `${base}/oauth2/auth?${authParams.toString()}`;
 
+  const runPasteCodeFlow = async (pasteMode: "explicit" | "fallback"): Promise<TokenConfig> => {
+    const code = await promptForCode(authUrl, state, port, pasteMode);
+    const exchanged = await exchangeCodeForToken(
+      base, code, client.clientId, client.clientSecret,
+      redirectUri, pkce?.verifier, options?.tlsInsecure,
+    );
+    const copyCommand = buildCopyCommand(
+      base, client.clientId, client.clientSecret,
+      exchanged.refreshToken, options?.tlsInsecure,
+    );
+    process.stderr.write(
+      "\nOn a machine without a browser, run:\n\n  " + copyCommand + "\n\n",
+    );
+    return exchanged;
+  };
+
   let token: TokenConfig;
 
-  {
-    // Step 4: Start local HTTP server to receive the authorization code
+  if (options?.noBrowser) {
+    token = await runPasteCodeFlow("explicit");
+  } else {
+    // Step 4: Local HTTP callback, or paste-code if browser cannot be opened
     token = await new Promise<TokenConfig>((resolve, reject) => {
       let server: Server;
       const timeoutId = setTimeout(() => {
@@ -408,10 +508,22 @@ export async function oauth2Login(
       });
 
       server.listen(port, "127.0.0.1", () => {
-        import("../utils/browser.js").then(({ openBrowser }) => {
-          openBrowser(authUrl);
-        });
-        process.stderr.write(`If the wrong browser opens, copy this URL to your correct browser:\n  ${authUrl}\n`);
+        void (async () => {
+          const { openBrowser } = await import("../utils/browser.js");
+          const opened = await openBrowser(authUrl);
+          process.stderr.write(
+            `If the wrong browser opens, copy this URL to your correct browser:\n  ${authUrl}\n`,
+          );
+          if (!opened) {
+            clearTimeout(timeoutId);
+            server.close();
+            try {
+              resolve(await runPasteCodeFlow("fallback"));
+            } catch (err) {
+              reject(err instanceof Error ? err : new Error(String(err)));
+            }
+          }
+        })();
       });
     });
   }

@@ -142,7 +142,7 @@ const skillMd = await client.skills.fetchContent("skill-id");
 ## CLI Reference
 
 ```
-kweaver auth login <url> [--alias name] [--no-auth] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--playwright] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless login)
 kweaver auth export [url|alias] [--json]   (export command to run on a headless host)
 kweaver auth status/list/use/delete/logout

@@ -59,6 +59,8 @@ Login options:
                          Requires --client-id and --client-secret.
                          Get these from the callback page after browser login or \`auth export\`.
   --port <n>             Local callback port (default: 9010). Use when 9010 is occupied.
+  --no-browser           Do not open a browser; print the auth URL and prompt for the callback URL or code (stdin).
+                         Use on headless servers or when automatic browser launch fails.
   -u, --username         Username (with -p triggers Playwright headless login)
   -p, --password         Password
   --playwright           Force Playwright browser login even without -u/-p
@@ -70,7 +72,7 @@ Login options:
 
   if (target === "login") {
     if (rest[0] === "--help" || rest[0] === "-h") {
-      console.log(`kweaver auth login <platform-url> [--alias <name>] [--no-auth] [-u user] [-p pass] [--playwright] [--refresh-token T --client-id ID --client-secret S]`);
+      console.log(`kweaver auth login <platform-url> [--alias <name>] [--no-auth] [--no-browser] [-u user] [-p pass] [--playwright] [--refresh-token T --client-id ID --client-secret S]`);
       return 0;
     }
     const url = rest[0];
@@ -114,10 +116,11 @@ Login options:
       const customPort = customPortStr ? parseInt(customPortStr, 10) : undefined;
       const tlsInsecure = args.includes("--insecure") || args.includes("-k");
       const noAuth = args.includes("--no-auth");
+      const noBrowser = args.includes("--no-browser");
 
       const KNOWN_LOGIN_FLAGS = new Set([
         "--alias", "--client-id", "--client-secret", "--refresh-token",
-        "--port", "--username", "-u", "--password", "-p",
+        "--port", "--no-browser", "--username", "-u", "--password", "-p",
         "--playwright", "--insecure", "-k", "--no-auth",
       ]);
       const KNOWN_VALUE_FLAGS = new Set([
@@ -147,6 +150,14 @@ Login options:
         console.error("--no-auth cannot be used with Playwright login or -u/-p.");
         return 1;
       }
+      if (noBrowser && (username || password || usePlaywright)) {
+        console.error("--no-browser cannot be used with Playwright login or -u/-p.");
+        return 1;
+      }
+      if (noBrowser && refreshToken) {
+        console.error("--no-browser cannot be used with --refresh-token.");
+        return 1;
+      }
 
       let token;
 
@@ -173,7 +184,9 @@ Login options:
           tlsInsecure, port: customPort,
         });
       } else {
-        if (clientId) {
+        if (noBrowser) {
+          console.log("OAuth2 login (no browser — open the URL on any device, then paste the callback URL or code)...");
+        } else if (clientId) {
           console.log(`Opening browser for OAuth2 login (client: ${clientId})...`);
         } else {
           console.log("Opening browser for OAuth2 login...");
@@ -181,7 +194,7 @@ Login options:
         token = await oauth2Login(normalizedTarget, {
           clientId: clientId ?? undefined,
           clientSecret: clientSecret ?? undefined,
-          tlsInsecure, port: customPort,
+          tlsInsecure, port: customPort, noBrowser,
         });
       }
 

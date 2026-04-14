@@ -13,7 +13,7 @@ npm install playwright && npx playwright install chromium
 ## 命令
 
 ```bash
-kweaver auth login <url> [--alias <name>] [--no-auth] [-u user] [-p pass] [--playwright]
+kweaver auth login <url> [--alias <name>] [--no-auth] [--no-browser] [-u user] [-p pass] [--playwright]
                          [--port <n>] [--insecure|-k]
 kweaver auth <url> [--alias <name>] ...              # 同上（简写）
 kweaver auth whoami [url|alias] [--json]              # 显示当前用户身份
@@ -86,13 +86,25 @@ kweaver auth logout prod --user bob
 | 选项 | 说明 |
 |------|------|
 | `--port <n>` | 修改本地回调端口（默认 9010）。端口被占用时使用。 |
+| `--no-browser` | 不自动打开浏览器；打印授权 URL，在终端粘贴回调地址栏中的完整 URL 或仅粘贴 `code` 值。适用于无图形界面或自动打开失败时。若本机 `openBrowser` 失败，CLI 也会自动进入该模式。 |
 
 ```bash
 # 端口被占用
 kweaver auth login https://platform.example.com --port 8080
+
+# 无浏览器：打印 URL，用手机/另一台电脑浏览器登录后，从地址栏复制回调 URL 粘贴到终端
+kweaver auth login https://platform.example.com --no-browser
 ```
 
-**无浏览器的服务器**：在有浏览器的机器上登录后，将回调页面上显示的 `--refresh-token` 命令复制到无浏览器的服务器执行，或使用 `kweaver auth export` 导出凭据。
+**Python SDK**（`OAuth2BrowserAuth`）：与 CLI 行为一致；无浏览器时在代码中调用 `login(no_browser=True)`，终端会提示粘贴回调 URL 或 code。若 `webbrowser.open` 失败，会自动进入同一粘贴流程。
+
+```python
+from kweaver import OAuth2BrowserAuth
+auth = OAuth2BrowserAuth("https://platform.example.com")
+auth.login(no_browser=True)
+```
+
+**无浏览器的服务器（备选）**：在有浏览器的机器上登录后，将回调页面上显示的 `--refresh-token` 命令复制到无浏览器的服务器执行，或使用 `kweaver auth export` 导出凭据。
 
 ## 说明
 

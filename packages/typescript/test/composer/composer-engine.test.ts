@@ -202,7 +202,154 @@ describe("validateComposerConfig", () => {
   });
 });
 
-// ── 6. sanitizeAgentName ─────────────────────────────────────────────────────
+// ── 6. End-to-end pipeline: ComposerConfig → validate → compile → DPH check ─
+
+import { validateFlow, compileToDph, validateDphSyntax } from "../../src/commands/composer-flow.js";
+import type { FlowDo } from "../../src/commands/composer-flow.js";
+
+describe("e2e pipeline: buildConfigFromPrompt → validate → compile → DPH syntax", () => {
+  it("research prompt produces a valid, compilable workflow", async () => {
+    const config = buildConfigFromPrompt("research and compare cloud providers AWS vs GCP");
+    const agentRefs = config.agents.map((a) => a.ref);
+
+    // Gate 1: flow validation
+    assert.ok(config.orchestrator.flow, "config should have a flow");
+    const flowErrors = validateFlow(config.orchestrator.flow!, agentRefs);
+    assert.deepEqual(flowErrors, [], `Gate 1 failed: ${flowErrors.join(", ")}`);
+
+    // Gate 2: compile to DPH
+    const compiled = compileToDph(config.orchestrator.flow!);
+    assert.ok(compiled.dph.length > 0, "DPH should not be empty");
+    assert.ok(compiled.answerVar.length > 0, "answerVar should not be empty");
+
+    // Gate 3: DPH syntax check
+    const syntaxResult = await validateDphSyntax(compiled.dph);
+    if (!syntaxResult.skipped) {
+      assert.ok(syntaxResult.is_valid, `DPH syntax error: ${syntaxResult.error_message} at line ${syntaxResult.line_number}`);
+    }
+  });
+
+  it("code prompt produces a valid, compilable workflow", async () => {
+    const config = buildConfigFromPrompt("implement a new REST API with authentication");
+    const agentRefs = config.agents.map((a) => a.ref);
+
+    assert.ok(config.orchestrator.flow);
+    const flowErrors = validateFlow(config.orchestrator.flow!, agentRefs);
+    assert.deepEqual(flowErrors, [], `Gate 1 failed: ${flowErrors.join(", ")}`);
+
+    const compiled = compileToDph(config.orchestrator.flow!);
+    assert.ok(compiled.dph.includes("@architect"), "DPH should reference architect agent");
+    assert.ok(compiled.dph.includes("@developer"), "DPH should reference developer agent");
+
+    const syntaxResult = await validateDphSyntax(compiled.dph);
+    if (!syntaxResult.skipped) {
+      assert.ok(syntaxResult.is_valid, `DPH syntax error: ${syntaxResult.error_message}`);
+    }
+  });
+});
+
+describe("e2e pipeline: complex hand-crafted flow (parallel + switch + merge)", () => {
+  // Scenario: customer support triage system
+  // 1. Triage classifies the ticket
+  // 2. Switch on classification:
+  //    - technical → parallel: code_analyzer + log_analyzer → synthesize
+  //    - billing → billing_agent
+  //    - default → general_agent
+  const agents = ["triage", "code_analyzer", "log_analyzer", "synthesizer", "billing_agent", "general_agent"];
+  const complexFlow: FlowDo = {
+    do: [
+      { call: "triage", input: "$query" },
+      {
+        switch: [
+          {
+            if: "$triage.category == 'technical'",
+            do: [
+              {
+                parallel: [
+                  { call: "code_analyzer", input: "$triage" },
+                  { call: "log_analyzer", input: "$triage" },
+                ],
+              },
+              { call: "synthesizer", input: "$code_analyzer + $log_analyzer" },
+            ],
+          },
+          {
+            if: "$triage.category == 'billing'",
+            do: [{ call: "billing_agent", input: "$triage" }],
+          },
+          {
+            default: true as const,
+            do: [{ call: "general_agent", input: "$triage" }],
+          },
+        ],
+      },
+    ],
+  };
+
+  it("Gate 1: validateFlow passes for complex flow", () => {
+    const errors = validateFlow(complexFlow, agents);
+    assert.deepEqual(errors, [], `Validation errors: ${errors.join(", ")}`);
+  });
+
+  it("Gate 2: compileToDph produces correct DPH structure", () => {
+    const compiled = compileToDph(complexFlow);
+
+    // Should have triage call
+    assert.ok(compiled.dph.includes("@triage(query=$query) -> triage"), `Missing triage call. DPH:\n${compiled.dph}`);
+
+    // Should have if/elif/else structure
+    assert.ok(compiled.dph.includes("/if/"), `Missing /if/. DPH:\n${compiled.dph}`);
+    assert.ok(compiled.dph.includes("elif"), `Missing elif. DPH:\n${compiled.dph}`);
+    assert.ok(compiled.dph.includes("else:"), `Missing else. DPH:\n${compiled.dph}`);
+    assert.ok(compiled.dph.includes("/end/"), `Missing /end/. DPH:\n${compiled.dph}`);
+
+    // Should have parallel block inside the technical branch
+    assert.ok(compiled.dph.includes("/parallel/"), `Missing /parallel/. DPH:\n${compiled.dph}`);
+
+    // Should have merge expression for synthesizer
+    assert.ok(compiled.dph.includes("$code_analyzer + $log_analyzer"), `Missing merge expression. DPH:\n${compiled.dph}`);
+
+    // Should have all agents referenced
+    for (const agent of agents) {
+      assert.ok(compiled.dph.includes(`@${agent}`), `Missing @${agent} in DPH:\n${compiled.dph}`);
+    }
+  });
+
+  it("Gate 3: compiled DPH passes Dolphin syntax check", async () => {
+    const compiled = compileToDph(complexFlow);
+    const result = await validateDphSyntax(compiled.dph);
+    if (!result.skipped) {
+      assert.ok(result.is_valid, `DPH syntax error at line ${result.line_number}: ${result.error_message}\nDPH:\n${compiled.dph}`);
+    }
+  });
+
+  it("buildAgentCreateBody produces valid orchestrator config for complex flow", () => {
+    const compiled = compileToDph(complexFlow);
+
+    // Simulate what createAgents does: build orchestrator body with compiled DPH
+    const orchBody = buildAgentCreateBody(
+      "Support Orchestrator",
+      "Orchestrates customer support triage",
+      "You are a support orchestrator.",
+      {
+        dolphin: compiled.dph,
+        is_dolphin_mode: 1,
+        skills: { tools: [], agents: agents.map((a) => ({ agent_key: `key_${a}` })), mcps: [] },
+        _answerVar: compiled.answerVar,
+      },
+    );
+
+    const parsed = JSON.parse(orchBody);
+    assert.equal(parsed.config.is_dolphin_mode, 1);
+    assert.equal(parsed.config.dolphin, compiled.dph);
+    assert.equal(parsed.config.output.variables.answer_var, compiled.answerVar);
+    assert.equal(parsed.config.skills.agents.length, agents.length);
+    // Verify no pre_dolphin in dolphin mode
+    assert.deepEqual(parsed.config.pre_dolphin, []);
+  });
+});
+
+// ── 7. sanitizeAgentName ─────────────────────────────────────────────────────
 
 describe("sanitizeAgentName", () => {
   it("replaces special chars with underscore", () => {

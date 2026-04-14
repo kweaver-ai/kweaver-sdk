@@ -309,7 +309,7 @@ export function sanitizeAgentName(name: string): string {
  * Fetch the first available LLM model from the model factory.
  * Caches the result for the lifetime of the process.
  */
-export let cachedDefaultLlms: unknown[] | undefined;
+let cachedDefaultLlms: unknown[] | undefined;
 
 export async function getDefaultLlms(baseUrl: string, accessToken: string, businessDomain: string): Promise<unknown[]> {
   if (cachedDefaultLlms) return cachedDefaultLlms;

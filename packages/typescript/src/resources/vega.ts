@@ -22,6 +22,7 @@ import {
   buildVegaDataset,
   getVegaDatasetBuildStatus,
   executeVegaQuery,
+  vegaSQLQuery,
   listAllVegaResources,
   listVegaConnectorTypes,
   getVegaConnectorType,
@@ -185,6 +186,12 @@ export class VegaResource {
 
   async executeQuery(body: string): Promise<unknown> {
     const raw = await executeVegaQuery({ ...this.ctx.base(), body });
+    return JSON.parse(raw);
+  }
+
+  /** POST /resources/query — direct SQL or OpenSearch DSL (see kweaver vega sql --help). */
+  async sqlQuery(body: string): Promise<unknown> {
+    const raw = await vegaSQLQuery({ ...this.ctx.base(), body });
     return JSON.parse(raw);
   }
 

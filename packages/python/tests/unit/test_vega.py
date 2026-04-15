@@ -105,6 +105,35 @@ def test_query_execute_empty_response():
     assert result.total_count == 0
 
 
+def test_query_sql_query():
+    """sql_query() posts to /resources/query and returns dict."""
+    def handler(req):
+        assert req.url.path == "/api/vega-backend/v1/resources/query"
+        body = req.content
+        import json as _json
+        parsed = _json.loads(body)
+        assert parsed["resource_type"] == "mysql"
+        return httpx.Response(200, json={"columns": [{"name": "x"}], "entries": [{"x": 1}], "total_count": 1})
+
+    from kweaver.resources.vega import VegaNamespace
+    ns = VegaNamespace(_make_vega_http(handler))
+    result = ns.query.sql_query({"query": "SELECT 1 AS x", "resource_type": "mysql"})
+    assert isinstance(result, dict)
+    assert result["total_count"] == 1
+    assert result["entries"] == [{"x": 1}]
+
+
+def test_query_sql_query_none_raises():
+    """sql_query() raises ValueError when backend returns no content."""
+    def handler(req):
+        return httpx.Response(204)
+
+    from kweaver.resources.vega import VegaNamespace
+    ns = VegaNamespace(_make_vega_http(handler))
+    with pytest.raises(ValueError, match="sql_query returned no data"):
+        ns.query.sql_query({"query": "SELECT 1", "resource_type": "mysql"})
+
+
 def test_query_dsl_with_index():
     """dsl() posts to index-specific endpoint when index is provided."""
     def handler(req):

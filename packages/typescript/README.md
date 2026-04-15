@@ -126,9 +126,18 @@ const result = await client.dataflows.execute({
   steps: [{ id: "s1", title: "load", operator: "csv_import", parameters: {} }],
 });
 
-// Vega observability
+// Vega — observability and query
 const catalogs = await client.vega.listCatalogs();
 const health   = await client.vega.health();
+// Structured query — POST /api/vega-backend/v1/query/execute (JSON string body)
+const structured = await client.vega.executeQuery(
+  JSON.stringify({ tables: [{ resource_id: "res-1" }], output_fields: ["*"], limit: 20 }),
+);
+// Direct SQL or OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+// Use {{resource_id}} placeholders so vega-backend routes to the correct catalog connector.
+const rows = await client.vega.sqlQuery(
+  JSON.stringify({ query: "SELECT * FROM {{res-1}} LIMIT 5", resource_type: "mysql" }),
+);
 
 // Context Loader (semantic search over a BKN via MCP)
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
@@ -164,7 +173,7 @@ kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
-kweaver vega health/stats/inspect/catalog/resource/connector-type
+kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]
@@ -183,6 +192,20 @@ kweaver dataflow logs <dagId> <instanceId> --detail
 ```
 
 `kweaver dataflow runs --since` filters one local natural day. If the value cannot be parsed by `new Date(...)`, the CLI falls back to the most recent 20 runs. `kweaver dataflow logs` defaults to summary output; add `--detail` to print indented `input` and `output` payloads.
+
+### Vega `sql` CLI examples
+
+Direct SQL against catalog-backed resources (`POST /api/vega-backend/v1/resources/query`). In SQL, use **`{{<resource_id>}}`** or **`{{.<resource_id>}}`** (Vega resource id from `vega resource list` / `get`) so the backend resolves the physical table and connector. `--resource-type` accepts the connector type of the target data source (run `kweaver vega connector-type list` to see available types). In simple mode, **quote the entire `--query` value** so the shell does not treat `{` / `}` specially.
+
+```bash
+# Simple mode (recommended): avoid JSON-escaping the query string
+kweaver vega sql --resource-type mysql --query "SELECT * FROM {{res-1}} LIMIT 5"
+
+# Advanced mode: full JSON body (optional fields like query_timeout, stream_size, OpenSearch DSL object)
+kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{res-1}} LIMIT 5"}'
+```
+
+If both `-d` and `--query` / `--resource-type` are present, **only `-d` is used**.
 
 **No-auth platforms:** If OAuth is not enabled, use `kweaver auth <url> --no-auth` (or run a normal `auth login`; a **404** on `POST /oauth2/clients` switches to no-auth automatically). Credentials are still saved under `~/.kweaver/` and work with `auth use` / `auth list`. Optional: `KWEAVER_NO_AUTH=1` with `KWEAVER_BASE_URL` when no token env is set. SDK: `new KWeaverClient({ baseUrl, auth: false })` or `kweaver.configure({ baseUrl, auth: false })`.
 

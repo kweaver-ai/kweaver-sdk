@@ -119,6 +119,19 @@ const queryRows = await client.dataviews.query(viewId, {
   needTotal: true,
 });
 
+// Vega — 可观测性与查询
+const catalogs = await client.vega.listCatalogs();
+const health   = await client.vega.health();
+// 结构化查询 — POST /api/vega-backend/v1/query/execute（body 为 JSON 字符串）
+const structured = await client.vega.executeQuery(
+  JSON.stringify({ tables: [{ resource_id: "res-1" }], output_fields: ["*"], limit: 20 }),
+);
+// 直连 SQL 或 OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+// 使用 {{resource_id}} 占位符以路由到正确的 catalog connector
+const rows = await client.vega.sqlQuery(
+  JSON.stringify({ query: "SELECT * FROM {{res-1}} LIMIT 5", resource_type: "mysql" }),
+);
+
 // Context Loader（通过 MCP 对 BKN 做语义搜索）
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
 const results = await cl.search({ query: "高血压 治疗" });
@@ -149,6 +162,7 @@ kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
+kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]
@@ -167,6 +181,20 @@ kweaver dataflow logs <dagId> <instanceId> --detail
 ```
 
 `kweaver dataflow runs --since` 会按本地自然日过滤；如果参数无法被 `new Date(...)` 解析，CLI 会回退到最近 20 条运行记录。`kweaver dataflow logs` 默认输出摘要；加上 `--detail` 会打印带缩进的 `input` 和 `output` 载荷。
+
+### Vega `sql` CLI 示例
+
+对 Catalog 资源执行直连 SQL（`POST /api/vega-backend/v1/resources/query`）。SQL 中使用 **`{{<resource_id>}}`** 或 **`{{.<resource_id>}}`**（资源 id 来自 `vega resource list` / `get`），后端据此解析物理表与 connector。`--resource-type` 为目标数据源的连接器类型，可通过 `kweaver vega connector-type list` 查看。简单模式下请**用引号包住整个 `--query` 参数**，避免 shell 对花括号做特殊处理。
+
+```bash
+# 简单模式（推荐）：避免在 JSON 里转义整段 SQL
+kweaver vega sql --resource-type mysql --query "SELECT * FROM {{res-1}} LIMIT 5"
+
+# 高级模式：完整 JSON（可带 query_timeout、stream_size，或 OpenSearch DSL 对象等）
+kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{res-1}} LIMIT 5"}'
+```
+
+若同时提供 `-d` 与 `--query` / `--resource-type`，**仅以 `-d` 为准**。
 
 **无 OAuth 的平台：** 使用 `kweaver auth <url> --no-auth`，或照常 `auth login`；若 `POST /oauth2/clients` 返回 **404**，CLI 会提示并自动保存为 no-auth。凭据仍在 `~/.kweaver/`，可用 `auth use` / `auth list` 切换。可选环境变量 `KWEAVER_NO_AUTH=1`（未设置 `KWEAVER_TOKEN` 时）配合 `KWEAVER_BASE_URL`。SDK：`new KWeaverClient({ baseUrl, auth: false })` 或 `kweaver.configure({ baseUrl, auth: false })`。
 

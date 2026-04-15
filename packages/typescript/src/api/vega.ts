@@ -838,6 +838,35 @@ export async function executeVegaQuery(options: ExecuteVegaQueryOptions): Promis
   return body;
 }
 
+// ── Resources SQL Query ──────────────────────────────────────────────────────
+
+export interface VegaSQLQueryOptions {
+  baseUrl: string;
+  accessToken: string;
+  body: string;
+  businessDomain?: string;
+}
+
+/** POST /api/vega-backend/v1/resources/query — direct SQL (or OpenSearch DSL) against catalog-backed resources. */
+export async function vegaSQLQuery(options: VegaSQLQueryOptions): Promise<string> {
+  const { baseUrl, accessToken, body: requestBody, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/resources/query`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+    },
+    body: requestBody,
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
 // ── Resource List All ────────────────────────────────────────────────────────
 
 export interface ListAllVegaResourcesOptions {

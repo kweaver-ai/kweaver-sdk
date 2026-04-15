@@ -103,6 +103,7 @@ Usage:
   kweaver vega health|stats|inspect
   kweaver vega catalog list|get|health|test-connection|discover|resources [options]
   kweaver vega resource list|get|query [options]
+  kweaver vega query execute|sql [options]
   kweaver vega connector-type list|get [options]
 
   kweaver context-loader config set|use|list|remove|show [options]
@@ -129,7 +130,7 @@ Commands:
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
   skill          Skill registry and market (register, search, progressive read, download/install)
-  vega           Vega observability (catalog, resource, connector-type, health/stats/inspect)
+  vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)
   context-loader Context-loader MCP (config, tools, resources, prompts, kn-search, query-*, etc.)
   help           Show this message`);
 }

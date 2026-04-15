@@ -151,11 +151,11 @@ SQL 中**应使用**占位符 `{{.<资源ID>}}` 或 `{{<资源ID>}}`，**资源 
 ```bash
 kweaver vega sql -d '{
   "resource_type":"mysql",
-  "query":"SELECT supplier_name, city FROM {{d7fks20ce1oc73ds19sg}} LIMIT 5"
+  "query":"SELECT supplier_name, city FROM {{<your_resource_id>}} LIMIT 5"
 }'
 ```
 
-（将 `d7fks20ce1oc73ds19sg` 换为你的 `resource_id`。）
+（将 `<your_resource_id>` 换为 `vega resource get` 返回的资源 id。）
 
 统计聚合示例：
 

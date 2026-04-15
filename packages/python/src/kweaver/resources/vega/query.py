@@ -53,8 +53,14 @@ class VegaQueryResource:
         return VegaQueryResult(**data) if data else VegaQueryResult()
 
     def sql_query(self, body: dict[str, Any]) -> dict[str, Any]:
-        """POST /api/vega-backend/v1/resources/query — direct SQL or OpenSearch DSL."""
+        """POST /api/vega-backend/v1/resources/query — direct SQL or OpenSearch DSL.
+
+        Use ``{{<resource_id>}}`` placeholders in ``query`` so vega-backend
+        routes to the correct catalog connector.
+        """
         data = self._http.post("/api/vega-backend/v1/resources/query", json=body)
+        if data is None:
+            raise ValueError("sql_query returned no data — check request body and connectivity")
         return data if isinstance(data, dict) else {}
 
     def dsl(self, *, index: str | None = None, body: dict) -> VegaDslResult:

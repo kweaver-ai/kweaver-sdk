@@ -1443,7 +1443,7 @@ Body fields:
   query_timeout  optional seconds (1–3600, default 60)
   query_id       optional cursor session id
 
-SQL may use {{.<vega_resource_id>}} or {{vega_resource_id}} placeholders; each token is the literal Vega resource id, replaced with that resource's physical table id (SourceIdentifier). Without placeholders, native SQL is allowed if the DB accepts the table names.
+SQL should use {{<vega_resource_id>}} or {{.<vega_resource_id>}} placeholders; the backend replaces each with the resource's physical table id (SourceIdentifier) and routes the query through the owning catalog's connector. Without placeholders the backend may fail with "connector config is incomplete" if no default connector is configured.
 
 Options:
   -d, --data <json>   Request body (JSON string)`);
@@ -1463,6 +1463,13 @@ Options:
 
   if (!data) {
     console.error("Usage: kweaver vega sql -d <json>");
+    return 1;
+  }
+
+  try {
+    JSON.parse(data);
+  } catch {
+    console.error(`Invalid JSON: ${data}`);
     return 1;
   }
 

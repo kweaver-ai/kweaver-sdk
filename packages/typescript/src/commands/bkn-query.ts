@@ -40,12 +40,16 @@ Query subgraph via ontology-query API. JSON body format see references/json-form
   }
 
   try {
-    // Auto-detect query_type=relation_path when body contains source_object_type_id
+    // Map body shape to ontology-query subgraph query_type:
+    // - relation_type_paths mode → ?query_type=relation_path
+    // - source_object_type_id mode → omit query_type (default path; do not send relation_path)
     let queryType: "" | "relation_path" | undefined;
     try {
       const parsedBody = JSON.parse(body) as Record<string, unknown>;
-      if (parsedBody.source_object_type_id) {
+      if (Array.isArray(parsedBody.relation_type_paths)) {
         queryType = "relation_path";
+      } else if (parsedBody.source_object_type_id) {
+        queryType = "";
       }
     } catch {
       // Not valid JSON — let the API return the error

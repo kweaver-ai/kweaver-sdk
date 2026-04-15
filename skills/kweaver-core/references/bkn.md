@@ -201,6 +201,8 @@ kweaver bkn search <kn_id> <query> [--max-concepts <n>] [--mode <mode>]   # 语�
 kweaver bkn subgraph <kn_id> '<json>'   # 子图查询
 ```
 
+CLI maps JSON body to ontology-query `query_type`: if `relation_type_paths` is present, append `query_type=relation_path`; if only `source_object_type_id` (default subgraph mode), omit `query_type`.
+
 ## Action Type / Log / Execution
 
 ```bash

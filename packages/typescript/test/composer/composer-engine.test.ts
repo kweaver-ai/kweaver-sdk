@@ -307,7 +307,7 @@ describe("e2e pipeline: complex hand-crafted flow (parallel + switch + merge)", 
     assert.ok(compiled.dph.includes("/parallel/"), `Missing /parallel/. DPH:\n${compiled.dph}`);
 
     // Should have merge expression for synthesizer
-    assert.ok(compiled.dph.includes("$code_analyzer + $log_analyzer"), `Missing merge expression. DPH:\n${compiled.dph}`);
+    assert.ok(compiled.dph.includes("$_code_analyzer_text + $_log_analyzer_text"), `Missing merge expression. DPH:\n${compiled.dph}`);
 
     // Should have all agents referenced
     for (const agent of agents) {

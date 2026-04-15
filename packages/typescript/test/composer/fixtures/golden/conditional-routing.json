@@ -15,5 +15,5 @@
       ]}
     ]
   },
-  "expected_dph": "@triage(query=$query) -> triage\n/if/ $triage.category == 'technical':\n    @tech_specialist(query=$triage) -> tech_specialist\nelif $triage.category == 'billing':\n    @billing_specialist(query=$triage) -> billing_specialist\nelse:\n    @general_agent(query=$triage) -> general_agent\n/end/"
+  "expected_dph": "@triage(query=$query) -> triage\n/if/ $triage.category == 'technical':\n    $triage.answer -> _triage_text\n    @tech_specialist(query=$_triage_text) -> tech_specialist\nelif $triage.category == 'billing':\n    $triage.answer -> _triage_text\n    @billing_specialist(query=$_triage_text) -> billing_specialist\nelse:\n    $triage.answer -> _triage_text\n    @general_agent(query=$_triage_text) -> general_agent\n/end/"
 }

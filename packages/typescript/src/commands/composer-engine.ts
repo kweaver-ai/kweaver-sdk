@@ -1,5 +1,5 @@
-import { createAgent, publishAgent, deleteAgent } from "../api/agent-list.js";
-import { fetchAgentInfo, sendChatRequestStream } from "../api/agent-chat.js";
+import { createAgent, publishAgent, unpublishAgent, deleteAgent } from "../api/agent-list.js";
+import { fetchAgentInfo, sendChatRequestStream, type ProgressItem } from "../api/agent-chat.js";
 import { type FlowDo, compileToDph, validateFlow, validateDphSyntax } from "./composer-flow.js";
 
 export type { FlowDo } from "./composer-flow.js";
@@ -58,7 +58,7 @@ export interface CleanupResult {
 
 export interface RunCallbacks {
   onTextDelta?: (fullText: string, currentText: string) => void;
-  onProgress?: (items: Array<{ agent_name: string; status: string; description: string }>) => void;
+  onProgress?: (items: ProgressItem[]) => void;
   onSegmentComplete?: (segmentText: string, segmentIndex: number) => void;
   onStepMeta?: (meta: Record<string, unknown>) => void;
   onConversationId?: (conversationId: string) => void;
@@ -117,7 +117,7 @@ const TEMPLATES: ComposerTemplate[] = [
         },
         {
           ref: "reviewer",
-          name: "Code Reviewer",
+          name: "Code_Reviewer",
           profile: "Reviews code for correctness, security, and quality",
           system_prompt:
             "You are a meticulous code reviewer. Analyze the provided code for correctness, security " +
@@ -152,7 +152,7 @@ const TEMPLATES: ComposerTemplate[] = [
       agents: [
         {
           ref: "researcher_a",
-          name: "Researcher A",
+          name: "Researcher_A",
           profile: "Researches from a technical/scientific perspective",
           system_prompt:
             "You are Research Analyst A. Investigate the given topic from a technical and quantitative " +
@@ -161,7 +161,7 @@ const TEMPLATES: ComposerTemplate[] = [
         },
         {
           ref: "researcher_b",
-          name: "Researcher B",
+          name: "Researcher_B",
           profile: "Researches from a practical/business perspective",
           system_prompt:
             "You are Research Analyst B. Investigate the given topic from a qualitative and strategic " +
@@ -750,6 +750,7 @@ export async function createAgents(
   const createdAgentIds: string[] = [];
   const agentIdMap: Record<string, string> = {};
   const agentKeyMap: Record<string, string> = {};
+  const agentNameMap: Record<string, string> = {};
 
   // Rollback helper — delete all agents created so far
   const rollback = async (): Promise<void> => {
@@ -765,7 +766,9 @@ export async function createAgents(
 
     // 1. Create, publish, and fetch info for each sub-agent
     for (const agentDef of config.agents) {
-      const createBody = buildAgentCreateBody(agentDef.name, agentDef.profile, agentDef.system_prompt, undefined, defaultLlms);
+      // Agent name doubles as DPH tool identifier — spaces break @name() parsing
+      const safeName = agentDef.name.replace(/\s+/g, "_");
+      const createBody = buildAgentCreateBody(safeName, agentDef.profile, agentDef.system_prompt, undefined, defaultLlms);
       console.error(`[composer/create] subAgentBody: ${createBody.slice(0, 600)}`);
       const createRaw = await createAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, body: createBody, businessDomain });
       const createResult = JSON.parse(createRaw) as { id?: string; data?: { id?: string } };
@@ -783,12 +786,16 @@ export async function createAgents(
 
       const info = await fetchAgentInfo({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, version: "v0", businessDomain });
       agentKeyMap[agentDef.ref] = info.key;
+      // Agent names are used as DPH identifiers (@name) — must not contain spaces
+      agentNameMap[agentDef.ref] = agentDef.name.replace(/\s+/g, "_");
     }
 
     console.error(`[composer/create] agentIdMap: ${JSON.stringify(agentIdMap)}`);
     console.error(`[composer/create] agentKeyMap: ${JSON.stringify(agentKeyMap)}`);
+    console.error(`[composer/create] agentNameMap: ${JSON.stringify(agentNameMap)}`);
 
-    // 2. Process DPH script — replace @ref with actual @agent_key
+    // 2. Process DPH script — replace @ref with actual agent name
+    //    Platform registers tools by agent name (tool.py:104), so DPH @xxx must match the name.
     let processedDphScript: string;
     let answerVar = "answer";
     if (config.orchestrator.flow && config.orchestrator.flow.do.length > 0) {
@@ -798,10 +805,10 @@ export async function createAgents(
     } else {
       processedDphScript = config.orchestrator.dolphin ?? "";
     }
-    for (const [ref, key] of Object.entries(agentKeyMap)) {
+    for (const [ref, name] of Object.entries(agentNameMap)) {
       processedDphScript = processedDphScript.replace(
         new RegExp(`@${ref}\\b`, "g"),
-        `@${key}`,
+        `@${name}`,
       );
     }
 
@@ -886,7 +893,7 @@ export async function runOrchestrator(
       businessDomain,
     },
     {
-      onTextDelta: callbacks.onTextDelta,
+      onTextDelta: callbacks.onTextDelta ?? (() => {}),
       onProgress: callbacks.onProgress,
       onSegmentComplete: callbacks.onSegmentComplete,
       onStepMeta: callbacks.onStepMeta,
@@ -908,11 +915,16 @@ export async function cleanupAgents(
 
   for (const agentId of agentIds) {
     try {
+      // Unpublish first — platform rejects deletion of published agents (409)
+      try {
+        await unpublishAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, businessDomain });
+      } catch { /* may already be unpublished */ }
       await deleteAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, businessDomain });
       deleted.push(agentId);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      errors.push({ agentId, error: msg });
+      const body = error && typeof error === "object" && "body" in error ? (error as { body: string }).body : "";
+      errors.push({ agentId, error: body ? `${msg} — ${body}` : msg });
     }
   }
 

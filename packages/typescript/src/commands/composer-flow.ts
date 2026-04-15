@@ -57,7 +57,7 @@ export interface CompileResult {
 }
 
 export function compileToDph(flow: FlowDo): CompileResult {
-  const ctx: CompileContext = { mergeCounter: 0, lastOutputVar: "" };
+  const ctx: CompileContext = { mergeCounter: 0, lastOutputVar: "", agentOutputVars: new Set() };
   const lines = compileSteps(flow.do, 0, ctx);
 
   // answer_var must match the last output variable in the DPH script.
@@ -73,6 +73,10 @@ export function compileToDph(flow: FlowDo): CompileResult {
 interface CompileContext {
   mergeCounter: number;
   lastOutputVar: string;
+  /** Variables that hold full agent output objects (need .answer to extract text). */
+  agentOutputVars: Set<string>;
+  /** Intermediate text vars already emitted (avoid duplicates). */
+  extractedVars?: Set<string>;
 }
 
 function compileSteps(steps: FlowStep[], indent: number, ctx: CompileContext): string[] {
@@ -92,26 +96,61 @@ function compileSteps(steps: FlowStep[], indent: number, ctx: CompileContext): s
   return lines;
 }
 
+/**
+ * Emit lines that extract text from agent output variables before passing
+ * them to the next agent call.  Agent outputs are full objects; the text
+ * answer lives in the `.answer` field.  DPH doesn't support property access
+ * in call parameters, so we emit an intermediate assignment:
+ *   $agent.answer -> _agent_text
+ * and then reference $_agent_text in the call.
+ */
+
+/** If ref is an agent-output var, emit an assignment line and return the new simple var. */
+function extractIfNeeded(
+  ref: string,
+  agentOutputVars: Set<string>,
+  lines: string[],
+  pad: string,
+  ctx: CompileContext,
+): string {
+  if (!ref.startsWith("$")) return ref;
+  const varName = ref.slice(1).split(".")[0];
+  if (agentOutputVars.has(varName) && !ref.includes(".")) {
+    const textVar = `_${varName}_text`;
+    lines.push(`${pad}${ref}.answer -> ${textVar}`);
+    ctx.extractedVars ??= new Set();
+    return `$${textVar}`;
+  }
+  return ref;
+}
+
 function compileCallStep(step: CallStep, pad: string, ctx: CompileContext): string[] {
   const outputVar = step.output ?? step.call;
   const lines: string[] = [];
 
   if (typeof step.input === "string") {
     if (step.input.includes(" + ")) {
+      // Merge expression: extract each agent-output part first
+      const parts = step.input.split(/\s*\+\s*/);
+      const resolved = parts
+        .map((part) => extractIfNeeded(part, ctx.agentOutputVars, lines, pad, ctx))
+        .join(" + ");
       const mergeVar = `_merged_${++ctx.mergeCounter}`;
-      lines.push(`${pad}${step.input} -> ${mergeVar}`);
+      lines.push(`${pad}${resolved} -> ${mergeVar}`);
       lines.push(`${pad}@${step.call}(query=$${mergeVar}) -> ${outputVar}`);
     } else {
-      lines.push(`${pad}@${step.call}(query=${step.input}) -> ${outputVar}`);
+      const resolved = extractIfNeeded(step.input, ctx.agentOutputVars, lines, pad, ctx);
+      lines.push(`${pad}@${step.call}(query=${resolved}) -> ${outputVar}`);
     }
   } else {
     const params = Object.entries(step.input)
-      .map(([k, v]) => `${k}=${v}`)
+      .map(([k, v]) => `${k}=${extractIfNeeded(v, ctx.agentOutputVars, lines, pad, ctx)}`)
       .join(", ");
     lines.push(`${pad}@${step.call}(${params}) -> ${outputVar}`);
   }
 
   ctx.lastOutputVar = outputVar;
+  ctx.agentOutputVars.add(outputVar);
   return lines;
 }
 
@@ -129,12 +168,14 @@ function compileSwitchStep(step: SwitchStep, indent: number, ctx: CompileContext
     } else if (branch.default) {
       lines.push(`${pad}else:`);
     }
-    const branchCtx: CompileContext = { ...ctx, lastOutputVar: "" };
+    const branchCtx: CompileContext = { ...ctx, lastOutputVar: "", agentOutputVars: new Set(ctx.agentOutputVars) };
     lines.push(...compileSteps(branch.do, indent + 1, branchCtx));
     // Track the last output var from any branch (used for answer_var)
     if (branchCtx.lastOutputVar) {
       ctx.lastOutputVar = branchCtx.lastOutputVar;
     }
+    // Propagate agent output vars from branch back to parent
+    for (const v of branchCtx.agentOutputVars) ctx.agentOutputVars.add(v);
     ctx.mergeCounter = branchCtx.mergeCounter;
   }
   lines.push(`${pad}/end/`);

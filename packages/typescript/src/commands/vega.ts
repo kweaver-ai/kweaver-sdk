@@ -30,6 +30,7 @@ import {
   buildVegaDataset,
   getVegaDatasetBuildStatus,
   executeVegaQuery,
+  vegaSQLQuery,
   listAllVegaResources,
 } from "../api/vega.js";
 import { formatCallOutput } from "./call.js";
@@ -68,7 +69,8 @@ Subcommands:
   dataset delete-docs-query <resource-id> -d <filter-json>
   dataset build <resource-id> [--mode full|incremental|realtime]
   dataset build-status <resource-id> <task-id>
-  query execute -d <json>
+  query execute -d <json>               Structured query (tables, joins, filters)
+  sql -d <json>                         Direct SQL / DSL (POST /resources/query)
   connector-type list                 List connector types
   connector-type get <type>           Get connector type details
   connector-type register -d <json>   Register a new connector type
@@ -141,6 +143,7 @@ export async function runVegaCommand(args: string[]): Promise<number> {
     if (subcommand === "resource") return runVegaResourceCommand(rest);
     if (subcommand === "dataset") return runVegaDatasetCommand(rest);
     if (subcommand === "query") return runVegaQueryCommand(rest);
+    if (subcommand === "sql") return runVegaSql(rest);
     if (subcommand === "connector-type") return runVegaConnectorTypeCommand(rest);
     return Promise.resolve(-1);
   };
@@ -1414,6 +1417,57 @@ Options:
 
   const token = await ensureValidToken();
   const body = await executeVegaQuery({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    body: data,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body, pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// sql (POST /resources/query)
+// ---------------------------------------------------------------------------
+
+async function runVegaSql(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega sql -d <json>
+
+POST /api/vega-backend/v1/resources/query — execute SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL.
+
+Body fields:
+  query          (required) SQL string or OpenSearch DSL object
+  resource_type  (required) one of: mysql, mariadb, postgresql, opensearch
+  stream_size    optional batch size for streaming (100–10000, default 10000)
+  query_timeout  optional seconds (1–3600, default 60)
+  query_id       optional cursor session id
+
+SQL may use {{.<vega_resource_id>}} or {{vega_resource_id}} placeholders; each token is the literal Vega resource id, replaced with that resource's physical table id (SourceIdentifier). Without placeholders, native SQL is allowed if the DB accepts the table names.
+
+Options:
+  -d, --data <json>   Request body (JSON string)`);
+    return 0;
+  }
+
+  let data: string | undefined;
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+
+  for (let i = 0; i < remaining.length; i += 1) {
+    const arg = remaining[i];
+    if ((arg === "-d" || arg === "--data") && remaining[i + 1]) {
+      data = remaining[++i];
+      continue;
+    }
+  }
+
+  if (!data) {
+    console.error("Usage: kweaver vega sql -d <json>");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await vegaSQLQuery({
     baseUrl: token.baseUrl,
     accessToken: token.accessToken,
     body: data,

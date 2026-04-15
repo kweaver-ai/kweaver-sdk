@@ -27,9 +27,107 @@ kweaver vega catalog resources <id> [--category table|index|...] [--limit N]
 ```bash
 kweaver vega resource list [--catalog-id <id>] [--category table] [--status active] [--limit N] [--offset N]
 kweaver vega resource get <id>
-kweaver vega resource query <id> -d '<json-body>'
+kweaver vega resource query <id> -d '<json-body>'   # POST .../resources/:id/data（结构化过滤、分页）
 kweaver vega resource preview <id> [--limit N]
 ```
+
+## 结构化查询（vega-backend）
+
+`POST /api/vega-backend/v1/query/execute` — 单 Catalog 内多表 JOIN、过滤、排序、分页；**不经过** `vega-calculate-coordinator`（Trino）。
+
+```bash
+kweaver vega query execute -d '<json>'
+```
+
+请求体字段：
+
+| 字段 | 说明 |
+|------|------|
+| `query_id` | 同一轮分页保持一致；首页 `offset=0` 可不传，后端生成 |
+| `tables` | 必填。`[{ "resource_id": "...", "alias": "t1" }]` |
+| `joins` | 可选。`type`: inner / left / right / full；`left_table_alias` / `right_table_alias`；`on`: `[{ "left_field", "right_field" }]`（**JOIN ON 使用 schema 中的字段名**，与 `resource get` 中 `schema_definition[].name` 一致） |
+| `output_fields` | 可选，如 `["t1.col_a", "t2.col_b"]` |
+| `filter_condition` | 可选，见下方 |
+| `sort` | 可选，`[{ "field": "t1.col", "direction": "asc|desc" }]` |
+| `offset` / `limit` | 分页；`limit` 最大 10000 |
+| `need_total` | 是否返回 `total_count` |
+
+**限制**：所有 `tables` 必须属于**同一** Catalog；跨 Catalog JOIN 会返回 501。
+
+**filter_condition** 常用 `operation`：
+
+- 比较：`==` / `eq`，`!=` / `not_eq`，`>` / `gt`，`>=` / `gte`，`<` / `lt`，`<=` / `lte`
+- 集合：`in`，`not_in`（值为数组）
+- 模糊：`like`，`not_like`（**仅当字段在 schema 中为 string 类型时**）
+- 范围：`range`（数值或日期字段，值为 `[min, max]`）
+- 空值：`null`，`not_null`
+- 逻辑：`and` / `or`，子条件放在 `sub_conditions` 数组中
+
+叶子条件通常含：`field`、`operation`、`value`、`value_from`（常量用 `"const"`）。
+
+示例（单表）：
+
+```bash
+kweaver vega query execute -d '{"tables":[{"resource_id":"<res-id>"}],"limit":5,"need_total":true}'
+```
+
+示例（两表 JOIN + 过滤）：
+
+```bash
+kweaver vega query execute -d '{
+  "tables": [
+    {"resource_id":"<id-a>","alias":"a"},
+    {"resource_id":"<id-b>","alias":"b"}
+  ],
+  "joins":[{"type":"inner","left_table_alias":"a","right_table_alias":"b","on":[{"left_field":"fk_col","right_field":"pk_col"}]}],
+  "output_fields":["a.name","b.amount"],
+  "filter_condition":{"field":"a.status","operation":"==","value":"active","value_from":"const"},
+  "limit":10
+}'
+```
+
+## SQL 查询（vega-backend）
+
+`POST /api/vega-backend/v1/resources/query` — 在 **MySQL / MariaDB / PostgreSQL** 上执行 SQL，或在 **OpenSearch** 上执行 DSL；由 vega-backend 直连数据源并可用 sqlglot 做方言转换。**不依赖** Etrino / Trino。
+
+```bash
+kweaver vega sql -d '<json>'
+kweaver vega sql --help
+```
+
+请求体字段：
+
+| 字段 | 说明 |
+|------|------|
+| `query` | 必填。SQL 字符串，或 OpenSearch 的 DSL 对象 |
+| `resource_type` | 必填。`mysql` \| `mariadb` \| `postgresql` \| `opensearch` |
+| `stream_size` | 可选，流式批次 100–10000，默认 10000 |
+| `query_timeout` | 可选，秒，1–3600，默认 60 |
+| `query_id` | 可选，游标会话 |
+
+SQL 中可使用占位符 `{{.<资源ID>}}` 或 `{{<资源ID>}}`，**资源 ID** 为 Vega 资源 id（与 `vega resource get` 一致）；后端会替换为该资源的物理表标识（`SourceIdentifier`）。无占位符时也可提交**原生 SQL**（仍需 `resource_type`），表名需符合目标库语法。
+
+示例（占位符）：
+
+```bash
+kweaver vega sql -d '{
+  "resource_type":"mysql",
+  "query":"SELECT * FROM {{.d75jdh40iradml79p6f0}} LIMIT 5"
+}'
+```
+
+（将 `d75jdh40iradml79p6f0` 换为你的 `resource_id`。）
+
+响应含 `columns`、`entries`、`total_count`、`stats`（含 `has_more`、`search_after` 等，用于流式/分页）。
+
+## 三种查询方式对照
+
+| 方式 | 命令 / 路径 | 适用场景 |
+|------|-------------|----------|
+| 结构化查询 | `vega query execute` | 单 Catalog 内表/JOIN、统一 filter DSL、offset 分页 |
+| 直连 SQL | `vega sql` | 复杂 SQL、聚合、或 `{{.<资源ID>}}` / `{{<资源ID>}}` 占位符 |
+| 资源数据 API | `vega resource query <id> -d {...}` | 按单个 resource 拉数（filter、sort、search_after） |
+| Dataview + `--sql` | `dataview query ... --sql` | 走 **mdl-uniquery + Trino**，需 Etrino / coordinator |
 
 ## Connector Type
 
@@ -59,8 +157,14 @@ kweaver vega catalog resources <catalog-id> --category table
 # 预览资源数据
 kweaver vega resource preview <resource-id> --limit 5
 
-# 查询资源数据
-kweaver vega resource query <resource-id> -d '{"page": 1, "limit": 10}'
+# 查询资源数据（结构化 body）
+kweaver vega resource query <resource-id> -d '{"limit":10,"offset":0}'
+
+# 结构化多表查询
+kweaver vega query execute -d '{"tables":[{"resource_id":"<id>"}],"limit":20}'
+
+# 直连 SQL
+kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT 1 AS one"}'
 
 # 查看连接器类型
 kweaver vega connector-type list

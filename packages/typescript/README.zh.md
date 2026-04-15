@@ -119,6 +119,19 @@ const queryRows = await client.dataviews.query(viewId, {
   needTotal: true,
 });
 
+// Vega — 可观测性与查询
+const catalogs = await client.vega.listCatalogs();
+const health   = await client.vega.health();
+// 结构化查询 — POST /api/vega-backend/v1/query/execute（body 为 JSON 字符串）
+const structured = await client.vega.executeQuery(
+  JSON.stringify({ tables: [{ resource_id: "res-1" }], output_fields: ["*"], limit: 20 }),
+);
+// 直连 SQL 或 OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+// 使用 {{resource_id}} 占位符以路由到正确的 catalog connector
+const rows = await client.vega.sqlQuery(
+  JSON.stringify({ query: "SELECT * FROM {{res-1}} LIMIT 5", resource_type: "mysql" }),
+);
+
 // Context Loader（通过 MCP 对 BKN 做语义搜索）
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
 const results = await cl.search({ query: "高血压 治疗" });
@@ -149,6 +162,7 @@ kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
+kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]

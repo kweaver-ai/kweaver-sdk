@@ -16,10 +16,44 @@ kweaver vega inspect                 # 聚合诊断（health + catalog 数量 + 
 ```bash
 kweaver vega catalog list [--status healthy|degraded|unhealthy|offline|disabled] [--limit N] [--offset N]
 kweaver vega catalog get <id>
+kweaver vega catalog create --name <n> --connector-type <t> --connector-config <json> [--tags t1,t2] [--description s]
+kweaver vega catalog update <id> [--name X] [--connector-type X] [--tags X] [--description X]
+kweaver vega catalog delete <ids...> [-y]
 kweaver vega catalog health <ids...> | --all
 kweaver vega catalog test-connection <id>
 kweaver vega catalog discover <id> [--wait]
 kweaver vega catalog resources <id> [--category table|index|...] [--limit N]
+```
+
+### Catalog 注册（关键流程）
+
+要通过 `vega sql` 查询 MySQL / PostgreSQL 等外部数据库，**必须先在 Vega 注册物理 Catalog**：
+
+```bash
+kweaver vega catalog create \
+  --name "my_mysql" \
+  --connector-type mysql \
+  --connector-config '{"host":"<db-host>","port":3306,"username":"<user>","password":"<pass>","databases":["<db>"]}' \
+  --pretty
+```
+
+- `connector-type` 可选值：`mysql` / `mariadb` / `postgresql` / `opensearch`
+- `connector-config` 字段因类型而异，用 `kweaver vega connector-type get <type>` 查看 `field_config`
+- 注册时后端会**测试连接**，密码错误或网络不通会被拒绝
+- **注意**：`host` 需用 Vega 后端容器能访问的地址（通常是 Docker/K8s 内网 IP，而非公网 IP）
+
+注册成功后，需**创建 Resource** 将物理表映射为 Vega 资源（`catalog discover` 可自动扫描；若 Redis 不可用则需手动创建）：
+
+```bash
+# 自动发现（需 Redis）
+kweaver vega catalog discover <catalog-id> --wait
+
+# 或手动创建
+kweaver vega resource create \
+  --catalog-id <catalog-id> \
+  --name "my_table" \
+  --category table \
+  -d '{"source_identifier":"<db>.<table>"}'
 ```
 
 ## Resource
@@ -27,6 +61,9 @@ kweaver vega catalog resources <id> [--category table|index|...] [--limit N]
 ```bash
 kweaver vega resource list [--catalog-id <id>] [--category table] [--status active] [--limit N] [--offset N]
 kweaver vega resource get <id>
+kweaver vega resource create --catalog-id <cid> --name <n> --category <cat> [-d <json>]
+kweaver vega resource update <id> [--name X] [--status X] [--tags X] [-d json]
+kweaver vega resource delete <ids...> [-y]
 kweaver vega resource query <id> -d '<json-body>'   # POST .../resources/:id/data（结构化过滤、分页）
 kweaver vega resource preview <id> [--limit N]
 ```
@@ -105,18 +142,29 @@ kweaver vega sql --help
 | `query_timeout` | 可选，秒，1–3600，默认 60 |
 | `query_id` | 可选，游标会话 |
 
-SQL 中可使用占位符 `{{.<资源ID>}}` 或 `{{<资源ID>}}`，**资源 ID** 为 Vega 资源 id（与 `vega resource get` 一致）；后端会替换为该资源的物理表标识（`SourceIdentifier`）。无占位符时也可提交**原生 SQL**（仍需 `resource_type`），表名需符合目标库语法。
+SQL 中**应使用**占位符 `{{.<资源ID>}}` 或 `{{<资源ID>}}`，**资源 ID** 为 Vega 资源 id（与 `vega resource get` 一致）；后端会替换为该资源的物理表标识（`SourceIdentifier`），并**通过资源所属 Catalog 的 connector 连接数据库**。
+
+> **重要**：占位符是 vega-backend 识别使用哪个 Catalog connector 的依据。不含占位符的裸 SQL（即便传了 `catalog_id`）可能因全局默认 connector 未配置而失败（`connector config is incomplete`）。**推荐始终使用 `{{resource_id}}` 占位符。**
 
 示例（占位符）：
 
 ```bash
 kweaver vega sql -d '{
   "resource_type":"mysql",
-  "query":"SELECT * FROM {{.d75jdh40iradml79p6f0}} LIMIT 5"
+  "query":"SELECT supplier_name, city FROM {{d7fks20ce1oc73ds19sg}} LIMIT 5"
 }'
 ```
 
-（将 `d75jdh40iradml79p6f0` 换为你的 `resource_id`。）
+（将 `d7fks20ce1oc73ds19sg` 换为你的 `resource_id`。）
+
+统计聚合示例：
+
+```bash
+kweaver vega sql -d '{
+  "resource_type":"mysql",
+  "query":"SELECT city, COUNT(*) AS cnt FROM {{<resource_id>}} GROUP BY city ORDER BY cnt DESC"
+}'
+```
 
 响应含 `columns`、`entries`、`total_count`、`stats`（含 `has_more`、`search_after` 等，用于流式/分页）。
 
@@ -150,6 +198,18 @@ kweaver vega connector-type get <type>
 kweaver vega inspect
 kweaver vega catalog health --all
 
+# ── 注册外部数据库为 Catalog ──
+kweaver vega connector-type list                     # 查看可用连接器
+kweaver vega connector-type get mysql                # 查看 MySQL 连接参数
+kweaver vega catalog create --name "my_db" \
+  --connector-type mysql \
+  --connector-config '{"host":"172.19.0.9","port":3306,"username":"user","password":"pass","databases":["mydb"]}'
+
+# ── 创建 Resource（手动 / 或 discover 自动扫描）──
+kweaver vega resource create --catalog-id <catalog-id> \
+  --name "orders" --category table \
+  -d '{"source_identifier":"mydb.orders"}'
+
 # 查看 catalog 下的资源
 kweaver vega catalog list
 kweaver vega catalog resources <catalog-id> --category table
@@ -163,9 +223,6 @@ kweaver vega resource query <resource-id> -d '{"limit":10,"offset":0}'
 # 结构化多表查询
 kweaver vega query execute -d '{"tables":[{"resource_id":"<id>"}],"limit":20}'
 
-# 直连 SQL
-kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT 1 AS one"}'
-
-# 查看连接器类型
-kweaver vega connector-type list
+# 直连 SQL（必须用 {{resource_id}} 占位符路由到正确的 connector）
+kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{<resource-id>}} LIMIT 10"}'
 ```

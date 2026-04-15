@@ -71,6 +71,9 @@ models = client.vega.metric_models.list()
 # Vega — 查询
 result = client.vega.query.dsl(body={"query": {"match_all": {}}, "size": 10})
 result = client.vega.query.execute(tables=[...], output_fields=["*"], limit=20)
+# 直连 SQL 或 OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+# 使用 {{resource_id}} 占位符以路由到正确的 catalog connector
+rows = client.vega.query.sql_query({"query": "SELECT * FROM {{<resource-id>}} LIMIT 5", "resource_type": "mysql"})
 
 # Vega — 诊断
 info = client.vega.health()
@@ -122,7 +125,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | 数据视图 | `client.vega.data_views` | `list`, `get` |
 | 数据字典 | `client.vega.data_dicts` | `list`, `get` |
 | 目标模型 | `client.vega.objective_models` | `list`, `get` |
-| 查询 | `client.vega.query` | `execute`, `dsl`, `dsl_count`, `promql`, `promql_instant`, `events` |
+| 查询 | `client.vega.query` | `execute`, `sql_query`, `dsl`, `dsl_count`, `promql`, `promql_instant`, `events` |
 | 任务 | `client.vega.tasks` | `list_discover`, `get_discover`, `wait_discover`, `get_metric` |
 | 命名空间 | `client.vega` | `health`, `stats`, `inspect` |
 

@@ -126,9 +126,18 @@ const result = await client.dataflows.execute({
   steps: [{ id: "s1", title: "load", operator: "csv_import", parameters: {} }],
 });
 
-// Vega observability
+// Vega — observability and query
 const catalogs = await client.vega.listCatalogs();
 const health   = await client.vega.health();
+// Structured query — POST /api/vega-backend/v1/query/execute (JSON string body)
+const structured = await client.vega.executeQuery(
+  JSON.stringify({ tables: [{ resource_id: "res-1" }], output_fields: ["*"], limit: 20 }),
+);
+// Direct SQL or OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+// Use {{resource_id}} placeholders so vega-backend routes to the correct catalog connector.
+const rows = await client.vega.sqlQuery(
+  JSON.stringify({ query: "SELECT * FROM {{res-1}} LIMIT 5", resource_type: "mysql" }),
+);
 
 // Context Loader (semantic search over a BKN via MCP)
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
@@ -164,7 +173,7 @@ kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
-kweaver vega health/stats/inspect/catalog/resource/connector-type
+kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]

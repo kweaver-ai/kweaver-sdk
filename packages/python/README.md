@@ -82,6 +82,9 @@ models = client.vega.metric_models.list()
 # Vega — Query
 result = client.vega.query.dsl(body={"query": {"match_all": {}}, "size": 10})
 result = client.vega.query.execute(tables=[...], output_fields=["*"], limit=20)
+# Direct SQL or OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+# Use {{resource_id}} placeholders so vega-backend routes to the correct catalog connector.
+rows = client.vega.query.sql_query({"query": "SELECT * FROM {{<resource-id>}} LIMIT 5", "resource_type": "mysql"})
 
 # Vega — Diagnostics
 info = client.vega.health()
@@ -133,7 +136,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Data Views | `client.vega.data_views` | `list`, `get` |
 | Data Dicts | `client.vega.data_dicts` | `list`, `get` |
 | Objective Models | `client.vega.objective_models` | `list`, `get` |
-| Query | `client.vega.query` | `execute`, `dsl`, `dsl_count`, `promql`, `promql_instant`, `events` |
+| Query | `client.vega.query` | `execute`, `sql_query`, `dsl`, `dsl_count`, `promql`, `promql_instant`, `events` |
 | Tasks | `client.vega.tasks` | `list_discover`, `get_discover`, `wait_discover`, `get_metric` |
 | Namespace | `client.vega` | `health`, `stats`, `inspect` |
 

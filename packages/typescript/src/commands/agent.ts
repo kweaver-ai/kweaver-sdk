@@ -686,7 +686,7 @@ Subcommands:
   chat <agent_id> -m "message"       Send a single message (non-interactive)
   sessions <agent_id>                List all conversations for an agent
   history <agent_id> <conversation_id> Show message history for a conversation
-  trace <conversation_id>            Get trace data for a conversation`);
+  trace <agent_id> <conversation_id>  Get trace data for a conversation`);
     return Promise.resolve(0);
   }
 

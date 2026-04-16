@@ -84,8 +84,8 @@ function printSkillHelp(subcommand?: string): void {
                        [--source src] [--extend-info json] [-bd value] [--pretty|--compact]`);
     return;
   }
-  if (subcommand === "status") {
-    console.log("kweaver skill status <skill-id> <unpublish|published|offline> [-bd value] [--pretty|--compact]");
+  if (subcommand === "set-status" || subcommand === "status") {
+    console.log("kweaver skill set-status <skill-id> <unpublish|published|offline> [-bd value] [--pretty|--compact]");
     return;
   }
   if (subcommand === "delete") {
@@ -115,7 +115,7 @@ Subcommands:
   market [--name kw] [--source src] [--page N] [--page-size N] [-bd value]
   get <skill-id> [-bd value]
   register --content-file <path> | --zip-file <path> [--source src] [--extend-info json]
-  status <skill-id> <unpublish|published|offline> [-bd value]
+  set-status <skill-id> <unpublish|published|offline> [-bd value]
   delete <skill-id> [-y] [-bd value]
   content <skill-id> [--raw] [--output file] [-bd value]
   read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value]
@@ -491,7 +491,7 @@ export async function runSkillCommand(args: string[]): Promise<number> {
           return 0;
         }
       }
-      if (subcommand === "status") {
+      if (subcommand === "set-status" || subcommand === "status") {
         const opts = parseStatusArgs(rest);
         const result = await updateSkillStatus({ ...token, ...opts });
         console.log(format(result, opts.pretty));

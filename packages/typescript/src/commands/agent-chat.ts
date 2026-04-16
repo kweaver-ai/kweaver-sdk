@@ -114,7 +114,7 @@ export function parseChatArgs(args: string[]): ChatArgs {
       continue;
     }
 
-    if (arg === "--verbose" || arg === "-v") {
+    if (arg === "--verbose" || arg === "-v" || arg === "--debug") {
       verbose = true;
       continue;
     }

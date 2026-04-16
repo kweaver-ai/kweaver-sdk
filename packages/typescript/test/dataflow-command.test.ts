@@ -71,16 +71,20 @@ test("dataflow list renders selected summary fields", async () => {
   try {
     const result = await runCommand(["list"]);
     assert.equal(result.code, 0);
-    assert.match(result.stdout, /\bID\b/);
-    assert.match(result.stdout, /\bTitle\b/);
-    assert.match(result.stdout, /\bStatus\b/);
-    assert.match(result.stdout, /dag-001/);
-    assert.match(result.stdout, /Demo/);
-    assert.match(result.stdout, /normal/);
-    assert.match(result.stdout, /event/);
-    assert.match(result.stdout, /Celia/);
-    assert.match(result.stdout, /1775616096/);
-    assert.match(result.stdout, /v-001/);
+    // Default output is JSON
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.dags[0].id, "dag-001");
+    assert.equal(parsed.dags[0].title, "Demo");
+    assert.equal(parsed.dags[0].status, "normal");
+    assert.equal(parsed.dags[0].trigger, "event");
+    assert.equal(parsed.dags[0].creator, "Celia");
+
+    // --table flag produces human-readable table
+    const tableResult = await runCommand(["list", "--table"]);
+    assert.equal(tableResult.code, 0);
+    assert.match(tableResult.stdout, /\bID\b/);
+    assert.match(tableResult.stdout, /dag-001/);
+    assert.match(tableResult.stdout, /Demo/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -201,16 +205,13 @@ test("dataflow runs renders selected run summary fields", async () => {
       seenUrls[0],
       "https://mock.kweaver.test/api/automation/v2/dag/dag-001/results?page=0&limit=20&sortBy=started_at&order=desc",
     );
-    assert.match(result.stdout, /\bID\b/);
-    assert.match(result.stdout, /Started At/);
-    assert.match(result.stdout, /Content Type/);
-    assert.match(result.stdout, /run-001/);
-    assert.match(result.stdout, /success/);
-    assert.match(result.stdout, /1775616539/);
-    assert.match(result.stdout, /1775616845/);
-    assert.match(result.stdout, /Lewis_Hamilton\.pdf/);
-    assert.match(result.stdout, /application\/pdf/);
-    assert.match(result.stdout, /5930061/);
+    // Default output is JSON
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed[0].id, "run-001");
+    assert.equal(parsed[0].status, "success");
+    assert.equal(parsed[0].started_at, 1775616539);
+    assert.equal(parsed[0].ended_at, 1775616845);
+    assert.equal(parsed[0].source.name, "Lewis_Hamilton.pdf");
   } finally {
     globalThis.fetch = originalFetch;
   }

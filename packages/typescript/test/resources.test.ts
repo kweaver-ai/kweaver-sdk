@@ -147,7 +147,7 @@ test("dataviews.list returns DataView[] from entries wrapper", async () => {
     assert.equal(result.length, 1);
     assert.equal(result[0].id, "dv-1");
     assert.equal(result[0].fields, undefined);
-    assert.ok(mock.calls[0].url.includes("data_source_id=ds-1"));
+    assert.ok(mock.calls[0].url.includes("catalog_id=ds-1"));
   } finally {
     mock.restore();
   }
@@ -158,7 +158,7 @@ test("dataviews.delete sends DELETE request", async () => {
   try {
     await makeClient().dataviews.delete("dv-1");
     assert.equal(mock.calls[0].method, "DELETE");
-    assert.ok(mock.calls[0].url.includes("/data-views/dv-1"));
+    assert.ok(mock.calls[0].url.includes("/resources/dv-1"));
   } finally {
     mock.restore();
   }
@@ -224,12 +224,12 @@ test("dataviews.find exact returns empty when wait false and not found", async (
   }
 });
 
-test("dataviews.query sends POST to mdl-uniquery data-views path", async () => {
+test("dataviews.query sends POST to vega-backend resources data path", async () => {
   const mock = mockFetch({ columns: [], entries: [], total_count: 0 });
   try {
     await makeClient().dataviews.query("dv-1", { limit: 10, offset: 0 });
     assert.equal(mock.calls[0].method, "POST");
-    assert.ok(mock.calls[0].url.includes("/api/mdl-uniquery/v1/data-views/dv-1"));
+    assert.ok(mock.calls[0].url.includes("/api/vega-backend/v1/resources/dv-1/data"));
     const body = JSON.parse(mock.calls[0].body ?? "{}");
     assert.equal(body.limit, 10);
     assert.equal(body.offset, 0);

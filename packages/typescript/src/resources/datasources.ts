@@ -13,16 +13,8 @@ import type { ClientContext } from "../client.js";
 export class DataSourcesResource {
   constructor(private readonly ctx: ClientContext) {}
 
-  async test(opts: {
-    type: string;
-    host: string;
-    port: number;
-    database: string;
-    account: string;
-    password: string;
-    schema?: string;
-  }): Promise<void> {
-    await testDatasource({ ...this.ctx.base(), ...opts });
+  async test(id: string): Promise<void> {
+    await testDatasource({ ...this.ctx.base(), id });
   }
 
   async create(opts: {

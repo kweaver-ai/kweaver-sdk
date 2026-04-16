@@ -618,6 +618,13 @@ function sanitizeBknId(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, "_").replace(/^(\d)/, "_$1");
 }
 
+/** Check if all OT entries are resource-backed (no build needed). */
+export function shouldSkipBuildForResourceOTs(
+  entries: Array<{ data_source?: { type?: string } }>,
+): boolean {
+  return entries.length > 0 && entries.every((e) => e.data_source?.type === "resource");
+}
+
 /** Generate a BKN ObjectType YAML markdown file for a table. */
 export function generateObjectTypeBkn(
   tableName: string,
@@ -629,7 +636,7 @@ export function generateObjectTypeBkn(
   const safeId = sanitizeBknId(tableName);
   const header = `## ObjectType: ${safeId}\n\n**${tableName}**\n`;
 
-  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| data_view | ${dvId} | ${tableName} |\n`;
+  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| resource | ${dvId} | ${tableName} |\n`;
 
   const dpHeader = `### Data Properties\n\n| Property | Display Name | Type | Primary Key | Display Key |\n|----------|-------------|------|-------------|-------------|\n`;
   const dpRows = columns.map((c) => {
@@ -740,6 +747,7 @@ export async function runKnCreateFromDsCommand(
     // Phase 3: Create object types via REST API
     console.error(`Creating ${targetTables.length} object type(s) ...`);
     const otResults: Array<{ name: string; id: string; field_count: number }> = [];
+    const otEntries: Array<{ data_source?: { type?: string } }> = [];
     for (const t of targetTables) {
       const pk = detectPrimaryKey(t, sampleRows?.[t.name]);
       const dk = detectDisplayKey(t, pk);
@@ -747,7 +755,7 @@ export async function runKnCreateFromDsCommand(
       const entry = {
         branch: "main",
         name: t.name,
-        data_source: { type: "data_view", id: viewMap[t.name] },
+        data_source: { type: "resource", id: viewMap[t.name] },
         primary_keys: [pk],
         display_key: dk,
         data_properties: t.columns.map((c) => ({
@@ -757,6 +765,7 @@ export async function runKnCreateFromDsCommand(
           mapped_field: { name: c.name, type: c.type || "varchar" },
         })),
       };
+      otEntries.push(entry);
       const otBody = JSON.stringify({ entries: [entry] });
       const otResponse = await createObjectTypes({
         ...base,
@@ -784,7 +793,10 @@ export async function runKnCreateFromDsCommand(
     }
 
     let statusStr = "skipped";
-    if (options.build) {
+    if (options.build && shouldSkipBuildForResourceOTs(otEntries)) {
+      console.error("All object types are resource-backed — skipping build (not needed).");
+      statusStr = "skipped (resource-backed)";
+    } else if (options.build) {
       console.error("Building ...");
       await buildKnowledgeNetwork({ ...base, knId });
       const TERMINAL = ["completed", "failed", "success"];

@@ -279,19 +279,8 @@ async function runDsConnectCommand(args: string[]): Promise<number> {
   const token = await ensureValidToken();
   const base = { baseUrl: token.baseUrl, accessToken: token.accessToken };
 
-  console.error("Testing connectivity ...");
-  await testDatasource({
-    ...base,
-    type: dbType,
-    host,
-    port,
-    database,
-    account,
-    password,
-    schema,
-  });
-
   const dsName = name ?? database;
+  console.error("Creating catalog ...");
   const createBody = await createDatasource({
     ...base,
     name: dsName,
@@ -310,6 +299,14 @@ async function runDsConnectCommand(args: string[]): Promise<number> {
     return 1;
   }
 
+  console.error("Testing connectivity ...");
+  try {
+    await testDatasource({ ...base, id: dsId });
+  } catch (err) {
+    console.error("Connection test failed, removing catalog ...");
+    try { await deleteDatasource({ ...base, id: dsId }); } catch { /* best-effort cleanup */ }
+    throw err;
+  }
   const tablesBody = await listTablesWithColumns({
     ...base,
     id: dsId,

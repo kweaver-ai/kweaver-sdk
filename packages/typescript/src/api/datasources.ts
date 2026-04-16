@@ -1,9 +1,15 @@
 import { HttpError } from "../utils/http.js";
+import { encryptPassword } from "../utils/crypto.js";
 import { buildHeaders } from "./headers.js";
 
-const VEGA_BASE = "/api/vega-backend/v1";
+const HTTPS_PROTOCOLS = new Set(["maxcompute", "anyshare7", "opensearch"]);
 
-function makeConnectorConfig(
+function connectProtocol(dsType: string): string {
+  return HTTPS_PROTOCOLS.has(dsType) ? "https" : "jdbc";
+}
+
+function makeBinData(
+  type: string,
   host: string,
   port: number,
   database: string,
@@ -11,23 +17,30 @@ function makeConnectorConfig(
   password: string,
   schema?: string
 ): Record<string, unknown> {
-  const cfg: Record<string, unknown> = {
+  const d: Record<string, unknown> = {
     host,
     port,
-    databases: [database],
-    username: account,
-    password,
+    database_name: database,
+    connect_protocol: connectProtocol(type),
+    account,
+    password: encryptPassword(password),
   };
   if (schema !== undefined && schema !== "") {
-    cfg.schema = schema;
+    d.schema = schema;
   }
-  return cfg;
+  return d;
 }
 
 export interface TestDatasourceOptions {
   baseUrl: string;
   accessToken: string;
-  id: string;
+  type: string;
+  host: string;
+  port: number;
+  database: string;
+  account: string;
+  password: string;
+  schema?: string;
   businessDomain?: string;
 }
 
@@ -35,16 +48,31 @@ export async function testDatasource(options: TestDatasourceOptions): Promise<vo
   const {
     baseUrl,
     accessToken,
-    id,
+    type,
+    host,
+    port,
+    database,
+    account,
+    password,
+    schema,
     businessDomain = "bd_public",
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/test-connection`;
+  const url = `${base}/api/data-connection/v1/datasource/test`;
+
+  const body = JSON.stringify({
+    type,
+    bin_data: makeBinData(type, host, port, database, account, password, schema),
+  });
 
   const response = await fetch(url, {
     method: "POST",
-    headers: buildHeaders(accessToken, businessDomain),
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+    },
+    body,
   });
 
   if (!response.ok) {
@@ -85,12 +113,12 @@ export async function createDatasource(options: CreateDatasourceOptions): Promis
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/catalogs`;
+  const url = `${base}/api/data-connection/v1/datasource`;
 
   const bodyObj: Record<string, unknown> = {
     name,
-    connector_type: type,
-    connector_config: makeConnectorConfig(host, port, database, account, password, schema),
+    type,
+    bin_data: makeBinData(type, host, port, database, account, password, schema),
   };
   if (comment) {
     bodyObj.comment = comment;
@@ -130,7 +158,7 @@ export async function listDatasources(options: ListDatasourcesOptions): Promise<
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = new URL(`${base}${VEGA_BASE}/catalogs`);
+  const url = new URL(`${base}/api/data-connection/v1/datasource`);
   if (keyword) url.searchParams.set("keyword", keyword);
   if (type) url.searchParams.set("type", type);
 
@@ -162,7 +190,7 @@ export async function getDatasource(options: GetDatasourceOptions): Promise<stri
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`;
+  const url = `${base}/api/data-connection/v1/datasource/${encodeURIComponent(id)}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -192,7 +220,7 @@ export async function deleteDatasource(options: DeleteDatasourceOptions): Promis
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/catalogs/${encodeURIComponent(id)}`;
+  const url = `${base}/api/data-connection/v1/datasource/${encodeURIComponent(id)}`;
 
   const response = await fetch(url, {
     method: "DELETE",
@@ -227,9 +255,9 @@ export async function listTables(options: ListTablesOptions): Promise<string> {
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = new URL(`${base}${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/resources`);
-  if (keyword) url.searchParams.set("keyword", keyword);
+  const url = new URL(`${base}/api/data-connection/v1/metadata/data-source/${encodeURIComponent(id)}`);
   url.searchParams.set("limit", String(limit));
+  if (keyword) url.searchParams.set("keyword", keyword);
   if (offset !== undefined) url.searchParams.set("offset", String(offset));
 
   const response = await fetch(url.toString(), {
@@ -248,7 +276,7 @@ export interface ListTablesWithColumnsOptions extends ListTablesOptions {
   autoScan?: boolean;
 }
 
-/** List tables with column details. Optionally triggers catalog discover if no resources found. */
+/** List tables with column details. Optionally triggers metadata scan if no tables found. */
 export async function listTablesWithColumns(options: ListTablesWithColumnsOptions): Promise<string> {
   const { id, autoScan = true, ...rest } = options;
   let body = await listTables({ ...rest, id });
@@ -276,30 +304,20 @@ export async function listTablesWithColumns(options: ListTablesWithColumnsOption
   const tables: Array<{ name: string; columns: Array<{ name: string; type: string; comment?: string }> }> = [];
 
   for (const t of items) {
+    const tableId = String(t.id ?? "");
     const tableName = String(t.name ?? "");
-    const resourceId = String(t.id ?? "");
     let columnsRaw = (t.columns ?? t.fields ?? []) as Array<Record<string, unknown>>;
 
-    // Vega catalog resources list doesn't include columns;
-    // fetch individual resource detail to get source_metadata.columns
-    if (columnsRaw.length === 0 && resourceId) {
-      const detailUrl = `${base}${VEGA_BASE}/resources/${encodeURIComponent(resourceId)}`;
-      const detailResp = await fetch(detailUrl, {
+    if (columnsRaw.length === 0 && tableId) {
+      const tableUrl = `${base}/api/data-connection/v1/metadata/table/${encodeURIComponent(tableId)}?limit=-1`;
+      const colResponse = await fetch(tableUrl, {
         method: "GET",
         headers: buildHeaders(rest.accessToken, rest.businessDomain ?? "bd_public"),
       });
-      if (detailResp.ok) {
-        const raw = (await detailResp.json()) as Record<string, unknown>;
-        // Vega-backend may wrap response in { entries: [...] }
-        const detail = (Array.isArray(raw.entries) && raw.entries.length > 0
-          ? raw.entries[0]
-          : raw) as Record<string, unknown>;
-        const srcMeta = detail.source_metadata as Record<string, unknown> | undefined;
-        const detailCols = srcMeta?.columns ?? detail.columns ?? detail.fields;
-        if (Array.isArray(detailCols)) {
-          columnsRaw = detailCols as Array<Record<string, unknown>>;
-        }
-      }
+      const colData = (await colResponse.json()) as
+        | Array<Record<string, unknown>>
+        | { entries?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
+      columnsRaw = Array.isArray(colData) ? colData : (colData.entries ?? colData.data ?? []);
     }
 
     const columns = columnsRaw.map((c) => ({
@@ -327,21 +345,47 @@ export async function scanMetadata(options: ScanMetadataOptions): Promise<string
     baseUrl,
     accessToken,
     id,
+    dsType = "mysql",
     businessDomain = "bd_public",
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = new URL(`${base}${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/discover`);
-  url.searchParams.set("wait", "true");
+  const scanUrl = `${base}/api/data-connection/v1/metadata/scan`;
+  const statusUrl = (taskId: string) => `${base}/api/data-connection/v1/metadata/scan/${taskId}`;
 
-  const response = await fetch(url.toString(), {
-    method: "POST",
-    headers: buildHeaders(accessToken, businessDomain),
+  const scanBody = JSON.stringify({
+    scan_name: `sdk_scan_${id.slice(0, 8)}`,
+    type: 0,
+    ds_info: { ds_id: id, ds_type: dsType },
+    use_default_template: true,
+    use_multi_threads: true,
+    status: "open",
   });
 
-  const body = await response.text();
-  if (!response.ok) {
-    throw new HttpError(response.status, response.statusText, body);
+  const scanResponse = await fetch(scanUrl, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+    },
+    body: scanBody,
+  });
+
+  const scanResult = await scanResponse.json() as { id?: string };
+  const taskId = scanResult.id ?? "";
+
+  for (let i = 0; i < 30; i += 1) {
+    const delay = Math.min(2000 * Math.pow(1.5, i), 15000);
+    await new Promise((r) => setTimeout(r, delay));
+    const statusResponse = await fetch(statusUrl(taskId), {
+      method: "GET",
+      headers: buildHeaders(accessToken, businessDomain),
+    });
+    const statusData = (await statusResponse.json()) as { status?: string };
+    if (statusData.status === "success" || statusData.status === "fail") {
+      break;
+    }
   }
-  return body;
+
+  return taskId;
 }

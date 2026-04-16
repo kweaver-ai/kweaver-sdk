@@ -1,7 +1,6 @@
+import { createHash } from "node:crypto";
 import { HttpError } from "../utils/http.js";
 import { buildHeaders } from "./headers.js";
-
-const VEGA_BASE = "/api/vega-backend/v1";
 
 function extractViewId(data: unknown): string | null {
   if (Array.isArray(data) && data.length > 0) {
@@ -17,7 +16,7 @@ function extractViewId(data: unknown): string | null {
   return null;
 }
 
-/** Field metadata returned by the resources API. */
+/** Field metadata returned by the data-views API. */
 export interface ViewField {
   name: string;
   type: string;
@@ -25,7 +24,7 @@ export interface ViewField {
   comment?: string;
 }
 
-/** Normalized data view model (vega-backend resource). */
+/** Normalized data view model (mdl-data-model). */
 export interface DataView {
   id: string;
   name: string;
@@ -46,9 +45,7 @@ export interface DataView {
 }
 
 export function parseDataView(raw: Record<string, unknown>): DataView {
-  // Vega resources store columns in source_metadata.columns; fall back to raw.fields
-  const srcMeta = raw.source_metadata as Record<string, unknown> | undefined;
-  const fieldsRaw = srcMeta?.columns ?? raw.fields;
+  const fieldsRaw = raw.fields;
   let fields: ViewField[] | undefined;
   if (Array.isArray(fieldsRaw) && fieldsRaw.length > 0) {
     fields = [];
@@ -68,7 +65,7 @@ export function parseDataView(raw: Record<string, unknown>): DataView {
     id: String(raw.id ?? ""),
     name: String(raw.name ?? ""),
     query_type: String(raw.query_type ?? "SQL"),
-    datasource_id: String(raw.catalog_id ?? raw.data_source_id ?? raw.group_id ?? ""),
+    datasource_id: String(raw.data_source_id ?? raw.group_id ?? ""),
   };
   if (raw.type != null) dv.type = String(raw.type);
   if (raw.data_source_type != null) dv.data_source_type = String(raw.data_source_type);
@@ -110,18 +107,23 @@ export async function createDataView(options: CreateDataViewOptions): Promise<st
     businessDomain = "bd_public",
   } = options;
 
-  const body = JSON.stringify({
-    name,
-    catalog_id: datasourceId,
-    technical_name: table,
-    type: "atomic",
-    query_type: "SQL",
-    category: "table",
-    fields,
-  });
+  const viewId = createHash("md5").update(`${datasourceId}:${table}`).digest("hex").slice(0, 35);
+
+  const body = JSON.stringify([
+    {
+      id: viewId,
+      name,
+      technical_name: table,
+      type: "atomic",
+      query_type: "SQL",
+      data_source_id: datasourceId,
+      group_id: datasourceId,
+      fields,
+    },
+  ]);
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/resources`;
+  const url = `${base}/api/mdl-data-model/v1/data-views`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -134,13 +136,14 @@ export async function createDataView(options: CreateDataViewOptions): Promise<st
 
   const responseBody = await response.text();
   if (!response.ok) {
-    // If resource already exists (409 or 403), try to find and return its ID
-    if (response.status === 409 || response.status === 403) {
+    // If DataView already exists (403 with "Existed" error code), delete and recreate
+    if (response.status === 403) {
       try {
         const errBody = JSON.parse(responseBody) as { error_code?: string };
-        if (errBody.error_code?.includes("Existed") || response.status === 409) {
+        if (errBody.error_code?.includes("Existed")) {
           const actualId = await findDataViewByName({ baseUrl, accessToken, name, groupId: datasourceId, businessDomain });
           if (actualId && fields.length > 0) {
+            // Delete the bare DataView (created by scanMetadata) and recreate with fields
             await deleteDataView({ baseUrl, accessToken, id: actualId, businessDomain });
             const retryResponse = await fetch(url, {
               method: "POST",
@@ -150,10 +153,11 @@ export async function createDataView(options: CreateDataViewOptions): Promise<st
             if (retryResponse.ok) {
               const retryBody = await retryResponse.text();
               const retryId = extractViewId(JSON.parse(retryBody));
-              return retryId ?? actualId;
+              return retryId ?? viewId;
             }
           }
           if (actualId) return actualId;
+          return viewId;
         }
       } catch { /* fall through to throw */ }
     }
@@ -161,7 +165,7 @@ export async function createDataView(options: CreateDataViewOptions): Promise<st
   }
 
   const createdId = extractViewId(JSON.parse(responseBody));
-  return createdId ?? "";
+  return createdId ?? viewId;
 }
 
 async function findDataViewByName(options: {
@@ -176,7 +180,6 @@ async function findDataViewByName(options: {
     accessToken: options.accessToken,
     businessDomain: options.businessDomain,
     name: options.name,
-    datasourceId: options.groupId,
   });
   const match = list.find((e) => e.name === options.name && e.datasource_id === options.groupId);
   return match?.id ?? null;
@@ -186,13 +189,13 @@ export interface ListDataViewsOptions {
   baseUrl: string;
   accessToken: string;
   businessDomain?: string;
-  /** Filter by catalog (datasource) id. */
+  /** Filter by data source id. */
   datasourceId?: string;
   /** Server-side keyword filter (fuzzy). */
   name?: string;
   /** View type filter (e.g. atomic, custom). */
   type?: string;
-  /** Max items; default 30. */
+  /** Max items; default -1 (all). */
   limit?: number;
 }
 
@@ -208,9 +211,9 @@ export async function listDataViews(options: ListDataViewsOptions): Promise<Data
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = new URL(`${base}${VEGA_BASE}/resources`);
+  const url = new URL(`${base}/api/mdl-data-model/v1/data-views`);
   url.searchParams.set("limit", String(limit));
-  if (datasourceId) url.searchParams.set("catalog_id", datasourceId);
+  if (datasourceId) url.searchParams.set("data_source_id", datasourceId);
   if (name) url.searchParams.set("keyword", name);
   if (type) url.searchParams.set("type", type);
 
@@ -245,7 +248,7 @@ export interface DeleteDataViewOptions {
 export async function deleteDataView(options: DeleteDataViewOptions): Promise<void> {
   const { baseUrl, accessToken, id, businessDomain = "bd_public" } = options;
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/resources/${encodeURIComponent(id)}`;
+  const url = `${base}/api/mdl-data-model/v1/data-views/${encodeURIComponent(id)}`;
   const response = await fetch(url, {
     method: "DELETE",
     headers: buildHeaders(accessToken, businessDomain),
@@ -272,7 +275,7 @@ export async function getDataView(options: GetDataViewOptions): Promise<DataView
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/resources/${encodeURIComponent(id)}`;
+  const url = `${base}/api/mdl-data-model/v1/data-views/${encodeURIComponent(id)}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -300,7 +303,7 @@ export interface FindDataViewOptions {
   businessDomain?: string;
   /** View name to search for (sent as keyword to server). */
   name: string;
-  /** Filter by catalog (datasource) id. */
+  /** Filter by data source id. */
   datasourceId?: string;
   /** When true, apply client-side exact name match after keyword search (default false). */
   exact?: boolean;
@@ -350,7 +353,7 @@ export async function findDataView(options: FindDataViewOptions): Promise<DataVi
   }
 }
 
-/** Options for querying data view rows via vega-backend resources. */
+/** Options for querying data view rows via mdl-uniquery (SQL / view definition). */
 export interface QueryDataViewOptions {
   baseUrl: string;
   accessToken: string;
@@ -365,7 +368,7 @@ export interface QueryDataViewOptions {
   businessDomain?: string;
 }
 
-/** Query result from vega-backend resources data endpoint. */
+/** Query result from mdl-uniquery data-views POST (shape varies by backend). */
 export interface DataViewQueryResult {
   columns?: Array<{ name: string; type?: string; vega_type?: string }>;
   entries?: unknown;
@@ -373,7 +376,7 @@ export interface DataViewQueryResult {
 }
 
 /**
- * Execute a query against a data view (POST /api/vega-backend/v1/resources/:id/data).
+ * Execute a query against a data view (POST /api/mdl-uniquery/v1/data-views/:id).
  * When `sql` is omitted, the server uses the view's stored SQL definition.
  */
 export async function queryDataView(options: QueryDataViewOptions): Promise<DataViewQueryResult> {
@@ -392,7 +395,7 @@ export async function queryDataView(options: QueryDataViewOptions): Promise<Data
   } = options;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/resources/${encodeURIComponent(id)}/data`;
+  const url = `${base}/api/mdl-uniquery/v1/data-views/${encodeURIComponent(id)}`;
 
   const body: Record<string, unknown> = {
     offset,

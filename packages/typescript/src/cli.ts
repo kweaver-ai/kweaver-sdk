@@ -22,7 +22,7 @@ Usage:
   kweaver --version | -V
   kweaver --help | -h
 
-  kweaver auth <platform-url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--playwright] [--insecure|-k]
+  kweaver auth <platform-url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--http-signin] [--playwright] [--insecure|-k]
   kweaver auth login <platform-url>          (alias for auth <url>)
   kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (run on host without browser)
   kweaver auth whoami [platform-url|alias] [--json]

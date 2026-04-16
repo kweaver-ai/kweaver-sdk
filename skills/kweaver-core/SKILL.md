@@ -62,7 +62,7 @@ kweaver [--user <userId|username>] <command> [subcommand] [options]
 
 | 命令组 | 说明 | 常用命令 | 详细参考 |
 |--------|------|---------|---------|
-| `auth` | 认证管理（支持多账号） | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `--no-browser`（无浏览器时粘贴回调 URL/code）；可选 `-u`/`-p` 或 `--playwright`；`auth list`（树形展示所有平台及用户）；`auth users`（列出用户名）；`auth switch --user <username>`（按用户名切换）；全局 `--user <name>` 可免切换使用指定用户凭证（env: `KWEAVER_USER`）；`auth use` / `status` / `logout` / `delete` 支持平台 URL 或别名 | `references/auth.md` |
+| `auth` | 认证管理（支持多账号） | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `--no-browser`（无浏览器时粘贴回调 URL/code）；可选 `-u`/`-p` + `--http-signin`（HTTP `/oauth2/signin`）或 `-u`/`-p` / `--playwright`；`auth list`（树形展示所有平台及用户）；`auth users`（列出用户名）；`auth switch --user <username>`（按用户名切换）；全局 `--user <name>` 可免切换使用指定用户凭证（env: `KWEAVER_USER`）；`auth use` / `status` / `logout` / `delete` 支持平台 URL 或别名 | `references/auth.md` |
 | `token` | 打印当前 access token（自动刷新） | `token` | — |
 | `config` | **平台业务域（优先于多数 bkn/agent/ds 操作）** | `config show`, `config list-bd`, `config set-bd <uuid>` | `references/config.md` |
 | `bkn` | BKN 知识网络管理、Schema、查询、Action | `bkn validate`/`push` 默认检测 `.bkn` 编码并规范为 UTF-8，可用 `--no-detect-encoding` 或 `--source-encoding gb18030`；另有 `pull`、`object-type`、`search`、`create-from-ds`/`create-from-csv` 等，见 `references/bkn.md` | `references/bkn.md` |

@@ -25,9 +25,11 @@ import {
 import { decodeJwtPayload } from "../config/jwt.js";
 import {
   buildCopyCommand,
+  eacpHydraAdminLogin,
   formatHttpError,
   normalizeBaseUrl,
   oauth2Login,
+  oauth2PasswordSigninLogin,
   playwrightLogin,
   refreshTokenLogin,
 } from "../auth/oauth.js";
@@ -61,8 +63,9 @@ Login options:
   --port <n>             Local callback port (default: 9010). Use when 9010 is occupied.
   --no-browser           Do not open a browser; print the auth URL and prompt for the callback URL or code (stdin).
                          Use on headless servers or when automatic browser launch fails.
-  -u, --username         Username (with -p triggers Playwright headless login)
+  -u, --username         Username (with -p triggers Playwright headless login by default)
   -p, --password         Password
+  --http-signin          With -u/-p: HTTP POST /oauth2/signin (no Playwright). Public key from page when present; else built-in modulus.
   --playwright           Force Playwright browser login even without -u/-p
   --insecure, -k         Skip TLS certificate verification (self-signed / dev HTTPS only)
   --no-auth              Save platform without OAuth (servers with no authentication). Same as detecting OAuth 404 during login.`);
@@ -72,7 +75,7 @@ Login options:
 
   if (target === "login") {
     if (rest[0] === "--help" || rest[0] === "-h") {
-      console.log(`kweaver auth login <platform-url> [--alias <name>] [--no-auth] [--no-browser] [-u user] [-p pass] [--playwright] [--refresh-token T --client-id ID --client-secret S]`);
+      console.log(`kweaver auth login <platform-url> [--alias <name>] [--no-auth] [--no-browser] [-u user] [-p pass] [--http-signin] [--playwright] [--refresh-token T --client-id ID --client-secret S]`);
       return 0;
     }
     const url = rest[0];
@@ -109,6 +112,17 @@ Login options:
       const username = readOption(args, "--username") ?? readOption(args, "-u");
       const password = readOption(args, "--password") ?? readOption(args, "-p");
       const usePlaywright = args.includes("--playwright");
+      const httpSignin = args.includes("--http-signin");
+      const eacpHydraAdmin = args.includes("--eacp-hydra-admin");
+      const hydraAdminBase =
+        readOption(args, "--hydra-admin-base") ?? process.env.KWEAVER_HYDRA_ADMIN_BASE ?? "";
+      const eacpGetnewUrl =
+        readOption(args, "--eacp-getnew-url") ?? process.env.KWEAVER_EACP_GETNEW_URL ?? "";
+      const rsaPublicKeyFile =
+        readOption(args, "--rsa-public-key-file") ?? process.env.KWEAVER_RSA_PUBLIC_KEY_FILE ?? "";
+      const eacpClientIp = readOption(args, "--eacp-client-ip");
+      const oauthProduct = readOption(args, "--oauth-product");
+      const signinPublicKeyFile = readOption(args, "--signin-public-key-file");
       const clientId = readOption(args, "--client-id");
       const clientSecret = readOption(args, "--client-secret");
       const refreshToken = readOption(args, "--refresh-token");
@@ -125,11 +139,25 @@ Login options:
       const KNOWN_LOGIN_FLAGS = new Set([
         "--alias", "--client-id", "--client-secret", "--refresh-token",
         "--port", "--no-browser", "--username", "-u", "--password", "-p",
+        "--http-signin",
+        "--eacp-hydra-admin",
+        "--hydra-admin-base",
+        "--eacp-getnew-url",
+        "--rsa-public-key-file",
+        "--eacp-client-ip",
+        "--oauth-product",
+        "--signin-public-key-file",
         "--playwright", "--insecure", "-k", "--no-auth", "--redirect-uri",
       ]);
       const KNOWN_VALUE_FLAGS = new Set([
         "--alias", "--client-id", "--client-secret", "--refresh-token",
         "--port", "--username", "-u", "--password", "-p", "--redirect-uri",
+        "--hydra-admin-base",
+        "--eacp-getnew-url",
+        "--rsa-public-key-file",
+        "--eacp-client-ip",
+        "--oauth-product",
+        "--signin-public-key-file",
       ]);
       for (let i = 0; i < args.length; i++) {
         const a = args[i];
@@ -153,12 +181,47 @@ Login options:
       if (noAuth && noBrowser) {
         console.error("--no-auth does not require a browser; --no-browser is ignored.");
       }
-      if (noAuth && (username || password || usePlaywright)) {
-        console.error("--no-auth cannot be used with Playwright login or -u/-p.");
+      if (noAuth && (username || password || usePlaywright || httpSignin || eacpHydraAdmin)) {
+        console.error("--no-auth cannot be used with Playwright login, HTTP sign-in, EACP login, or -u/-p.");
         return 1;
       }
-      if (noBrowser && (username || password || usePlaywright)) {
-        console.error("--no-browser cannot be used with Playwright login or -u/-p.");
+      if (noBrowser && (username || password || usePlaywright || httpSignin || eacpHydraAdmin)) {
+        console.error("--no-browser cannot be used with Playwright login, HTTP sign-in, EACP login, or -u/-p.");
+        return 1;
+      }
+      if (httpSignin && eacpHydraAdmin) {
+        console.error("--http-signin cannot be used with --eacp-hydra-admin.");
+        return 1;
+      }
+      if (eacpHydraAdmin && usePlaywright) {
+        console.error("--eacp-hydra-admin cannot be used with --playwright.");
+        return 1;
+      }
+      if (eacpHydraAdmin && refreshToken) {
+        console.error("--eacp-hydra-admin cannot be used with --refresh-token.");
+        return 1;
+      }
+      if (httpSignin && usePlaywright) {
+        console.error("--http-signin cannot be used with --playwright.");
+        return 1;
+      }
+      if (httpSignin && refreshToken) {
+        console.error("--http-signin cannot be used with --refresh-token.");
+        return 1;
+      }
+      if (httpSignin && (!username || !password)) {
+        console.error("--http-signin requires -u/--username and -p/--password.");
+        return 1;
+      }
+      if (eacpHydraAdmin && (!username || !password)) {
+        console.error("--eacp-hydra-admin requires -u/--username and -p/--password.");
+        return 1;
+      }
+      if (eacpHydraAdmin && (!hydraAdminBase.trim() || !eacpGetnewUrl.trim() || !rsaPublicKeyFile.trim())) {
+        console.error(
+          "--eacp-hydra-admin requires --hydra-admin-base, --eacp-getnew-url, and --rsa-public-key-file " +
+            "(or KWEAVER_HYDRA_ADMIN_BASE, KWEAVER_EACP_GETNEW_URL, KWEAVER_RSA_PUBLIC_KEY_FILE).",
+        );
         return 1;
       }
       if (noBrowser && refreshToken) {
@@ -179,6 +242,32 @@ Login options:
         console.log("Logging in with refresh token (no browser)...");
         token = await refreshTokenLogin(normalizedTarget, {
           clientId, clientSecret, refreshToken, tlsInsecure,
+        });
+      } else if (username && password && eacpHydraAdmin) {
+        console.log("Logging in (EACP + Hydra Admin)...");
+        token = await eacpHydraAdminLogin(normalizedTarget, {
+          username,
+          password,
+          hydraAdminBase: hydraAdminBase.trim(),
+          eacpGetnewUrl: eacpGetnewUrl.trim(),
+          rsaPublicKeyPemPath: rsaPublicKeyFile.trim(),
+          clientIp: eacpClientIp ?? undefined,
+          tlsInsecure,
+          port: customPort,
+          clientId: clientId ?? undefined,
+          clientSecret: clientSecret ?? undefined,
+        });
+      } else if (username && password && httpSignin) {
+        console.log("Logging in (HTTP /oauth2/signin)...");
+        token = await oauth2PasswordSigninLogin(normalizedTarget, {
+          username,
+          password,
+          tlsInsecure,
+          port: customPort,
+          clientId: clientId ?? undefined,
+          clientSecret: clientSecret ?? undefined,
+          oauthProduct: oauthProduct ?? undefined,
+          signinPublicKeyPemPath: signinPublicKeyFile ?? undefined,
         });
       } else if (username && password) {
         console.log("Logging in (headless)...");

@@ -234,7 +234,7 @@ result = client.dataflows.execute(
 ## 命令速查
 
 ```bash
-kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--http-signin] [--playwright] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   （无浏览器主机）
 kweaver auth export [url|alias] [--json]   auth status/list/use/delete/logout
 kweaver config show / list-bd / set-bd <value>   # 平台业务域，登录后优先执行

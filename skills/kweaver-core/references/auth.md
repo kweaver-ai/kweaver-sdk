@@ -13,7 +13,8 @@ npm install playwright && npx playwright install chromium
 ## 命令
 
 ```bash
-kweaver auth login <url> [--alias <name>] [--no-auth] [--no-browser] [-u user] [-p pass] [--playwright]
+kweaver auth login <url> [--alias <name>] [--no-auth] [--no-browser] [-u user] [-p pass]
+                         [--http-signin] [--playwright]
                          [--port <n>] [--insecure|-k]
 kweaver auth <url> [--alias <name>] ...              # 同上（简写）
 kweaver auth whoami [url|alias] [--json]              # 显示当前用户身份
@@ -109,7 +110,8 @@ auth.login(no_browser=True)
 ## 说明
 
 - **OAuth2 授权码登录**（默认）：获取 `access_token` + `refresh_token`，过期自动刷新
-- **Playwright cookie 登录**（`-u`/`-p` 或 `--playwright`）：无 `refresh_token`，过期需重新登录
+- **HTTP 密码登录**（`-u`/`-p` + `--http-signin`）：无 Playwright，走 `POST /oauth2/signin`；优先使用页面里的公钥，否则使用内置 RSA modulus，无需额外参数。DIP 部署可设 `KWEAVER_OAUTH_PRODUCT=dip`。若解密仍失败，再在 `packages/typescript/README.md` 中查可选环境变量（公钥文件、product、密文格式等）。
+- **Playwright 登录**（`-u`/`-p` 且未加 `--http-signin`，或 `--playwright`）：自动化浏览器填表
 - Token 有效期 1 小时
 - `--alias` 设置短名称方便切换
 - `--insecure` / `-k`：跳过 TLS 证书校验（仅用于自签名/内网开发环境）

@@ -260,3 +260,14 @@ export {
 
 // ── JWT utilities ─────────────────────────────────────────────────────────────
 export { decodeJwtPayload, extractUserIdFromJwt } from "./config/jwt.js";
+
+// ── OAuth (advanced — CLI uses these internally; optional for custom login tools) ─
+export {
+  DEFAULT_SIGNIN_RSA_MODULUS_HEX,
+  eacpHydraAdminLogin,
+  encryptPasswordWithRsaPemFile,
+  oauth2PasswordSigninLogin,
+  parseSigninPageHtmlProps,
+  rsaModulusHexToSpkiPem,
+  STUDIO_SIGNIN_RSA_MODULUS_HEX,
+} from "./auth/oauth.js";

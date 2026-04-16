@@ -598,6 +598,17 @@ test("run auth login accepts all known flags without unknown-flag error", async 
       "--no-auth",
     ]);
     assert.ok(!errors.some((e) => e.includes("Unknown option")));
+    errors.length = 0;
+
+    await auth.runAuthCommand([
+      "https://headless3.example.com",
+      "-u",
+      "u",
+      "-p",
+      "p",
+      "--http-signin",
+    ]);
+    assert.ok(!errors.some((e) => e.includes("Unknown option")));
   } finally {
     console.error = origError;
   }

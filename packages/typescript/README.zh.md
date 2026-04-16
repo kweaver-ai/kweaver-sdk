@@ -144,7 +144,7 @@ const skillMd = await client.skills.fetchContent("skill-id");
 ## 命令速查
 
 ```
-kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--http-signin] [--playwright] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (无浏览器登录)
 kweaver auth export [url|alias] [--json]   (导出在无浏览器机器上运行的命令)
 kweaver auth status/list/use/delete/logout

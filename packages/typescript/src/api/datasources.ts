@@ -221,7 +221,7 @@ export async function listTables(options: ListTablesOptions): Promise<string> {
     accessToken,
     id,
     keyword,
-    limit,
+    limit = -1,
     offset,
     businessDomain = "bd_public",
   } = options;
@@ -229,7 +229,7 @@ export async function listTables(options: ListTablesOptions): Promise<string> {
   const base = baseUrl.replace(/\/+$/, "");
   const url = new URL(`${base}${VEGA_BASE}/catalogs/${encodeURIComponent(id)}/resources`);
   if (keyword) url.searchParams.set("keyword", keyword);
-  if (limit !== undefined) url.searchParams.set("limit", String(limit));
+  url.searchParams.set("limit", String(limit));
   if (offset !== undefined) url.searchParams.set("offset", String(offset));
 
   const response = await fetch(url.toString(), {

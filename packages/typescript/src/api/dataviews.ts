@@ -46,7 +46,9 @@ export interface DataView {
 }
 
 export function parseDataView(raw: Record<string, unknown>): DataView {
-  const fieldsRaw = raw.fields;
+  // Vega resources store columns in source_metadata.columns; fall back to raw.fields
+  const srcMeta = raw.source_metadata as Record<string, unknown> | undefined;
+  const fieldsRaw = srcMeta?.columns ?? raw.fields;
   let fields: ViewField[] | undefined;
   if (Array.isArray(fieldsRaw) && fieldsRaw.length > 0) {
     fields = [];

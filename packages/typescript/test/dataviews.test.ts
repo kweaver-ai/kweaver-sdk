@@ -7,6 +7,7 @@ import {
   getDataView,
   deleteDataView,
   queryDataView,
+  parseDataView,
 } from "../src/api/dataviews.js";
 
 const BASE = "https://mock.kweaver.test";
@@ -138,6 +139,30 @@ test("queryDataView calls POST /api/vega-backend/v1/resources/{id}/data", async 
   } finally {
     mock.restore();
   }
+});
+
+// ── parseDataView: must read source_metadata.columns from vega resource ──────
+
+test("parseDataView extracts fields from source_metadata.columns", () => {
+  const raw = {
+    id: "res-1",
+    name: "users",
+    query_type: "SQL",
+    catalog_id: "cat-1",
+    source_metadata: {
+      columns: [
+        { name: "id", type: "int" },
+        { name: "email", type: "varchar", comment: "user email" },
+      ],
+    },
+  };
+  const dv = parseDataView(raw as Record<string, unknown>);
+  assert.equal(dv.id, "res-1");
+  assert.ok(dv.fields, "fields should be populated from source_metadata.columns");
+  assert.equal(dv.fields!.length, 2);
+  assert.equal(dv.fields![0].name, "id");
+  assert.equal(dv.fields![1].name, "email");
+  assert.equal(dv.fields![1].comment, "user email");
 });
 
 test("queryDataView sends x-http-method-override GET header", async () => {

@@ -13,8 +13,34 @@ import type { ClientContext } from "../client.js";
 export class DataSourcesResource {
   constructor(private readonly ctx: ClientContext) {}
 
-  async test(id: string): Promise<void> {
+  /** Test connectivity by catalog ID. */
+  async testById(id: string): Promise<void> {
     await testDatasource({ ...this.ctx.base(), id });
+  }
+
+  /**
+   * Test connectivity using connection parameters.
+   * Creates a temporary catalog, tests the connection, and cleans up on failure.
+   */
+  async test(opts: {
+    type: string;
+    host: string;
+    port: number;
+    database: string;
+    account: string;
+    password: string;
+    schema?: string;
+  }): Promise<void> {
+    const base = this.ctx.base();
+    const tmpName = `_sdk_test_${Date.now()}`;
+    const raw = await createDatasource({ ...base, name: tmpName, ...opts });
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const id = String(parsed.id ?? "");
+    try {
+      await testDatasource({ ...base, id });
+    } finally {
+      try { await deleteDatasource({ ...base, id }); } catch { /* best-effort cleanup */ }
+    }
   }
 
   async create(opts: {

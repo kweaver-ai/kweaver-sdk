@@ -166,7 +166,7 @@ test("testDatasource calls POST /api/vega-backend/v1/catalogs/{id}/test-connecti
 
 // ── listTables → GET /api/vega-backend/v1/catalogs/{id}/resources ────────────
 
-test("listTables calls GET /api/vega-backend/v1/catalogs/{id}/resources", async () => {
+test("listTables defaults limit to -1 (fetch all) when not specified", async () => {
   const mock = mockFetch({ entries: [] });
   try {
     await listTables({ baseUrl: BASE, accessToken: TOKEN, id: "ds-1" });
@@ -174,6 +174,7 @@ test("listTables calls GET /api/vega-backend/v1/catalogs/{id}/resources", async 
     assert.equal(mock.calls[0].method, "GET");
     const url = new URL(mock.calls[0].url);
     assert.equal(url.pathname, "/api/vega-backend/v1/catalogs/ds-1/resources");
+    assert.equal(url.searchParams.get("limit"), "-1", "default limit should be -1 to fetch all resources");
   } finally {
     mock.restore();
   }

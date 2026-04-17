@@ -15,6 +15,7 @@ import {
   type DataflowLogItem,
   type DataflowRunItem,
 } from "../api/dataflow2.js";
+import { createDataflow, type DataflowCreateBody } from "../api/dataflow.js";
 
 function renderTable(rows: Array<Record<string, string>>): string {
   if (rows.length === 0) return "";
@@ -125,20 +126,56 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
       throw error ?? new Error(message);
     })
     .command(
+      "create <json>",
+      "Create a new dataflow (DAG) from a JSON definition",
+      (command: any) =>
+        command
+          .positional("json", {
+            type: "string",
+            describe: "JSON body string or @file-path to read from file",
+          })
+          .option("biz-domain", { alias: "bd", type: "string" }),
+      async (argv: any) => {
+        exitCode = await with401RefreshRetry(async () => {
+          const base = await requireTokenAndBusinessDomain(argv.bizDomain);
+          let raw: string = argv.json;
+          if (raw.startsWith("@")) {
+            const filePath = raw.slice(1);
+            await access(filePath, constants.R_OK);
+            raw = (await readFile(filePath, "utf8")).toString();
+          }
+          const body = JSON.parse(raw) as DataflowCreateBody;
+          const dagId = await createDataflow({ ...base, body });
+          console.log(JSON.stringify({ id: dagId }, null, 2));
+          return 0;
+        });
+      },
+    )
+    .command(
       "list",
       "List all dataflows",
       (command: any) =>
-        command.option("biz-domain", {
-          alias: "bd",
-          type: "string",
-        }),
+        command
+          .option("biz-domain", {
+            alias: "bd",
+            type: "string",
+          })
+          .option("table", {
+            type: "boolean",
+            default: false,
+            describe: "Output as human-readable table instead of JSON",
+          }),
       async (argv: any) => {
         exitCode = await with401RefreshRetry(async () => {
           const base = await requireTokenAndBusinessDomain(argv.bizDomain);
           const body = await listDataflows(base);
-          const table = renderTable(buildListTableRows(body.dags));
-          if (table) {
-            console.log(table);
+          if (argv.table) {
+            const table = renderTable(buildListTableRows(body.dags));
+            if (table) {
+              console.log(table);
+            }
+          } else {
+            console.log(JSON.stringify(body, null, 2));
           }
           return 0;
         });
@@ -200,6 +237,11 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
         command
           .positional("dagId", { type: "string" })
           .option("since", { type: "string" })
+          .option("table", {
+            type: "boolean",
+            default: false,
+            describe: "Output as human-readable table instead of JSON",
+          })
           .option("biz-domain", { alias: "bd", type: "string" }),
       async (argv: any) => {
         exitCode = await with401RefreshRetry(async () => {
@@ -245,9 +287,13 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
             }
           }
 
-          const table = renderTable(buildRunTableRows(results));
-          if (table) {
-            console.log(table);
+          if (argv.table) {
+            const table = renderTable(buildRunTableRows(results));
+            if (table) {
+              console.log(table);
+            }
+          } else {
+            console.log(JSON.stringify(results, null, 2));
           }
           return 0;
         });

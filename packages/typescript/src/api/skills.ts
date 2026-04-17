@@ -11,7 +11,7 @@ export type SkillStatus = "unpublish" | "published" | "offline";
 export type SkillFileType = "zip" | "content";
 
 export interface SkillSummary {
-  skill_id: string;
+  id: string;
   name: string;
   description?: string;
   version?: string;
@@ -39,14 +39,14 @@ export interface SkillFileSummary {
 }
 
 export interface SkillContentIndex {
-  skill_id: string;
+  id: string;
   url: string;
   files: SkillFileSummary[];
   status?: SkillStatus;
 }
 
 export interface SkillFileReadResult {
-  skill_id: string;
+  id: string;
   rel_path: string;
   url: string;
   mime_type?: string;
@@ -54,7 +54,7 @@ export interface SkillFileReadResult {
 }
 
 export interface RegisterSkillResult {
-  skill_id: string;
+  id: string;
   name: string;
   description?: string;
   version?: string;
@@ -63,12 +63,12 @@ export interface RegisterSkillResult {
 }
 
 export interface DeleteSkillResult {
-  skill_id: string;
+  id: string;
   deleted: boolean;
 }
 
 export interface UpdateSkillStatusResult {
-  skill_id: string;
+  id: string;
   status: SkillStatus;
 }
 
@@ -170,6 +170,19 @@ function unwrapEnvelope<T>(raw: string): T {
   return parsed as T;
 }
 
+/** Rename `skill_id` → `id` for consistent output with other modules. */
+function normalizeSkillId<T>(obj: T): T {
+  if (!obj || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map(normalizeSkillId) as unknown as T;
+  const record = obj as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const newKey = key === "skill_id" ? "id" : key;
+    out[newKey] = typeof value === "object" ? normalizeSkillId(value) : value;
+  }
+  return out as T;
+}
+
 function appendCommonListParams(url: URL, opts: {
   page?: number;
   pageSize?: number;
@@ -216,26 +229,26 @@ export async function listSkills(options: ListSkillsOptions): Promise<SkillListR
   if (options.status) url.searchParams.set("status", options.status);
   if (options.createUser) url.searchParams.set("create_user", options.createUser);
   const { body } = await fetchTextOrThrow(url, { headers: baseHeaders(options) });
-  return unwrapEnvelope<SkillListResult>(body);
+  return normalizeSkillId(unwrapEnvelope<SkillListResult>(body));
 }
 
 export async function listSkillMarket(options: ListSkillMarketOptions): Promise<SkillListResult> {
   const url = new URL(buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/market`));
   appendCommonListParams(url, options);
   const { body } = await fetchTextOrThrow(url, { headers: baseHeaders(options) });
-  return unwrapEnvelope<SkillListResult>(body);
+  return normalizeSkillId(unwrapEnvelope<SkillListResult>(body));
 }
 
 export async function getSkill(options: GetSkillOptions): Promise<SkillInfo> {
   const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}`);
   const { body } = await fetchTextOrThrow(url, { headers: baseHeaders(options) });
-  return unwrapEnvelope<SkillInfo>(body);
+  return normalizeSkillId(unwrapEnvelope<SkillInfo>(body));
 }
 
 export async function deleteSkill(options: GetSkillOptions): Promise<DeleteSkillResult> {
   const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}`);
   const { body } = await fetchTextOrThrow(url, { method: "DELETE", headers: baseHeaders(options) });
-  return unwrapEnvelope<DeleteSkillResult>(body);
+  return normalizeSkillId(unwrapEnvelope<DeleteSkillResult>(body));
 }
 
 export async function updateSkillStatus(options: UpdateSkillStatusOptions): Promise<UpdateSkillStatusResult> {
@@ -245,7 +258,7 @@ export async function updateSkillStatus(options: UpdateSkillStatusOptions): Prom
     headers: { ...baseHeaders(options), "content-type": "application/json" },
     body: JSON.stringify({ status: options.status }),
   });
-  return unwrapEnvelope<UpdateSkillStatusResult>(body);
+  return normalizeSkillId(unwrapEnvelope<UpdateSkillStatusResult>(body));
 }
 
 export async function registerSkillContent(options: RegisterSkillContentOptions): Promise<RegisterSkillResult> {
@@ -261,7 +274,7 @@ export async function registerSkillContent(options: RegisterSkillContentOptions)
     headers: { ...baseHeaders(options), "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  return unwrapEnvelope<RegisterSkillResult>(body);
+  return normalizeSkillId(unwrapEnvelope<RegisterSkillResult>(body));
 }
 
 export async function registerSkillZip(options: RegisterSkillZipOptions): Promise<RegisterSkillResult> {
@@ -277,13 +290,13 @@ export async function registerSkillZip(options: RegisterSkillZipOptions): Promis
     headers: baseHeaders(options),
     body: form,
   });
-  return unwrapEnvelope<RegisterSkillResult>(body);
+  return normalizeSkillId(unwrapEnvelope<RegisterSkillResult>(body));
 }
 
 export async function getSkillContentIndex(options: GetSkillOptions): Promise<SkillContentIndex> {
   const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/content`);
   const { body } = await fetchTextOrThrow(url, { headers: baseHeaders(options) });
-  return unwrapEnvelope<SkillContentIndex>(body);
+  return normalizeSkillId(unwrapEnvelope<SkillContentIndex>(body));
 }
 
 export async function fetchSkillContent(options: GetSkillOptions): Promise<string> {
@@ -302,7 +315,7 @@ export async function readSkillFile(options: ReadSkillFileOptions): Promise<Skil
     headers: { ...baseHeaders(options), "content-type": "application/json" },
     body: JSON.stringify({ rel_path: options.relPath }),
   });
-  return unwrapEnvelope<SkillFileReadResult>(body);
+  return normalizeSkillId(unwrapEnvelope<SkillFileReadResult>(body));
 }
 
 export async function fetchSkillFile(options: ReadSkillFileOptions): Promise<Uint8Array> {

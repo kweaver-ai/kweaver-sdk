@@ -157,7 +157,10 @@ export async function pollDataflowResults(options: PollDataflowOptions): Promise
         return latest;
       }
       if (latest.status === "failed" || latest.status === "error") {
-        const reason = latest.reason ? `: ${latest.reason}` : "";
+        const reasonVal = latest.reason;
+        const reason = reasonVal
+          ? `: ${typeof reasonVal === "string" ? reasonVal : JSON.stringify(reasonVal)}`
+          : "";
         throw new Error(`Dataflow run ${latest.status}${reason}`);
       }
     }

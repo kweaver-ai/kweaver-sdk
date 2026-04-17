@@ -350,22 +350,27 @@ async function runKnSearch(
 ): Promise<number> {
   let query: string | undefined;
   let onlySchema = false;
+  let knIdOverride: string | undefined;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === "--only-schema") {
       onlySchema = true;
+    } else if ((arg === "--kn-id" || arg === "-k") && args[i + 1]) {
+      knIdOverride = args[i + 1];
+      i += 1;
     } else if (!arg.startsWith("-") && !query) {
       query = arg;
     }
   }
 
   if (!query) {
-    console.error("Usage: kweaver context-loader kn-search <query> [--only-schema]");
+    console.error("Usage: kweaver context-loader kn-search <query> [--kn-id <id>] [--only-schema]");
     return 1;
   }
 
-  const result = await knSearch(options, { query, only_schema: onlySchema });
+  const effectiveOptions = knIdOverride ? { ...options, knId: knIdOverride } : options;
+  const result = await knSearch(effectiveOptions, { query, only_schema: onlySchema });
   console.log(formatOutput(result, pretty));
   return 0;
 }

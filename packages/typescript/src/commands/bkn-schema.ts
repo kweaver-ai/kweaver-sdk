@@ -1398,8 +1398,13 @@ query/execute: Query or execute actions. execute has side effects - only use whe
         console.error("Usage: kweaver bkn action-type create <kn-id> '<json>'");
         return 1;
       }
+      // Wrap in {"entries": [...]} if needed (ontology-manager expects this envelope)
+      const entry = JSON.parse(bodyJson) as unknown;
+      const wrapped = entry && typeof entry === "object" && "entries" in (entry as Record<string, unknown>)
+        ? bodyJson
+        : JSON.stringify({ entries: Array.isArray(entry) ? entry : [entry] });
       const token = await ensureValidToken();
-      const result = await createActionTypes({ baseUrl: token.baseUrl, accessToken: token.accessToken, knId, body: bodyJson, businessDomain: parsed.businessDomain });
+      const result = await createActionTypes({ baseUrl: token.baseUrl, accessToken: token.accessToken, knId, body: wrapped, businessDomain: parsed.businessDomain });
       console.log(formatCallOutput(result, parsed.pretty));
       return 0;
     } catch (error) {

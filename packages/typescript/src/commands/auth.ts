@@ -25,7 +25,6 @@ import {
 import { decodeJwtPayload } from "../config/jwt.js";
 import {
   buildCopyCommand,
-  eacpHydraAdminLogin,
   formatHttpError,
   isStudiowebShellUnavailableError,
   normalizeBaseUrl,
@@ -125,14 +124,6 @@ Login options:
       const password = readOption(args, "--password") ?? readOption(args, "-p");
       const usePlaywright = args.includes("--playwright");
       const httpSignin = args.includes("--http-signin");
-      const eacpHydraAdmin = args.includes("--eacp-hydra-admin");
-      const hydraAdminBase =
-        readOption(args, "--hydra-admin-base") ?? process.env.KWEAVER_HYDRA_ADMIN_BASE ?? "";
-      const eacpGetnewUrl =
-        readOption(args, "--eacp-getnew-url") ?? process.env.KWEAVER_EACP_GETNEW_URL ?? "";
-      const rsaPublicKeyFile =
-        readOption(args, "--rsa-public-key-file") ?? process.env.KWEAVER_RSA_PUBLIC_KEY_FILE ?? "";
-      const eacpClientIp = readOption(args, "--eacp-client-ip");
       const oauthProduct = readOption(args, "--oauth-product");
       const signinPublicKeyFile = readOption(args, "--signin-public-key-file");
       const clientId = readOption(args, "--client-id");
@@ -152,11 +143,6 @@ Login options:
         "--alias", "--client-id", "--client-secret", "--refresh-token",
         "--port", "--no-browser", "--username", "-u", "--password", "-p",
         "--http-signin",
-        "--eacp-hydra-admin",
-        "--hydra-admin-base",
-        "--eacp-getnew-url",
-        "--rsa-public-key-file",
-        "--eacp-client-ip",
         "--oauth-product",
         "--signin-public-key-file",
         "--playwright", "--insecure", "-k", "--no-auth", "--redirect-uri",
@@ -164,10 +150,6 @@ Login options:
       const KNOWN_VALUE_FLAGS = new Set([
         "--alias", "--client-id", "--client-secret", "--refresh-token",
         "--port", "--username", "-u", "--password", "-p", "--redirect-uri",
-        "--hydra-admin-base",
-        "--eacp-getnew-url",
-        "--rsa-public-key-file",
-        "--eacp-client-ip",
         "--oauth-product",
         "--signin-public-key-file",
       ]);
@@ -193,24 +175,12 @@ Login options:
       if (noAuth && noBrowser) {
         console.error("--no-auth does not require a browser; --no-browser is ignored.");
       }
-      if (noAuth && (username || password || usePlaywright || httpSignin || eacpHydraAdmin)) {
-        console.error("--no-auth cannot be used with Playwright login, HTTP sign-in, EACP login, or -u/-p.");
+      if (noAuth && (username || password || usePlaywright || httpSignin)) {
+        console.error("--no-auth cannot be used with Playwright login, HTTP sign-in, or -u/-p.");
         return 1;
       }
-      if (noBrowser && (username || password || usePlaywright || httpSignin || eacpHydraAdmin)) {
-        console.error("--no-browser cannot be used with Playwright login, HTTP sign-in, EACP login, or -u/-p.");
-        return 1;
-      }
-      if (httpSignin && eacpHydraAdmin) {
-        console.error("--http-signin cannot be used with --eacp-hydra-admin.");
-        return 1;
-      }
-      if (eacpHydraAdmin && usePlaywright) {
-        console.error("--eacp-hydra-admin cannot be used with --playwright.");
-        return 1;
-      }
-      if (eacpHydraAdmin && refreshToken) {
-        console.error("--eacp-hydra-admin cannot be used with --refresh-token.");
+      if (noBrowser && (username || password || usePlaywright || httpSignin)) {
+        console.error("--no-browser cannot be used with Playwright login, HTTP sign-in, or -u/-p.");
         return 1;
       }
       if (httpSignin && usePlaywright) {
@@ -223,17 +193,6 @@ Login options:
       }
       if (httpSignin && (!username || !password)) {
         console.error("--http-signin requires -u/--username and -p/--password.");
-        return 1;
-      }
-      if (eacpHydraAdmin && (!username || !password)) {
-        console.error("--eacp-hydra-admin requires -u/--username and -p/--password.");
-        return 1;
-      }
-      if (eacpHydraAdmin && (!hydraAdminBase.trim() || !eacpGetnewUrl.trim() || !rsaPublicKeyFile.trim())) {
-        console.error(
-          "--eacp-hydra-admin requires --hydra-admin-base, --eacp-getnew-url, and --rsa-public-key-file " +
-            "(or KWEAVER_HYDRA_ADMIN_BASE, KWEAVER_EACP_GETNEW_URL, KWEAVER_RSA_PUBLIC_KEY_FILE).",
-        );
         return 1;
       }
       if (noBrowser && refreshToken) {
@@ -254,20 +213,6 @@ Login options:
         console.log("Logging in with refresh token (no browser)...");
         token = await refreshTokenLogin(normalizedTarget, {
           clientId, clientSecret, refreshToken, tlsInsecure,
-        });
-      } else if (username && password && eacpHydraAdmin) {
-        console.log("Logging in (EACP + Hydra Admin)...");
-        token = await eacpHydraAdminLogin(normalizedTarget, {
-          username,
-          password,
-          hydraAdminBase: hydraAdminBase.trim(),
-          eacpGetnewUrl: eacpGetnewUrl.trim(),
-          rsaPublicKeyPemPath: rsaPublicKeyFile.trim(),
-          clientIp: eacpClientIp ?? undefined,
-          tlsInsecure,
-          port: customPort,
-          clientId: clientId ?? undefined,
-          clientSecret: clientSecret ?? undefined,
         });
       } else if (username && password && httpSignin) {
         console.log("Logging in (HTTP /oauth2/signin)...");

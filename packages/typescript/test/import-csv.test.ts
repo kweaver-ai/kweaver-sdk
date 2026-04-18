@@ -179,7 +179,7 @@ test("buildDagBody: creates correct DAG with trigger step + write step", () => {
   assert.ok(params.sync_model_fields !== undefined, "sync_model_fields must be present");
 });
 
-test("buildDagBody uses overwrite on first batch when recreate is true", () => {
+test("buildDagBody uses insert on first batch when recreate is true", () => {
   const options: DagBodyOptions = {
     datasourceId: "ds-123",
     datasourceType: "postgresql",
@@ -196,7 +196,7 @@ test("buildDagBody uses overwrite on first batch when recreate is true", () => {
   const body = buildDagBody(options);
   const writeStep = body.steps[1];
   const params = writeStep!.parameters as Record<string, unknown>;
-  assert.equal(params.operate_type, "overwrite");
+  assert.equal(params.operate_type, "insert");
 });
 
 test("buildDagBody uses append on later batches even when recreate is true", () => {

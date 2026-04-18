@@ -78,6 +78,8 @@ CLI ──→ SDK ──→ HTTP     (AI Agent / 终端用户通过 CLI 操作)
 
 ### 3.2 CLI 命令粒度选择
 
+> **CLI 命名与结构约定见 [`docs/cli_conventions.md`](./cli_conventions.md)。** 新增命令前必须对齐。
+
 | 方案 | 优点 | 缺点 |
 |------|------|------|
 | 一个命令覆盖全流程 | Agent 一次调用完成 | 参数太多，灵活性差 |

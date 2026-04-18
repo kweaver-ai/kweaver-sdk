@@ -29,7 +29,7 @@ export interface DataflowCreateBody {
 
 export interface DataflowResult {
   status: "success" | "completed" | "failed" | "error";
-  reason?: string;
+  reason?: unknown;
 }
 
 // ── createDataflow ────────────────────────────────────────────────────────────

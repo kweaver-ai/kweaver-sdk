@@ -43,3 +43,8 @@ test("parseToolUploadArgs rejects unsupported --metadata-type", () => {
     /metadata-type/i
   );
 });
+
+test("parseToolUploadArgs --compact flips pretty to false", () => {
+  const opts = parseToolUploadArgs(["--toolbox", "b1", "/tmp/spec.json", "--compact"]);
+  assert.equal(opts.pretty, false);
+});

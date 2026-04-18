@@ -15,7 +15,8 @@ Subcommands:
 
 Options:
   -bd, --biz-domain <s>   Business domain (default: bd_public)
-  --pretty                Pretty-print JSON (default)`;
+  --pretty                Pretty-print JSON (default)
+  --compact               Single-line JSON (pipeline-friendly)`;
 
 export async function runToolCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
@@ -77,6 +78,7 @@ export function parseToolUploadArgs(args: string[]): ToolUploadOptions {
     }
     if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) { businessDomain = args[++i]; continue; }
     if (a === "--pretty") { pretty = true; continue; }
+    if (a === "--compact") { pretty = false; continue; }
     if (!a.startsWith("-") && !filePath) { filePath = a; continue; }
   }
 
@@ -118,6 +120,7 @@ async function runToolList(args: string[]): Promise<number> {
     if (a === "--toolbox" && args[i + 1]) { boxId = args[++i]; continue; }
     if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) { businessDomain = args[++i]; continue; }
     if (a === "--pretty") { pretty = true; continue; }
+    if (a === "--compact") { pretty = false; continue; }
   }
   if (!boxId) { console.error("Missing required flag: --toolbox"); return 1; }
   if (!businessDomain) businessDomain = resolveBusinessDomain();

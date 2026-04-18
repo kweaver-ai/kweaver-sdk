@@ -27,6 +27,11 @@ test("parseToolboxCreateArgs defaults description to empty string", () => {
   assert.equal(opts.description, "");
 });
 
+test("parseToolboxCreateArgs --compact flips pretty to false", () => {
+  const opts = parseToolboxCreateArgs(["--name", "a", "--service-url", "u", "--compact"]);
+  assert.equal(opts.pretty, false);
+});
+
 test("parseToolboxSetStatusArgs extracts boxId after -bd flag (regression: bd value was being treated as boxId)", () => {
   const opts = parseToolboxSetStatusArgs(["-bd", "bd_x", "my-box-id"]);
   assert.equal(opts.boxId, "my-box-id");

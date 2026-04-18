@@ -12,9 +12,9 @@ import { buildHeaders } from "./headers.js";
 //   POST   /tool-box/{id}/tool         upload tool (multipart)
 //   POST   /tool-box/{id}/tools/status enable/disable (batch)
 //
-// TBD — verify against live backend during Task 8 (e2e):
+// Verified during Task 8 e2e against the live backend (2026-04-18):
 //   GET    /tool-box?keyword=&limit=&offset=  list toolboxes
-//   GET    /tool-box/{id}/tool                 list tools
+//   GET    /tool-box/{id}/tool                list tools
 
 const PATH = "/api/agent-operator-integration/v1/tool-box";
 

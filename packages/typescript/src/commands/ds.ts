@@ -535,7 +535,7 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
         const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
         process.stderr.write(`${elapsed}s\n`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = formatHttpError(err);
         process.stderr.write(`FAILED\n`);
         console.error(`[${tableName}] batch ${batchLabel} error: ${msg}`);
         batchFailed = true;

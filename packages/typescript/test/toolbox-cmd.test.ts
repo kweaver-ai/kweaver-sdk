@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseToolboxCreateArgs } from "../src/commands/toolbox.js";
+import { parseToolboxCreateArgs, parseToolboxSetStatusArgs } from "../src/commands/toolbox.js";
 
 test("parseToolboxCreateArgs requires --name and --service-url", () => {
   assert.throws(() => parseToolboxCreateArgs([]), /--name/);
@@ -25,4 +25,21 @@ test("parseToolboxCreateArgs reads all flags", () => {
 test("parseToolboxCreateArgs defaults description to empty string", () => {
   const opts = parseToolboxCreateArgs(["--name", "a", "--service-url", "u"]);
   assert.equal(opts.description, "");
+});
+
+test("parseToolboxSetStatusArgs extracts boxId after -bd flag (regression: bd value was being treated as boxId)", () => {
+  const opts = parseToolboxSetStatusArgs(["-bd", "bd_x", "my-box-id"]);
+  assert.equal(opts.boxId, "my-box-id");
+  assert.equal(opts.businessDomain, "bd_x");
+});
+
+test("parseToolboxSetStatusArgs accepts boxId before flags too", () => {
+  const opts = parseToolboxSetStatusArgs(["my-box-id", "-bd", "bd_x"]);
+  assert.equal(opts.boxId, "my-box-id");
+  assert.equal(opts.businessDomain, "bd_x");
+});
+
+test("parseToolboxSetStatusArgs throws when no boxId provided", () => {
+  assert.throws(() => parseToolboxSetStatusArgs([]), /box-id/);
+  assert.throws(() => parseToolboxSetStatusArgs(["-bd", "bd_x"]), /box-id/);
 });

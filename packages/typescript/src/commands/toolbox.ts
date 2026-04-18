@@ -109,8 +109,24 @@ async function runToolboxList(args: string[]): Promise<number> {
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
     if (a === "--keyword" && args[i + 1]) { keyword = args[++i]; continue; }
-    if (a === "--limit" && args[i + 1]) { limit = parseInt(args[++i], 10); continue; }
-    if (a === "--offset" && args[i + 1]) { offset = parseInt(args[++i], 10); continue; }
+    if (a === "--limit" && args[i + 1]) {
+      const n = parseInt(args[++i], 10);
+      if (Number.isNaN(n)) {
+        console.error("--limit must be a number");
+        return 1;
+      }
+      limit = n;
+      continue;
+    }
+    if (a === "--offset" && args[i + 1]) {
+      const n = parseInt(args[++i], 10);
+      if (Number.isNaN(n)) {
+        console.error("--offset must be a number");
+        return 1;
+      }
+      offset = n;
+      continue;
+    }
     if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) { businessDomain = args[++i]; continue; }
     if (a === "--pretty") { pretty = true; continue; }
   }
@@ -129,28 +145,44 @@ async function runToolboxList(args: string[]): Promise<number> {
 
 // ── publish / unpublish ───────────────────────────────────────────────────────
 
-async function runToolboxSetStatus(args: string[], status: "published" | "draft"): Promise<number> {
-  const boxId = args.find((a) => !a.startsWith("-"));
-  if (!boxId) {
-    console.error(`Usage: kweaver toolbox ${status === "published" ? "publish" : "unpublish"} <box-id>`);
-    return 1;
-  }
+export interface ToolboxSetStatusOptions {
+  boxId: string;
+  businessDomain: string;
+}
+
+export function parseToolboxSetStatusArgs(args: string[]): ToolboxSetStatusOptions {
+  let boxId = "";
   let businessDomain = "";
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
-    if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) { businessDomain = args[++i]; }
+    if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (!a.startsWith("-")) boxId = a;
   }
+  if (!boxId) throw new Error("Missing required argument: <box-id>");
   if (!businessDomain) businessDomain = resolveBusinessDomain();
+  return { boxId, businessDomain };
+}
+
+async function runToolboxSetStatus(args: string[], status: "published" | "draft"): Promise<number> {
+  let opts: ToolboxSetStatusOptions;
+  try { opts = parseToolboxSetStatusArgs(args); }
+  catch (e) {
+    console.error(`Usage: kweaver toolbox ${status === "published" ? "publish" : "unpublish"} <box-id>`);
+    return 1;
+  }
 
   const token = await ensureValidToken();
   await setToolboxStatus({
     baseUrl: token.baseUrl,
     accessToken: token.accessToken,
-    businessDomain,
-    boxId,
+    businessDomain: opts.businessDomain,
+    boxId: opts.boxId,
     status,
   });
-  console.error(`${status === "published" ? "Published" : "Unpublished"} toolbox ${boxId}`);
+  console.error(`${status === "published" ? "Published" : "Unpublished"} toolbox ${opts.boxId}`);
   return 0;
 }
 

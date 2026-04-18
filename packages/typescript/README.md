@@ -180,7 +180,9 @@ kweaver skill list/market/get/register/status/delete/content/read-file/download/
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
-kweaver call <path> [-X METHOD] [-d BODY] [-H header]
+kweaver toolbox create/list/get/publish/delete
+kweaver tool upload/list/enable/disable
+kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-F key=value]
 ```
 
 ### Dataflow CLI examples
@@ -210,6 +212,25 @@ kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{res-1}} L
 ```
 
 If both `-d` and `--query` / `--resource-type` are present, **only `-d` is used**.
+
+### Register an Agent toolbox
+
+```bash
+# 1. Create a toolbox pointing at your service
+kweaver toolbox create \
+  --name my_actions \
+  --service-url http://my-svc:8080 \
+  --description "Demo action backend"
+# → {"box_id":"<BOX_ID>"}
+
+# 2. Upload an OpenAPI spec as a tool
+kweaver tool upload --toolbox <BOX_ID> ./openapi.json
+# → {"success_ids":["<TOOL_ID>"]}
+
+# 3. Publish the toolbox and enable the tool
+kweaver toolbox publish <BOX_ID>
+kweaver tool enable --toolbox <BOX_ID> <TOOL_ID>
+```
 
 **No-auth platforms:** If OAuth is not enabled, use `kweaver auth <url> --no-auth` (or run a normal `auth login`; a **404** on `POST /oauth2/clients` switches to no-auth automatically). Credentials are still saved under `~/.kweaver/` and work with `auth use` / `auth list`. Optional: `KWEAVER_NO_AUTH=1` with `KWEAVER_BASE_URL` when no token env is set. SDK: `new KWeaverClient({ baseUrl, auth: false })` or `kweaver.configure({ baseUrl, auth: false })`.
 

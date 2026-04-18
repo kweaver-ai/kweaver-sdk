@@ -180,7 +180,7 @@ kweaver skill list/market/get/register/status/delete/content/read-file/download/
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
-kweaver toolbox create/list/get/publish/delete
+kweaver toolbox create/list/publish/unpublish/delete
 kweaver tool upload/list/enable/disable
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-F key=value]
 ```

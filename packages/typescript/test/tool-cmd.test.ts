@@ -25,3 +25,21 @@ test("parseToolStatusArgs accepts multiple tool ids", () => {
   assert.deepEqual(opts.toolIds, ["t1", "t2"]);
   assert.equal(opts.status, "enabled");
 });
+
+test("parseToolStatusArgs flows status='disabled' through", () => {
+  const opts = parseToolStatusArgs(["--toolbox", "b1", "t1"], "disabled");
+  assert.equal(opts.status, "disabled");
+});
+
+test("parseToolUploadArgs handles file-path before --toolbox", () => {
+  const opts = parseToolUploadArgs(["/tmp/spec.json", "--toolbox", "b1"]);
+  assert.equal(opts.boxId, "b1");
+  assert.equal(opts.filePath, "/tmp/spec.json");
+});
+
+test("parseToolUploadArgs rejects unsupported --metadata-type", () => {
+  assert.throws(
+    () => parseToolUploadArgs(["--toolbox", "b1", "--metadata-type", "swagger", "/tmp/spec.json"]),
+    /metadata-type/i
+  );
+});

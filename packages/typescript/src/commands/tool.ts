@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { listTools, setToolStatuses, uploadTool } from "../api/toolboxes.js";
 import { formatCallOutput } from "./call.js";
@@ -51,7 +52,7 @@ export async function runToolCommand(args: string[]): Promise<number> {
 export interface ToolUploadOptions {
   boxId: string;
   filePath: string;
-  metadataType: string;
+  metadataType: "openapi";  // tightened — only value the backend accepts today
   businessDomain: string;
   pretty: boolean;
 }
@@ -59,14 +60,21 @@ export interface ToolUploadOptions {
 export function parseToolUploadArgs(args: string[]): ToolUploadOptions {
   let boxId = "";
   let filePath = "";
-  let metadataType = "openapi";
+  let metadataType: "openapi" = "openapi";
   let businessDomain = "";
   let pretty = true;
 
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
     if (a === "--toolbox" && args[i + 1]) { boxId = args[++i]; continue; }
-    if (a === "--metadata-type" && args[i + 1]) { metadataType = args[++i]; continue; }
+    if (a === "--metadata-type" && args[i + 1]) {
+      const val = args[++i];
+      if (val !== "openapi") {
+        throw new Error(`Unsupported --metadata-type: ${val} (only "openapi" is supported)`);
+      }
+      metadataType = val;
+      continue;
+    }
     if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) { businessDomain = args[++i]; continue; }
     if (a === "--pretty") { pretty = true; continue; }
     if (!a.startsWith("-") && !filePath) { filePath = a; continue; }
@@ -83,6 +91,9 @@ async function runToolUpload(args: string[]): Promise<number> {
   try { opts = parseToolUploadArgs(args); }
   catch (e) { console.error(e instanceof Error ? e.message : String(e)); return 1; }
 
+  try { await access(opts.filePath); }
+  catch { console.error(`File not found: ${opts.filePath}`); return 1; }
+
   const token = await ensureValidToken();
   const body = await uploadTool({
     baseUrl: token.baseUrl,
@@ -90,7 +101,7 @@ async function runToolUpload(args: string[]): Promise<number> {
     businessDomain: opts.businessDomain,
     boxId: opts.boxId,
     filePath: opts.filePath,
-    metadataType: opts.metadataType as "openapi",
+    metadataType: opts.metadataType,
   });
   console.log(formatCallOutput(body, opts.pretty));
   return 0;

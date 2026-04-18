@@ -836,6 +836,7 @@ Options:
   --tables <a,b>       Tables to include in KN (default: all imported)
   --build (default)    Build after creation
   --no-build           Skip build
+  --recreate           Use "insert" mode on first batch (only effective for new tables)
   --timeout <n>        Build timeout in seconds (default: 300)
   -bd, --biz-domain    Business domain (default: bd_public)`;
 
@@ -847,6 +848,7 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
   batchSize: number;
   tables: string[];
   build: boolean;
+  recreate: boolean;
   timeout: number;
   businessDomain: string;
 } {
@@ -857,6 +859,7 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
   let batchSize = 500;
   let tablesStr = "";
   let build = true;
+  let recreate = false;
   let timeout = 300;
   let businessDomain = "";
 
@@ -892,6 +895,10 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
       build = false;
       continue;
     }
+    if (arg === "--recreate") {
+      recreate = true;
+      continue;
+    }
     if (arg === "--timeout" && args[i + 1]) {
       timeout = parseInt(args[++i], 10);
       if (Number.isNaN(timeout) || timeout < 1) timeout = 300;
@@ -911,7 +918,7 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
     throw new Error("Usage: kweaver bkn create-from-csv <ds-id> --files <glob> --name X [options]");
   }
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { dsId, files, name, tablePrefix, batchSize, tables, build, timeout, businessDomain };
+  return { dsId, files, name, tablePrefix, batchSize, tables, build, recreate, timeout, businessDomain };
 }
 
 export async function runKnCreateFromCsvCommand(args: string[]): Promise<number> {
@@ -935,6 +942,7 @@ export async function runKnCreateFromCsvCommand(args: string[]): Promise<number>
     "--table-prefix", options.tablePrefix,
     "--batch-size", String(options.batchSize),
     "-bd", options.businessDomain,
+    ...(options.recreate ? ["--recreate"] : []),
   ];
   const importResult = await runDsImportCsv(importArgs);
   if (importResult.code !== 0) {

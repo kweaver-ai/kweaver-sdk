@@ -32,8 +32,8 @@ export interface CreateToolboxOptions extends BaseOpts {
   name: string;
   description: string;
   serviceUrl: string;
-  metadataType?: string; // default: openapi
-  source?: string;       // default: custom
+  metadataType?: "openapi"; // sole value the backend accepts today
+  source?: string;          // default: custom
 }
 
 export async function createToolbox(opts: CreateToolboxOptions): Promise<string> {
@@ -79,7 +79,7 @@ export async function setToolboxStatus(opts: SetToolboxStatusOptions): Promise<v
 export interface UploadToolOptions extends BaseOpts {
   boxId: string;
   filePath: string;
-  metadataType?: string; // default: openapi
+  metadataType?: "openapi"; // sole value the backend accepts today
 }
 
 export async function uploadTool(opts: UploadToolOptions): Promise<string> {
@@ -117,7 +117,7 @@ export interface ListToolboxesOptions extends BaseOpts {
 
 export async function listToolboxes(opts: ListToolboxesOptions): Promise<string> {
   const qp = new URLSearchParams();
-  if (opts.keyword) qp.set("keyword", opts.keyword);
+  if (opts.keyword !== undefined) qp.set("keyword", opts.keyword);
   if (opts.limit !== undefined) qp.set("limit", String(opts.limit));
   if (opts.offset !== undefined) qp.set("offset", String(opts.offset));
   const suffix = qp.toString() ? `?${qp}` : "";

@@ -47,15 +47,17 @@ test("createToolbox POSTs JSON to /tool-box and returns body", async () => {
 });
 
 test("deleteToolbox DELETEs /tool-box/{id}", async () => {
-  let captured: { url: string; method?: string } | null = null;
+  let captured: { url: string; method?: string; init?: RequestInit } | null = null;
   const restore = mockFetch(async (url, init) => {
-    captured = { url: String(url), method: init?.method };
+    captured = { url: String(url), method: init?.method, init };
     return new Response("", { status: 200 });
   });
   try {
     await deleteToolbox({ baseUrl: BASE, accessToken: TOKEN, boxId: "b1" });
     assert.equal(captured!.url, `${BASE}/api/agent-operator-integration/v1/tool-box/b1`);
     assert.equal(captured!.method, "DELETE");
+    const authHeader = new Headers(captured!.init?.headers).get("authorization");
+    assert.equal(authHeader, `Bearer ${TOKEN}`);
   } finally { restore(); }
 });
 
@@ -129,6 +131,21 @@ test("listToolboxes GETs /tool-box with query params", async () => {
     assert.match(captured!.url, /\/tool-box\?/);
     assert.match(captured!.url, /keyword=demo/);
     assert.match(captured!.url, /limit=20/);
+    assert.match(captured!.url, /offset=0/);
+  } finally { restore(); }
+});
+
+test("listToolboxes with no params produces no query string", async () => {
+  let captured: { url: string } | null = null;
+  const restore = mockFetch(async (url) => {
+    captured = { url: String(url) };
+    return new Response(JSON.stringify({ entries: [] }), { status: 200 });
+  });
+  try {
+    await listToolboxes({ baseUrl: BASE, accessToken: TOKEN });
+    assert.ok(captured);
+    assert.equal(captured!.url, `${BASE}/api/agent-operator-integration/v1/tool-box`);
+    assert.ok(!captured!.url.includes("?"), `URL should have no '?' suffix; got ${captured!.url}`);
   } finally { restore(); }
 });
 

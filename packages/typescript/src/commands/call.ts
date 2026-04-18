@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { isNoAuth } from "../config/no-auth.js";
 import { HttpError } from "../utils/http.js";
@@ -231,8 +233,6 @@ Options:
     let requestBody: BodyInit | undefined = invocation.body;
 
     if (invocation.formFields && invocation.formFields.length > 0) {
-      const { readFile } = await import("node:fs/promises");
-      const { basename } = await import("node:path");
       const form = new FormData();
       for (const field of invocation.formFields) {
         if (field.kind === "string") {

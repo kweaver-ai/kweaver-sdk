@@ -133,6 +133,19 @@ test("parseCallArgs rejects malformed -F", () => {
   assert.throws(() => parseCallArgs(["/api/x", "-F", "noequalsign"]), /-F/);
 });
 
+test("parseCallArgs accumulates multiple -F fields in order", () => {
+  const inv = parseCallArgs([
+    "/api/x",
+    "-F", "metadata_type=openapi",
+    "-F", "data=@/tmp/spec.json",
+  ]);
+  assert.equal(inv.formFields?.length, 2);
+  assert.equal(inv.formFields?.[0].name, "metadata_type");
+  assert.equal(inv.formFields?.[0].kind, "string");
+  assert.equal(inv.formFields?.[1].name, "data");
+  assert.equal(inv.formFields?.[1].kind, "file");
+});
+
 test("parseTokenArgs accepts no flags", () => {
   assert.doesNotThrow(() => parseTokenArgs([]));
   assert.throws(() => parseTokenArgs(["--verbose"]), /Usage: kweaver token/);

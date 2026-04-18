@@ -12,6 +12,8 @@ import { runExploreCommand } from "./commands/explore.js";
 import { runDataviewCommand } from "./commands/dataview.js";
 import { runSkillCommand } from "./commands/skill.js";
 import { runTokenCommand } from "./commands/token.js";
+import { runToolboxCommand } from "./commands/toolbox.js";
+import { runToolCommand } from "./commands/tool.js";
 import { runVegaCommand } from "./commands/vega.js";
 
 function printHelp(): void {
@@ -100,6 +102,15 @@ Usage:
   kweaver skill read-file <skill-id> <rel-path> [--raw] [--output file]
   kweaver skill download|install <skill-id> [path] [options]
 
+  kweaver toolbox create --name <n> --service-url <url> [--description <d>] [-bd value]
+  kweaver toolbox list [--keyword X] [--limit N] [--offset N] [-bd value]
+  kweaver toolbox publish|unpublish <box-id> [-bd value]
+  kweaver toolbox delete <box-id> [-y] [-bd value]
+
+  kweaver tool upload --toolbox <box-id> <openapi-spec-path> [--metadata-type openapi]
+  kweaver tool list --toolbox <box-id> [-bd value]
+  kweaver tool enable|disable --toolbox <box-id> <tool-id>... [-bd value]
+
   kweaver vega health|stats|inspect
   kweaver vega catalog list|get|health|test-connection|discover|resources [options]
   kweaver vega resource list|get|query [options]
@@ -130,6 +141,8 @@ Commands:
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
   skill          Skill registry and market (register, search, progressive read, download/install)
+  toolbox        Agent toolbox lifecycle (create, list, publish, delete)
+  tool           Tools inside a toolbox (upload OpenAPI spec, list, enable/disable)
   vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)
   context-loader Context-loader MCP (config, tools, resources, prompts, kn-search, query-*, etc.)
   help           Show this message`);
@@ -215,6 +228,14 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "skill") {
     return runSkillCommand(rest);
+  }
+
+  if (command === "toolbox") {
+    return runToolboxCommand(rest);
+  }
+
+  if (command === "tool") {
+    return runToolCommand(rest);
   }
 
   if (command === "context-loader" || command === "context") {

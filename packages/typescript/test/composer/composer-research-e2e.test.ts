@@ -18,7 +18,7 @@
  * Run:
  *   bun test test/composer/composer-research-e2e.test.ts
  */
-import { describe, it, before, after } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 
 import { ensureValidToken } from "../../src/auth/oauth.js";
@@ -35,23 +35,21 @@ import {
 } from "../../src/commands/composer-engine.js";
 import { validateFlow, compileToDph, validateDphSyntax } from "../../src/commands/composer-flow.js";
 
-// ── Auth setup ─────────────────────────────────────────────────────────────
+// ── Auth setup (top-level await so `canRun` is resolved before describe) ───
 
 let canRun = false;
-let getToken: TokenProvider;
-let businessDomain: string;
+let getToken: TokenProvider = () => { throw new Error("auth not initialized"); };
+let businessDomain = "bd_public";
 
-before(async () => {
-  try {
-    const t = await ensureValidToken();
-    canRun = true;
-    getToken = () => ensureValidToken();
-    businessDomain = resolveBusinessDomain("") || "bd_public";
-    console.error(`[research-e2e] Connected to ${t.baseUrl}, bd=${businessDomain}`);
-  } catch (err) {
-    console.error(`[research-e2e] Skipping: no valid auth token (${err instanceof Error ? err.message : err})`);
-  }
-});
+try {
+  const t = await ensureValidToken();
+  canRun = true;
+  getToken = () => ensureValidToken();
+  businessDomain = resolveBusinessDomain("") || "bd_public";
+  console.error(`[research-e2e] Connected to ${t.baseUrl}, bd=${businessDomain}`);
+} catch (err) {
+  console.error(`[research-e2e] Skipping: no valid auth token (${err instanceof Error ? err.message : err})`);
+}
 
 // ── Test: full pipeline with research-synthesize template ─────────────────
 
@@ -95,10 +93,10 @@ describe("e2e: research-synthesize pipeline (parallel + merge)", () => {
     assert.ok(compiled.dph.includes("@researcher_b"), `Missing @researcher_b:\n${compiled.dph}`);
 
     // Verify merge expression for synthesizer
-    assert.ok(
-      compiled.dph.includes("$_researcher_a_text + $_researcher_b_text"),
-      `Missing merge expression:\n${compiled.dph}`,
-    );
+    // Merge is emitted as a /prompt/ template block containing both refs
+    assert.ok(compiled.dph.includes("/prompt/"), `Missing /prompt/ merge block:\n${compiled.dph}`);
+    assert.ok(compiled.dph.includes("$researcher_a.answer.answer"), `Missing researcher_a merge ref:\n${compiled.dph}`);
+    assert.ok(compiled.dph.includes("$researcher_b.answer.answer"), `Missing researcher_b merge ref:\n${compiled.dph}`);
     assert.ok(compiled.dph.includes("@synthesizer"), `Missing @synthesizer:\n${compiled.dph}`);
 
     // answer_var should be synthesizer (last agent in the flow)
@@ -234,7 +232,7 @@ describe("e2e: research-synthesize pipeline (parallel + merge)", () => {
   });
 
   // Step 6: run orchestrator — tests actual DPH parallel routing
-  it("orchestrator returns synthesized response via DPH routing", { skip: !canRun, timeout: 180000 }, async () => {
+  it("orchestrator returns synthesized response via DPH routing", { skip: !canRun, timeout: 300000 }, async () => {
     assert.ok(createResult?.orchestratorId, "orchestrator required");
 
     let fullText = "";
@@ -255,17 +253,9 @@ describe("e2e: research-synthesize pipeline (parallel + merge)", () => {
       },
     );
 
-    console.error(`[research-e2e] Orchestrator response: ${fullText.length} chars`);
+    console.error(`[research-e2e] Orchestrator response: ${fullText.length} chars — ${fullText.slice(0, 200)}…`);
     console.error(`[research-e2e] Progress events: ${progressEvents.length}`);
-
-    if (fullText.length === 0) {
-      console.error("[research-e2e] WARNING: DPH returned empty — likely publish permission issue.");
-      console.error("[research-e2e] Orchestrator was created and configured correctly (verified in step 5).");
-      console.error("[research-e2e] DPH routing requires sub-agents to be published. Skipping assertion.");
-    } else {
-      assert.ok(fullText.length > 50, `Synthesized response too short: ${fullText}`);
-      console.error(`[research-e2e] Synthesized output (first 500 chars): ${fullText.slice(0, 500)}`);
-    }
+    assert.ok(fullText.length > 100, `Synthesized response too short (${fullText.length} chars): ${fullText}`);
     assert.ok(result.conversationId.length > 0, "should have conversation ID");
   });
 

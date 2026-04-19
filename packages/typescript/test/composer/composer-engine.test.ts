@@ -295,7 +295,7 @@ describe("e2e pipeline: complex hand-crafted flow (parallel + switch + merge)", 
     const compiled = compileToDph(complexFlow);
 
     // Should have triage call
-    assert.ok(compiled.dph.includes("@triage(query=$query) -> triage"), `Missing triage call. DPH:\n${compiled.dph}`);
+    assert.ok(compiled.dph.includes("@triage(query=$_user_query.q) -> triage"), `Missing triage call. DPH:\n${compiled.dph}`);
 
     // Should have if/elif/else structure
     assert.ok(compiled.dph.includes("/if/"), `Missing /if/. DPH:\n${compiled.dph}`);
@@ -307,7 +307,9 @@ describe("e2e pipeline: complex hand-crafted flow (parallel + switch + merge)", 
     assert.ok(compiled.dph.includes("/parallel/"), `Missing /parallel/. DPH:\n${compiled.dph}`);
 
     // Should have merge expression for synthesizer
-    assert.ok(compiled.dph.includes("$_code_analyzer_text + $_log_analyzer_text"), `Missing merge expression. DPH:\n${compiled.dph}`);
+    // Merge is emitted as a /prompt/ template block (not a `+` expression)
+    assert.ok(compiled.dph.includes("$code_analyzer.answer.answer"), `Missing code_analyzer merge ref. DPH:\n${compiled.dph}`);
+    assert.ok(compiled.dph.includes("$log_analyzer.answer.answer"), `Missing log_analyzer merge ref. DPH:\n${compiled.dph}`);
 
     // Should have all agents referenced
     for (const agent of agents) {

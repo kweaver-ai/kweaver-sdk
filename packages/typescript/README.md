@@ -186,6 +186,8 @@ kweaver bkn subgraph / search
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
+kweaver composer create/get/delete (orchestrator from prompt|template|config; run via `agent chat <id>`)
+kweaver composer template list/get
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
@@ -222,6 +224,45 @@ kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{res-1}} L
 ```
 
 If both `-d` and `--query` / `--resource-type` are present, **only `-d` is used**.
+
+### Keeping a Composer
+
+`kweaver composer` creates multi-agent orchestrators from a natural-language
+prompt, a built-in template, or a `ComposerConfig` JSON file. The orchestrator
+and its sub-agents are **plain agents on the platform** — once created they
+persist until you delete them. There is no separate composer identity or
+local state to manage: just remember the orchestrator id, and use the existing
+`agent` subcommands for the day-to-day lifecycle.
+
+```bash
+# 1. Create — JSON goes to stdout; `--save-to` also writes it to a file
+kweaver composer create --prompt "..." --save-to ./pipeline.json --compact
+# → {"orchestrator_id":"01KPJ...","sub_agent_ids":[...], "config": {...}}
+
+ID=$(jq -r .orchestrator_id ./pipeline.json)
+
+# 2. Try it out — composer has no `run`; use `agent chat`
+kweaver agent chat $ID -m "a first query" --stream
+
+# 3. Keep it — rename, publish to share with the team
+kweaver agent update $ID --name "Customer Scoring v1"
+kweaver agent publish $ID
+
+# 4. When you're done, retire it (also removes the sub-agents it owns)
+kweaver composer delete $ID --cascade -y
+```
+
+Notes:
+- **No auto-save.** The CLI does not store any composer state under `~/.kweaver/`.
+  If you forget the id, the orchestrator still exists on the platform; find it
+  via `kweaver agent list` (it's an agent with `is_dolphin_mode=1`).
+- **`--cascade`** reads `config.skills.agents[].agent_key` to resolve and delete
+  the orchestrator's sub-agents. If a sub-agent is shared with another
+  orchestrator, cascade will delete it too — use with care.
+- **Iterating.** To tweak an existing orchestrator's flow, re-run `composer
+  create` to get a new id, then `composer delete --cascade -y` the old one.
+  There is no `composer update` — the visual editor in the Explorer web UI is
+  the intended path for iterative DPH editing.
 
 ### Register an Agent toolbox
 

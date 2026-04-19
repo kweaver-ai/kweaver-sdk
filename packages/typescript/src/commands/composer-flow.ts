@@ -60,12 +60,23 @@ export function compileToDph(flow: FlowDo): CompileResult {
   const ctx: CompileContext = { mergeCounter: 0, lastOutputVar: "", agentOutputVars: new Set() };
   const lines = compileSteps(flow.do, 0, ctx);
 
+  // Wrap `$query` so orchestrator-scope binding becomes a plain string.
+  // Passing `$query` directly to `@sub_agent(query=$query)` fails with
+  // "agent_input query must be a string type" — the platform's parameter
+  // type check sees the upstream binding as non-string even though at
+  // runtime the value concats as a string. Writing into a dict and reading
+  // back via `.q` severs that upstream type info.
+  const body = lines.join("\n").replace(/\$query\b/g, "$_user_query.q");
+  const dph = body.includes("$_user_query.q")
+    ? `{"q": $query} -> _user_query\n${body}`
+    : body;
+
   // answer_var must match the last output variable in the DPH script.
   // We do NOT append "$lastVar -> answer" because DPH's assign_block
   // evals expressions eagerly and will fail with "invalid syntax"
   // if the variable doesn't exist yet at parse time.
   return {
-    dph: lines.join("\n"),
+    dph,
     answerVar: ctx.lastOutputVar || "answer",
   };
 }
@@ -97,29 +108,20 @@ function compileSteps(steps: FlowStep[], indent: number, ctx: CompileContext): s
 }
 
 /**
- * Emit lines that extract text from agent output variables before passing
- * them to the next agent call.  Agent outputs are full objects; the text
- * answer lives in the `.answer` field.  DPH doesn't support property access
- * in call parameters, so we emit an intermediate assignment:
- *   $agent.answer -> _agent_text
- * and then reference $_agent_text in the call.
+ * An agent's output is a nested object; the actual text lives at
+ * `.answer.answer` (the outer `.answer` is the full message record with
+ * metadata, the inner `.answer` is the streamed text). So whenever a prior
+ * agent's output is referenced as a plain `$agent_ref`, we rewrite it to
+ * `$agent_ref.answer.answer` so downstream calls receive a string.
  */
-
-/** If ref is an agent-output var, emit an assignment line and return the new simple var. */
-function extractIfNeeded(
+function resolveRef(
   ref: string,
   agentOutputVars: Set<string>,
-  lines: string[],
-  pad: string,
-  ctx: CompileContext,
 ): string {
   if (!ref.startsWith("$")) return ref;
   const varName = ref.slice(1).split(".")[0];
   if (agentOutputVars.has(varName) && !ref.includes(".")) {
-    const textVar = `_${varName}_text`;
-    lines.push(`${pad}${ref}.answer -> ${textVar}`);
-    ctx.extractedVars ??= new Set();
-    return `$${textVar}`;
+    return `${ref}.answer.answer`;
   }
   return ref;
 }
@@ -130,21 +132,32 @@ function compileCallStep(step: CallStep, pad: string, ctx: CompileContext): stri
 
   if (typeof step.input === "string") {
     if (step.input.includes(" + ")) {
-      // Merge expression: extract each agent-output part first
-      const parts = step.input.split(/\s*\+\s*/);
-      const resolved = parts
-        .map((part) => extractIfNeeded(part, ctx.agentOutputVars, lines, pad, ctx))
-        .join(" + ");
+      // Merge via `/prompt/` template block. The `+` operator in DPH inlines
+      // resolved string values into a Python eval expression, which breaks
+      // on arbitrary content (unescaped backticks, quotes, newlines in
+      // markdown code fences → "invalid syntax"). A prompt block safely
+      // interpolates each $var into a templated string.
+      // Note: chained `$var.field.field` only resolves inside @call params or
+      // /prompt/ bodies; it cannot appear as a standalone DPH statement
+      // (`$x.answer.answer -> _v` triggers an eval parse failure). So we
+      // keep them inline in the prompt template and let the prompt block
+      // handle interpolation.
+      const parts = step.input.split(/\s*\+\s*/).map((p) => resolveRef(p, ctx.agentOutputVars));
       const mergeVar = `_merged_${++ctx.mergeCounter}`;
-      lines.push(`${pad}${resolved} -> ${mergeVar}`);
-      lines.push(`${pad}@${step.call}(query=$${mergeVar}) -> ${outputVar}`);
+      lines.push(`${pad}/prompt/`);
+      for (let i = 0; i < parts.length; i++) {
+        lines.push(`${pad}${parts[i]}`);
+        if (i < parts.length - 1) lines.push("");
+      }
+      lines.push(`${pad}-> ${mergeVar}`);
+      lines.push(`${pad}@${step.call}(query=$${mergeVar}.answer) -> ${outputVar}`);
     } else {
-      const resolved = extractIfNeeded(step.input, ctx.agentOutputVars, lines, pad, ctx);
+      const resolved = resolveRef(step.input, ctx.agentOutputVars);
       lines.push(`${pad}@${step.call}(query=${resolved}) -> ${outputVar}`);
     }
   } else {
     const params = Object.entries(step.input)
-      .map(([k, v]) => `${k}=${extractIfNeeded(v, ctx.agentOutputVars, lines, pad, ctx)}`)
+      .map(([k, v]) => `${k}=${resolveRef(v, ctx.agentOutputVars)}`)
       .join(", ");
     lines.push(`${pad}@${step.call}(${params}) -> ${outputVar}`);
   }

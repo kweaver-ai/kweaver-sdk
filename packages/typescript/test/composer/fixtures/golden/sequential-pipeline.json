@@ -9,5 +9,5 @@
       { "call": "reviewer", "input": "$developer" }
     ]
   },
-  "expected_dph": "@architect(query=$query) -> architect\n$architect.answer -> _architect_text\n@developer(query=$_architect_text) -> developer\n$developer.answer -> _developer_text\n@reviewer(query=$_developer_text) -> reviewer"
+  "expected_dph": "{\"q\": $query} -> _user_query\n@architect(query=$_user_query.q) -> architect\n@developer(query=$architect.answer.answer) -> developer\n@reviewer(query=$developer.answer.answer) -> reviewer"
 }

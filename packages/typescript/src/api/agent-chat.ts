@@ -135,6 +135,9 @@ function stringFromAnswerObject(obj: Record<string, unknown>): string {
   const block = obj.block_answer as Record<string, unknown> | undefined;
   const src = answer ?? block;
   if (!src || typeof src !== "object") return "";
+  // Dolphin orchestrator streams text at `answer_type_other.answer.answer` —
+  // i.e. `src.answer` is the streamed text string (not a nested object).
+  if (typeof src.answer === "string" && src.answer) return src.answer;
   const d = typeof src.description === "string" ? src.description : "";
   const c = typeof src.code === "string" ? src.code : "";
   const s = typeof src.solution === "string" ? src.solution : "";

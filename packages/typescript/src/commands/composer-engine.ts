@@ -866,8 +866,12 @@ export async function createAgents(
 
       // Publish if permitted (non-fatal — unpublished agents can still be used)
       try {
-        await publishAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, businessDomain });
-      } catch { /* permission may be restricted */ }
+        const pubRes = await publishAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, businessDomain });
+        console.error(`[composer/publish] ${agentDef.name} ok: ${pubRes.slice(0, 200)}`);
+      } catch (err) {
+        const body = err && typeof err === "object" && "body" in err ? (err as { body: string }).body : "";
+        console.error(`[composer/publish] ${agentDef.name} FAILED: ${err instanceof Error ? err.message : err} — ${body.slice(0, 300)}`);
+      }
 
       const info = await fetchAgentInfo({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, version: "v0", businessDomain });
       agentKeyMap[agentDef.ref] = info.key;
@@ -899,8 +903,28 @@ export async function createAgents(
 
     // 3. Create orchestrator agent with processed DPH script
     const isDolphinMode = config.orchestrator.is_dolphin_mode ?? 1;
-    // Register sub-agents as callable skills in the orchestrator
-    const agentSkills = Object.values(agentKeyMap).map((key) => ({ agent_key: key }));
+    // Register sub-agents as callable skills in the orchestrator. The
+    // `agent_input` schema declaration is REQUIRED — without it the platform
+    // falls back to wrapping the parameter in an object, and @sub(query=$query)
+    // fails at runtime with "agent_input query must be a string type".
+    const agentSkills = Object.values(agentKeyMap).map((key) => ({
+      agent_key: key,
+      agent_version: "v0",
+      agent_input: [
+        {
+          enable: true,
+          map_type: "auto",
+          input_name: "query",
+          input_type: "string",
+          input_desc: "query变量",
+        },
+      ],
+      intervention: false,
+      intervention_confirmation_message: "",
+      data_source_config: { type: "self_configured", specific_inherit: "" },
+      llm_config: { type: "self_configured" },
+      agent_timeout: 0,
+    }));
     const orchBody = buildAgentCreateBody(
       config.orchestrator.name,
       config.orchestrator.profile,
@@ -987,6 +1011,64 @@ export async function runOrchestrator(
   );
 
   return { conversationId: result.conversationId ?? conversationId ?? "" };
+}
+
+// ── Reverse lookup helpers (for stateless CLI operations) ────────────────────
+
+/**
+ * Fetch the full stored config of an orchestrator (or any agent).
+ * Returns the `config` object from /agent-market/agent/{id}/version/v0.
+ */
+export async function fetchOrchestratorConfig(
+  orchestratorId: string,
+  getToken: TokenProvider,
+  businessDomain: string,
+): Promise<Record<string, unknown>> {
+  const t = await getToken();
+  const { fetchWithRetry } = await import("../utils/http.js");
+  const { buildHeaders } = await import("../api/headers.js");
+  const base = t.baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/agent-factory/v3/agent-market/agent/${encodeURIComponent(orchestratorId)}/version/v0?is_visit=true`;
+  const res = await fetchWithRetry(url, { method: "GET", headers: buildHeaders(t.accessToken, businessDomain) });
+  const body = await res.text();
+  if (!res.ok) {
+    const { HttpError } = await import("../utils/http.js");
+    throw new HttpError(res.status, res.statusText, body);
+  }
+  const parsed = JSON.parse(body) as { config?: Record<string, unknown> };
+  return parsed.config ?? {};
+}
+
+/**
+ * Given an orchestrator id, resolve its sub-agent ids by reading
+ * `config.skills.agents[].agent_key` and reverse-looking-up each key.
+ * Returns ids of sub-agents that could be resolved; silently skips any
+ * that fail to resolve (e.g. already deleted, permission denied).
+ */
+export async function listSubAgentIds(
+  orchestratorId: string,
+  getToken: TokenProvider,
+  businessDomain: string,
+): Promise<string[]> {
+  const config = await fetchOrchestratorConfig(orchestratorId, getToken, businessDomain);
+  const skills = config.skills as { agents?: Array<{ agent_key?: string }> } | undefined;
+  const keys = (skills?.agents ?? [])
+    .map((a) => a.agent_key)
+    .filter((k): k is string => typeof k === "string" && k.length > 0);
+  if (keys.length === 0) return [];
+
+  const t = await getToken();
+  const { getAgentByKey } = await import("../api/agent-list.js");
+  const ids: string[] = [];
+  for (const key of keys) {
+    try {
+      const raw = await getAgentByKey({ baseUrl: t.baseUrl, accessToken: t.accessToken, key, businessDomain });
+      const parsed = JSON.parse(raw) as { id?: string; data?: { id?: string } };
+      const id = parsed.id ?? parsed.data?.id;
+      if (id) ids.push(id);
+    } catch { /* skip unresolvable */ }
+  }
+  return ids;
 }
 
 export async function cleanupAgents(

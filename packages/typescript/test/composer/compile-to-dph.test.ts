@@ -47,7 +47,7 @@ describe("compileToDph", () => {
       do: [{ call: "architect", input: "$query", output: "design" }],
     };
     const result = compileToDph(flow);
-    assert.equal(result.dph, "@architect(query=$query) -> design");
+    assert.equal(result.dph, '{"q": $query} -> _user_query\n@architect(query=$_user_query.q) -> design');
     assert.equal(result.answerVar, "design");
   });
 
@@ -56,7 +56,7 @@ describe("compileToDph", () => {
       do: [{ call: "synth", input: "$a + $b" }],
     };
     const result = compileToDph(flow);
-    assert.equal(result.dph, "$a + $b -> _merged_1\n@synth(query=$_merged_1) -> synth");
+    assert.equal(result.dph, "/prompt/\n$a\n\n$b\n-> _merged_1\n@synth(query=$_merged_1.answer) -> synth");
     assert.equal(result.answerVar, "synth");
   });
 });

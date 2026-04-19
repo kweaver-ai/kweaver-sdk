@@ -4,6 +4,7 @@ import { runAgentCommand } from "./commands/agent.js";
 import { runAuthCommand } from "./commands/auth.js";
 import { runKnCommand } from "./commands/bkn.js";
 import { runCallCommand } from "./commands/call.js";
+import { runComposerCommand } from "./commands/composer.js";
 import { runConfigCommand } from "./commands/config.js";
 import { runContextLoaderCommand } from "./commands/context-loader.js";
 import { runDataflowCommand } from "./commands/dataflow.js";
@@ -104,6 +105,13 @@ Usage:
   kweaver skill read-file <skill-id> <rel-path> [--raw] [--output file]
   kweaver skill download|install <skill-id> [path] [options]
 
+  kweaver composer create --prompt "<text>" [--save-to <file>] [-bd value] [--pretty|--compact]
+  kweaver composer create --template <id> [--save-to <file>] [-bd value] [--pretty|--compact]
+  kweaver composer create --config <file.json> [--save-to <file>] [-bd value] [--pretty|--compact]
+  kweaver composer get <orchestrator-id> [-bd value] [--pretty|--compact]
+  kweaver composer delete <orchestrator-id> [--cascade] [-y|--yes] [-bd value]
+  kweaver composer template list|get [<template-id>] [--pretty|--compact]
+
   kweaver toolbox create --name <n> --service-url <url> [--description <d>] [-bd value]
   kweaver toolbox list [--keyword X] [--limit N] [--offset N] [-bd value]
   kweaver toolbox publish|unpublish <box-id> [-bd value]
@@ -153,6 +161,7 @@ Commands:
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
   skill          Skill registry and market (register, search, progressive read, download/install)
+  composer       Create orchestrator agents from prompts/templates/config (get, delete, template list|get)
   toolbox        Agent toolbox lifecycle (create, list, publish, delete, export, import)
   tool           Tools inside a toolbox (upload OpenAPI spec, list, enable/disable)
   vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)
@@ -240,6 +249,10 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "skill") {
     return runSkillCommand(rest);
+  }
+
+  if (command === "composer") {
+    return runComposerCommand(rest);
   }
 
   if (command === "toolbox") {

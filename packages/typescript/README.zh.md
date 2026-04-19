@@ -174,6 +174,8 @@ kweaver bkn subgraph
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
+kweaver composer create/get/delete（由 prompt|template|config 生成 orchestrator；运行用 `agent chat <id>`）
+kweaver composer template list/get
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader config set/use/list/show
@@ -210,6 +212,42 @@ kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{res-1}} L
 若同时提供 `-d` 与 `--query` / `--resource-type`，**仅以 `-d` 为准**。
 
 **无 OAuth 的平台：** 使用 `kweaver auth <url> --no-auth`，或照常 `auth login`；若 `POST /oauth2/clients` 返回 **404**，CLI 会提示并自动保存为 no-auth。凭据仍在 `~/.kweaver/`，可用 `auth use` / `auth list` 切换。可选环境变量 `KWEAVER_NO_AUTH=1`（未设置 `KWEAVER_TOKEN` 时）配合 `KWEAVER_BASE_URL`。SDK：`new KWeaverClient({ baseUrl, auth: false })` 或 `kweaver.configure({ baseUrl, auth: false })`。
+
+### 保留一个 Composer
+
+`kweaver composer` 从自然语言 prompt、内置模板或 `ComposerConfig` JSON 文件生成
+多 Agent 编排器（orchestrator）。orchestrator 和它的 sub-agents **就是平台上的
+普通 agent**——创建后会一直保留，直到你显式删除。CLI 不维护任何本地状态：只要
+记住 orchestrator id，日常维护都走已有的 `agent` 子命令。
+
+```bash
+# 1. 创建 — JSON 打到 stdout；`--save-to` 同时写到文件
+kweaver composer create --prompt "..." --save-to ./pipeline.json --compact
+# → {"orchestrator_id":"01KPJ...","sub_agent_ids":[...], "config": {...}}
+
+ID=$(jq -r .orchestrator_id ./pipeline.json)
+
+# 2. 试跑 — composer 没有 `run`；直接用 `agent chat`
+kweaver agent chat $ID -m "第一个问题" --stream
+
+# 3. 保留 — 改名、发布给团队共享
+kweaver agent update $ID --name "客户评分 v1"
+kweaver agent publish $ID
+
+# 4. 不要了再清理（连同 sub-agents 一并删除）
+kweaver composer delete $ID --cascade -y
+```
+
+说明：
+- **不自动落盘。**CLI 不在 `~/.kweaver/` 下保存任何 composer 状态。如果 id 弄丢了，
+  orchestrator 仍然存在于平台；用 `kweaver agent list` 找回（它是一条
+  `is_dolphin_mode=1` 的 agent）。
+- **`--cascade`** 通过读取 `config.skills.agents[].agent_key` 反查并删除 orchestrator
+  所属的 sub-agents。如果某个 sub-agent 被其他 orchestrator 共享引用，cascade 也会
+  把它删掉——请谨慎使用。
+- **迭代。**要改已有 orchestrator 的 flow：重新 `composer create` 拿新 id，再
+  `composer delete --cascade -y` 旧的。Composer 没有 `update`——Explorer Web UI 的
+  可视化编辑器才是 DPH 迭代编辑的正确路径。
 
 ## 环境变量
 

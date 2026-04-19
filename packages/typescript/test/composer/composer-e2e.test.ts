@@ -14,7 +14,7 @@
  * Run:
  *   bun test test/composer/composer-e2e.test.ts
  */
-import { describe, it, before, after } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
 
 import { ensureValidToken } from "../../src/auth/oauth.js";
@@ -31,23 +31,21 @@ import {
 } from "../../src/commands/composer-engine.js";
 import { validateFlow, compileToDph } from "../../src/commands/composer-flow.js";
 
-// ── Auth setup ─────────────────────────────────────────────────────────────
+// ── Auth setup (top-level await so `canRun` is resolved before describe) ───
 
 let canRun = false;
-let getToken: TokenProvider;
-let businessDomain: string;
+let getToken: TokenProvider = () => { throw new Error("auth not initialized"); };
+let businessDomain = "bd_public";
 
-before(async () => {
-  try {
-    const t = await ensureValidToken();
-    canRun = true;
-    getToken = () => ensureValidToken();
-    businessDomain = resolveBusinessDomain("") || "bd_public";
-    console.error(`[composer-e2e] Connected to ${t.baseUrl}, bd=${businessDomain}`);
-  } catch (err) {
-    console.error(`[composer-e2e] Skipping: no valid auth token (${err instanceof Error ? err.message : err})`);
-  }
-});
+try {
+  const t = await ensureValidToken();
+  canRun = true;
+  getToken = () => ensureValidToken();
+  businessDomain = resolveBusinessDomain("") || "bd_public";
+  console.error(`[composer-e2e] Connected to ${t.baseUrl}, bd=${businessDomain}`);
+} catch (err) {
+  console.error(`[composer-e2e] Skipping: no valid auth token (${err instanceof Error ? err.message : err})`);
+}
 
 // ── Test: full pipeline with code-development template ─────────────────────
 
@@ -155,8 +153,8 @@ describe("e2e: composer engine pipeline", () => {
     console.error(`[composer-e2e] Orchestrator DPH stored: ${(storedConfig.dolphin as string).slice(0, 200)}`);
   });
 
-  // Step 5: test orchestrator run (DPH routing) — may fail without publish permission
-  it("orchestrator returns response via DPH routing", { skip: !canRun, timeout: 180000 }, async () => {
+  // Step 5: orchestrator DPH routing produces real streamed text
+  it("orchestrator returns response via DPH routing", { skip: !canRun, timeout: 300000 }, async () => {
     assert.ok(createResult?.orchestratorId, "orchestrator required");
 
     let fullText = "";
@@ -168,16 +166,8 @@ describe("e2e: composer engine pipeline", () => {
       { onTextDelta: (ft) => { fullText = ft; } },
     );
 
-    console.error(`[composer-e2e] Orchestrator response: ${fullText.length} chars`);
-
-    if (fullText.length === 0) {
-      console.error("[composer-e2e] WARNING: DPH returned empty — likely publish permission issue on this platform.");
-      console.error("[composer-e2e] Orchestrator was created and configured correctly (verified in step 4).");
-      console.error("[composer-e2e] DPH routing requires sub-agents to be published. Skipping assertion.");
-      // Don't fail — this is a known platform limitation
-    } else {
-      assert.ok(fullText.length > 50, `Response too short: ${fullText}`);
-    }
+    console.error(`[composer-e2e] Orchestrator response: ${fullText.length} chars — ${fullText.slice(0, 200)}…`);
+    assert.ok(fullText.length > 100, `Response too short (${fullText.length} chars): ${fullText}`);
     assert.ok(result.conversationId.length > 0, "should have conversation ID");
   });
 

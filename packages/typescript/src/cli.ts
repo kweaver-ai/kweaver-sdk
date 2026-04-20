@@ -27,7 +27,7 @@ Usage:
   kweaver auth <platform-url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
   kweaver auth login <platform-url>          (alias for auth <url>)
   kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (run on host without browser)
-  kweaver auth change-password [<platform-url>] -u <account> [-o <old>] [-n <new>] [--insecure|-k]
+  kweaver auth change-password [<platform-url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
   kweaver auth whoami [platform-url|alias] [--json]
   kweaver auth export [platform-url|alias] [--json]
   kweaver auth status [platform-url|alias]

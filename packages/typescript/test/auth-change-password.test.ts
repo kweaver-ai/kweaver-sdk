@@ -133,6 +133,57 @@ test("change-password: omitted URL falls back to current platform", async () => 
   }
 });
 
+test("change-password: omitted -u defaults to active user displayName", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+  const t = `${Date.now()}-${Math.random()}`;
+  const auth = await import(`${pathToFileURL(join(process.cwd(), "src/commands/auth.ts")).href}?${t}`);
+  const store = await import(`${pathToFileURL(join(process.cwd(), "src/config/store.ts")).href}?${t}`);
+
+  const baseUrl = "https://plat.example.com";
+  store.saveNoAuthPlatform(`${baseUrl}/`, { tlsInsecure: false });
+  store.setCurrentPlatform(baseUrl);
+  // Persist a synthetic token with a displayName so the command can default the account.
+  const userId = "default";
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "no-auth",
+    tokenType: "Bearer",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+    displayName: "alice",
+  });
+  store.setActiveUser(baseUrl, userId);
+
+  let postBody = "";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (requestUrl(input).includes("/api/eacp/v1/auth1/modifypassword")) {
+      postBody = typeof init?.body === "string" ? init.body : "";
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response("unexpected", { status: 500 });
+  };
+
+  try {
+    const code = await auth.runAuthCommand([
+      "change-password",
+      "-o",
+      "oldsecret",
+      "-n",
+      "newsecret123456",
+    ]);
+    assert.equal(code, 0);
+    const parsed = JSON.parse(postBody) as { account?: string };
+    assert.equal(parsed.account, "alice");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("change-password: omitted URL with no current platform exits 1", async () => {
   const configDir = createConfigDir();
   process.env.KWEAVERC_CONFIG_DIR = configDir;

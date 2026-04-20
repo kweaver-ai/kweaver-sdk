@@ -14,6 +14,7 @@ import {
   listUsers,
   loadClientConfig,
   loadTokenConfig,
+  loadUserTokenConfig,
   resolveBusinessDomain,
   resolvePlatformIdentifier,
   resolveUserId,
@@ -53,7 +54,7 @@ kweaver auth users [url|alias]       List all user profiles (with usernames) for
 kweaver auth switch [url|alias] --user <id|username>  Switch active user for a platform
 kweaver auth logout [url|alias] [--user <id>]  Logout (clear local token)
 kweaver auth delete <url|alias> [--user <id>]  Delete saved credentials
-kweaver auth change-password [<url>] -u <account> [-o <old>] [-n <new>]  Change password (EACP modifypassword; URL optional, no token required)
+kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>]  Change password (EACP modifypassword; URL & account optional, no token required)
 
 Login options:
   --alias <name>         Save platform with a short alias (use with use / status / logout)
@@ -838,7 +839,7 @@ Change the EACP account password via POST /api/eacp/v1/auth1/modifypassword.
 No saved OAuth token is required.
 
 Options:
-  -u, --account <name>       Account / login name (required)
+  -u, --account <name>       Account / login name (defaults to the current active user on the resolved platform)
   -o, --old-password <pwd>   Current password (omit on TTY to be prompted)
   -n, --new-password <pwd>   New password, 6-100 characters (omit on TTY to be prompted)
   --insecure, -k             Skip TLS certificate verification
@@ -890,15 +891,26 @@ Platform URL is optional; defaults to the current active platform (kweaver auth 
     return 1;
   }
 
-  const account =
+  let account =
     readOption(flagArgs, "--account") ?? readOption(flagArgs, "-u");
   let oldPassword = readOption(flagArgs, "--old-password") ?? readOption(flagArgs, "-o");
   let newPassword = readOption(flagArgs, "--new-password") ?? readOption(flagArgs, "-n");
   const tlsInsecure = flagArgs.includes("--insecure") || flagArgs.includes("-k");
 
+  // Default account from the active user on the resolved platform.
   if (!account?.trim()) {
-    console.error("Missing required -u/--account.");
-    return 1;
+    const activeUser = getActiveUser(normalizedTarget);
+    const tok = activeUser ? loadUserTokenConfig(normalizedTarget, activeUser) : null;
+    const defaultAccount = tok?.displayName?.trim();
+    if (defaultAccount) {
+      account = defaultAccount;
+      console.log(`Using current account: ${account}`);
+    } else {
+      console.error(
+        "Cannot determine current account on the platform. Pass -u/--account, or log in first (kweaver auth login ...).",
+      );
+      return 1;
+    }
   }
 
   const interactive = process.stdin.isTTY === true && process.stderr.isTTY === true;

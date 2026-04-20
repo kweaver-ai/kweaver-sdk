@@ -11,7 +11,7 @@ kweaver auth login <url> [--alias <name>] [--no-auth] [--no-browser] [-u user] [
                          [--new-password <pwd>] [--http-signin]
                          [--port <n>] [--insecure|-k]
 kweaver auth <url> [--alias <name>] ...              # 同上（简写）
-kweaver auth change-password [<url>] -u <account> [-o <old>] [-n <new>]
+kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>]
                                  [--insecure|-k]
 kweaver auth whoami [url|alias] [--json]              # 显示当前用户身份
 kweaver auth export [url|alias] [--json]              # 导出凭据（用于无浏览器的服务器）
@@ -123,7 +123,7 @@ auth.login(no_browser=True)
 - **OAuth2 授权码登录**（默认）：浏览器流程，获取 `access_token` + `refresh_token`，过期自动刷新。
 - **HTTP 密码登录**（`-u`/`-p`，可选 `--http-signin`）：直接 `POST /oauth2/signin`，无需浏览器，可拿到 `refresh_token`。公钥优先取登录页，否则使用内置候选。缺失的 `-u`/`-p` 会从 stdin 提示输入（TTY 下密码隐藏）。DIP 可设 `KWEAVER_OAUTH_PRODUCT=dip`。解密失败等见 `packages/typescript/README.md` 环境变量说明。
 - **初始密码（错误码 401001017）**：服务端仍要求使用初始密码时，HTTP 登录会失败。交互终端可确认后按提示设置新密码（6–100 字符）并自动重试登录；非交互环境请使用 `--new-password <pwd>` 后重跑同一登录命令。
-- **修改密码**（`kweaver auth change-password [<url>] -u <account> -o <old> -n <new>`）：调用 EACP `POST /api/eacp/v1/auth1/modifypassword`，**不需要**已保存的 OAuth token；`<url>` 省略时使用当前激活平台（`kweaver auth use`）。TTY 可省略 `-o`/`-n` 以隐藏输入。
+- **修改密码**（`kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>]`）：调用 EACP `POST /api/eacp/v1/auth1/modifypassword`，**不需要**已保存的 OAuth token；`<url>` 省略时使用当前激活平台（`kweaver auth use`），`-u` 省略时使用该平台**当前激活账号**（`token.json` 中的 `displayName`）。TTY 可省略 `-o`/`-n` 以隐藏输入。
 - **`--no-browser` 粘贴流程**（不带 `-u`/`-p`）：打印授权 URL，由用户在任意浏览器登录后粘贴回调 URL 或 `code` 到终端。
 - **`--no-browser` + `-u`/`-p`**：等价于 HTTP 密码登录，缺失字段同样从 stdin 提示。
 - Token 有效期 1 小时

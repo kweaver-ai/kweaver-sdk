@@ -64,7 +64,7 @@ kweaver [--user <userId|username>] <command> [subcommand] [options]
 
 | 命令组 | 说明 | 常用命令 | 详细参考 |
 |--------|------|---------|---------|
-| `auth` | 认证管理（支持多账号） | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `--no-browser`、`-u/-p` HTTP `/oauth2/signin`；**初始密码**（401001017）下 TTY 可交互改密，脚本用 `--new-password`；`auth change-password [<url>] -u …`（EACP 改密；URL 可省略，使用当前平台；无需 token）；`auth list` / `auth users` / `auth switch`；全局 `--user` / `KWEAVER_USER`；**无当前平台时** `auth status` / `whoami` 可用 env 兜底（见 `references/auth.md`） | `references/auth.md` |
+| `auth` | 认证管理（支持多账号） | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `--no-browser`、`-u/-p` HTTP `/oauth2/signin`；**初始密码**（401001017）下 TTY 可交互改密，脚本用 `--new-password`；`auth change-password [<url>] [-u …]`（EACP 改密；URL 与 `-u` 都可省略，分别回退到当前平台与当前激活账号；无需 token）；`auth list` / `auth users` / `auth switch`；全局 `--user` / `KWEAVER_USER`；**无当前平台时** `auth status` / `whoami` 可用 env 兜底（见 `references/auth.md`） | `references/auth.md` |
 | `token` | 打印当前 access token（自动刷新） | `token` | — |
 | `config` | **平台业务域（优先于多数 bkn/agent/ds 操作）** | `config show`, `config list-bd`, `config set-bd <uuid>` | `references/config.md` |
 | `bkn` | BKN 知识网络管理、Schema、查询、Action | `bkn validate`/`push` 默认检测 `.bkn` 编码并规范为 UTF-8，可用 `--no-detect-encoding` 或 `--source-encoding gb18030`；另有 `pull`、`object-type`、`search`、`create-from-ds`/`create-from-csv` 等，见 `references/bkn.md` | `references/bkn.md` |

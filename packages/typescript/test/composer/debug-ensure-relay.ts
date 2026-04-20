@@ -12,7 +12,7 @@
 import { ensureValidToken } from "../../src/auth/oauth.js";
 import { resolveBusinessDomain } from "../../src/config/store.js";
 import { fetchAgentInfo } from "../../src/api/agent-chat.js";
-import { listAgents, createAgent, publishAgent } from "../../src/api/agent-list.js";
+import { listPersonalAgents, createAgent, publishAgent } from "../../src/api/agent-list.js";
 import {
   ensureComposerRelay,
   getDefaultLlms,
@@ -29,7 +29,7 @@ async function main() {
 
   const makeDeps = () => ({
     listAgents: async () => {
-      const raw = await listAgents({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd, limit: 20 });
+      const raw = await listPersonalAgents({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd, name: COMPOSER_RELAY_NAME, size: 20 });
       const list = JSON.parse(raw) as { entries?: Array<{ id?: string; name?: string }> };
       return list.entries ?? [];
     },
@@ -59,8 +59,8 @@ async function main() {
   const sameId = first.id === second.id;
   console.error(`\n[debug-ensure-relay] idempotent: ${sameId ? "✅" : "❌"}`);
 
-  // Also verify the created agent actually carries the canary
-  const raw = await listAgents({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd, name: COMPOSER_RELAY_NAME, limit: 20 });
+  // Also verify exactly one relay exists in the user's personal space
+  const raw = await listPersonalAgents({ baseUrl: t.baseUrl, accessToken: t.accessToken, businessDomain: bd, name: COMPOSER_RELAY_NAME, size: 20 });
   const list = JSON.parse(raw) as { entries?: Array<{ id?: string; name?: string }> };
   const reserved = (list.entries ?? []).filter((e) => e.name === COMPOSER_RELAY_NAME);
   console.error(`[debug-ensure-relay] relays on platform with reserved name: ${reserved.length} (expect 1)`);

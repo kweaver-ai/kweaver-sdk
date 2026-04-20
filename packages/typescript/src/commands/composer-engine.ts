@@ -652,12 +652,15 @@ async function findRelayAgent(
   businessDomain: string,
 ): Promise<{ id: string; key: string; version: string } | null> {
   try {
-    const { listAgents, createAgent, publishAgent } = await import("../api/agent-list.js");
+    const { listPersonalAgents, createAgent, publishAgent } = await import("../api/agent-list.js");
     const llms = await getDefaultLlms(baseUrl, accessToken, businessDomain);
 
     const info = await ensureComposerRelay({
       listAgents: async () => {
-        const raw = await listAgents({ baseUrl, accessToken, businessDomain, limit: 20 });
+        // Use personal-space scope — /published/agent is marketplace-scoped and
+        // does NOT return the user's own created agents, which would defeat
+        // the "reuse" half of ensure-or-create.
+        const raw = await listPersonalAgents({ baseUrl, accessToken, businessDomain, name: COMPOSER_RELAY_NAME, size: 20 });
         const list = JSON.parse(raw) as { entries?: Array<{ id?: string; name?: string }> };
         return list.entries ?? [];
       },

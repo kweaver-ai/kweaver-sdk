@@ -349,7 +349,151 @@ describe("e2e pipeline: complex hand-crafted flow (parallel + switch + merge)", 
   });
 });
 
-// ── 7. sanitizeAgentName ─────────────────────────────────────────────────────
+// ── 7. compileAndValidateWithRetry (Gate 2 retry loop) ──────────────────────
+
+import { compileAndValidateWithRetry } from "../../src/commands/composer-engine.js";
+import type { ComposerConfig } from "../../src/commands/composer-engine.js";
+import type { DphValidationResult } from "../../src/commands/composer-flow.js";
+
+describe("compileAndValidateWithRetry", () => {
+  const baseConfig: ComposerConfig = {
+    name: "Test",
+    description: "desc",
+    agents: [{ ref: "agent_a", name: "Agent A", profile: "p", system_prompt: "s" }],
+    orchestrator: {
+      name: "Orch",
+      profile: "orch",
+      system_prompt: "You orchestrate.",
+      flow: { do: [{ call: "agent_a", input: "$query" }] },
+    },
+  };
+
+  const okValidator = async (_dph: string): Promise<DphValidationResult> =>
+    ({ is_valid: true, error_message: "", line_number: 0 });
+
+  it("initial compile+validate succeeds → regenerate not called", async () => {
+    let regenerateCalls = 0;
+    const result = await compileAndValidateWithRetry(
+      baseConfig,
+      async () => { regenerateCalls++; return null; },
+      okValidator,
+      1,
+    );
+    assert.ok(result.ok, `expected ok, got ${JSON.stringify(result)}`);
+    if (result.ok) {
+      assert.ok(result.dph.length > 0);
+      assert.ok(result.answerVar.length > 0);
+      assert.strictEqual(result.validatorSkipped, false);
+    }
+    assert.strictEqual(regenerateCalls, 0, "regenerate should not be called when first attempt succeeds");
+  });
+
+  it("Gate 2 fails, regenerate succeeds, second attempt valid → returns second result", async () => {
+    let validatorCalls = 0;
+    const flakyValidator = async (_dph: string): Promise<DphValidationResult> => {
+      validatorCalls++;
+      return validatorCalls === 1
+        ? { is_valid: false, error_message: "bad syntax near @foo", line_number: 3 }
+        : { is_valid: true, error_message: "", line_number: 0 };
+    };
+
+    let regenerateCalls = 0;
+    let capturedHint = "";
+    const regenerate = async (hint: string): Promise<ComposerConfig | null> => {
+      regenerateCalls++;
+      capturedHint = hint;
+      // Return a different config so we can tell which attempt won
+      return { ...baseConfig, name: "TestRetry" };
+    };
+
+    const result = await compileAndValidateWithRetry(baseConfig, regenerate, flakyValidator, 1);
+    assert.ok(result.ok, `expected ok, got ${JSON.stringify(result)}`);
+    if (result.ok) {
+      assert.strictEqual(result.config.name, "TestRetry", "should use regenerated config");
+    }
+    assert.strictEqual(regenerateCalls, 1);
+    assert.strictEqual(validatorCalls, 2);
+    assert.ok(capturedHint.includes("bad syntax near @foo"), `hint missing error: ${capturedHint}`);
+    assert.ok(capturedHint.includes("3"), `hint missing line number: ${capturedHint}`);
+  });
+
+  it("all attempts fail → returns ok:false with last error", async () => {
+    const badValidator = async (_dph: string): Promise<DphValidationResult> =>
+      ({ is_valid: false, error_message: "still broken", line_number: 7 });
+
+    let regenerateCalls = 0;
+    const result = await compileAndValidateWithRetry(
+      baseConfig,
+      async () => { regenerateCalls++; return { ...baseConfig, name: "Retry" }; },
+      badValidator,
+      1,
+    );
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.ok(result.error.includes("still broken"));
+      assert.strictEqual(result.lineNumber, 7);
+    }
+    assert.strictEqual(regenerateCalls, 1, "regenerate called once for maxRetries=1");
+  });
+
+  it("regenerate returns null → returns ok:false without further tries", async () => {
+    let validatorCalls = 0;
+    const badValidator = async (_dph: string): Promise<DphValidationResult> => {
+      validatorCalls++;
+      return { is_valid: false, error_message: "broken", line_number: 1 };
+    };
+
+    const result = await compileAndValidateWithRetry(
+      baseConfig,
+      async () => null,
+      badValidator,
+      2,
+    );
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(validatorCalls, 1, "no second validation when regenerate returned null");
+  });
+
+  it("validator returns skipped=true → treated as valid, flag exposed", async () => {
+    const skippedValidator = async (_dph: string): Promise<DphValidationResult> =>
+      ({ is_valid: true, error_message: "", line_number: 0, skipped: true });
+
+    let regenerateCalls = 0;
+    const result = await compileAndValidateWithRetry(
+      baseConfig,
+      async () => { regenerateCalls++; return null; },
+      skippedValidator,
+      1,
+    );
+    assert.ok(result.ok);
+    if (result.ok) {
+      assert.strictEqual(result.validatorSkipped, true);
+    }
+    assert.strictEqual(regenerateCalls, 0, "skipped should not trigger retry");
+  });
+
+  it("maxRetries=2: first two fail, third succeeds → ok", async () => {
+    let validatorCalls = 0;
+    const validator = async (_dph: string): Promise<DphValidationResult> => {
+      validatorCalls++;
+      return validatorCalls < 3
+        ? { is_valid: false, error_message: `fail ${validatorCalls}`, line_number: validatorCalls }
+        : { is_valid: true, error_message: "", line_number: 0 };
+    };
+
+    let regenerateCalls = 0;
+    const result = await compileAndValidateWithRetry(
+      baseConfig,
+      async () => { regenerateCalls++; return baseConfig; },
+      validator,
+      2,
+    );
+    assert.ok(result.ok, `expected ok, got ${JSON.stringify(result)}`);
+    assert.strictEqual(regenerateCalls, 2);
+    assert.strictEqual(validatorCalls, 3);
+  });
+});
+
+// ── 8. sanitizeAgentName ─────────────────────────────────────────────────────
 
 describe("sanitizeAgentName", () => {
   it("replaces special chars with underscore", () => {

@@ -1,6 +1,6 @@
 import { createAgent, publishAgent, unpublishAgent, deleteAgent } from "../api/agent-list.js";
 import { fetchAgentInfo, sendChatRequestStream, type ProgressItem } from "../api/agent-chat.js";
-import { type FlowDo, compileToDph, validateFlow, validateDphSyntax } from "./composer-flow.js";
+import { type FlowDo, type DphValidationResult, compileToDph, validateFlow, validateDphSyntax } from "./composer-flow.js";
 
 export type { FlowDo } from "./composer-flow.js";
 
@@ -419,7 +419,7 @@ export function buildAgentCreateBody(
 
 // ── LLM generation ───────────────────────────────────────────────────────────
 
-const FLOW_GENERATION_SYSTEM_PROMPT = `You are a multi-agent workflow designer. Given a user's natural language description, design a multi-agent workflow and output a ComposerConfig JSON.
+export const FLOW_GENERATION_SYSTEM_PROMPT = `You are a multi-agent workflow designer. Given a user's natural language description, design a multi-agent workflow and output a ComposerConfig JSON.
 
 ## Flow Schema
 
@@ -621,6 +621,57 @@ function logBadCase(gate: string, prompt: string, llmOutput: unknown, error: str
   console.error(`[composer/badcase] ${JSON.stringify(entry)}`);
 }
 
+export type CompileValidateResult =
+  | { ok: true; config: ComposerConfig; dph: string; answerVar: string; validatorSkipped: boolean }
+  | { ok: false; error: string; lineNumber: number };
+
+/**
+ * Compile the flow in `initialConfig` to DPH and validate its syntax (Gate 2).
+ * On syntax failure, invokes `regenerate(hint)` to obtain a new config (LLM feedback
+ * loop) and retries up to `maxRetries` times. `regenerate` returning null aborts.
+ * A `skipped: true` validator result is treated as valid but surfaced via
+ * `validatorSkipped` so callers can warn the user.
+ */
+export async function compileAndValidateWithRetry(
+  initialConfig: ComposerConfig,
+  regenerate: (errorHint: string) => Promise<ComposerConfig | null>,
+  validator: (dph: string) => Promise<DphValidationResult>,
+  maxRetries: number,
+): Promise<CompileValidateResult> {
+  let current = initialConfig;
+  let lastError = "unknown";
+  let lastLine = 0;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const flow = current.orchestrator.flow;
+    if (!flow) return { ok: false, error: "config has no flow to compile", lineNumber: 0 };
+
+    const compiled = compileToDph(flow);
+    const syntaxResult = await validator(compiled.dph);
+
+    if (syntaxResult.is_valid) {
+      return {
+        ok: true,
+        config: current,
+        dph: compiled.dph,
+        answerVar: compiled.answerVar,
+        validatorSkipped: syntaxResult.skipped === true,
+      };
+    }
+
+    lastError = syntaxResult.error_message;
+    lastLine = syntaxResult.line_number;
+
+    if (attempt === maxRetries) break;
+    const hint = `Your compiled DPH had a syntax error at line ${lastLine}: ${lastError}. Please fix and output again.`;
+    const next = await regenerate(hint);
+    if (!next) break;
+    current = next;
+  }
+
+  return { ok: false, error: lastError, lineNumber: lastLine };
+}
+
 /**
  * Generate a ComposerConfig by calling an LLM via an existing published agent.
  * Uses Flow schema generation with Gate 1 (validateFlow) retry loop + Gate 2 (validateDphSyntax).
@@ -714,16 +765,50 @@ export async function generateConfig(
     ] });
 
     if (config.orchestrator.flow && config.orchestrator.flow.do.length > 0) {
-      const compiled = compileToDph(config.orchestrator.flow);
-      const syntaxResult = await validateDphSyntax(compiled.dph);
+      const regenerateForGate2 = async (hint: string): Promise<ComposerConfig | null> => {
+        emit({ type: "progress", items: [
+          { agent_name: "Initializing...", status: "completed", description: "Agent ready" },
+          { agent_name: "Designing workflow...", status: "running", description: "Fixing DPH syntax error" },
+          { agent_name: "Validating...", status: "pending", description: "Waiting" },
+        ] });
 
-      if (!syntaxResult.is_valid) {
-        logBadCase("gate2", prompt, config, `DPH syntax error at line ${syntaxResult.line_number}: ${syntaxResult.error_message}`);
-        emit({ type: "text", fullText: `⚠️ Compiled DPH failed syntax check: ${syntaxResult.error_message}\n\nUsing template fallback.`, currentText: "" });
+        const retryQuery = `${FLOW_GENERATION_SYSTEM_PROMPT}\n\n---\n\nUser request: ${prompt}\n\n${hint}`;
+        let fullText = "";
+        await sendChatRequestStream(
+          { baseUrl: t.baseUrl, accessToken: t.accessToken, agentId: relayAgent.id, agentKey: relayAgent.key, agentVersion: relayAgent.version, query: retryQuery, stream: true, businessDomain },
+          { onTextDelta: (ft: string, seg: string) => { fullText = ft; emit({ type: "text", fullText: ft, currentText: seg }); } },
+        );
+
+        const parsed = extractJsonFromLLMResponse(fullText);
+        if (!parsed || !validateComposerConfig(parsed)) {
+          logBadCase("gate2-retry", prompt, fullText, "regenerated output is not valid ComposerConfig JSON");
+          return null;
+        }
+        if (parsed.orchestrator.flow) {
+          const agentRefs = parsed.agents.map((a) => a.ref);
+          const flowErrors = validateFlow(parsed.orchestrator.flow, agentRefs);
+          if (flowErrors.length > 0) {
+            logBadCase("gate2-retry", prompt, parsed, flowErrors.join("; "));
+            return null;
+          }
+        }
+        return parsed;
+      };
+
+      const result = await compileAndValidateWithRetry(config, regenerateForGate2, validateDphSyntax, 1);
+
+      if (!result.ok) {
+        logBadCase("gate2", prompt, config, `DPH syntax error at line ${result.lineNumber}: ${result.error}`);
+        emit({ type: "text", fullText: `⚠️ Compiled DPH failed syntax check: ${result.error}\n\nUsing template fallback.`, currentText: "" });
         return buildConfigFromPrompt(prompt);
       }
 
-      config.orchestrator.dolphin = compiled.dph;
+      if (result.validatorSkipped) {
+        console.error("[composer] warning: Gate 2 (DPH syntax check) skipped — dolphin parser unavailable");
+      }
+
+      config = result.config;
+      config.orchestrator.dolphin = result.dph;
     }
 
     if (config.orchestrator.is_dolphin_mode === undefined) {

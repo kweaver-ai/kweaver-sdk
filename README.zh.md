@@ -237,7 +237,7 @@ result = client.dataflows.execute(
 kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
 # -u/-p（无论是否带 --http-signin）：HTTP POST /oauth2/signin（可拿 refresh_token）；缺失的用户名/密码会从 stdin 提示输入（TTY 下密码隐藏）
 # 初始密码 401001017：TTY 会提示修改；脚本请加 --new-password <pwd>。
-kweaver auth change-password <url> -u <account> [-o <old>] [-n <new>] [--public-key-file <pem>] [--insecure|-k]
+kweaver auth change-password [<url>] -u <account> [-o <old>] [-n <new>] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   （无浏览器主机）
 kweaver auth export [url|alias] [--json]
 kweaver auth status / whoami [url|alias] [--json]   # 无 ~/.kweaver/ 当前平台时可配 KWEAVER_BASE_URL+KWEAVER_TOKEN

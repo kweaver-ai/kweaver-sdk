@@ -156,7 +156,7 @@ const skillMd = await client.skills.fetchContent("skill-id");
 kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
 # -u/-p (with or without --http-signin): HTTP POST /oauth2/signin (yields refresh_token). Missing -u/-p are prompted from stdin (password hidden when TTY).
 # If the server returns error 401001017 (initial password), TTY users get a prompt to set a new password; non-interactive scripts must pass --new-password <pwd>.
-kweaver auth change-password <url> -u <account> [-o <old>] [-n <new>] [--public-key-file <pem>] [--insecure|-k]
+kweaver auth change-password [<url>] -u <account> [-o <old>] [-n <new>] [--insecure|-k]
 # EACP POST /api/eacp/v1/auth1/modifypassword — no OAuth token required. Omit -o/-n on a TTY to be prompted.
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless login)
 kweaver auth export [url|alias] [--json]   (export command to run on a headless host)

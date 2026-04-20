@@ -237,7 +237,7 @@ result = client.dataflows.execute(
 kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
 # -u/-p (with or without --http-signin): HTTP POST /oauth2/signin (yields refresh_token). Missing -u/-p are prompted from stdin (password hidden on TTY).
 # Initial-password lockout (401001017): TTY prompts to change password; scripts use --new-password <pwd>.
-kweaver auth change-password <url> -u <account> [-o <old>] [-n <new>] [--public-key-file <pem>] [--insecure|-k]
+kweaver auth change-password [<url>] -u <account> [-o <old>] [-n <new>] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless host)
 kweaver auth export [url|alias] [--json]
 kweaver auth status / whoami [url|alias] [--json]   # with KWEAVER_BASE_URL+KWEAVER_TOKEN when no ~/.kweaver/ platform

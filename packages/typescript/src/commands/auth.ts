@@ -53,7 +53,7 @@ kweaver auth users [url|alias]       List all user profiles (with usernames) for
 kweaver auth switch [url|alias] --user <id|username>  Switch active user for a platform
 kweaver auth logout [url|alias] [--user <id>]  Logout (clear local token)
 kweaver auth delete <url|alias> [--user <id>]  Delete saved credentials
-kweaver auth change-password <url> -u <account> [-o <old>] [-n <new>]  Change password (EACP modifypassword; no token required)
+kweaver auth change-password [<url>] -u <account> [-o <old>] [-n <new>]  Change password (EACP modifypassword; URL optional, no token required)
 
 Login options:
   --alias <name>         Save platform with a short alias (use with use / status / logout)
@@ -832,7 +832,7 @@ async function loginWithInitialPasswordRecovery(
 
 async function runAuthChangePasswordCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth change-password <platform-url> [options]
+    console.log(`kweaver auth change-password [<platform-url>] [options]
 
 Change the EACP account password via POST /api/eacp/v1/auth1/modifypassword.
 No saved OAuth token is required.
@@ -841,21 +841,10 @@ Options:
   -u, --account <name>       Account / login name (required)
   -o, --old-password <pwd>   Current password (omit on TTY to be prompted)
   -n, --new-password <pwd>   New password, 6-100 characters (omit on TTY to be prompted)
-  --public-key-file <path>   Override RSA public key (PEM) for password encryption
-  --insecure, -k             Skip TLS certificate verification`);
-    return 0;
-  }
+  --insecure, -k             Skip TLS certificate verification
 
-  const url = args[0];
-  if (!url || url.startsWith("-")) {
-    console.error(
-      "Usage: kweaver auth change-password <platform-url> -u <account> [-o <old-password>] [-n <new-password>] [--public-key-file <path>] [--insecure|-k]",
-    );
-    return 1;
-  }
-  if (!/^https?:\/\//.test(url)) {
-    console.error("Expected a platform URL starting with http:// or https://.");
-    return 1;
+Platform URL is optional; defaults to the current active platform (kweaver auth use).`);
+    return 0;
   }
 
   const KNOWN_CP_FLAGS = new Set([
@@ -865,7 +854,6 @@ Options:
     "--old-password",
     "-n",
     "--new-password",
-    "--public-key-file",
     "--insecure",
     "-k",
     "--help",
@@ -878,10 +866,14 @@ Options:
     "--old-password",
     "-n",
     "--new-password",
-    "--public-key-file",
   ]);
-  for (let i = 1; i < args.length; i++) {
-    const a = args[i];
+
+  // First positional (if present and not a flag) is the platform URL or alias.
+  const positional = args[0] && !args[0].startsWith("-") ? args[0] : undefined;
+  const flagArgs = positional ? args.slice(1) : args;
+
+  for (let i = 0; i < flagArgs.length; i++) {
+    const a = flagArgs[i];
     if (a.startsWith("-") && !KNOWN_CP_FLAGS.has(a)) {
       console.error(`Unknown option: ${a}`);
       console.error("Run 'kweaver auth change-password --help' for usage.");
@@ -890,13 +882,32 @@ Options:
     if (KNOWN_CP_VALUE.has(a)) i++;
   }
 
-  const normalizedTarget = normalizeBaseUrl(url);
+  let normalizedTarget: string;
+  if (positional) {
+    const resolved = /^https?:\/\//.test(positional)
+      ? positional
+      : resolvePlatformIdentifier(positional) ?? positional;
+    if (!/^https?:\/\//.test(resolved)) {
+      console.error(`Cannot resolve platform: ${positional}. Provide a full URL or a known alias (kweaver auth list).`);
+      return 1;
+    }
+    normalizedTarget = normalizeBaseUrl(resolved);
+  } else {
+    const current = getCurrentPlatform();
+    if (!current) {
+      console.error(
+        "No active platform. Pass <platform-url> or run `kweaver auth use <url|alias>` first.",
+      );
+      return 1;
+    }
+    normalizedTarget = current;
+  }
+
   const account =
-    readOption(args, "--account") ?? readOption(args, "-u");
-  let oldPassword = readOption(args, "--old-password") ?? readOption(args, "-o");
-  let newPassword = readOption(args, "--new-password") ?? readOption(args, "-n");
-  const publicKeyFile = readOption(args, "--public-key-file");
-  const tlsInsecure = args.includes("--insecure") || args.includes("-k");
+    readOption(flagArgs, "--account") ?? readOption(flagArgs, "-u");
+  let oldPassword = readOption(flagArgs, "--old-password") ?? readOption(flagArgs, "-o");
+  let newPassword = readOption(flagArgs, "--new-password") ?? readOption(flagArgs, "-n");
+  const tlsInsecure = flagArgs.includes("--insecure") || flagArgs.includes("-k");
 
   if (!account?.trim()) {
     console.error("Missing required -u/--account.");
@@ -929,16 +940,10 @@ Options:
 
     validateNewPasswordLengthForEacp(newPassword!);
 
-    let publicKeyPem: string | undefined;
-    if (publicKeyFile?.trim()) {
-      publicKeyPem = (await readFile(publicKeyFile.trim(), "utf8")).trim();
-    }
-
     const result = await eacpModifyPassword(normalizedTarget, {
       account: account.trim(),
       oldPassword: oldPassword!,
       newPassword: newPassword!,
-      publicKeyPem,
       tlsInsecure,
     });
 

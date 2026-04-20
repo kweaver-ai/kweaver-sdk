@@ -929,7 +929,7 @@ export async function createAgents(
     // 1. Create, publish, and fetch info for each sub-agent
     for (const agentDef of config.agents) {
       // Agent name doubles as DPH tool identifier — spaces break @name() parsing
-      const safeName = agentDef.name.replace(/\s+/g, "_");
+      const safeName = sanitizeAgentName(agentDef.name);
       const createBody = buildAgentCreateBody(safeName, agentDef.profile, agentDef.system_prompt, undefined, defaultLlms);
       console.error(`[composer/create] subAgentBody: ${createBody.slice(0, 600)}`);
       const createRaw = await createAgent({ baseUrl: t.baseUrl, accessToken: t.accessToken, body: createBody, businessDomain });
@@ -953,7 +953,7 @@ export async function createAgents(
       const info = await fetchAgentInfo({ baseUrl: t.baseUrl, accessToken: t.accessToken, agentId, version: "v0", businessDomain });
       agentKeyMap[agentDef.ref] = info.key;
       // Agent names are used as DPH identifiers (@name) — must not contain spaces
-      agentNameMap[agentDef.ref] = agentDef.name.replace(/\s+/g, "_");
+      agentNameMap[agentDef.ref] = sanitizeAgentName(agentDef.name);
     }
 
     console.error(`[composer/create] agentIdMap: ${JSON.stringify(agentIdMap)}`);

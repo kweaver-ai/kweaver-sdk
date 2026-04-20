@@ -676,4 +676,15 @@ describe("sanitizeAgentName", () => {
     const name = "my_agent_名字";
     assert.strictEqual(sanitizeAgentName(name), name);
   });
+
+  it("strips chars that break DPH @tool-call syntax (& ! ? @ # $ %)", () => {
+    // Regression: LLM-generated agent names sometimes contain '&'
+    // ("Legal & Compliance Officer"). Dolphin's parser rejects
+    // @Legal_&_... as "Invalid tool call format", so this sanitization
+    // must remove anything outside [a-zA-Z0-9_ + CJK].
+    for (const ch of ["&", "!", "?", "@", "#", "$", "%"]) {
+      const out = sanitizeAgentName(`A${ch}B`);
+      assert.ok(!out.includes(ch), `leaked '${ch}' → ${out}`);
+    }
+  });
 });

@@ -343,7 +343,10 @@ export async function getDefaultLlms(baseUrl: string, accessToken: string, busin
     console.error(`[composer] Failed to fetch LLM list: ${err instanceof Error ? err.message : err}`);
   }
 
-  // Fallback to a generic name
+  // Fallback to a generic name. This model id is rarely accepted by the platform's
+  // model router, so sub-agents built from it will 500 with ModelFactory.Router.ParamError
+  // at runtime. Warn so the user isn't left debugging post-create.
+  console.error('[composer] warning: no usable LLM on platform, using "v3" fallback — sub-agents may fail at runtime. Check /api/mf-model-manager/v1/llm/list for this business_domain.');
   cachedDefaultLlms = [{ is_default: true, llm_config: { id: "v3", name: "v3", max_tokens: 4096 } }];
   return cachedDefaultLlms;
 }

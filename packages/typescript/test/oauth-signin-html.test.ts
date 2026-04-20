@@ -7,7 +7,6 @@ import test from "node:test";
 
 import {
   DEFAULT_SIGNIN_RSA_MODULUS_HEX,
-  isStudiowebShellUnavailableError,
   parseSigninPageHtmlProps,
   rsaModulusHexToSpkiPem,
   STUDIOWEB_LOGIN_PUBLIC_KEY_PEM,
@@ -102,20 +101,3 @@ test("STUDIOWEB_LOGIN_PUBLIC_KEY_PEM: parses as a valid 2048-bit RSA SPKI", () =
   assert.equal((details as { modulusLength: number }).modulusLength, 2048);
 });
 
-test("isStudiowebShellUnavailableError: true for probe / network messages", () => {
-  assert.equal(
-    isStudiowebShellUnavailableError(
-      new Error(
-        "Studioweb signin endpoint not available at https://x/interface/studioweb/login (HTTP 404).",
-      ),
-    ),
-    true,
-  );
-  assert.equal(
-    isStudiowebShellUnavailableError(
-      new Error("Cannot reach studioweb signin endpoint at https://x/interface/studioweb/login."),
-    ),
-    true,
-  );
-  assert.equal(isStudiowebShellUnavailableError(new Error("wrong password")), false);
-});

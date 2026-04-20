@@ -26,24 +26,14 @@ import { decodeJwtPayload } from "../config/jwt.js";
 import {
   buildCopyCommand,
   formatHttpError,
-  isStudiowebShellUnavailableError,
   normalizeBaseUrl,
   oauth2Login,
   oauth2PasswordSigninLogin,
   playwrightLogin,
+  promptForUsername,
+  promptForPassword,
   refreshTokenLogin,
 } from "../auth/oauth.js";
-
-/** True when the `playwright` npm package can be imported (browser binaries may still need `npx playwright install`). */
-async function isPlaywrightPackageResolvable(): Promise<boolean> {
-  try {
-    const modName = "playwright";
-    await import(/* webpackIgnore: true */ modName);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export async function runAuthCommand(args: string[]): Promise<number> {
   const target = args[0];
@@ -72,11 +62,12 @@ Login options:
                          Requires --client-id and --client-secret.
                          Get these from the callback page after browser login or \`auth export\`.
   --port <n>             Local callback port (default: 9010). Use when 9010 is occupied.
-  --no-browser           Do not open a browser; print the auth URL and prompt for the callback URL or code (stdin).
-                         Use on headless servers or when automatic browser launch fails.
-  -u, --username         Username (with -p: tries HTTP /oauth2/signin first when the Studio web shell is available)
-  -p, --password         Password (with -u: falls back to Playwright headless only when studioweb is unavailable and Playwright is installed)
-  --http-signin          With -u/-p: HTTP POST /oauth2/signin only (no Playwright fallback). Uses the built-in RSA public key.
+  --no-browser           Do not open a browser. Without -u/-p: print the auth URL and prompt for the
+                         callback URL or code (stdin). With -u and/or -p: route through HTTP sign-in
+                         (any missing credential is prompted; password is hidden when stdin is a TTY).
+  -u, --username         Username for HTTP /oauth2/signin (POST). If -p is omitted, password is prompted.
+  -p, --password         Password for HTTP /oauth2/signin (POST). If -u is omitted, username is prompted.
+  --http-signin          Force HTTP /oauth2/signin (no browser). Missing -u/-p are prompted from stdin.
   --playwright           With -u/-p: force Playwright (skip HTTP sign-in). Without -u/-p: open Playwright for manual login.
   --insecure, -k         Skip TLS certificate verification (self-signed / dev HTTPS only)
   --no-auth              Save platform without OAuth (servers with no authentication). Same as detecting OAuth 404 during login.`);
@@ -120,8 +111,8 @@ Login options:
     try {
       const normalizedTarget = normalizeBaseUrl(target);
       const alias = readOption(args, "--alias");
-      const username = readOption(args, "--username") ?? readOption(args, "-u");
-      const password = readOption(args, "--password") ?? readOption(args, "-p");
+      let username = readOption(args, "--username") ?? readOption(args, "-u");
+      let password = readOption(args, "--password") ?? readOption(args, "-p");
       const usePlaywright = args.includes("--playwright");
       const httpSignin = args.includes("--http-signin");
       const oauthProduct = readOption(args, "--oauth-product");
@@ -179,9 +170,13 @@ Login options:
         console.error("--no-auth cannot be used with Playwright login, HTTP sign-in, or -u/-p.");
         return 1;
       }
-      if (noBrowser && (username || password || usePlaywright || httpSignin)) {
-        console.error("--no-browser cannot be used with Playwright login, HTTP sign-in, or -u/-p.");
+      if (noBrowser && usePlaywright) {
+        console.error("--no-browser cannot be used with --playwright (Playwright opens a browser).");
         return 1;
+      }
+      if (noBrowser && httpSignin) {
+        // HTTP sign-in already runs without a browser; --no-browser is a no-op signal here.
+        console.error("--http-signin already runs without a browser; --no-browser is redundant and ignored.");
       }
       if (httpSignin && usePlaywright) {
         console.error("--http-signin cannot be used with --playwright.");
@@ -191,13 +186,21 @@ Login options:
         console.error("--http-signin cannot be used with --refresh-token.");
         return 1;
       }
-      if (httpSignin && (!username || !password)) {
-        console.error("--http-signin requires -u/--username and -p/--password.");
-        return 1;
-      }
       if (noBrowser && refreshToken) {
         console.error("--no-browser cannot be used with --refresh-token.");
         return 1;
+      }
+
+      // Headless credential login: if the user signalled HTTP sign-in (--http-signin,
+      // or partial -u/-p, or --no-browser combined with -u/-p) but didn't provide both
+      // credentials inline, prompt for the missing one(s) on stderr. Password is read
+      // without echo when stdin is a TTY.
+      const wantsCredentialLogin =
+        !noAuth && !refreshToken && !usePlaywright &&
+        (httpSignin || (noBrowser && (username || password)) || (!!username !== !!password));
+      if (wantsCredentialLogin) {
+        if (!username) username = await promptForUsername("Username");
+        if (!password) password = await promptForPassword("Password");
       }
 
       let token;
@@ -235,7 +238,8 @@ Login options:
           port: customPort,
         });
       } else if (username && password) {
-        const signinOpts = {
+        console.log("Logging in (HTTP /oauth2/signin)...");
+        token = await oauth2PasswordSigninLogin(normalizedTarget, {
           username,
           password,
           tlsInsecure,
@@ -244,38 +248,7 @@ Login options:
           clientSecret: clientSecret ?? undefined,
           oauthProduct: oauthProduct ?? undefined,
           signinPublicKeyPemPath: signinPublicKeyFile ?? undefined,
-        };
-        console.log("Logging in (HTTP /oauth2/signin)...");
-        try {
-          token = await oauth2PasswordSigninLogin(normalizedTarget, signinOpts);
-        } catch (err) {
-          if (!isStudiowebShellUnavailableError(err)) {
-            throw err;
-          }
-          const playwrightOk = await isPlaywrightPackageResolvable();
-          if (playwrightOk) {
-            process.stderr.write(
-              "Studio web sign-in shell is not available; falling back to Playwright headless login.\n",
-            );
-            console.log("Logging in (headless, Playwright)...");
-            token = await playwrightLogin(normalizedTarget, {
-              username,
-              password,
-              tlsInsecure,
-              port: customPort,
-            });
-          } else {
-            console.error(
-              "Studio web sign-in shell is not available on this platform, and the Playwright package is not installed.",
-            );
-            console.error(
-              "Install Playwright for headless browser login: npm install playwright && npx playwright install chromium",
-            );
-            console.error("Alternatively, use OAuth without credentials:");
-            console.error(`  kweaver auth login ${normalizedTarget} --no-browser`);
-            throw err;
-          }
-        }
+        });
       } else if (usePlaywright) {
         console.log("Opening browser for login (Playwright)...");
         token = await playwrightLogin(normalizedTarget, {

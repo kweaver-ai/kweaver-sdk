@@ -609,6 +609,127 @@ export async function promptForCode(
 }
 
 /**
+ * Prompt the user for a username on stderr (input echoed).
+ *
+ * `io` is injectable for tests; defaults to `process.stdin` / `process.stderr`.
+ */
+export async function promptForUsername(
+  promptLabel = "Username",
+  io?: { input?: NodeJS.ReadableStream; output?: NodeJS.WritableStream },
+): Promise<string> {
+  const { createInterface } = await import("node:readline");
+  const stdin = io?.input ?? process.stdin;
+  const stderr = io?.output ?? process.stderr;
+  const rl = createInterface({ input: stdin, output: stderr });
+  const value = await new Promise<string>((resolve, reject) => {
+    let answered = false;
+    rl.on("close", () => {
+      if (!answered) reject(new Error("Login cancelled."));
+    });
+    rl.question(`${promptLabel}: `, (answer) => {
+      answered = true;
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+  if (!value) {
+    throw new Error(`${promptLabel} is required.`);
+  }
+  return value;
+}
+
+/**
+ * Prompt the user for a password on stderr without echoing keystrokes (TTY only).
+ *
+ * Falls back to a regular readline prompt when stdin is not a TTY (e.g. piped input
+ * during scripted use); callers needing strict no-echo should detect this case themselves.
+ *
+ * `io` is injectable for tests.
+ */
+export async function promptForPassword(
+  promptLabel = "Password",
+  io?: { input?: NodeJS.ReadableStream & { isTTY?: boolean; setRawMode?: (mode: boolean) => unknown }; output?: NodeJS.WritableStream },
+): Promise<string> {
+  const stdin = io?.input ?? (process.stdin as NodeJS.ReadableStream & { isTTY?: boolean; setRawMode?: (mode: boolean) => unknown });
+  const stderr = io?.output ?? process.stderr;
+
+  // Non-TTY (piped, redirected, tests): use regular readline — no masking is possible
+  // without raw mode, so we accept echoed input rather than block forever.
+  if (!stdin.isTTY || typeof stdin.setRawMode !== "function") {
+    const { createInterface } = await import("node:readline");
+    const rl = createInterface({ input: stdin, output: stderr });
+    const value = await new Promise<string>((resolve, reject) => {
+      let answered = false;
+      rl.on("close", () => {
+        if (!answered) reject(new Error("Login cancelled."));
+      });
+      rl.question(`${promptLabel}: `, (answer) => {
+        answered = true;
+        rl.close();
+        resolve(answer);
+      });
+    });
+    if (!value) throw new Error(`${promptLabel} is required.`);
+    return value;
+  }
+
+  // TTY: read byte-by-byte in raw mode so keystrokes are not echoed.
+  return new Promise<string>((resolve, reject) => {
+    stderr.write(`${promptLabel}: `);
+    let buf = "";
+    const onData = (chunk: Buffer) => {
+      const s = chunk.toString("utf8");
+      for (const ch of s) {
+        const code = ch.charCodeAt(0);
+        if (ch === "\n" || ch === "\r") {
+          cleanup();
+          stderr.write("\n");
+          if (!buf) {
+            reject(new Error(`${promptLabel} is required.`));
+          } else {
+            resolve(buf);
+          }
+          return;
+        }
+        if (code === 3) {
+          // Ctrl-C
+          cleanup();
+          stderr.write("\n");
+          reject(new Error("Login cancelled."));
+          return;
+        }
+        if (code === 4 && buf.length === 0) {
+          // Ctrl-D on empty buffer -> cancel
+          cleanup();
+          stderr.write("\n");
+          reject(new Error("Login cancelled."));
+          return;
+        }
+        if (code === 8 || code === 127) {
+          // Backspace / DEL
+          buf = buf.slice(0, -1);
+          continue;
+        }
+        if (code < 32) continue; // ignore other control chars
+        buf += ch;
+      }
+    };
+    const cleanup = () => {
+      try { stdin.setRawMode!(false); } catch { /* noop */ }
+      stdin.removeListener("data", onData);
+      if (typeof (stdin as { pause?: () => void }).pause === "function") {
+        (stdin as { pause: () => void }).pause();
+      }
+    };
+    try { stdin.setRawMode!(true); } catch { /* noop */ }
+    if (typeof (stdin as { resume?: () => void }).resume === "function") {
+      (stdin as { resume: () => void }).resume();
+    }
+    stdin.on("data", onData);
+  });
+}
+
+/**
  * OAuth2 Authorization Code login flow.
  * 1. Register client (if not already registered), OR use a provided client ID
  * 2. Open browser to /oauth2/auth (unless `noBrowser` or browser launch fails)
@@ -1363,20 +1484,6 @@ async function tryAcceptConsentAfterSignin(
   return null;
 }
 
-const STUDIOWEB_SHELL_UNAVAILABLE_SNIPPETS = [
-  "Studioweb signin endpoint not available",
-  "Cannot reach studioweb signin endpoint",
-] as const;
-
-/**
- * True when {@link oauth2PasswordSigninLogin} failed because the Studio web sign-in shell
- * (`/interface/studioweb/login`) is missing or unreachable — callers may fall back to Playwright.
- */
-export function isStudiowebShellUnavailableError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return STUDIOWEB_SHELL_UNAVAILABLE_SNIPPETS.some((s) => msg.includes(s));
-}
-
 /**
  * Build the JSON body for `POST /oauth2/signin` (matches the browser `oauth2-ui` form).
  *
@@ -1468,32 +1575,10 @@ export async function oauth2PasswordSigninLogin(
         ? process.env.KWEAVER_OAUTH_PRODUCT.trim()
         : "adp");
 
-    // Pre-flight: verify studioweb signin shell exists (same entry as deploy auto_config.sh get_token).
-    // If the deployment lacks studioweb, abort before OAuth client registration.
-    const studiowebProbeUrl =
-      `${base}/interface/studioweb/login?lang=zh-cn&state=${encodeURIComponent(state)}` +
-      `&x-forwarded-prefix=&integrated=false&product=${encodeURIComponent(oauthProduct)}&_t=${Date.now()}`;
-    let probeResp: Response;
-    try {
-      probeResp = await fetch(studiowebProbeUrl, { method: "GET", redirect: "manual" });
-    } catch (cause) {
-      throw new Error(
-        `Cannot reach studioweb signin endpoint at ${base}/interface/studioweb/login. ` +
-          `The deployment may not include studioweb. Use \`kweaver auth login ${base}\` ` +
-          `(OAuth code flow) instead.\n  Cause: ${cause instanceof Error ? cause.message : String(cause)}`,
-      );
-    }
-    const probeOk2xx = probeResp.status >= 200 && probeResp.status < 300;
-    const probeOkRedirect = [301, 302, 303, 307, 308].includes(probeResp.status);
-    await probeResp.text().catch(() => "");
-    if (!probeOk2xx && !probeOkRedirect) {
-      throw new Error(
-        `Studioweb signin endpoint not available at ${base}/interface/studioweb/login ` +
-          `(HTTP ${probeResp.status}). The deployment may not include studioweb. ` +
-          `Use \`kweaver auth login ${base}\` (OAuth code flow) instead.`,
-      );
-    }
-
+    // Note: previously we pre-flighted `/interface/studioweb/login` to detect deployments
+    // missing the Studio web shell. The probe added an extra round-trip and was unreliable
+    // (see kweaver-admin which works fine without it). HTTP sign-in only needs `/oauth2/auth`
+    // and `/oauth2/signin`; if either is missing the request below will surface a precise error.
     let client: ClientConfig;
     try {
       client = await resolveOrRegisterClient(base, redirectUri, scope, {

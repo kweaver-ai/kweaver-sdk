@@ -109,8 +109,9 @@ Usage:
   kweaver config list-bd
   kweaver config show
 
-  kweaver skill list|get|register|status|delete [options]
+  kweaver skill list|get|market-get|register|status|delete [options]
   kweaver skill market [options]
+  kweaver skill update-metadata|update-package|history|republish|publish-history [options]
   kweaver skill content <skill-id> [--raw] [--output file]
   kweaver skill read-file <skill-id> <rel-path> [--raw] [--output file]
   kweaver skill download|install <skill-id> [path] [options]
@@ -180,7 +181,7 @@ Commands:
   bkn            Knowledge network (CRUD, build, validate, export, stats, push/pull,
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
-  skill          Skill registry and market (register, search, progressive read, download/install)
+  skill          Skill registry and market (register, edit, history, progressive read, download/install)
   toolbox        Agent toolbox lifecycle (create, list, publish, delete, export, import)
   tool           Tools inside a toolbox (upload OpenAPI spec, list, enable/disable)
   vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)

@@ -8,13 +8,21 @@ import {
   fetchSkillContent,
   fetchSkillFile,
   getSkill,
+  getSkillMarketDetail,
   getSkillContentIndex,
   installSkillArchive,
   listSkillMarket,
+  listSkillHistory,
   listSkills,
+  publishSkillHistory,
   readSkillFile,
+  republishSkillHistory,
   registerSkillZip,
+  updateSkillMetadata,
+  updateSkillPackageContent,
+  updateSkillPackageZip,
   updateSkillStatus,
+  type SkillCategory,
   type SkillStatus,
 } from "../api/skills.js";
 import { bundleSkillDirectoryToZip, bundleSkillFileToZip } from "../utils/skill-bundle.js";
@@ -41,6 +49,26 @@ interface RegisterOptions extends BaseOptions {
   zipFile?: string;
   source?: string;
   extendInfo?: Record<string, unknown>;
+}
+
+interface UpdateMetadataOptions extends BaseOptions {
+  skillId: string;
+  name: string;
+  description: string;
+  category: SkillCategory;
+  source?: string;
+  extendInfo?: Record<string, unknown>;
+}
+
+interface UpdatePackageOptions extends BaseOptions {
+  skillId: string;
+  contentFile?: string;
+  zipFile?: string;
+}
+
+interface HistoryVersionOptions extends BaseOptions {
+  skillId: string;
+  version: string;
 }
 
 interface ContentOptions extends BaseOptions {
@@ -79,6 +107,10 @@ function printSkillHelp(subcommand?: string): void {
     console.log("kweaver skill get <skill-id> [-bd value] [--pretty|--compact]");
     return;
   }
+  if (subcommand === "market-get") {
+    console.log("kweaver skill market-get <skill-id> [-bd value] [--pretty|--compact]");
+    return;
+  }
   if (subcommand === "register") {
     console.log(`kweaver skill register (--content-file <path> | --zip-file <path>)
                        [--source src] [--extend-info json] [-bd value] [--pretty|--compact]
@@ -98,6 +130,28 @@ function printSkillHelp(subcommand?: string): void {
   }
   if (subcommand === "delete") {
     console.log("kweaver skill delete <skill-id> [-y|--yes] [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "update-metadata") {
+    console.log(`kweaver skill update-metadata <skill-id> --name <name> --description <text> --category <other_category|system>
+                         [--source <custom|internal>] [--extend-info json] [-bd value] [--pretty|--compact]`);
+    return;
+  }
+  if (subcommand === "update-package") {
+    console.log(`kweaver skill update-package <skill-id> (--content-file <path> | --zip-file <path>)
+                        [-bd value] [--pretty|--compact]`);
+    return;
+  }
+  if (subcommand === "history") {
+    console.log("kweaver skill history <skill-id> [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "republish") {
+    console.log("kweaver skill republish <skill-id> --version <version> [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "publish-history") {
+    console.log("kweaver skill publish-history <skill-id> --version <version> [-bd value] [--pretty|--compact]");
     return;
   }
   if (subcommand === "content") {
@@ -122,10 +176,16 @@ Subcommands:
   list [--name kw] [--status status] [--page N] [--page-size N] [-bd value]
   market [--name kw] [--source src] [--page N] [--page-size N] [-bd value]
   get <skill-id> [-bd value]
+  market-get <skill-id> [-bd value]
   register --content-file <path> | --zip-file <path> [--source src] [--extend-info json]
            (--content-file accepts a file named SKILL.md or a directory; both auto-zip)
   set-status <skill-id> <unpublish|published|offline> [-bd value]
   delete <skill-id> [-y] [-bd value]
+  update-metadata <skill-id> --name <name> --description <text> --category <other_category|system> [--source <custom|internal>] [--extend-info json]
+  update-package <skill-id> (--content-file <path> | --zip-file <path>) [-bd value]
+  history <skill-id> [-bd value]
+  republish <skill-id> --version <version> [-bd value]
+  publish-history <skill-id> --version <version> [-bd value]
   content <skill-id> [--raw] [--output file] [-bd value]
   read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value]
   download <skill-id> [--output file] [-bd value]
@@ -134,6 +194,9 @@ Subcommands:
 Examples:
   kweaver skill list --name kweaver
   kweaver skill register --zip-file ./demo-skill.zip --source upload_zip
+  kweaver skill update-metadata skill-123 --name "Demo" --description "Demo skill" --category system
+  kweaver skill update-package skill-123 --content-file ./SKILL.md
+  kweaver skill history skill-123
   kweaver skill content skill-123 --raw
   kweaver skill read-file skill-123 references/guide.md --output ./guide.md
   kweaver skill install skill-123 ./skills/demo-skill --force`);
@@ -346,6 +409,101 @@ function parseSkillGetArgs(args: string[]): BaseOptions & { skillId: string } {
   return { ...base.opts, skillId };
 }
 
+export function parseSkillUpdateMetadataArgs(args: string[]): UpdateMetadataOptions {
+  const skillId = args[0];
+  if (!skillId || skillId.startsWith("-")) throw new Error("Missing skill-id");
+  let name: string | undefined;
+  let description: string | undefined;
+  let category: SkillCategory | undefined;
+  let source: string | undefined;
+  let extendInfo: Record<string, unknown> | undefined;
+  const base = parseBaseArgs(args, 1);
+  for (let i = 1; i < base.args.length; i += 1) {
+    const arg = base.args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--name") {
+      name = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === "--description") {
+      description = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === "--category") {
+      const value = base.args[i + 1];
+      if (value !== "other_category" && value !== "system") {
+        throw new Error("Invalid --category. Expected other_category|system");
+      }
+      category = value;
+      i += 1;
+      continue;
+    }
+    if (arg === "--source") {
+      source = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === "--extend-info") {
+      extendInfo = parseJsonFlag(base.args[i + 1], "--extend-info");
+      i += 1;
+      continue;
+    }
+    throw new Error(`Unsupported skill update-metadata argument: ${arg}`);
+  }
+  if (!name) throw new Error("Missing --name");
+  if (!description) throw new Error("Missing --description");
+  if (!category) throw new Error("Missing --category");
+  return { ...base.opts, skillId, name, description, category, source, extendInfo };
+}
+
+export function parseSkillUpdatePackageArgs(args: string[]): UpdatePackageOptions {
+  const skillId = args[0];
+  if (!skillId || skillId.startsWith("-")) throw new Error("Missing skill-id");
+  let contentFile: string | undefined;
+  let zipFile: string | undefined;
+  const base = parseBaseArgs(args, 1);
+  for (let i = 1; i < base.args.length; i += 1) {
+    const arg = base.args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--content-file") {
+      contentFile = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === "--zip-file") {
+      zipFile = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    throw new Error(`Unsupported skill update-package argument: ${arg}`);
+  }
+  if ((contentFile ? 1 : 0) + (zipFile ? 1 : 0) !== 1) {
+    throw new Error("Use exactly one of --content-file or --zip-file");
+  }
+  return { ...base.opts, skillId, contentFile, zipFile };
+}
+
+export function parseSkillHistoryVersionArgs(args: string[], commandName: string): HistoryVersionOptions {
+  const skillId = args[0];
+  if (!skillId || skillId.startsWith("-")) throw new Error("Missing skill-id");
+  let version: string | undefined;
+  const base = parseBaseArgs(args, 1);
+  for (let i = 1; i < base.args.length; i += 1) {
+    const arg = base.args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--version") {
+      version = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    throw new Error(`Unsupported skill ${commandName} argument: ${arg}`);
+  }
+  if (!version) throw new Error("Missing --version");
+  return { ...base.opts, skillId, version };
+}
+
 function parseSkillReadFileArgs(args: string[]): ReadFileOptions {
   const skillId = args[0];
   const relPath = args[1];
@@ -472,6 +630,16 @@ export async function runSkillCommand(args: string[]): Promise<number> {
         console.log(format(result, opts.pretty));
         return 0;
       }
+      if (subcommand === "market-get") {
+        const opts = parseSkillGetArgs(rest);
+        const result = await getSkillMarketDetail({
+          ...token,
+          businessDomain: opts.businessDomain,
+          skillId: opts.skillId,
+        });
+        console.log(format(result, opts.pretty));
+        return 0;
+      }
       if (subcommand === "register") {
         const opts = parseSkillRegisterArgs(rest);
         if (opts.contentFile) {
@@ -530,6 +698,79 @@ export async function runSkillCommand(args: string[]): Promise<number> {
           }
         }
         const result = await deleteSkill({ ...token, businessDomain: opts.businessDomain, skillId });
+        console.log(format(result, opts.pretty));
+        return 0;
+      }
+      if (subcommand === "update-metadata") {
+        const opts = parseSkillUpdateMetadataArgs(rest);
+        const result = await updateSkillMetadata({
+          ...token,
+          businessDomain: opts.businessDomain,
+          skillId: opts.skillId,
+          name: opts.name,
+          description: opts.description,
+          category: opts.category,
+          source: opts.source,
+          extendInfo: opts.extendInfo,
+        });
+        console.log(format(result, opts.pretty));
+        return 0;
+      }
+      if (subcommand === "update-package") {
+        const opts = parseSkillUpdatePackageArgs(rest);
+        if (opts.contentFile) {
+          const content = readFileSync(resolve(opts.contentFile), "utf8");
+          const result = await updateSkillPackageContent({
+            ...token,
+            businessDomain: opts.businessDomain,
+            skillId: opts.skillId,
+            content,
+          });
+          console.log(format(result, opts.pretty));
+          return 0;
+        }
+        if (opts.zipFile) {
+          const bytes = new Uint8Array(readFileSync(resolve(opts.zipFile)));
+          const result = await updateSkillPackageZip({
+            ...token,
+            businessDomain: opts.businessDomain,
+            skillId: opts.skillId,
+            filename: basename(resolve(opts.zipFile)),
+            bytes,
+          });
+          console.log(format(result, opts.pretty));
+          return 0;
+        }
+      }
+      if (subcommand === "history") {
+        const opts = parseSkillGetArgs(rest);
+        const result = await listSkillHistory({
+          ...token,
+          businessDomain: opts.businessDomain,
+          skillId: opts.skillId,
+        });
+        console.log(format(result, opts.pretty));
+        return 0;
+      }
+      if (subcommand === "republish") {
+        const opts = parseSkillHistoryVersionArgs(rest, "republish");
+        const result = await republishSkillHistory({
+          ...token,
+          businessDomain: opts.businessDomain,
+          skillId: opts.skillId,
+          version: opts.version,
+        });
+        console.log(format(result, opts.pretty));
+        return 0;
+      }
+      if (subcommand === "publish-history") {
+        const opts = parseSkillHistoryVersionArgs(rest, "publish-history");
+        const result = await publishSkillHistory({
+          ...token,
+          businessDomain: opts.businessDomain,
+          skillId: opts.skillId,
+          version: opts.version,
+        });
         console.log(format(result, opts.pretty));
         return 0;
       }

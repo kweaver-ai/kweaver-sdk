@@ -292,7 +292,7 @@ kweaver trace diagnose --traces=<list> --out=<dir>    # batch (single agent)
 kweaver trace diagnose rules validate <rule.yaml>     # validate a rule
 kweaver trace eval-set build --diagnosis=<dir>|--queries=<file> --out=<dir>  # build eval-set yaml dir
 kweaver trace schema validate <file> [--kind=<kind>]  # validate yaml against M5/M4 zod schema
-kweaver skill list/market/get/register/status/delete/content/read-file/download/install
+kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>

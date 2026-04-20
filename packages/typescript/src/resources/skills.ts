@@ -5,14 +5,22 @@ import {
   fetchSkillContent,
   fetchSkillFile,
   getSkill,
+  getSkillMarketDetail,
   getSkillContentIndex,
   installSkillArchive,
   listSkillMarket,
+  listSkillHistory,
   listSkills,
+  publishSkillHistory,
   readSkillFile,
+  republishSkillHistory,
   registerSkillContent,
   registerSkillZip,
+  updateSkillMetadata,
+  updateSkillPackageContent,
+  updateSkillPackageZip,
   updateSkillStatus,
+  type SkillCategory,
   type SkillListResult,
   type SkillStatus,
 } from "../api/skills.js";
@@ -50,6 +58,10 @@ export class SkillsResource {
     return getSkill({ ...this.ctx.base(), skillId });
   }
 
+  async getMarket(skillId: string) {
+    return getSkillMarketDetail({ ...this.ctx.base(), skillId });
+  }
+
   async registerContent(content: string, opts: {
     source?: string;
     extendInfo?: Record<string, unknown>;
@@ -70,6 +82,36 @@ export class SkillsResource {
 
   async updateStatus(skillId: string, status: SkillStatus) {
     return updateSkillStatus({ ...this.ctx.base(), skillId, status });
+  }
+
+  async updateMetadata(skillId: string, metadata: {
+    name: string;
+    description: string;
+    category: SkillCategory;
+    source?: string;
+    extendInfo?: Record<string, unknown>;
+  }) {
+    return updateSkillMetadata({ ...this.ctx.base(), skillId, ...metadata });
+  }
+
+  async updatePackageContent(skillId: string, content: string) {
+    return updateSkillPackageContent({ ...this.ctx.base(), skillId, content });
+  }
+
+  async updatePackageZip(skillId: string, filename: string, bytes: Uint8Array) {
+    return updateSkillPackageZip({ ...this.ctx.base(), skillId, filename, bytes });
+  }
+
+  async history(skillId: string) {
+    return listSkillHistory({ ...this.ctx.base(), skillId });
+  }
+
+  async republishHistory(skillId: string, version: string) {
+    return republishSkillHistory({ ...this.ctx.base(), skillId, version });
+  }
+
+  async publishHistory(skillId: string, version: string) {
+    return publishSkillHistory({ ...this.ctx.base(), skillId, version });
   }
 
   async content(skillId: string) {

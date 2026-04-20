@@ -206,6 +206,8 @@ export {
 
 // ── Skills (agent-operator-integration) ──────────────────────────────────────
 export type {
+  SkillCategory,
+  SkillEditableStatus,
   SkillStatus,
   SkillSummary,
   SkillInfo,
@@ -221,24 +223,38 @@ export type {
   GetSkillOptions,
   RegisterSkillContentOptions,
   RegisterSkillZipOptions,
+  UpdateSkillMetadataOptions,
+  UpdateSkillMetadataResult,
+  UpdateSkillPackageContentOptions,
+  UpdateSkillPackageZipOptions,
+  UpdateSkillPackageResult,
   UpdateSkillStatusOptions,
   ReadSkillFileOptions,
   DownloadSkillOptions,
   DownloadedSkillArchive,
+  SkillReleaseHistoryInfo,
+  SkillHistoryVersionOptions,
 } from "./api/skills.js";
 export {
   listSkills,
   listSkillMarket,
   getSkill,
+  getSkillMarketDetail,
   deleteSkill,
   updateSkillStatus,
+  updateSkillMetadata,
   registerSkillContent,
   registerSkillZip,
+  updateSkillPackageContent,
+  updateSkillPackageZip,
   getSkillContentIndex,
   fetchSkillContent,
   readSkillFile,
   fetchSkillFile,
   downloadSkill,
+  listSkillHistory,
+  republishSkillHistory,
+  publishSkillHistory,
   installSkillArchive,
 } from "./api/skills.js";
 

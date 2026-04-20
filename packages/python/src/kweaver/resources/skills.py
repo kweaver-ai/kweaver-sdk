@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 
 SkillStatus = str
+SkillCategory = str
 
 
 def _unwrap_data(payload: Any) -> Any:
@@ -87,6 +88,9 @@ class SkillsResource:
     def get(self, skill_id: str) -> dict[str, Any]:
         return _unwrap_data(self._http.get(f"/api/agent-operator-integration/v1/skills/{skill_id}"))
 
+    def get_market(self, skill_id: str) -> dict[str, Any]:
+        return _unwrap_data(self._http.get(f"/api/agent-operator-integration/v1/skills/market/{skill_id}"))
+
     def register_content(
         self,
         content: str,
@@ -139,6 +143,71 @@ class SkillsResource:
             self._http.put(
                 f"/api/agent-operator-integration/v1/skills/{skill_id}/status",
                 json={"status": status},
+            )
+        )
+
+    def update_metadata(
+        self,
+        skill_id: str,
+        *,
+        name: str,
+        description: str,
+        category: SkillCategory,
+        source: str | None = None,
+        extend_info: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "category": category,
+        }
+        if source:
+            body["source"] = source
+        if extend_info is not None:
+            body["extend_info"] = extend_info
+        return _unwrap_data(
+            self._http.put(
+                f"/api/agent-operator-integration/v1/skills/{skill_id}/metadata",
+                json=body,
+            )
+        )
+
+    def update_package_content(self, skill_id: str, content: str) -> dict[str, Any]:
+        return _unwrap_data(
+            self._http.put(
+                f"/api/agent-operator-integration/v1/skills/{skill_id}/package",
+                json={"file_type": "content", "file": content},
+            )
+        )
+
+    def update_package_zip(self, skill_id: str, filename: str, data: bytes) -> dict[str, Any]:
+        files = {
+            "file_type": (None, "zip"),
+            "file": (filename, data, "application/zip"),
+        }
+        status_code, body = self._http.put_multipart(
+            f"/api/agent-operator-integration/v1/skills/{skill_id}/package",
+            files=files,
+        )
+        raise_for_status_parts(status_code, body)
+        return _unwrap_data(json.loads(body))
+
+    def history(self, skill_id: str) -> list[dict[str, Any]]:
+        return _unwrap_data(self._http.get(f"/api/agent-operator-integration/v1/skills/{skill_id}/history"))
+
+    def republish_history(self, skill_id: str, version: str) -> dict[str, Any]:
+        return _unwrap_data(
+            self._http.post(
+                f"/api/agent-operator-integration/v1/skills/{skill_id}/history/republish",
+                json={"version": version},
+            )
+        )
+
+    def publish_history(self, skill_id: str, version: str) -> dict[str, Any]:
+        return _unwrap_data(
+            self._http.post(
+                f"/api/agent-operator-integration/v1/skills/{skill_id}/history/publish",
+                json={"version": version},
             )
         )
 

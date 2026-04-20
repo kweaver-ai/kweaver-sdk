@@ -8,6 +8,7 @@ import {
   isNoAuth,
   loadPlatformBusinessDomain,
   loadTokenConfig,
+  normalizePlatformId,
   resolveBusinessDomain,
   saveNoAuthPlatform,
   savePlatformBusinessDomain,
@@ -65,5 +66,51 @@ describe("platform config (businessDomain)", () => {
     assert.ok(loaded);
     assert.ok(isNoAuth(loaded!.accessToken));
     assert.equal(loaded!.tokenType, "none");
+  });
+
+  it("saveNoAuthPlatform rejects bare-host input", () => {
+    assert.throws(
+      () => saveNoAuthPlatform("192.168.40.62"),
+      /must include scheme/,
+    );
+  });
+});
+
+describe("normalizePlatformId", () => {
+  it("accepts http:// and https:// URLs", () => {
+    assert.equal(normalizePlatformId("http://192.168.40.62"), "http://192.168.40.62");
+    assert.equal(normalizePlatformId("https://dip.aishu.cn"), "https://dip.aishu.cn");
+  });
+
+  it("strips trailing slashes", () => {
+    assert.equal(normalizePlatformId("https://dip.aishu.cn/"), "https://dip.aishu.cn");
+    assert.equal(normalizePlatformId("http://host///"), "http://host");
+  });
+
+  it("trims whitespace", () => {
+    assert.equal(normalizePlatformId("  http://host  "), "http://host");
+  });
+
+  it("rejects bare IP host", () => {
+    assert.throws(() => normalizePlatformId("192.168.40.62"), /must include scheme/);
+  });
+
+  it("rejects bare DNS host", () => {
+    assert.throws(() => normalizePlatformId("dip.aishu.cn"), /must include scheme/);
+  });
+
+  it("rejects scheme-less with port", () => {
+    assert.throws(() => normalizePlatformId("192.168.40.62:8080"), /must include scheme/);
+  });
+
+  it("error message suggests both schemes", () => {
+    try {
+      normalizePlatformId("192.168.40.62");
+      assert.fail("expected throw");
+    } catch (err) {
+      const msg = (err as Error).message;
+      assert.match(msg, /http:\/\/192\.168\.40\.62/);
+      assert.match(msg, /https:\/\/192\.168\.40\.62/);
+    }
   });
 });

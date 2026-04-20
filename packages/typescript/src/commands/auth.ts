@@ -14,6 +14,7 @@ import {
   listUsers,
   loadClientConfig,
   loadTokenConfig,
+  normalizePlatformId,
   resolveBusinessDomain,
   resolvePlatformIdentifier,
   resolveUserId,
@@ -118,7 +119,7 @@ Login options:
   const LOGIN_SUBCOMMANDS = new Set(["status", "list", "use", "delete", "logout", "export", "whoami", "users", "switch"]);
   if (target && !LOGIN_SUBCOMMANDS.has(target)) {
     try {
-      const normalizedTarget = normalizeBaseUrl(target);
+      const normalizedTarget = normalizePlatformId(target);
       const alias = readOption(args, "--alias");
       const username = readOption(args, "--username") ?? readOption(args, "-u");
       const password = readOption(args, "--password") ?? readOption(args, "-p");

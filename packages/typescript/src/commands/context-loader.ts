@@ -16,6 +16,7 @@ import {
 } from "../api/context-loader.js";
 import {
   addContextLoaderEntry,
+  buildMcpUrl,
   getCurrentContextLoaderKn,
   getCurrentPlatform,
   loadContextLoaderConfig,
@@ -51,6 +52,20 @@ function ensureContextLoaderConfig(): {
 function formatOutput(value: unknown, pretty: boolean): string {
   const json = JSON.stringify(value, null, pretty ? 2 : 0);
   return json;
+}
+
+// Extracts and removes --kn-id / -k from args. Lifted to dispatch level so the
+// override can bypass the local context-loader config requirement (issue #65).
+function extractKnIdOverride(args: string[]): string | undefined {
+  let value: string | undefined;
+  for (let i = 0; i < args.length; i += 1) {
+    if ((args[i] === "--kn-id" || args[i] === "-k") && args[i + 1]) {
+      value = args[i + 1];
+      args.splice(i, 2);
+      i -= 1;
+    }
+  }
+  return value;
 }
 
 export async function runContextLoaderCommand(args: string[]): Promise<number> {
@@ -96,9 +111,13 @@ Examples:
     rest.splice(prettyIdx, 1);
   }
 
+  const knIdOverride = extractKnIdOverride(rest);
+
   const dispatch = async (): Promise<number> => {
     const token = await ensureValidToken();
-    const base = ensureContextLoaderConfig();
+    const base = knIdOverride
+      ? { mcpUrl: buildMcpUrl(token.baseUrl), knId: knIdOverride }
+      : ensureContextLoaderConfig();
     const options = { ...base, accessToken: token.accessToken };
 
     if (subcommand === "tools") return runListTools(options, rest, pretty);

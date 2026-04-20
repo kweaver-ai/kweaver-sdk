@@ -10,6 +10,7 @@ import {
   loadClientConfig,
   loadTokenConfig,
   loadUserTokenConfig,
+  normalizePlatformId,
   resolveUserId,
   saveClientConfig,
   saveNoAuthPlatform,
@@ -1858,7 +1859,7 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
   if (!opts?.forceRefresh && envToken && envBaseUrl) {
     const rawToken = envToken.replace(/^Bearer\s+/i, "");
     return {
-      baseUrl: normalizeBaseUrl(envBaseUrl),
+      baseUrl: normalizePlatformId(envBaseUrl),
       accessToken: rawToken,
       tokenType: isNoAuth(rawToken) ? "none" : "bearer",
       scope: "",
@@ -1871,7 +1872,7 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
     if (currentPlatformForEnv) {
       const rawToken = envToken.replace(/^Bearer\s+/i, "");
       return {
-        baseUrl: normalizeBaseUrl(currentPlatformForEnv),
+        baseUrl: normalizePlatformId(currentPlatformForEnv),
         accessToken: rawToken,
         tokenType: isNoAuth(rawToken) ? "none" : "bearer",
         scope: "",

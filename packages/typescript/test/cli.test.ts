@@ -291,6 +291,193 @@ test("run context-loader config set use list", async () => {
   assert.equal(await cli.run(["context-loader", "config", "list"]), 0);
 });
 
+// ── --kn-id override should bypass local MCP config (issue #65) ──────────────
+
+function installContextLoaderMcpFetchMock(): {
+  restore: () => void;
+  received: { url: string; body: string; headers: Record<string, string> }[];
+} {
+  const received: { url: string; body: string; headers: Record<string, string> }[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : (input as URL).href;
+    const body = (init as RequestInit)?.body as string;
+    const rawHeaders = (init as RequestInit)?.headers;
+    const headers: Record<string, string> =
+      rawHeaders instanceof Headers
+        ? Object.fromEntries(rawHeaders.entries())
+        : (rawHeaders as Record<string, string>) ?? {};
+    received.push({ url, body, headers });
+
+    const parsed = body ? (JSON.parse(body) as { method?: string }) : {};
+    if (parsed.method === "initialize") {
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2024-11-05", capabilities: {} } }),
+        { headers: { "Content-Type": "application/json", "MCP-Session-Id": "session-id-test" } }
+      );
+    }
+    if (parsed.method === "notifications/initialized") {
+      return new Response("", { status: 200 });
+    }
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: JSON.stringify({ object_types: [] }) }] },
+      }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  };
+  return {
+    restore: () => {
+      globalThis.fetch = originalFetch;
+    },
+    received,
+  };
+}
+
+test("context-loader kn-search --kn-id works without local MCP config (issue #65)", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://platform.example.com",
+    accessToken: "tok-test",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://platform.example.com");
+  // Intentionally NO addContextLoaderEntry: local MCP config is absent.
+  assert.equal(store.getCurrentContextLoaderKn(), null);
+
+  const { restore, received } = installContextLoaderMcpFetchMock();
+  const errs: string[] = [];
+  const origErr = console.error;
+  console.error = (...args: unknown[]) => { errs.push(args.map(String).join(" ")); };
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run([
+      "context-loader",
+      "kn-search",
+      "test query",
+      "--kn-id",
+      "kn-override-xyz",
+    ]);
+    assert.equal(
+      code,
+      0,
+      `expected exit 0 with --kn-id override; got ${code}. stderr: ${errs.join("\n")}`
+    );
+    const toolsCall = received.find((r) => {
+      try { return JSON.parse(r.body).method === "tools/call"; } catch { return false; }
+    });
+    assert.ok(toolsCall, "expected a tools/call request");
+    assert.equal(toolsCall!.url, "https://platform.example.com/api/agent-retrieval/v1/mcp");
+    assert.equal(toolsCall!.headers["X-Kn-ID"], "kn-override-xyz");
+  } finally {
+    restore();
+    console.error = origErr;
+  }
+});
+
+test("context-loader kn-search without --kn-id still requires local MCP config", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://platform.example.com",
+    accessToken: "tok-test",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://platform.example.com");
+
+  const errs: string[] = [];
+  const origErr = console.error;
+  console.error = (...args: unknown[]) => { errs.push(args.map(String).join(" ")); };
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run(["context-loader", "kn-search", "test query"]);
+    assert.equal(code, 1, "expected failure when no --kn-id and no local config");
+    assert.ok(
+      errs.some((e) => e.includes("Context-loader MCP is not configured")),
+      `expected MCP_NOT_CONFIGURED message; got: ${errs.join(" | ")}`
+    );
+  } finally {
+    console.error = origErr;
+  }
+});
+
+test("context-loader tools --kn-id works without local MCP config", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://platform.example.com",
+    accessToken: "tok-test",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://platform.example.com");
+
+  const { restore, received } = installContextLoaderMcpFetchMock();
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run(["context-loader", "tools", "--kn-id", "kn-tools-1"]);
+    assert.equal(code, 0);
+    const toolsListCall = received.find((r) => {
+      try { return JSON.parse(r.body).method === "tools/list"; } catch { return false; }
+    });
+    assert.ok(toolsListCall, "expected tools/list request");
+    assert.equal(toolsListCall!.headers["X-Kn-ID"], "kn-tools-1");
+  } finally {
+    restore();
+  }
+});
+
+test("context-loader query-object-instance --kn-id does not break JSON parsing", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://platform.example.com",
+    accessToken: "tok-test",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://platform.example.com");
+
+  const { restore, received } = installContextLoaderMcpFetchMock();
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run([
+      "context-loader",
+      "query-object-instance",
+      '{"ot_id":"ot_drug","condition":{"operation":"and","sub_conditions":[]}}',
+      "--kn-id",
+      "kn-q-1",
+    ]);
+    assert.equal(code, 0);
+    const toolsCall = received.find((r) => {
+      try { return JSON.parse(r.body).method === "tools/call"; } catch { return false; }
+    });
+    assert.ok(toolsCall, "expected tools/call request");
+    assert.equal(toolsCall!.headers["X-Kn-ID"], "kn-q-1");
+    const parsed = JSON.parse(toolsCall!.body);
+    assert.equal(parsed.params.arguments.ot_id, "ot_drug");
+  } finally {
+    restore();
+  }
+});
+
 test("help text exposes auth as completing oauth login through local callback", async () => {
   assert.equal(await run(["help"]), 0);
 });

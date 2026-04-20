@@ -19,11 +19,28 @@ import { decodeJwtPayload, extractUserIdFromJwt } from "./jwt.js";
 export { NO_AUTH_TOKEN, isNoAuth } from "./no-auth.js";
 
 /**
+ * Strict platform-id normalizer for user-facing input boundaries (auth login,
+ * KWEAVER_BASE_URL, etc). Trims, strips trailing slashes, and REQUIRES an
+ * http(s):// scheme. Throws with a copy-pastable hint when the scheme is
+ * missing so a bare-host identifier never reaches the platforms/ directory.
+ */
+export function normalizePlatformId(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new Error(
+      `Platform URL must include scheme (http:// or https://). Got: "${input}".\n` +
+      `  Try: http://${trimmed}  or  https://${trimmed}`,
+    );
+  }
+  return trimmed;
+}
+
+/**
  * Persist a no-auth session for a platform (users/default/token.json) and set it as current.
  * Used by `kweaver auth <url> --no-auth` and when OAuth registration returns 404.
  */
 export function saveNoAuthPlatform(baseUrl: string, opts?: { tlsInsecure?: boolean }): TokenConfig {
-  const base = baseUrl.replace(/\/+$/, "");
+  const base = normalizePlatformId(baseUrl);
   const token: TokenConfig = {
     baseUrl: base,
     accessToken: NO_AUTH_TOKEN,
@@ -82,7 +99,7 @@ export interface ContextLoaderConfig {
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 
-function buildMcpUrl(baseUrl: string): string {
+export function buildMcpUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "") + MCP_PATH;
 }
 

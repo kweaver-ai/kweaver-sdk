@@ -581,9 +581,70 @@ export function validateComposerConfig(obj: unknown): obj is ComposerConfig {
   return true;
 }
 
+// ── Composer relay agent (auto-provisioned LLM relay) ───────────────────────
+// Composer's --prompt path calls an LLM via an existing agent (the "relay").
+// Previously the relay was picked heuristically from listAgents — which broke
+// on empty accounts and biased flow generation when the picked agent had a
+// domain-specific system prompt. Instead we reserve a well-known agent name
+// and lazily provision it on first use. It is intentionally minimal (neutral
+// system prompt, standard chat mode) to act as a clean LLM pipe.
+
+export const COMPOSER_RELAY_NAME = "__kweaver_composer_relay__";
+export const COMPOSER_RELAY_METADATA_PURPOSE = "composer-relay";
+
+export function findRelayByName(
+  entries: Array<{ id?: string; name?: string }>,
+  name: string,
+): string | null {
+  for (const e of entries) {
+    if (!e.id || !e.name) continue;
+    if (e.name === name) return e.id;
+  }
+  return null;
+}
+
+export function buildComposerRelayCreateBody(llms?: unknown[]): string {
+  return buildAgentCreateBody(
+    COMPOSER_RELAY_NAME,
+    "Internal LLM relay for KWeaver Composer — do not delete",
+    "You are a helpful assistant. Follow the user's instructions exactly, including any instructions embedded in the user's message.",
+    { metadata: { config_version: "v1", purpose: COMPOSER_RELAY_METADATA_PURPOSE } },
+    llms,
+  );
+}
+
+export interface EnsureRelayDeps {
+  listAgents: () => Promise<Array<{ id?: string; name?: string }>>;
+  fetchAgentInfo: (agentId: string) => Promise<{ id: string; key: string; version: string }>;
+  createAgent: (body: string) => Promise<string>;
+  publishAgent: (agentId: string) => Promise<void>;
+  llms: unknown[];
+}
+
+export async function ensureComposerRelay(
+  deps: EnsureRelayDeps,
+): Promise<{ id: string; key: string; version: string }> {
+  const entries = await deps.listAgents();
+  const existing = findRelayByName(entries, COMPOSER_RELAY_NAME);
+  if (existing) {
+    return await deps.fetchAgentInfo(existing);
+  }
+
+  const body = buildComposerRelayCreateBody(deps.llms);
+  const newId = await deps.createAgent(body);
+  try {
+    await deps.publishAgent(newId);
+  } catch (err) {
+    console.error(`[composer] relay publish failed (non-fatal): ${err instanceof Error ? err.message : err}`);
+  }
+  return await deps.fetchAgentInfo(newId);
+}
+
 /**
- * Find a usable published agent to relay LLM requests through.
- * Picks the first published agent from the agent list.
+ * Resolve the LLM relay agent for Composer's --prompt path. Auto-provisions a
+ * reserved-name relay when absent (solves "fresh account" bootstrap and
+ * eliminates the heuristic bias of picking an arbitrary domain-specific agent
+ * from listAgents).
  */
 async function findRelayAgent(
   baseUrl: string,
@@ -591,22 +652,32 @@ async function findRelayAgent(
   businessDomain: string,
 ): Promise<{ id: string; key: string; version: string } | null> {
   try {
-    const { listAgents } = await import("../api/agent-list.js");
-    const raw = await listAgents({ baseUrl, accessToken, businessDomain, limit: 20 });
-    const list = JSON.parse(raw) as { entries?: Array<{ id?: string; name?: string; is_built_in?: number }> };
-    const entries = list.entries ?? [];
+    const { listAgents, createAgent, publishAgent } = await import("../api/agent-list.js");
+    const llms = await getDefaultLlms(baseUrl, accessToken, businessDomain);
 
-    // Prefer non-built-in agents (less likely to have special behavior like planning)
-    const sorted = [...entries].sort((a, b) => (a.is_built_in ?? 0) - (b.is_built_in ?? 0));
-
-    for (const entry of sorted) {
-      if (!entry.id) continue;
-      try {
-        const info = await fetchAgentInfo({ baseUrl, accessToken, agentId: entry.id, version: "v0", businessDomain });
-        console.error(`[composer] Using relay agent "${entry.name}" (${entry.id})`);
-        return info;
-      } catch { /* try next */ }
-    }
+    const info = await ensureComposerRelay({
+      listAgents: async () => {
+        const raw = await listAgents({ baseUrl, accessToken, businessDomain, limit: 20 });
+        const list = JSON.parse(raw) as { entries?: Array<{ id?: string; name?: string }> };
+        return list.entries ?? [];
+      },
+      fetchAgentInfo: (agentId) =>
+        fetchAgentInfo({ baseUrl, accessToken, agentId, version: "v0", businessDomain }),
+      createAgent: async (body) => {
+        console.error(`[composer] provisioning relay agent "${COMPOSER_RELAY_NAME}" (first use on this account)`);
+        const raw = await createAgent({ baseUrl, accessToken, body, businessDomain });
+        const parsed = JSON.parse(raw) as { id?: string; data?: { id?: string } };
+        const id = parsed.id ?? parsed.data?.id;
+        if (!id) throw new Error("createAgent returned no id for relay");
+        return id;
+      },
+      publishAgent: async (agentId) => {
+        await publishAgent({ baseUrl, accessToken, agentId, businessDomain });
+      },
+      llms,
+    });
+    console.error(`[composer] Using relay agent "${COMPOSER_RELAY_NAME}" (${info.id})`);
+    return info;
   } catch (err) {
     console.error(`[composer] findRelayAgent failed: ${err instanceof Error ? err.message : err}`);
   }

@@ -495,7 +495,173 @@ describe("compileAndValidateWithRetry", () => {
   });
 });
 
-// ── 8. sanitizeAgentName ─────────────────────────────────────────────────────
+// ── 8. Composer relay agent (auto-provisioned LLM relay) ───────────────────
+
+import {
+  COMPOSER_RELAY_NAME,
+  COMPOSER_RELAY_METADATA_PURPOSE,
+  findRelayByName,
+  buildComposerRelayCreateBody,
+} from "../../src/commands/composer-engine.js";
+
+describe("findRelayByName", () => {
+  it("empty list → null", () => {
+    assert.strictEqual(findRelayByName([], COMPOSER_RELAY_NAME), null);
+  });
+
+  it("no match → null", () => {
+    assert.strictEqual(
+      findRelayByName([{ id: "a", name: "other" }, { id: "b", name: "__other__" }], COMPOSER_RELAY_NAME),
+      null,
+    );
+  });
+
+  it("single match → returns that id", () => {
+    const found = findRelayByName(
+      [{ id: "a", name: "other" }, { id: "b", name: COMPOSER_RELAY_NAME }],
+      COMPOSER_RELAY_NAME,
+    );
+    assert.strictEqual(found, "b");
+  });
+
+  it("multiple matches → returns first (list order)", () => {
+    const found = findRelayByName(
+      [
+        { id: "first", name: COMPOSER_RELAY_NAME },
+        { id: "second", name: COMPOSER_RELAY_NAME },
+      ],
+      COMPOSER_RELAY_NAME,
+    );
+    assert.strictEqual(found, "first");
+  });
+
+  it("entry missing id → skipped", () => {
+    const found = findRelayByName(
+      [{ name: COMPOSER_RELAY_NAME }, { id: "b", name: COMPOSER_RELAY_NAME }],
+      COMPOSER_RELAY_NAME,
+    );
+    assert.strictEqual(found, "b");
+  });
+
+  it("entry missing name → skipped", () => {
+    const found = findRelayByName(
+      [{ id: "a" }, { id: "b", name: COMPOSER_RELAY_NAME }],
+      COMPOSER_RELAY_NAME,
+    );
+    assert.strictEqual(found, "b");
+  });
+});
+
+describe("buildComposerRelayCreateBody", () => {
+  it("name is the reserved constant", () => {
+    const body = JSON.parse(buildComposerRelayCreateBody());
+    assert.strictEqual(body.name, COMPOSER_RELAY_NAME);
+  });
+
+  it("metadata.purpose carries the canary tag", () => {
+    const body = JSON.parse(buildComposerRelayCreateBody());
+    assert.strictEqual(body.config.metadata.purpose, COMPOSER_RELAY_METADATA_PURPOSE);
+  });
+
+  it("system_prompt is neutral (no role / domain bias)", () => {
+    const body = JSON.parse(buildComposerRelayCreateBody());
+    const sp = body.config.system_prompt as string;
+    assert.ok(sp.length > 0, "system_prompt must not be empty");
+    // Bias detectors: any prompt that claims a specific expertise is a relay anti-pattern
+    assert.ok(!/market|research|analyst|engineer|专家|分析师/i.test(sp),
+      `system_prompt looks biased (contains role keyword): ${sp}`);
+  });
+
+  it("llms field set when provided", () => {
+    const llms = [{ is_default: true, llm_config: { id: "mid-123", name: "test-model" } }];
+    const body = JSON.parse(buildComposerRelayCreateBody(llms));
+    assert.ok(Array.isArray(body.config.llms));
+    assert.strictEqual((body.config.llms as unknown[]).length, 1);
+  });
+
+  it("llms field absent when not provided", () => {
+    const body = JSON.parse(buildComposerRelayCreateBody());
+    assert.strictEqual(body.config.llms, undefined);
+  });
+
+  it("non-dolphin chat mode (pre_dolphin has context_organize)", () => {
+    const body = JSON.parse(buildComposerRelayCreateBody());
+    const pre = body.config.pre_dolphin as Array<{ key: string }>;
+    assert.ok(pre.some((p) => p.key === "context_organize"),
+      "relay must be a standard chat agent (pre_dolphin includes context_organize)");
+  });
+});
+
+// ── 9. ensureComposerRelay (auto-provision orchestration) ──────────────────
+
+import { ensureComposerRelay } from "../../src/commands/composer-engine.js";
+import type { AgentInfo } from "../../src/api/agent-chat.js";
+
+describe("ensureComposerRelay", () => {
+  const fakeInfo: AgentInfo = { id: "existing-relay", key: "k", version: "v0" };
+
+  it("returns existing relay when found by reserved name — no create", async () => {
+    let createCalls = 0;
+    let publishCalls = 0;
+    const info = await ensureComposerRelay({
+      listAgents: async () => [{ id: "existing-relay", name: COMPOSER_RELAY_NAME }],
+      fetchAgentInfo: async (id) => ({ ...fakeInfo, id }),
+      createAgent: async () => { createCalls++; return "never"; },
+      publishAgent: async () => { publishCalls++; },
+      llms: [],
+    });
+    assert.strictEqual(info.id, "existing-relay");
+    assert.strictEqual(createCalls, 0, "create must not be called when relay exists");
+    assert.strictEqual(publishCalls, 0, "publish must not be called when relay exists");
+  });
+
+  it("creates + publishes relay when not found, returns info of the new relay", async () => {
+    let createdBody: string | null = null;
+    let publishedId: string | null = null;
+    const info = await ensureComposerRelay({
+      listAgents: async () => [{ id: "other", name: "Other Agent" }],
+      fetchAgentInfo: async (id) => ({ ...fakeInfo, id }),
+      createAgent: async (body) => { createdBody = body; return "new-relay-id"; },
+      publishAgent: async (id) => { publishedId = id; },
+      llms: [{ is_default: true, llm_config: { id: "m", name: "m" } }],
+    });
+    assert.strictEqual(info.id, "new-relay-id");
+    assert.ok(createdBody, "createAgent must be called");
+    const parsed = JSON.parse(createdBody!);
+    assert.strictEqual(parsed.name, COMPOSER_RELAY_NAME);
+    assert.strictEqual(parsed.config.metadata.purpose, COMPOSER_RELAY_METADATA_PURPOSE);
+    assert.strictEqual(publishedId, "new-relay-id", "publish must target new relay id");
+  });
+
+  it("skips agents missing id when scanning", async () => {
+    const info = await ensureComposerRelay({
+      listAgents: async () => [
+        { name: COMPOSER_RELAY_NAME }, // missing id
+        { id: "real", name: COMPOSER_RELAY_NAME },
+      ],
+      fetchAgentInfo: async (id) => ({ ...fakeInfo, id }),
+      createAgent: async () => "should-not-be-called",
+      publishAgent: async () => { throw new Error("should not publish"); },
+      llms: [],
+    });
+    assert.strictEqual(info.id, "real");
+  });
+
+  it("tolerates publish failure (non-fatal) and still returns created info", async () => {
+    let publishAttempts = 0;
+    const info = await ensureComposerRelay({
+      listAgents: async () => [],
+      fetchAgentInfo: async (id) => ({ ...fakeInfo, id }),
+      createAgent: async () => "created",
+      publishAgent: async () => { publishAttempts++; throw new Error("403 forbidden"); },
+      llms: [],
+    });
+    assert.strictEqual(info.id, "created");
+    assert.strictEqual(publishAttempts, 1);
+  });
+});
+
+// ── 10. sanitizeAgentName ────────────────────────────────────────────────────
 
 describe("sanitizeAgentName", () => {
   it("replaces special chars with underscore", () => {

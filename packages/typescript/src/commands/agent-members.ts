@@ -123,3 +123,159 @@ export function mutateConfigMembers(input: MutateConfigMembersInput): MutateConf
     },
   };
 }
+
+// ── MemberSpec + orchestrator ───────────────────────────────────────────────
+
+export interface MemberFetchResult {
+  exists: boolean;
+  published: boolean;
+  name?: string;
+  /** Optional free-form status label for `list` output; e.g. "published" | "draft" | "offline". */
+  status?: string;
+}
+
+export interface MemberSpec {
+  /** Human-readable noun used in error/warning messages. */
+  memberKind: string;
+  /** Path inside the agent `config` object where the member array lives. */
+  configPath: string[];
+  /** Key inside each array element that identifies the member. */
+  idField: string;
+}
+
+export interface AgentMembersDeps {
+  getAgent: (agentId: string) => Promise<string>;
+  updateAgent: (agentId: string, body: Record<string, unknown>) => Promise<string>;
+  fetchById: (id: string) => Promise<MemberFetchResult>;
+}
+
+export interface PatchAgentMembersInput {
+  agentId: string;
+  spec: MemberSpec;
+  addIds: string[];
+  removeIds: string[];
+  strict: boolean;
+  deps: AgentMembersDeps;
+}
+
+export interface PatchAgentMembersReport extends MutationReport {
+  warnings: string[];
+}
+
+function mergeAgentBody(current: Record<string, unknown>, newConfig: Record<string, unknown>): Record<string, unknown> {
+  return {
+    name: current.name,
+    profile: current.profile,
+    avatar_type: current.avatar_type,
+    avatar: current.avatar,
+    product_key: current.product_key,
+    config: newConfig,
+  };
+}
+
+export async function patchAgentMembers(input: PatchAgentMembersInput): Promise<PatchAgentMembersReport> {
+  const { agentId, spec, addIds, removeIds, strict, deps } = input;
+
+  const warnings: string[] = [];
+
+  // 1. validate (add only)
+  if (addIds.length > 0) {
+    const results = await Promise.all(
+      addIds.map(async (id) => ({ id, info: await deps.fetchById(id) })),
+    );
+    const missing = results.filter((r) => !r.info.exists).map((r) => r.id);
+    if (missing.length > 0) {
+      throw new Error(
+        `${spec.memberKind}(s) ${missing.join(", ")} not found (aborting, agent not modified)`,
+      );
+    }
+    const drafts = results.filter((r) => r.info.exists && !r.info.published).map((r) => r.id);
+    if (drafts.length > 0) {
+      if (strict) {
+        throw new Error(
+          `${spec.memberKind}(s) ${drafts.join(", ")} are in draft status (aborted by --strict)`,
+        );
+      }
+      for (const id of drafts) {
+        warnings.push(`${spec.memberKind} ${id} is in draft status (use --strict to reject, or publish it first)`);
+      }
+    }
+  }
+
+  // 2. fetch current agent
+  const currentRaw = await deps.getAgent(agentId);
+  const current = JSON.parse(currentRaw) as Record<string, unknown>;
+  const config = (current.config ?? {}) as Record<string, unknown>;
+
+  // 3. mutate
+  const { newConfig, report } = mutateConfigMembers({
+    config,
+    path: spec.configPath,
+    idField: spec.idField,
+    addIds,
+    removeIds,
+  });
+
+  // Short-circuit: no-op (skip the write if neither add nor remove changed anything)
+  const nothingChanged = report.added.length === 0 && report.removed.length === 0;
+  if (nothingChanged) {
+    return { ...report, warnings };
+  }
+
+  // 4. write
+  await deps.updateAgent(agentId, mergeAgentBody(current, newConfig));
+
+  // 5. report
+  return { ...report, warnings };
+}
+
+// ── List orchestrator ────────────────────────────────────────────────────────
+
+export interface ListAgentMembersInput {
+  agentId: string;
+  spec: MemberSpec;
+  deps: Pick<AgentMembersDeps, "getAgent" | "fetchById">;
+}
+
+export interface ListedMember {
+  id: string;
+  name: string | null;
+  status: string;
+}
+
+export async function listAgentMembers(input: ListAgentMembersInput): Promise<ListedMember[]> {
+  const { agentId, spec, deps } = input;
+  const currentRaw = await deps.getAgent(agentId);
+  const current = JSON.parse(currentRaw) as Record<string, unknown>;
+  const config = (current.config ?? {}) as Record<string, unknown>;
+
+  // Read (don't create) the path. If any segment is missing, result is empty.
+  let cursor: unknown = config;
+  for (const key of spec.configPath) {
+    if (cursor && typeof cursor === "object" && !Array.isArray(cursor) && key in (cursor as Record<string, unknown>)) {
+      cursor = (cursor as Record<string, unknown>)[key];
+    } else {
+      return [];
+    }
+  }
+  if (!Array.isArray(cursor)) return [];
+
+  const ids = (cursor as Record<string, unknown>[]).map((el) => String(el[spec.idField] ?? ""));
+
+  const results = await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const info = await deps.fetchById(id);
+        return {
+          id,
+          name: info.name ?? null,
+          status: info.status ?? (info.exists ? (info.published ? "published" : "unpublish") : "unknown"),
+        };
+      } catch {
+        return { id, name: null, status: "unknown" };
+      }
+    }),
+  );
+
+  return results;
+}

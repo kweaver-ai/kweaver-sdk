@@ -4,7 +4,7 @@
  */
 
 export interface MutationReport {
-  currentIds: string[];
+  finalIds: string[];
   added: string[];
   alreadyAttached: string[];
   removed: string[];
@@ -22,7 +22,7 @@ export interface MutateConfigMembersInput {
 export interface MutateConfigMembersResult {
   newConfig: Record<string, unknown>;
   report: MutationReport;
-  currentIds: string[];
+  finalIds: string[];
 }
 
 /** Deep-clone a JSON-serializable object so mutations don't leak to callers. */
@@ -64,11 +64,14 @@ function ensureArrayAtPath(
 }
 
 export function mutateConfigMembers(input: MutateConfigMembersInput): MutateConfigMembersResult {
+  if (input.path.length === 0) {
+    throw new Error("mutateConfigMembers: path must have at least one segment");
+  }
   const newConfig = clone(input.config);
   const arr = ensureArrayAtPath(newConfig, input.path);
 
-  const currentIds: string[] = arr.map((el) => String(el[input.idField] ?? ""));
-  const currentSet = new Set(currentIds);
+  const existingIds: string[] = arr.map((el) => String(el[input.idField] ?? ""));
+  const currentSet = new Set(existingIds);
 
   const added: string[] = [];
   const alreadyAttached: string[] = [];
@@ -110,9 +113,9 @@ export function mutateConfigMembers(input: MutateConfigMembersInput): MutateConf
 
   return {
     newConfig,
-    currentIds: finalIds,
+    finalIds,
     report: {
-      currentIds: finalIds,
+      finalIds,
       added,
       alreadyAttached,
       removed,

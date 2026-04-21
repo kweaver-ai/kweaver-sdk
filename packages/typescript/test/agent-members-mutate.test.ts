@@ -101,14 +101,28 @@ test("mutateConfigMembers does not mutate input config", () => {
   assert.deepEqual(config, original);
 });
 
-test("mutateConfigMembers lists current ids", () => {
+test("mutateConfigMembers exposes finalIds list", () => {
   const config = { skills: { skills: [{ skill_id: "sk_a" }, { skill_id: "sk_b" }] } };
-  const { currentIds } = mutateConfigMembers({
+  const { finalIds } = mutateConfigMembers({
     config,
     path: ["skills", "skills"],
     idField: "skill_id",
     addIds: [],
     removeIds: [],
   });
-  assert.deepEqual(currentIds, ["sk_a", "sk_b"]);
+  assert.deepEqual(finalIds, ["sk_a", "sk_b"]);
+});
+
+test("mutateConfigMembers throws on empty path", () => {
+  assert.throws(
+    () =>
+      mutateConfigMembers({
+        config: {},
+        path: [],
+        idField: "skill_id",
+        addIds: ["sk_a"],
+        removeIds: [],
+      }),
+    /path must have at least one segment/i,
+  );
 });

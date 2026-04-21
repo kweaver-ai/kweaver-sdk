@@ -108,6 +108,26 @@ test("agent skill add — rejects missing id", { concurrency: false }, async () 
   }
 });
 
+test("agent skill add — arg parse error uses ✗ prefix", { concurrency: false }, async () => {
+  await primeToken();
+  const errors: string[] = [];
+  const originalErr = console.error;
+  const originalStderr = process.stderr.write.bind(process.stderr);
+  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
+  (process.stderr as any).write = (chunk: any) => { errors.push(String(chunk)); return true; };
+  try {
+    // No agent id, no skill id — triggers parseWriteArgs throw
+    const code = await runAgentCommand(["skill", "add"]);
+    assert.equal(code, 1);
+    const out = errors.join("");
+    assert.match(out, /✗/, `expected ✗ prefix, got: ${out}`);
+    assert.match(out, /Missing <agent-id>/);
+  } finally {
+    console.error = originalErr;
+    (process.stderr as any).write = originalStderr;
+  }
+});
+
 test("agent skill add — happy path writes and reports", { concurrency: false }, async () => {
   await primeToken();
 

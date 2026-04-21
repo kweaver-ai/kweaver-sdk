@@ -340,29 +340,29 @@ function printReport(kind: string, agentId: string, report: PatchAgentMembersRep
 }
 
 async function runSkillAdd(args: string[]): Promise<number> {
-  const parsed = parseWriteArgs(args, "add");
-  const token = await ensureValidToken();
-  const businessDomain = parsed.businessDomain || resolveBusinessDomain();
-
-  const deps: AgentMembersDeps = {
-    getAgent: (id) => getAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, businessDomain }),
-    updateAgent: (id, body) => updateAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, body: JSON.stringify(body), businessDomain }),
-    fetchById: async (id) => {
-      try {
-        const info = await getSkill({ baseUrl: token.baseUrl, accessToken: token.accessToken, skillId: id, businessDomain });
-        return {
-          exists: true,
-          published: info.status === "published",
-          name: info.name,
-          status: info.status,
-        };
-      } catch {
-        return { exists: false, published: false };
-      }
-    },
-  };
-
   try {
+    const parsed = parseWriteArgs(args, "add");
+    const token = await ensureValidToken();
+    const businessDomain = parsed.businessDomain || resolveBusinessDomain();
+
+    const deps: AgentMembersDeps = {
+      getAgent: (id) => getAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, businessDomain }),
+      updateAgent: (id, body) => updateAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, body: JSON.stringify(body), businessDomain }),
+      fetchById: async (id) => {
+        try {
+          const info = await getSkill({ baseUrl: token.baseUrl, accessToken: token.accessToken, skillId: id, businessDomain });
+          return {
+            exists: true,
+            published: info.status === "published",
+            name: info.name,
+            status: info.status,
+          };
+        } catch {
+          return { exists: false, published: false };
+        }
+      },
+    };
+
     const report = await patchAgentMembers({
       agentId: parsed.agentId,
       spec: SKILL_SPEC,
@@ -380,17 +380,17 @@ async function runSkillAdd(args: string[]): Promise<number> {
 }
 
 async function runSkillRemove(args: string[]): Promise<number> {
-  const parsed = parseWriteArgs(args, "remove");
-  const token = await ensureValidToken();
-  const businessDomain = parsed.businessDomain || resolveBusinessDomain();
-
-  const deps: AgentMembersDeps = {
-    getAgent: (id) => getAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, businessDomain }),
-    updateAgent: (id, body) => updateAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, body: JSON.stringify(body), businessDomain }),
-    fetchById: async () => ({ exists: true, published: true }),
-  };
-
   try {
+    const parsed = parseWriteArgs(args, "remove");
+    const token = await ensureValidToken();
+    const businessDomain = parsed.businessDomain || resolveBusinessDomain();
+
+    const deps: AgentMembersDeps = {
+      getAgent: (id) => getAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, businessDomain }),
+      updateAgent: (id, body) => updateAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, body: JSON.stringify(body), businessDomain }),
+      fetchById: async () => ({ exists: true, published: true }),
+    };
+
     const report = await patchAgentMembers({
       agentId: parsed.agentId,
       spec: SKILL_SPEC,
@@ -421,6 +421,10 @@ async function runSkillList(args: string[]): Promise<number> {
     if (arg === "--compact") { pretty = false; continue; }
     if (arg === "-bd" || arg === "--biz-domain") {
       businessDomain = args[i + 1] ?? "";
+      if (!businessDomain || businessDomain.startsWith("-")) {
+        process.stderr.write("Missing value for biz-domain flag\n");
+        return 1;
+      }
       i += 1;
       continue;
     }

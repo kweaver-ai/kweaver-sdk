@@ -13,8 +13,8 @@ import { buildHeaders } from "./headers.js";
 //   POST   /tool-box/{id}/tools/status enable/disable (batch)
 //
 // Verified during Task 8 e2e against the live backend (2026-04-18):
-//   GET    /tool-box?keyword=&limit=&offset=  list toolboxes
-//   GET    /tool-box/{id}/tool                list tools
+//   GET    /tool-box/list?keyword=&limit=&offset=  list toolboxes
+//   GET    /tool-box/{id}/tools/list               list tools
 
 const PATH = "/api/agent-operator-integration/v1/tool-box";
 
@@ -120,7 +120,7 @@ export async function listToolboxes(opts: ListToolboxesOptions): Promise<string>
   if (opts.keyword !== undefined) qp.set("keyword", opts.keyword);
   if (opts.limit !== undefined) qp.set("limit", String(opts.limit));
   if (opts.offset !== undefined) qp.set("offset", String(opts.offset));
-  const suffix = qp.toString() ? `?${qp}` : "";
+  const suffix = `/list${qp.toString() ? `?${qp}` : ""}`;
   const { body } = await fetchTextOrThrow(url(opts.baseUrl, suffix), {
     method: "GET",
     headers: buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"),
@@ -133,7 +133,7 @@ export interface ListToolsOptions extends BaseOpts {
 }
 
 export async function listTools(opts: ListToolsOptions): Promise<string> {
-  const { body } = await fetchTextOrThrow(url(opts.baseUrl, `/${encodeURIComponent(opts.boxId)}/tool`), {
+  const { body } = await fetchTextOrThrow(url(opts.baseUrl, `/${encodeURIComponent(opts.boxId)}/tools/list`), {
     method: "GET",
     headers: buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"),
   });

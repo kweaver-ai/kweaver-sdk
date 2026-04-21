@@ -120,7 +120,7 @@ test("setToolStatuses POSTs JSON array to /tools/status", async () => {
   } finally { restore(); }
 });
 
-test("listToolboxes GETs /tool-box with query params", async () => {
+test("listToolboxes GETs /tool-box/list with query params", async () => {
   let captured: { url: string } | null = null;
   const restore = mockFetch(async (url) => {
     captured = { url: String(url) };
@@ -128,7 +128,7 @@ test("listToolboxes GETs /tool-box with query params", async () => {
   });
   try {
     await listToolboxes({ baseUrl: BASE, accessToken: TOKEN, keyword: "demo", limit: 20, offset: 0 });
-    assert.match(captured!.url, /\/tool-box\?/);
+    assert.match(captured!.url, /\/tool-box\/list\?/);
     assert.match(captured!.url, /keyword=demo/);
     assert.match(captured!.url, /limit=20/);
     assert.match(captured!.url, /offset=0/);
@@ -144,12 +144,12 @@ test("listToolboxes with no params produces no query string", async () => {
   try {
     await listToolboxes({ baseUrl: BASE, accessToken: TOKEN });
     assert.ok(captured);
-    assert.equal(captured!.url, `${BASE}/api/agent-operator-integration/v1/tool-box`);
+    assert.equal(captured!.url, `${BASE}/api/agent-operator-integration/v1/tool-box/list`);
     assert.ok(!captured!.url.includes("?"), `URL should have no '?' suffix; got ${captured!.url}`);
   } finally { restore(); }
 });
 
-test("listTools GETs /tool-box/{id}/tool", async () => {
+test("listTools GETs /tool-box/{id}/tools/list", async () => {
   let captured: { url: string } | null = null;
   const restore = mockFetch(async (url) => {
     captured = { url: String(url) };
@@ -157,6 +157,6 @@ test("listTools GETs /tool-box/{id}/tool", async () => {
   });
   try {
     await listTools({ baseUrl: BASE, accessToken: TOKEN, boxId: "b1" });
-    assert.match(captured!.url, /\/tool-box\/b1\/tool($|\?)/);
+    assert.match(captured!.url, /\/tool-box\/b1\/tools\/list($|\?)/);
   } finally { restore(); }
 });

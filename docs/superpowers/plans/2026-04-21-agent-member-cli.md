@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship 9 sub-subcommands (`kweaver agent {skill|tool|mcp} {add|remove|list}`) that let users attach / detach / inspect agent members without hand-editing JSON, closing [issue #72](https://github.com/kweaver-ai/kweaver-sdk/issues/72).
+**Goal:** Ship 3 sub-subcommands (`kweaver agent skill {add|remove|list}`) that let users attach / detach / inspect skills without hand-editing JSON, closing the most painful slice of [issue #72](https://github.com/kweaver-ai/kweaver-sdk/issues/72). Tool + MCP groups deferred to follow-up — see `docs/superpowers/plans/research/2026-04-21-agent-config-probe.md` for rationale.
 
-**Architecture:** One pure mutation utility (`mutateConfigMembers`) + one orchestrator (`patchAgentMembers`) + three `MemberSpec` adapters (skill/tool/mcp) that plug into existing `getAgent` / `updateAgent` API calls. A separate `listAgentMembers` orchestrator handles the read path. All new code lives in a new file `packages/typescript/src/commands/agent-members.ts`; `agent.ts` only gains a dispatch branch.
+**Architecture:** One pure mutation utility (`mutateConfigMembers`) + one orchestrator (`patchAgentMembers`) + a `MemberSpec` adapter for skills, plugging into existing `getAgent` / `updateAgent` API calls. A separate `listAgentMembers` orchestrator handles the read path. All new code lives in a new file `packages/typescript/src/commands/agent-members.ts`; `agent.ts` only gains a dispatch branch. The orchestrator is intentionally member-agnostic so the follow-up tool/mcp work can plug in without restructuring.
 
 **Tech Stack:** TypeScript, Node built-in `node:test`, existing `fetchTextOrThrow` / `HttpError` utilities, existing `getAgent` / `updateAgent` / `getSkill` API functions.
 
@@ -18,19 +18,16 @@
 packages/typescript/
   src/
     commands/
-      agent.ts                          — MODIFY: add skill|tool|mcp dispatch in runAgentCommand, update help text
-      agent-members.ts                  — NEW: MemberSpec + mutateConfigMembers + patchAgentMembers + listAgentMembers + three command handlers
-    api/
-      toolboxes.ts                      — MODIFY (only if Task 1 finds no suitable fetch): add getToolboxById helper
-      mcp-servers.ts                    — NEW (only if Task 1 probe shows mcp support): thin API wrapper
+      agent.ts                          — MODIFY: add skill dispatch in runAgentCommand, update help text
+      agent-members.ts                  — NEW: MemberSpec + mutateConfigMembers + patchAgentMembers + listAgentMembers + skill command handler
   test/
     agent-members-mutate.test.ts        — NEW: pure mutation tests
     agent-members-orchestrator.test.ts  — NEW: patchAgentMembers / listAgentMembers with fetch mocks
     agent-members-cmd.test.ts           — NEW: command parsing + help text + router wiring
     e2e/
-      agent-member-skill.test.ts        — NEW: end-to-end on real platform, skill group only
+      agent-member-skill.test.ts        — NEW: end-to-end on real platform
 docs/superpowers/plans/research/
-  2026-04-21-agent-config-probe.md      — NEW: findings from Task 1
+  2026-04-21-agent-config-probe.md      — NEW: findings from Task 1 (already complete)
 ```
 
 ---
@@ -120,13 +117,7 @@ git commit -m "docs(plan): agent config probe findings for #72"
 
 - [ ] **Step 6: Update this plan based on findings**
 
-Edit this plan file in place:
-
-1. In Task 2, replace `SKILL_SPEC.configPath = ["skills", "skills"]` with the actually-observed path.
-2. In Task 7 / 8 / 9, replace the `<TOOL_CONFIG_PATH>` placeholder with the observed path and `<TOOL_ID_FIELD>` with the observed id-field name. Update the command verb if probe chose `toolbox` over `tool`.
-3. If MCP is ABSENT: delete Tasks 10, 11, 12 from this plan entirely, and mark the mcp group as "deferred — tracked in follow-up issue" in Task 14's writeup.
-
-Do NOT commit the plan edits separately — they'll flow in with Task 2.
+This step has already been executed (2026-04-21): probe confirmed `configPath = ["skills", "skills"]` and `idField = "skill_id"` for the skill group, matching the values hard-coded in Task 4. Tool and MCP groups were dropped from this plan based on the probe (see "Decisions for this plan" in the probe report and the follow-up issue stub).
 
 ---
 
@@ -1272,169 +1263,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ---
 
-## Task 5: Tool Command Handlers
-
-**Files:**
-- Modify: `packages/typescript/src/commands/agent-members.ts` — add `runAgentToolCommand`
-- Modify: `packages/typescript/src/commands/agent.ts` — dispatch
-- Test: extend `packages/typescript/test/agent-members-cmd.test.ts`
-
-Mirrors Task 4 for tools. Exact config path, id-field, and command verb (`tool` vs `toolbox`) come from Task 1's probe.
-
-**Prerequisites from Task 1:**
-- `<TOOL_CONFIG_PATH>` — replace with the path array observed in probe, e.g. `["tools", "tools"]` or `["toolboxes"]`
-- `<TOOL_ID_FIELD>` — replace with observed id-field name, e.g. `"tool_id"` or `"toolbox_id"`
-- `<TOOL_VERB>` — replace with `"tool"` or `"toolbox"` based on probe decision
-
-- [ ] **Step 1: Add TOOL_SPEC and tool `fetchById` adapter**
-
-In `packages/typescript/src/commands/agent-members.ts`, add alongside `SKILL_SPEC`:
-
-```ts
-import { listToolboxes, listTools } from "../api/toolboxes.js";
-
-const TOOL_SPEC: MemberSpec = {
-  memberKind: "<TOOL_VERB>",
-  configPath: [<TOOL_CONFIG_PATH>],
-  idField: "<TOOL_ID_FIELD>",
-};
-```
-
-Write a tool-specific `fetchById`. Toolboxes/tools don't have a pure `getById` endpoint — if the verb is `toolbox`, use `listToolboxes({keyword: id})` and filter; if `tool`, use `listToolboxes` to enumerate boxes then `listTools({boxId})` to find the match. Extract this into a helper:
-
-```ts
-async function fetchToolInfo(
-  ctx: { baseUrl: string; accessToken: string; businessDomain: string },
-  id: string,
-): Promise<MemberFetchResult> {
-  // Implementation depends on Task 1 decision. Pseudo-code for the "toolbox as unit" case:
-  try {
-    const raw = await listToolboxes({ baseUrl: ctx.baseUrl, accessToken: ctx.accessToken, businessDomain: ctx.businessDomain });
-    const parsed = JSON.parse(raw) as { data?: Array<{ box_id?: string; toolbox_id?: string; id?: string; box_name?: string; status?: string }> };
-    const rows = parsed.data ?? [];
-    const match = rows.find((r) => String(r.box_id ?? r.toolbox_id ?? r.id) === id);
-    if (!match) return { exists: false, published: false };
-    return {
-      exists: true,
-      published: match.status === "published",
-      name: match.box_name,
-      status: match.status,
-    };
-  } catch {
-    return { exists: false, published: false };
-  }
-}
-```
-
-For the "individual tool" case, the equivalent is nested: `listToolboxes` → for each box `listTools({boxId})` → match `tool_id`. This is O(N*M); acceptable for now, issue #72 explicitly accepts N round-trips per fetch.
-
-- [ ] **Step 2: Copy the three runners from Task 4 and rename**
-
-In `agent-members.ts`, duplicate `runSkillAdd` / `runSkillRemove` / `runSkillList` as `runToolAdd` / `runToolRemove` / `runToolList`. Differences:
-
-- Use `TOOL_SPEC` instead of `SKILL_SPEC`.
-- `deps.fetchById` uses `fetchToolInfo` (add) or the never-invoked stub (remove).
-- `printReport` second arg becomes `"<TOOL_VERB>"`.
-- `list` output row becomes `{ <TOOL_ID_FIELD>: r.id, name: r.name, status: r.status }`.
-
-Export a dispatcher:
-
-```ts
-export async function runAgentToolCommand(args: string[]): Promise<number> {
-  const [verb, ...rest] = args;
-  if (!verb || verb === "--help" || verb === "-h") {
-    console.log(`kweaver agent <TOOL_VERB>
-  add <agent-id> <id>... [--strict] [-bd <bd>]
-  remove <agent-id> <id>... [-bd <bd>]
-  list <agent-id> [--pretty|--compact] [-bd <bd>]`);
-    return 0;
-  }
-  if (verb === "add") return runToolAdd(rest);
-  if (verb === "remove") return runToolRemove(rest);
-  if (verb === "list") return runToolList(rest);
-  process.stderr.write(`Unknown agent <TOOL_VERB> subcommand: ${verb}\n`);
-  return 1;
-}
-```
-
-- [ ] **Step 3: Wire dispatch in agent.ts**
-
-In the `dispatch` inner of `runAgentCommand`, add:
-
-```ts
-    if (subcommand === "<TOOL_VERB>") return runAgentToolCommand(rest);
-```
-
-And add a line to the help text.
-
-- [ ] **Step 4: Add a happy-path test**
-
-Append to `test/agent-members-cmd.test.ts` one test mirroring "agent skill add — happy path writes and reports" but targeting `["<TOOL_VERB>", "add", "ag_1", "tb_a"]` with mocks for `listToolboxes` / agent get+put.
-
-- [ ] **Step 5: Run lint + full test suite**
-
-```bash
-cd packages/typescript && npm run lint && npm test 2>&1 | tail -20
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add packages/typescript/src/commands/agent-members.ts packages/typescript/src/commands/agent.ts packages/typescript/test/agent-members-cmd.test.ts
-git commit -m "feat(agent): kweaver agent <TOOL_VERB> {add,remove,list} for #72
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
-```
-
----
-
-## Task 6: MCP Command Handlers
-
-> **Gated on Task 1 probe.** If the probe determined MCP is not supported on the platform (no config field exists), DELETE this task and note the deferral in Task 8's writeup.
-
-**Files:** same pattern as Task 5.
-
-**Prerequisites from Task 1:**
-- `<MCP_CONFIG_PATH>`, `<MCP_ID_FIELD>` from probe
-- Whether a get-by-id or list endpoint exists on the platform for mcp servers
-
-- [ ] **Step 1: Add `api/mcp-servers.ts` if absent**
-
-If the probe found the platform API endpoints for mcp servers, create a thin wrapper matching the pattern of `api/skills.ts` — exports `getMcpServer` or `listMcpServers` as needed.
-
-If only a list endpoint exists, the `fetchById` adapter uses list-and-filter like Task 5's tool adapter.
-
-- [ ] **Step 2: Add MCP_SPEC + runners + dispatcher**
-
-Same structure as Task 5, targeting `MCP_SPEC` and `runAgentMcpCommand`.
-
-- [ ] **Step 3: Wire dispatch + help**
-
-```ts
-    if (subcommand === "mcp") return runAgentMcpCommand(rest);
-```
-
-- [ ] **Step 4: Add command test**
-
-One happy-path test for `mcp add`.
-
-- [ ] **Step 5: Lint + test**
-
-```bash
-cd packages/typescript && npm run lint && npm test 2>&1 | tail -10
-```
-
-- [ ] **Step 6: Commit**
-
-```bash
-git commit -m "feat(agent): kweaver agent mcp {add,remove,list} for #72"
-```
-
----
-
-## Task 7: E2E Test for Skill Group
+## Task 5: E2E Test for Skill Group
 
 **Files:**
 - Create: `packages/typescript/test/e2e/agent-member-skill.test.ts`
@@ -1493,7 +1322,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ---
 
-## Task 8: Manual Verification + Issue Writeup
+## Task 6: Manual Verification + Issue Writeup
 
 **Files:**
 - None modified. Artifacts posted to GitHub issue #72.
@@ -1523,18 +1352,16 @@ kweaver agent skill remove <agent-id> <skill-id>
 Verify:
 1. Before add: skill not in list.
 2. After add: skill in list with correct name + status.
-3. `agent get <agent-id>` afterward: other config fields (llms, system_prompt, data_source) untouched.
+3. `agent get <agent-id>` afterward: other config fields (llms, system_prompt, data_source, the rest of `config.skills.*`) untouched.
 4. After remove: skill gone from list.
-5. Tool group: same round-trip.
-6. MCP group (if shipped): same round-trip.
 
 - [ ] **Step 3: Post a close-out comment on issue #72**
 
 Use `gh issue comment 72 --repo kweaver-ai/kweaver-sdk --body-file <file>` with content:
 
-- Summary of what shipped (9 / 6 / 3 subcommands depending on scope).
+- Summary of what shipped: 3 subcommands (`agent skill {add,remove,list}`).
 - Before/after terminal transcript from Step 2.
-- What was explicitly deferred and why (llm, knowledge-network, `set` verb, flag form, agent trace fix — each cites its own follow-up rationale).
+- What was explicitly deferred and why: tool + mcp groups (need separate spec — see `docs/superpowers/plans/research/2026-04-21-agent-config-probe.md` for the resolved facts that make a follow-up cheap); also still-deferred from spec: llm, knowledge-network, `set` verb, flag form, agent trace fix.
 - Link to the merged PR when available.
 
 - [ ] **Step 4: Final commit if any docs updated during verification**
@@ -1549,17 +1376,19 @@ git commit -am "docs: final probe findings for #72 close-out"
 
 ## Self-Review
 
-Ran a final pass against the spec:
+Ran a final pass against the spec (after the 2026-04-21 scope shrink to skill-only):
 
-- **Spec coverage:** Every spec section has a task. Section-to-task mapping:
-  - "目标 UX" before/after → Task 8
-  - "CLI 表面" 9 commands → Tasks 4, 5, 6
-  - "底层机制" `patchAgentMembers` + `listAgentMembers` → Tasks 2, 3
+- **Spec coverage (skill slice):** Every spec section that applies to skill has a task:
+  - "目标 UX" before/after → Task 6
+  - "CLI 表面" — skill row of the 9-command table → Task 4
+  - "底层机制" `patchAgentMembers` + `listAgentMembers` → Tasks 2, 3 (member-agnostic, ready for tool/mcp follow-up)
   - "校验与用户可见输出" → Tasks 3 (logic), 4 (printReport)
-  - "测试" 单元 / 集成 / e2e / 手工 → Tasks 2, 3, 4-6 (cmd), 7 (e2e), 8 (manual)
-  - "文件改动清单" → matches File Structure header exactly
-  - "已知 limitation" → surfaced in Task 8's writeup (the "deferred" list)
+  - "测试" 单元 / 集成 / e2e / 手工 → Tasks 2, 3, 4 (cmd), 5 (e2e), 6 (manual)
+  - "文件改动清单" → matches File Structure header
+  - "已知 limitation" → surfaced in Task 6's writeup (deferred list)
 
-- **Placeholder scan:** Task 5 and Task 6 intentionally keep `<TOOL_*>` and `<MCP_*>` placeholders because Task 1 supplies those values — this is an explicit substitution step, not an unfilled gap. All other tasks have concrete code and commands.
+- **Spec coverage (deferred):** "CLI 表面" tool + mcp rows are not in this plan; tracked via the follow-up issue described in the probe report. This is the explicit user-approved scope shrink, not a gap.
 
-- **Type consistency:** `MemberSpec`, `MemberFetchResult`, `AgentMembersDeps`, `PatchAgentMembersReport`, `MutationReport`, `mutateConfigMembers`, `patchAgentMembers`, `listAgentMembers` — names and shapes used identically across Tasks 2, 3, 4, 5, 6.
+- **Placeholder scan:** No `<TOOL_*>` / `<MCP_*>` placeholders remain. Task 1 placeholders that referenced Task 5/6 substitutions were dropped along with those tasks. Task 1 itself is already complete (probe ran 2026-04-21).
+
+- **Type consistency:** `MemberSpec`, `MemberFetchResult`, `AgentMembersDeps`, `PatchAgentMembersReport`, `MutationReport`, `mutateConfigMembers`, `patchAgentMembers`, `listAgentMembers` — names and shapes used identically across Tasks 2, 3, 4.

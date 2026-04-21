@@ -1,5 +1,6 @@
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { runAgentChatCommand } from "./agent-chat.js";
+import { runAgentSkillCommand } from "./agent-members.js";
 import {
   listAgents, getAgent, getAgentByKey,
   createAgent, updateAgent, deleteAgent,
@@ -684,6 +685,7 @@ Subcommands:
   unpublish <agent_id>               Unpublish an agent
   chat <agent_id>                    Start interactive chat with an agent
   chat <agent_id> -m "message"       Send a single message (non-interactive)
+  skill <verb> ...                   Manage skills attached to an agent (add/remove/list)
   sessions <agent_id>                List all conversations for an agent
   history <agent_id> <conversation_id> Show message history for a conversation
   trace <agent_id> <conversation_id>  Get trace data for a conversation`);
@@ -707,6 +709,7 @@ Subcommands:
     if (subcommand === "delete") return runAgentDeleteCommand(rest);
     if (subcommand === "publish") return runAgentPublishCommand(rest);
     if (subcommand === "unpublish") return runAgentUnpublishCommand(rest);
+    if (subcommand === "skill") return runAgentSkillCommand(rest);
     return -1;
   };
 

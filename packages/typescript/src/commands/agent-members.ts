@@ -3,6 +3,11 @@
  * (skills, tools, mcps) via get → mutate(config) → update.
  */
 
+import { getAgent, updateAgent } from "../api/agent-list.js";
+import { getSkill } from "../api/skills.js";
+import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
+import { resolveBusinessDomain } from "../config/store.js";
+
 export interface MutationReport {
   finalIds: string[];
   added: string[];
@@ -278,4 +283,201 @@ export async function listAgentMembers(input: ListAgentMembersInput): Promise<Li
   );
 
   return results;
+}
+
+// ── Skill command handler ────────────────────────────────────────────────────
+
+const SKILL_SPEC: MemberSpec = {
+  memberKind: "skill",
+  configPath: ["skills", "skills"],
+  idField: "skill_id",
+};
+
+interface ParsedWriteArgs {
+  agentId: string;
+  ids: string[];
+  strict: boolean;
+  businessDomain: string;
+}
+
+function parseWriteArgs(args: string[], verb: "add" | "remove"): ParsedWriteArgs {
+  const agentId = args[0];
+  if (!agentId || agentId.startsWith("-")) {
+    throw new Error(`Missing <agent-id> for ${verb}`);
+  }
+  const ids: string[] = [];
+  let strict = false;
+  let businessDomain = "";
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i]!;
+    if (arg === "--strict") { strict = true; continue; }
+    if (arg === "-bd" || arg === "--biz-domain") {
+      businessDomain = args[i + 1] ?? "";
+      if (!businessDomain || businessDomain.startsWith("-")) {
+        throw new Error("Missing value for biz-domain flag");
+      }
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("-")) {
+      throw new Error(`Unsupported flag: ${arg}`);
+    }
+    ids.push(arg);
+  }
+  if (ids.length === 0) {
+    throw new Error(`Missing <member-id> for ${verb}`);
+  }
+  return { agentId, ids, strict, businessDomain };
+}
+
+function printReport(kind: string, agentId: string, report: PatchAgentMembersReport): void {
+  for (const w of report.warnings) process.stderr.write(`! ${w}\n`);
+  for (const id of report.added) console.log(`✓ ${id}  added`);
+  for (const id of report.alreadyAttached) console.log(`• ${id}  already attached (skipped)`);
+  for (const id of report.removed) console.log(`✓ ${id}  removed`);
+  for (const id of report.notAttached) console.log(`• ${id}  not attached (skipped)`);
+  console.log(`Agent ${agentId} now has ${report.finalIds.length} ${kind}(s) attached.`);
+}
+
+async function runSkillAdd(args: string[]): Promise<number> {
+  const parsed = parseWriteArgs(args, "add");
+  const token = await ensureValidToken();
+  const businessDomain = parsed.businessDomain || resolveBusinessDomain();
+
+  const deps: AgentMembersDeps = {
+    getAgent: (id) => getAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, businessDomain }),
+    updateAgent: (id, body) => updateAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, body: JSON.stringify(body), businessDomain }),
+    fetchById: async (id) => {
+      try {
+        const info = await getSkill({ baseUrl: token.baseUrl, accessToken: token.accessToken, skillId: id, businessDomain });
+        return {
+          exists: true,
+          published: info.status === "published",
+          name: info.name,
+          status: info.status,
+        };
+      } catch {
+        return { exists: false, published: false };
+      }
+    },
+  };
+
+  try {
+    const report = await patchAgentMembers({
+      agentId: parsed.agentId,
+      spec: SKILL_SPEC,
+      addIds: parsed.ids,
+      removeIds: [],
+      strict: parsed.strict,
+      deps,
+    });
+    printReport("skill", parsed.agentId, report);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`✗ ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+}
+
+async function runSkillRemove(args: string[]): Promise<number> {
+  const parsed = parseWriteArgs(args, "remove");
+  const token = await ensureValidToken();
+  const businessDomain = parsed.businessDomain || resolveBusinessDomain();
+
+  const deps: AgentMembersDeps = {
+    getAgent: (id) => getAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, businessDomain }),
+    updateAgent: (id, body) => updateAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, body: JSON.stringify(body), businessDomain }),
+    fetchById: async () => ({ exists: true, published: true }),
+  };
+
+  try {
+    const report = await patchAgentMembers({
+      agentId: parsed.agentId,
+      spec: SKILL_SPEC,
+      addIds: [],
+      removeIds: parsed.ids,
+      strict: false,
+      deps,
+    });
+    printReport("skill", parsed.agentId, report);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`✗ ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+}
+
+async function runSkillList(args: string[]): Promise<number> {
+  const agentId = args[0];
+  if (!agentId || agentId.startsWith("-")) {
+    process.stderr.write("Missing <agent-id> for list\n");
+    return 1;
+  }
+  let pretty = true;
+  let businessDomain = "";
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i]!;
+    if (arg === "--pretty") { pretty = true; continue; }
+    if (arg === "--compact") { pretty = false; continue; }
+    if (arg === "-bd" || arg === "--biz-domain") {
+      businessDomain = args[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+    process.stderr.write(`Unsupported flag: ${arg}\n`);
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  businessDomain = businessDomain || resolveBusinessDomain();
+
+  const deps = {
+    getAgent: (id: string) => getAgent({ baseUrl: token.baseUrl, accessToken: token.accessToken, agentId: id, businessDomain }),
+    fetchById: async (id: string): Promise<MemberFetchResult> => {
+      try {
+        const info = await getSkill({ baseUrl: token.baseUrl, accessToken: token.accessToken, skillId: id, businessDomain });
+        return { exists: true, published: info.status === "published", name: info.name, status: info.status };
+      } catch {
+        return { exists: false, published: false };
+      }
+    },
+  };
+
+  try {
+    const rows = await listAgentMembers({ agentId, spec: SKILL_SPEC, deps });
+    const output = rows.map((r) => ({ skill_id: r.id, name: r.name, status: r.status }));
+    console.log(JSON.stringify(output, null, pretty ? 2 : 0));
+    return 0;
+  } catch (error) {
+    process.stderr.write(`✗ ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+}
+
+export async function runAgentSkillCommand(args: string[]): Promise<number> {
+  const [verb, ...rest] = args;
+  if (!verb || verb === "--help" || verb === "-h") {
+    console.log(`kweaver agent skill
+
+Subcommands:
+  add <agent-id> <skill-id>... [--strict] [-bd <bd>]      Attach skills to an agent
+  remove <agent-id> <skill-id>... [-bd <bd>]              Detach skills from an agent
+  list <agent-id> [--pretty|--compact] [-bd <bd>]         List skills attached to an agent
+
+Notes:
+  --strict         On add, reject skills that exist but are not in 'published' status.
+                   Default behaviour: warn and continue.
+  Dedupe is automatic for add; remove silently skips not-attached ids.`);
+    return 0;
+  }
+  try {
+    if (verb === "add") return await runSkillAdd(rest);
+    if (verb === "remove") return await runSkillRemove(rest);
+    if (verb === "list") return await runSkillList(rest);
+    process.stderr.write(`Unknown agent skill subcommand: ${verb}\n`);
+    return 1;
+  } catch (error) {
+    process.stderr.write(`${formatHttpError(error)}\n`);
+    return 1;
+  }
 }

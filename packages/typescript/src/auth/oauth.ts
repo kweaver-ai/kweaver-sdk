@@ -1936,15 +1936,7 @@ export function __resetEnvTokenInfoCacheForTests(): void {
  */
 export function requireUserToken(token: TokenConfig): void {
   if (token.userInfo?.type === "app") {
-    const idLabel = token.userInfo.id;
-    const nameLabel = token.userInfo.name ? `, name: "${token.userInfo.name}"` : "";
-    throw new Error(
-      `This command requires a user-bound token, but you are authenticated as an application ` +
-        `(type: "app", id: ${idLabel}${nameLabel}).\n` +
-        `App tokens have no associated user, so this endpoint cannot resolve a user_id.\n` +
-        `  - Use a user-bound token instead (export KWEAVER_TOKEN=<user-token>), or\n` +
-        `  - Run \`kweaver auth login ${token.baseUrl}\` to start an interactive user session.`,
-    );
+    throw new Error("This command does not support app accounts.");
   }
 }
 

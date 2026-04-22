@@ -91,8 +91,7 @@ describe("kweaver config", () => {
       const { code, stderr } = await runCli(["config", "list-bd"]);
       assert.equal(code, 1);
       assert.ok(backendCalled === false, "list-bd should not call the backend for app tokens");
-      assert.match(stderr, /requires a user-bound token/);
-      assert.match(stderr, /app-42/);
+      assert.match(stderr, /does not support app accounts/);
     } finally {
       globalThis.fetch = origFetch;
     }

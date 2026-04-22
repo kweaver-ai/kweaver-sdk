@@ -1042,7 +1042,7 @@ test("requireUserToken: rejects app token with actionable message", async () => 
         obtainedAt: new Date().toISOString(),
         userInfo: { type: "app", id: "app-7", name: "svc" },
       }),
-    /requires a user-bound token.*type: "app".*id: app-7.*name: "svc"/s,
+    /does not support app accounts/,
   );
 });
 

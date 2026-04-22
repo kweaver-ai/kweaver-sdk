@@ -6,16 +6,13 @@ import {
   type ClientConfig,
   type EacpUserInfo,
   type TokenConfig,
-  clearEnvUserInfo,
   deleteClientConfig,
   getCurrentPlatform,
   loadClientConfig,
-  loadEnvUserInfo,
   loadTokenConfig,
   loadUserTokenConfig,
   resolveUserId,
   saveClientConfig,
-  saveEnvUserInfo,
   saveNoAuthPlatform,
   saveTokenConfig,
   setCurrentPlatform,
@@ -1872,88 +1869,18 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
  *
  * Static env `KWEAVER_TOKEN` bypasses refresh (see implementation).
  */
-/**
- * Three-tier lookup for env-token identity, in order:
- *   1. In-process Map (covers tight loops within one CLI invocation).
- *   2. Disk cache (`platforms/<base>/env-userinfo.json`, never expires).
- *   3. EACP `/api/eacp/v1/user/get` (probe and persist for next time).
- *
- * The in-process Map is keyed by `baseUrl|accessToken` so swapping `KWEAVER_TOKEN`
- * mid-process invalidates correctly without touching disk. The disk cache is
- * keyed by baseUrl alone (no token / no hash stored) and is invalidated by
- * `withTokenRetry` on 401, or by `kweaver auth whoami --refresh`.
- *
- * `null` results are remembered in-process only — a transient EACP failure
- * shouldn't repeat for every command in the same process, but should be
- * retried on the next CLI invocation.
- */
-const envTokenInfoCache = new Map<string, EacpUserInfo | null>();
-
-/**
- * Resolve the env-token's EACP identity, going through the three-tier cache.
- * `forceRefresh: true` (used by `whoami --refresh`) bypasses both layers and
- * re-probes EACP, persisting the fresh result back to disk.
- */
-export async function enrichEnvToken(
-  baseUrl: string,
-  accessToken: string,
-  opts?: { forceRefresh?: boolean },
-): Promise<EacpUserInfo | null> {
-  if (isNoAuth(accessToken)) return null;
-  const key = `${baseUrl}|${accessToken}`;
-
-  if (opts?.forceRefresh) {
-    envTokenInfoCache.delete(key);
-    clearEnvUserInfo(baseUrl);
-  } else {
-    if (envTokenInfoCache.has(key)) return envTokenInfoCache.get(key) ?? null;
-    const cached = loadEnvUserInfo(baseUrl);
-    if (cached) {
-      envTokenInfoCache.set(key, cached);
-      return cached;
-    }
-  }
-
-  const fresh = await fetchEacpUserInfo(baseUrl, accessToken);
-  envTokenInfoCache.set(key, fresh);
-  if (fresh) saveEnvUserInfo(baseUrl, fresh);
-  return fresh;
-}
-
-/** Test-only: clear the in-process env-token enrichment cache. */
-export function __resetEnvTokenInfoCacheForTests(): void {
-  envTokenInfoCache.clear();
-}
-
-/**
- * Refuse the operation when the caller is authenticated as an application token
- * (no bound user). Used to gate user-scoped endpoints whose backend cannot
- * resolve a `user_id` from app tokens (e.g. `business-system/v1/business-domain`).
- *
- * Failing fast here gives a precise, actionable error message including the
- * caller's identity, rather than letting the backend return a cryptic
- * `{"code":1,"message":"invalid user_id","cause":"get userinfo failed: %!s(<nil>)"}`.
- */
-export function requireUserToken(token: TokenConfig): void {
-  if (token.userInfo?.type === "app") {
-    throw new Error("This command does not support app accounts.");
-  }
-}
-
 export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promise<TokenConfig> {
   const envToken = process.env.KWEAVER_TOKEN;
   const envBaseUrl = process.env.KWEAVER_BASE_URL;
   if (!opts?.forceRefresh && envToken && envBaseUrl) {
     const rawToken = envToken.replace(/^Bearer\s+/i, "");
     const baseUrl = normalizeBaseUrl(envBaseUrl);
-    const userInfo = await enrichEnvToken(baseUrl, rawToken);
     return {
       baseUrl,
       accessToken: rawToken,
       tokenType: isNoAuth(rawToken) ? "none" : "bearer",
       scope: "",
       obtainedAt: new Date().toISOString(),
-      ...(userInfo ? { userInfo, displayName: pickDisplayName(userInfo) } : {}),
     };
   }
 
@@ -1962,14 +1889,12 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
     if (currentPlatformForEnv) {
       const rawToken = envToken.replace(/^Bearer\s+/i, "");
       const baseUrl = normalizeBaseUrl(currentPlatformForEnv);
-      const userInfo = await enrichEnvToken(baseUrl, rawToken);
       return {
         baseUrl,
         accessToken: rawToken,
         tokenType: isNoAuth(rawToken) ? "none" : "bearer",
         scope: "",
         obtainedAt: new Date().toISOString(),
-        ...(userInfo ? { userInfo, displayName: pickDisplayName(userInfo) } : {}),
       };
     }
   }
@@ -2130,11 +2055,8 @@ export async function withTokenRetry<T>(
       const platformUrl = normalizeBaseUrl(token.baseUrl);
       // env-sourced token: no refresh_token / OAuth client — refresh is impossible.
       // Probe above already confirmed the token is dead, so surface an env-aware hint
-      // instead of telling the user to `auth login` (which writes to disk). Also drop
-      // the cached env-userinfo: the user likely rotated `KWEAVER_TOKEN` to a different
-      // identity, so any persisted display would lie until the next manual refresh.
+      // instead of telling the user to `auth login` (which writes to disk).
       if (process.env.KWEAVER_TOKEN && !token.refreshToken) {
-        clearEnvUserInfo(platformUrl);
         throw new Error(
           `Authentication failed (401) for ${platformUrl}. Your KWEAVER_TOKEN appears to be invalid or expired.\n` +
             `  - Refresh the token and re-export: export KWEAVER_TOKEN=<new-token>\n` +
@@ -2218,14 +2140,6 @@ export function formatHttpError(error: unknown): string {
       /BknBackend\.KnowledgeNetwork\.NotFound/.test(error.body)
     ) {
       return `${base}\nHint: this is a "knowledge network not found" error (the kn-id does not exist), not a permission/auth issue. Verify the kn-id you passed.`;
-    }
-    // KWeaver `business-system` (and similar user-scoped services) return 401
-    // with "invalid user_id" when the token is an app/service token that has
-    // no bound user. Empirically the backend ignores any client-supplied
-    // x-user-id header, so the SDK cannot work around this. Tracked upstream:
-    // https://github.com/kweaver-ai/kweaver-core/issues/263
-    if (error.status === 401 && /invalid user_id|get userinfo failed/.test(error.body)) {
-      return `${base}\nHint: this endpoint requires a user-bound token, but your token is not associated with a user (e.g. an application/service token). Use a token obtained via \`kweaver auth login\` instead, or have an admin issue a user-scoped token.`;
     }
     return base;
   }

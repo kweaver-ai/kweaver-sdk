@@ -31,7 +31,7 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
-两者同时设置时，即使未执行 `auth login`，业务命令也会使用该 token。若 **`~/.kweaver/` 无当前平台**，仍可使用 **`kweaver auth status`**、**`kweaver auth whoami`**（支持 `--json` 与 `--refresh`）、**`kweaver config show`**：首次调用时会调 EACP `/api/eacp/v1/user/get` 解析当前身份（user 与 app 两种 token 都支持），结果落盘到 `~/.kweaver/platforms/<base>/env-userinfo.json` 并永久保留；后续命令直接读盘，业务调用一旦返回 401 会自动清除，`kweaver auth whoami --refresh` 可强制重新探测。EACP 不可达时回退到本地 JWT 解码。强依赖用户的命令（如 `config list-bd`）会主动拦截 `type: "app"` 的 token，给出含身份信息的明确提示，避免后端返回令人困惑的 `invalid user_id`。
+两者同时设置时，即使未执行 `auth login`，业务命令也会使用该 token。若 **`~/.kweaver/` 无当前平台**，仍可使用 **`kweaver auth status`**、**`kweaver auth whoami`**（支持 `--json`）、**`kweaver config show`**：`whoami` 会调 EACP `/api/eacp/v1/user/get` 解析当前身份（user 与 app 两种 token 都支持），EACP 不可达时回退到本地 JWT 解码。`kweaver config list-bd` **不支持 app 账号**（后端无法绑定 `user_id`）；当平台返回 `invalid user_id` 401 时 CLI 会替换为简短提示，避免暴露后端原文。
 
 ### 业务域（平台配置）
 

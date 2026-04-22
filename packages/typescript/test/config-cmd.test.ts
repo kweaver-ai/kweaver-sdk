@@ -68,7 +68,7 @@ describe("kweaver config", () => {
     assert.ok(stdout.includes("list-bd"));
   });
 
-  it("config list-bd refuses app tokens with actionable hint (and never hits the backend)", async () => {
+  it("config list-bd rewrites backend `invalid user_id` 401 into 'app accounts' message when EACP confirms app", async () => {
     const platformsDir = join(tempDir, "platforms", "aHR0cHM6Ly9leGFtcGxlLmNvbQ");
     writeFileSync(
       join(platformsDir, "token.json"),
@@ -78,19 +78,33 @@ describe("kweaver config", () => {
         tokenType: "Bearer",
         scope: "openid",
         obtainedAt: "2020-01-01T00:00:00Z",
-        userInfo: { type: "app", id: "app-42", name: "demo-svc" },
       }),
     );
     const origFetch = globalThis.fetch;
-    let backendCalled = false;
-    globalThis.fetch = async () => {
-      backendCalled = true;
-      throw new Error("backend should not be called for app tokens");
+    // Three URLs are involved in this flow, in order:
+    //   1) /business-system/...        → 401 invalid_user_id  (the trigger)
+    //   2) /api/ontology-manager/...   → 200                  (probeTokenAlive)
+    //   3) /api/eacp/v1/user/get       → 200 type:"app"       (the confirmation)
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/business-system/")) {
+        return new Response(
+          JSON.stringify({ code: 1, message: "invalid user_id", cause: "get userinfo failed: %!s(<nil>)" }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/eacp/v1/user/get")) {
+        return new Response(JSON.stringify({ type: "app", id: "app-42", name: "svc" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      // probeTokenAlive — anything non-401 keeps withTokenRetry on the wrap path
+      return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
     };
     try {
       const { code, stderr } = await runCli(["config", "list-bd"]);
       assert.equal(code, 1);
-      assert.ok(backendCalled === false, "list-bd should not call the backend for app tokens");
       assert.match(stderr, /does not support app accounts/);
     } finally {
       globalThis.fetch = origFetch;

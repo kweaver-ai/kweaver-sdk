@@ -650,64 +650,6 @@ export function deleteClientConfig(baseUrl: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Env-token user-info cache (per platform; no token / no hash stored)
-// ---------------------------------------------------------------------------
-//
-// When operating with `KWEAVER_TOKEN` (no `auth login`), we still want each
-// CLI invocation to know who it is acting as — both for `whoami` and for the
-// `requireUserToken` gate that protects user-bound endpoints. Re-probing EACP
-// on every command costs ~50ms; instead we persist the resolved identity
-// per platform and reuse it across processes.
-//
-// What we store: `{ userInfo: { type, id, account?, name? } }` only — no
-// token, no hash, no timestamp. The cache never expires.
-//
-// What invalidates it:
-//   1. `withTokenRetry` calls `clearEnvUserInfo(baseUrl)` on 401 (token rotated
-//      to a different identity, backend rejects → drop and re-probe).
-//   2. `kweaver auth whoami --refresh` (manual override).
-//
-// Why no TTL: the two invalidation paths above cover every scenario where the
-// cache *and the user* both notice staleness. A scheduled refresh would only
-// help "user silently rotated to same-permissions different-identity token
-// without checking whoami" — vanishingly rare and the user explicitly opted
-// to accept this trade-off ("如果认证失败也没关系").
-
-interface EnvUserInfoFile {
-  userInfo: EacpUserInfo;
-}
-
-function getEnvUserInfoPath(baseUrl: string): string {
-  return getPlatformFile(baseUrl, "env-userinfo.json");
-}
-
-export function loadEnvUserInfo(baseUrl: string): EacpUserInfo | null {
-  try {
-    const file = readJsonFile<EnvUserInfoFile>(getEnvUserInfoPath(baseUrl));
-    if (!file?.userInfo || (file.userInfo.type !== "user" && file.userInfo.type !== "app")) {
-      return null;
-    }
-    return file.userInfo;
-  } catch {
-    // Corrupted JSON: treat as cache miss (caller will re-probe).
-    return null;
-  }
-}
-
-export function saveEnvUserInfo(baseUrl: string, userInfo: EacpUserInfo): void {
-  ensureStoreReady();
-  ensurePlatformDir(baseUrl);
-  // Re-use the same atomic write helper as the rest of the store; concurrent
-  // CLI invocations writing identical info is safe (last write wins, both correct).
-  writeJsonFile(getEnvUserInfoPath(baseUrl), { userInfo } satisfies EnvUserInfoFile);
-}
-
-export function clearEnvUserInfo(baseUrl: string): void {
-  const filePath = getEnvUserInfoPath(baseUrl);
-  if (existsSync(filePath)) rmSync(filePath, { force: true });
-}
-
-// ---------------------------------------------------------------------------
 // Context-loader config (user-scoped)
 // ---------------------------------------------------------------------------
 

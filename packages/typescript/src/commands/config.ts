@@ -1,5 +1,6 @@
 import { listBusinessDomains } from "../api/business-domains.js";
-import { normalizeBaseUrl, requireUserToken, withTokenRetry } from "../auth/oauth.js";
+import { fetchEacpUserInfo, normalizeBaseUrl, withTokenRetry } from "../auth/oauth.js";
+import { HttpError } from "../utils/http.js";
 
 // Resolve platform URL: saved current platform > KWEAVER_BASE_URL (normalized to
 // match what `auth login` writes, so env users share the same platforms/<key>/ dir).
@@ -77,12 +78,12 @@ export async function runConfigCommand(args: string[]): Promise<number> {
       console.error("No active platform. Run `kweaver auth login <url>` first.\n  Tip: set KWEAVER_BASE_URL and KWEAVER_TOKEN to use this command without a saved login.");
       return 1;
     }
+    let lastAccessToken = "";
+    let lastTlsInsecure: boolean | undefined;
     try {
       const rows = await withTokenRetry((token) => {
-        // business-system requires a user-bound token; app tokens get a cryptic
-        // 401/invalid_user_id from the backend. Fail fast with a clear message
-        // that includes the caller's resolved identity.
-        requireUserToken(token);
+        lastAccessToken = token.accessToken;
+        lastTlsInsecure = token.tlsInsecure;
         return listBusinessDomains({
           baseUrl: platform,
           accessToken: token.accessToken,
@@ -100,7 +101,12 @@ export async function runConfigCommand(args: string[]): Promise<number> {
       console.log(JSON.stringify(payload, null, 2));
       return 0;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      // The backend returns 401 + `invalid user_id` when the caller is an app
+      // (service) token with no bound user. Probe EACP to confirm — if the
+      // token really is `type:"app"`, swap the cryptic backend error for a
+      // one-liner. Anything else falls through unchanged. See kweaver-core#263.
+      const friendly = await maybeAppAccountMessage(error, platform, lastAccessToken, lastTlsInsecure);
+      const message = friendly ?? (error instanceof Error ? error.message : String(error));
       console.error(`Failed to list business domains: ${message}`);
       return 1;
     }
@@ -109,4 +115,37 @@ export async function runConfigCommand(args: string[]): Promise<number> {
   console.error(`Unknown config subcommand: ${sub}`);
   console.log(HELP);
   return 1;
+}
+
+/**
+ * Detect "app account hit a user-scoped endpoint" by signature, then confirm
+ * with EACP. Returns a short user-facing message if the call really came from
+ * an app token, otherwise `null` (caller falls back to the original error).
+ *
+ * Two layers of evidence are required (signature first, identity second) so
+ * we don't probe EACP on every random failure and don't mislabel real auth
+ * problems with a misleading "use a user account" hint.
+ */
+async function maybeAppAccountMessage(
+  error: unknown,
+  baseUrl: string,
+  accessToken: string,
+  tlsInsecure: boolean | undefined,
+): Promise<string | null> {
+  // Unwrap: withTokenRetry wraps the original HttpError in a friendlier Error
+  // when its alive-probe succeeds; for app tokens the probe endpoint returns
+  // 2xx, so we drill into `cause` to recover the real backend body.
+  const httpErr =
+    error instanceof HttpError
+      ? error
+      : error instanceof Error && error.cause instanceof HttpError
+        ? error.cause
+        : null;
+  if (!httpErr) return null;
+  if (httpErr.status !== 401) return null;
+  if (!/invalid user_id|get userinfo failed/.test(httpErr.body)) return null;
+  if (!accessToken) return null;
+  const info = await fetchEacpUserInfo(baseUrl, accessToken, tlsInsecure);
+  if (info?.type !== "app") return null;
+  return "This command does not support app accounts.";
 }

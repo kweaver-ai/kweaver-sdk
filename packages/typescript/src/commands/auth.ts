@@ -28,7 +28,7 @@ import { decodeJwtPayload } from "../config/jwt.js";
 import { eacpModifyPassword } from "../auth/eacp-modify-password.js";
 import {
   buildCopyCommand,
-  enrichEnvToken,
+  fetchEacpUserInfo,
   formatHttpError,
   InitialPasswordChangeRequiredError,
   normalizeBaseUrl,
@@ -573,21 +573,17 @@ You can specify either the userId (sub claim) or the username (preferred_usernam
 
 async function runAuthWhoamiCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth whoami [platform-url|alias] [--json] [--refresh]
+    console.log(`kweaver auth whoami [platform-url|alias] [--json]
 
 Show current user identity. Resolves the bound user / app from EACP
 (/api/eacp/v1/user/get), with a fallback to id_token claims for saved sessions.
-In env-token mode the resolved identity is cached on disk per platform; pass
---refresh to discard the cache and re-probe.
 
 Options:
-  --json     Output as JSON (machine-readable)
-  --refresh  Bypass and overwrite the cached env-token identity (env-token mode only)`);
+  --json   Output as JSON (machine-readable)`);
     return 0;
   }
 
   const jsonOutput = args.includes("--json");
-  const refresh = args.includes("--refresh");
   const positional = args.find((a) => !a.startsWith("-"));
   const resolved = positional ? resolvePlatformIdentifier(positional) : null;
   const platform = resolved && /^https?:\/\//.test(resolved) ? normalizeBaseUrl(resolved) : resolved ?? getCurrentPlatform();
@@ -601,10 +597,10 @@ Options:
       return 1;
     }
     const accessToken = envToken.replace(/^Bearer\s+/i, "");
-    // Resolve via the same three-tier lookup business commands use (memory →
-    // disk → EACP), so whoami matches whatever the next API call would see.
-    // `--refresh` bypasses both caches and overwrites the persisted entry.
-    const userInfo = await enrichEnvToken(envUrl, accessToken, { forceRefresh: refresh });
+    // Try EACP first (works for both opaque and JWT, both user and app tokens).
+    // Fall back to JWT decoding only if EACP doesn't respond — keeps env-token
+    // mode informative even when the token has no decodable claims.
+    const userInfo = await fetchEacpUserInfo(envUrl, accessToken);
     const payload = userInfo ? null : decodeJwtPayload(accessToken);
 
     if (jsonOutput) {

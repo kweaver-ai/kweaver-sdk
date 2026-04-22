@@ -34,9 +34,9 @@ kweaver auth delete <url|alias> [--user <id|username>]
 
 **常用环境变量**：`KWEAVER_BASE_URL`（与 `KWEAVER_TOKEN` 配对时通常必填）、`KWEAVER_TOKEN`（可带或不带 `Bearer ` 前缀）、`KWEAVER_TLS_INSECURE`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_USER`、`KWEAVER_NO_AUTH`。
 
-**env 模式下 `auth status` / `whoami` 输出**：`whoami` 会标注 `Source: env (KWEAVER_TOKEN)`；refresh_token 在 env 路径下为 **n/a**。`whoami` 优先展示 EACP 解析出的 `Type`/`User ID`/`Account`/`Name`；EACP 无法访问时回退到 JWT 字段（若 token 为 JWT）。`whoami --json` 在 env 模式下包含 `"source": "env"` 与 `"userInfo": {...}`（或 JWT payload）。
+**env 模式下 `auth status` / `whoami` 输出**：`whoami` 会标注 `Source: env (KWEAVER_TOKEN)`；refresh_token 在 env 路径下为 **n/a**。`whoami` 优先展示 EACP 解析出的 `Type`/`User ID`/`Account`/`Name`（每次按需调用，不缓存）；EACP 无法访问时回退到 JWT 字段（若 token 为 JWT）。`whoami --json` 在 env 模式下包含 `"source": "env"` 与 `"userInfo": {...}`（或 JWT payload）。
 
-**env 模式身份缓存**：首次解析得到的 `userInfo` 会落盘到 `~/.kweaver/platforms/<base>/env-userinfo.json`，**永不过期**，后续命令直接读盘。失效时机：① 任意业务命令收到 401（`withTokenRetry` 自动清除该平台缓存），② `kweaver auth whoami --refresh` 手动重拉。**不存 token、也不存 hash**——若用户切到不同身份的 token 但权限相同未触发 401，缓存会显示陈旧身份，需要手动 `--refresh`。
+**`config list-bd` 与 app 账号**：该命令依赖后端 `business-system` 服务从 token 解析 `user_id`，因此 **app 账号不支持**。当后端返回 `401 {"message":"invalid user_id"}` 时 CLI 会调用 EACP 复核，确认是 `type:"app"` 后输出 `Failed to list business domains: This command does not support app accounts.`，其它情形原样透传。
 
 **App token 守门**：`config list-bd` 等强依赖 user_id 的命令会在调用前主动拦截 `type: "app"` 的 token，给出含身份信息的明确提示，避免后端返回 `invalid user_id / get userinfo failed` 让人困惑。
 

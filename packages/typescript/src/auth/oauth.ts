@@ -315,14 +315,34 @@ async function fetchDisplayName(
   return null;
 }
 
-/** POSIX shell single-quote escaping for copy-paste commands. */
-export function shellQuoteForShell(value: string): string {
+/**
+ * Quote a value for safe copy-paste into a shell command.
+ *
+ * - POSIX (bash/zsh/sh): single-quote wrap; embedded `'` becomes `'\''`.
+ *   Single quotes prevent any further interpretation by the shell.
+ * - Windows (cmd.exe / PowerShell): double-quote wrap; embedded `"` becomes `""`.
+ *   cmd.exe treats single quotes as literal characters (issue #74), so we must
+ *   use double quotes there.
+ *
+ * The `platform` argument defaults to `process.platform` so the printed command
+ * matches the shell where the user is running `kweaver` right now.
+ */
+export function shellQuoteForShell(
+  value: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === "win32") {
+    return `"${value.replace(/"/g, `""`)}"`;
+  }
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
  * Build a one-line `kweaver auth login ...` command for headless / other machines.
  * Omits `--client-secret` when empty (PKCE-only client); headless refresh may still require a confidential client.
+ *
+ * `platform` defaults to `process.platform`; pass explicitly in tests or when
+ * generating a command meant for a different OS.
  */
 export function buildCopyCommand(
   baseUrl: string,
@@ -330,13 +350,15 @@ export function buildCopyCommand(
   clientSecret: string,
   refreshToken: string | undefined,
   tlsInsecure?: boolean,
+  platform: NodeJS.Platform = process.platform,
 ): string {
-  const parts = ["kweaver", "auth", "login", shellQuoteForShell(normalizeBaseUrl(baseUrl)), "--client-id", shellQuoteForShell(clientId)];
+  const q = (v: string) => shellQuoteForShell(v, platform);
+  const parts = ["kweaver", "auth", "login", q(normalizeBaseUrl(baseUrl)), "--client-id", q(clientId)];
   if (clientSecret) {
-    parts.push("--client-secret", shellQuoteForShell(clientSecret));
+    parts.push("--client-secret", q(clientSecret));
   }
   if (refreshToken) {
-    parts.push("--refresh-token", shellQuoteForShell(refreshToken));
+    parts.push("--refresh-token", q(refreshToken));
   }
   if (tlsInsecure) {
     parts.push("--insecure");

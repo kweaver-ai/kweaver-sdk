@@ -755,6 +755,54 @@ test("buildCopyCommand: omits --refresh-token when undefined", async () => {
   assert.ok(!cmd.includes("--refresh-token"));
 });
 
+// Regression for issue #74: cmd.exe / PowerShell don't strip POSIX single
+// quotes, so on Windows we must wrap values in double quotes instead.
+test("buildCopyCommand: uses double quotes on win32", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  const cmd = oauth.buildCopyCommand(
+    "https://1.2.3.4",
+    "cid",
+    "csec",
+    "rt",
+    true,
+    "win32",
+  );
+  assert.ok(!cmd.includes("'"), `expected no single quotes, got: ${cmd}`);
+  assert.match(cmd, /--client-id "cid"/);
+  assert.match(cmd, /--client-secret "csec"/);
+  assert.match(cmd, /--refresh-token "rt"/);
+  assert.match(cmd, / "https:\/\/1\.2\.3\.4" /);
+  assert.match(cmd, /--insecure$/);
+});
+
+test("buildCopyCommand: keeps single quotes on POSIX", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  const cmd = oauth.buildCopyCommand(
+    "https://1.2.3.4",
+    "cid",
+    "csec",
+    "rt",
+    false,
+    "linux",
+  );
+  assert.match(cmd, /--client-id 'cid'/);
+  assert.match(cmd, /--client-secret 'csec'/);
+});
+
+test("shellQuoteForShell: win32 escapes embedded double quotes", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  assert.equal(oauth.shellQuoteForShell(`a"b`, "win32"), `"a""b"`);
+});
+
+test("shellQuoteForShell: POSIX escapes embedded single quotes", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  assert.equal(oauth.shellQuoteForShell(`a'b`, "linux"), `'a'\\''b'`);
+});
+
 // --- buildCallbackHtml ---
 
 test("buildCallbackHtml: contains key elements", async () => {

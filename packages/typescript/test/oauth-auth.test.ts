@@ -456,6 +456,11 @@ test("withTokenRetry: retries once after 401 when refresh succeeds", async () =>
       tokenCalls += 1;
       return new Response(JSON.stringify({ access_token: "a2", expires_in: 3600 }), { status: 200 });
     }
+    // Token-alive probe must return 401 here so withTokenRetry proceeds with refresh
+    // instead of wrapping the original 401 as a "request-level" error.
+    if (url.includes("/api/ontology-manager/v1/knowledge-networks")) {
+      return new Response("", { status: 401 });
+    }
     return new Response("", { status: 404 });
   };
 
@@ -492,13 +497,98 @@ test("withTokenRetry: 401 without refresh capability throws", async () => {
     obtainedAt: new Date().toISOString(),
   });
 
-  await assert.rejects(
-    () =>
-      oauth.withTokenRetry(async () => {
-        throw new HttpError(401, "Unauthorized", "{}");
-      }),
-    /refresh did not succeed|no refresh_token/,
-  );
+  // Probe must return 401 too so the test exercises the no-refresh-capability path.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("", { status: 401 });
+  try {
+    await assert.rejects(
+      () =>
+        oauth.withTokenRetry(async () => {
+          throw new HttpError(401, "Unauthorized", "{}");
+        }),
+      /refresh did not succeed|no refresh_token/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+for (const status of [401, 403] as const) {
+  test(`withTokenRetry: env KWEAVER_TOKEN + ${status} + probe alive => wrapped error states token is valid`, async () => {
+    const configDir = createConfigDir();
+    const { oauth } = await importOauthAndStore(configDir);
+    const baseUrl = "https://platform.example.com";
+    process.env.KWEAVER_TOKEN = "env-token-still-valid";
+    process.env.KWEAVER_BASE_URL = baseUrl;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/ontology-manager/v1/knowledge-networks")) {
+        return new Response(JSON.stringify({ entries: [] }), { status: 200 });
+      }
+      throw new Error(`unexpected fetch url: ${url}`);
+    };
+    try {
+      await assert.rejects(
+        () =>
+          oauth.withTokenRetry(async () => {
+            throw new HttpError(
+              status,
+              status === 401 ? "Unauthorized" : "Forbidden",
+              '{"error_code":"Some.RequestLevelError"}',
+            );
+          }),
+        (e: unknown) => {
+          // Wrapped — must say token is valid and surface the original status + body.
+          const err = e as Error;
+          assert.match(err.message, /Authentication is valid/);
+          assert.match(err.message, new RegExp(`${status}`));
+          assert.match(err.message, /Some\.RequestLevelError/);
+          // Must NOT misattribute to token expiry / invalidity.
+          assert.doesNotMatch(err.message, /KWEAVER_TOKEN appears to be invalid|token.*expired/i);
+          // Original HttpError preserved as cause.
+          assert.ok((err as Error & { cause?: unknown }).cause instanceof HttpError);
+          return true;
+        },
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      delete process.env.KWEAVER_TOKEN;
+      delete process.env.KWEAVER_BASE_URL;
+    }
+  });
+}
+
+test("withTokenRetry: env KWEAVER_TOKEN + 401 + probe also 401 => throws friendly env hint", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://platform.example.com";
+  process.env.KWEAVER_TOKEN = "env-token-expired";
+  process.env.KWEAVER_BASE_URL = baseUrl;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    // probe endpoint returns 401 => token is genuinely dead
+    if (url.includes("/api/ontology-manager/v1/knowledge-networks")) {
+      return new Response("", { status: 401 });
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  };
+  try {
+    await assert.rejects(
+      () =>
+        oauth.withTokenRetry(async () => {
+          throw new HttpError(401, "Unauthorized", "{}");
+        }),
+      /KWEAVER_TOKEN appears to be invalid or expired/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.KWEAVER_TOKEN;
+    delete process.env.KWEAVER_BASE_URL;
+  }
 });
 
 test("withTokenRetry: non-401 error is not retried", async () => {

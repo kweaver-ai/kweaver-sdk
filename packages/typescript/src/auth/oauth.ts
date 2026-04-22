@@ -1959,6 +1959,33 @@ export async function with401RefreshRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * Lightweight probe to verify whether the token is still accepted by the server.
+ * Returns true when the server replies with anything other than 401 (200, 403, 404, 5xx all
+ * count as "token is alive, the failing request had a different cause"). Network errors
+ * are treated as "alive" too — we'd rather under-blame the token than misattribute.
+ *
+ * Used to avoid telling the user "your token expired" when in fact the original request
+ * failed for a non-auth reason (e.g. wrong KN id surfacing as 401/403 from some upstream).
+ */
+async function probeTokenAlive(token: TokenConfig): Promise<boolean> {
+  if (isNoAuth(token.accessToken)) return true;
+  try {
+    const url = `${token.baseUrl.replace(/\/+$/, "")}/api/ontology-manager/v1/knowledge-networks?limit=1`;
+    const res = await fetch(url, {
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${token.accessToken}`,
+        token: token.accessToken,
+        "x-business-domain": "bd_public",
+      },
+    });
+    return res.status !== 401;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Load a valid token, run `fn(token)`, and on 401 refresh once and retry with the new token.
  */
 export async function withTokenRetry<T>(
@@ -1968,13 +1995,30 @@ export async function withTokenRetry<T>(
   try {
     return await fn(token);
   } catch (error) {
+    // 401/403 from a non-no-auth session may or may not be a real auth issue.
+    // Probe once before deciding which message to surface.
+    if (
+      error instanceof HttpError &&
+      (error.status === 401 || error.status === 403) &&
+      !isNoAuth(token.accessToken) &&
+      (await probeTokenAlive(token))
+    ) {
+      throw new Error(
+        `Authentication is valid (token probe returned 2xx).\n` +
+          `The ${error.status} ${error.statusText} comes from the request itself, not from your token.\n` +
+          `Check kn-id, business domain, request payload, or backend permissions.\n` +
+          `Original response body:\n${error.body}`,
+        { cause: error },
+      );
+    }
     if (error instanceof HttpError && error.status === 401) {
       if (isNoAuth(token.accessToken)) {
         throw error;
       }
       const platformUrl = normalizeBaseUrl(token.baseUrl);
       // env-sourced token: no refresh_token / OAuth client — refresh is impossible.
-      // Surface an env-aware hint instead of telling the user to `auth login` (which writes to disk).
+      // Probe above already confirmed the token is dead, so surface an env-aware hint
+      // instead of telling the user to `auth login` (which writes to disk).
       if (process.env.KWEAVER_TOKEN && !token.refreshToken) {
         throw new Error(
           `Authentication failed (401) for ${platformUrl}. Your KWEAVER_TOKEN appears to be invalid or expired.\n` +

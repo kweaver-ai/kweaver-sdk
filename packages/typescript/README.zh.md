@@ -31,7 +31,9 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
-两者同时设置时，即使未执行 `auth login`，业务命令也会使用该 token。若 **`~/.kweaver/` 无当前平台**，仍可使用 **`kweaver auth status`**、**`kweaver auth whoami`**（支持 `--json`）、**`kweaver config show`**：CLI 会在本地解 JWT 展示身份；若 token 为 opaque，则省略身份字段并给出简短提示。
+两者同时设置时，即使未执行 `auth login`，业务命令也会使用该 token。若 **`~/.kweaver/` 无当前平台**，仍可使用 **`kweaver auth status`**、**`kweaver auth whoami`**（支持 `--json`）、**`kweaver config show`**。环境变量模式下，`whoami` 会通过 EACP `/api/eacp/v1/user/get` 在线获取身份并展示 `Type`（user/app）、`User ID`、`Account`、`Name`，对 opaque 与 JWT token 都生效；若 EACP 不可达，则回退到本地 JWT 解码，opaque token 会给出简短提示。
+
+`kweaver config list-bd` 用于列出当前用户可访问的业务域。**应用（service）token 没有绑定终端用户**——当后端返回 `401 invalid user_id` 时，CLI 会再向 EACP 复核 token 类型，确认为 `type:"app"` 后将晦涩的后端原文替换为 `This command does not support app accounts.`。需要这个能力时请改用交互式 `auth login` 获得的用户 token。
 
 ### 业务域（平台配置）
 

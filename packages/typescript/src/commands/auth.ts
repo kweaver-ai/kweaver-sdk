@@ -28,6 +28,7 @@ import { decodeJwtPayload } from "../config/jwt.js";
 import { eacpModifyPassword } from "../auth/eacp-modify-password.js";
 import {
   buildCopyCommand,
+  fetchEacpUserInfo,
   formatHttpError,
   InitialPasswordChangeRequiredError,
   normalizeBaseUrl,
@@ -95,7 +96,7 @@ Login options:
   }
 
   if (target === "whoami") {
-    return runAuthWhoamiCommand(rest);
+    return await runAuthWhoamiCommand(rest);
   }
 
   if (target === "export") {
@@ -570,11 +571,13 @@ You can specify either the userId (sub claim) or the username (preferred_usernam
   return 0;
 }
 
-function runAuthWhoamiCommand(args: string[]): number {
+async function runAuthWhoamiCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
     console.log(`kweaver auth whoami [platform-url|alias] [--json]
 
-Show current user identity decoded from the saved id_token.
+Show current user identity. For env-token mode (KWEAVER_TOKEN), the bound
+identity is resolved live from EACP /api/eacp/v1/user/get; for saved sessions
+it is decoded from the local id_token.
 
 Options:
   --json   Output as JSON (machine-readable)`);
@@ -595,14 +598,27 @@ Options:
       return 1;
     }
     const accessToken = envToken.replace(/^Bearer\s+/i, "");
-    const payload = decodeJwtPayload(accessToken);
+    // Try EACP first — works for both opaque and JWT, both user and app tokens,
+    // and is the only way to recover the account name from an opaque token.
+    // Fall back to JWT decode when EACP is unreachable so env-token mode still
+    // shows something useful.
+    const userInfo = await fetchEacpUserInfo(envUrl, accessToken);
+    const payload = userInfo ? null : decodeJwtPayload(accessToken);
     if (jsonOutput) {
-      console.log(JSON.stringify({ platform: envUrl, source: "env", ...(payload ?? {}) }, null, 2));
+      const out: Record<string, unknown> = { platform: envUrl, source: "env" };
+      if (userInfo) out.userInfo = userInfo;
+      if (payload) Object.assign(out, payload);
+      console.log(JSON.stringify(out, null, 2));
       return 0;
     }
     console.log(`Platform: ${envUrl}`);
     console.log(`Source:   env (KWEAVER_TOKEN)`);
-    if (payload) {
+    if (userInfo) {
+      console.log(`Type:     ${userInfo.type}`);
+      console.log(`User ID:  ${userInfo.id}`);
+      if (userInfo.account) console.log(`Account:  ${userInfo.account}`);
+      if (userInfo.name) console.log(`Name:     ${userInfo.name}`);
+    } else if (payload) {
       const uname = payload.preferred_username ?? payload.name;
       if (uname) console.log(`Username: ${uname}`);
       console.log(`User ID:  ${payload.sub ?? "(unknown)"}`);
@@ -610,8 +626,8 @@ Options:
       if (payload.iat) console.log(`Issued:   ${new Date((payload.iat as number) * 1000).toISOString()}`);
       if (payload.exp) console.log(`Expires:  ${new Date((payload.exp as number) * 1000).toISOString()}`);
     } else {
-      console.log(`User info unavailable: opaque access token.`);
-      console.log(`Hint: run \`kweaver auth login ${envUrl}\` to obtain a full session.`);
+      console.log(`User info unavailable: opaque access token and EACP did not respond.`);
+      console.log(`Hint: run \`kweaver auth login ${envUrl}\` to obtain a full session, or check connectivity to ${envUrl}.`);
     }
     return 0;
   }

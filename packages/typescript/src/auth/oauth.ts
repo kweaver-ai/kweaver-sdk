@@ -487,6 +487,36 @@ export function normalizeBaseUrl(value: string): string {
 }
 
 /**
+ * Resolve the platform URL the CLI should act on, with explicit precedence:
+ *
+ *   1. **positional**  — caller passed a URL/alias (always wins)
+ *   2. **env**         — `KWEAVER_BASE_URL` is set (explicit user intent;
+ *                        wins over a stale `~/.kweaver/` saved session)
+ *   3. **saved**       — `getCurrentPlatform()` from local config
+ *
+ * `source` lets callers print provenance without re-deriving it. This mirrors
+ * `ensureValidToken()` (which is already env-first), so introspection
+ * commands (`auth status`, `auth whoami`, `config show|list-bd|set-bd`) and
+ * data-path commands agree on which platform "current" means.
+ */
+export function resolveActivePlatform(positional?: string | null): {
+  url: string;
+  source: "positional" | "env" | "saved";
+} | null {
+  if (positional) {
+    const url = /^https?:\/\//.test(positional) ? normalizeBaseUrl(positional) : positional;
+    return { url, source: "positional" };
+  }
+  const envRaw = process.env.KWEAVER_BASE_URL?.trim();
+  if (envRaw) {
+    return { url: normalizeBaseUrl(envRaw), source: "env" };
+  }
+  const saved = getCurrentPlatform();
+  if (saved) return { url: saved, source: "saved" };
+  return null;
+}
+
+/**
  * Temporarily disable TLS certificate verification for Node `fetch` (sets
  * NODE_TLS_REJECT_UNAUTHORIZED). Used for `--insecure` login and token refresh.
  */
@@ -2087,10 +2117,6 @@ export function formatHttpError(error: unknown): string {
       return `HTTP ${error.status} ${error.statusText}\n\n${oauthMessage}`;
     }
     const base = `${error.message}\n${error.body}`.trim();
-    // Backend quirk: BKN returns 403 (sometimes 404) with body
-    // `BknBackend.KnowledgeNetwork.NotFound` for unknown kn-id, which makes the
-    // HTTP status look like a permission problem. Surface the real cause so
-    // users don't waste time chasing auth.
     if (
       (error.status === 403 || error.status === 404) &&
       /BknBackend\.KnowledgeNetwork\.NotFound/.test(error.body)

@@ -937,3 +937,220 @@ test("buildCallbackHtml: escapes HTML entities", async () => {
   assert.ok(!html.includes("<script>alert(1)</script>"));
   assert.match(html, /&lt;script&gt;/);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EACP user-info enrichment + requireUserToken gate
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("fetchEacpUserInfo: parses user response", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://eacp.example.com";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const u = typeof input === "string" ? input : input.toString();
+    assert.ok(u.endsWith("/api/eacp/v1/user/get"));
+    return new Response(
+      JSON.stringify({
+        type: "user",
+        userid: "user-uuid-1",
+        account: "alice@example.com",
+        name: "Alice",
+        csflevel: 5,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  try {
+    const info = await oauth.fetchEacpUserInfo(baseUrl, "tok-1");
+    assert.deepEqual(info, {
+      type: "user",
+      id: "user-uuid-1",
+      account: "alice@example.com",
+      name: "Alice",
+      raw: {
+        type: "user",
+        userid: "user-uuid-1",
+        account: "alice@example.com",
+        name: "Alice",
+        csflevel: 5,
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchEacpUserInfo: parses app response (no `account`, id from `id`)", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ type: "app", id: "app-1", name: "demo-svc" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  try {
+    const info = await oauth.fetchEacpUserInfo("https://x", "tok");
+    assert.equal(info?.type, "app");
+    assert.equal(info?.id, "app-1");
+    assert.equal(info?.name, "demo-svc");
+    assert.equal(info?.account, undefined);
+  } finally {
+    globalThis.fetch = fetch;
+  }
+});
+
+test("fetchEacpUserInfo: returns null on non-2xx, malformed json, or unknown type", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+
+  globalThis.fetch = async () => new Response("nope", { status: 401 });
+  assert.equal(await oauth.fetchEacpUserInfo("https://x", "t"), null);
+
+  globalThis.fetch = async () => new Response("not json", { status: 200 });
+  assert.equal(await oauth.fetchEacpUserInfo("https://x", "t"), null);
+
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ type: "robot", id: "x" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  assert.equal(await oauth.fetchEacpUserInfo("https://x", "t"), null);
+
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ type: "user" /* missing userid */ }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  assert.equal(await oauth.fetchEacpUserInfo("https://x", "t"), null);
+
+  globalThis.fetch = fetch;
+});
+
+test("requireUserToken: rejects app token with actionable message", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  assert.throws(
+    () =>
+      oauth.requireUserToken({
+        baseUrl: "https://p",
+        accessToken: "t",
+        tokenType: "bearer",
+        scope: "",
+        obtainedAt: new Date().toISOString(),
+        userInfo: { type: "app", id: "app-7", name: "svc" },
+      }),
+    /requires a user-bound token.*type: "app".*id: app-7.*name: "svc"/s,
+  );
+});
+
+test("requireUserToken: allows user token", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  oauth.requireUserToken({
+    baseUrl: "https://p",
+    accessToken: "t",
+    tokenType: "bearer",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+    userInfo: { type: "user", id: "u-1", account: "a@b" },
+  });
+});
+
+test("requireUserToken: allows tokens with no userInfo (cannot prove app)", async () => {
+  // We don't want to break env-token users when EACP is unreachable; only block
+  // when we've definitively classified the token as app.
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  oauth.requireUserToken({
+    baseUrl: "https://p",
+    accessToken: "t",
+    tokenType: "bearer",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+  });
+});
+
+test("ensureValidToken (env mode): enriches token with EACP userInfo and caches in-process", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  process.env.KWEAVER_BASE_URL = "https://eacp.example.com";
+  process.env.KWEAVER_TOKEN = "ory_at_xxx";
+
+  let calls = 0;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const u = typeof input === "string" ? input : input.toString();
+    assert.ok(u.endsWith("/api/eacp/v1/user/get"));
+    calls += 1;
+    return new Response(JSON.stringify({ type: "app", id: "env-app-1", name: "env-svc" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    oauth.__resetEnvTokenInfoCacheForTests();
+    const t1 = await oauth.ensureValidToken();
+    assert.equal(t1.userInfo?.type, "app");
+    assert.equal(t1.userInfo?.id, "env-app-1");
+    assert.equal(t1.displayName, "env-svc");
+    assert.equal(calls, 1);
+
+    // Second call within the same process should hit the in-memory cache.
+    const t2 = await oauth.ensureValidToken();
+    assert.equal(t2.userInfo?.id, "env-app-1");
+    assert.equal(calls, 1, "second ensureValidToken should not re-probe EACP");
+  } finally {
+    delete process.env.KWEAVER_BASE_URL;
+    delete process.env.KWEAVER_TOKEN;
+    globalThis.fetch = fetch;
+  }
+});
+
+test("ensureValidToken (env mode): KWEAVER_SKIP_ENRICH=1 bypasses EACP probe", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  process.env.KWEAVER_BASE_URL = "https://x.example.com";
+  process.env.KWEAVER_TOKEN = "ory_at_yyy";
+  process.env.KWEAVER_SKIP_ENRICH = "1";
+
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return new Response("{}", { status: 200 });
+  };
+
+  try {
+    oauth.__resetEnvTokenInfoCacheForTests();
+    const tok = await oauth.ensureValidToken();
+    assert.equal(tok.userInfo, undefined);
+    assert.equal(called, false);
+  } finally {
+    delete process.env.KWEAVER_BASE_URL;
+    delete process.env.KWEAVER_TOKEN;
+    delete process.env.KWEAVER_SKIP_ENRICH;
+    globalThis.fetch = fetch;
+  }
+});
+
+test("ensureValidToken (env mode): EACP failure does not break command (userInfo absent)", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  process.env.KWEAVER_BASE_URL = "https://x.example.com";
+  process.env.KWEAVER_TOKEN = "ory_at_zzz";
+
+  globalThis.fetch = async () => new Response("server down", { status: 502 });
+
+  try {
+    oauth.__resetEnvTokenInfoCacheForTests();
+    const tok = await oauth.ensureValidToken();
+    assert.equal(tok.accessToken, "ory_at_zzz");
+    assert.equal(tok.userInfo, undefined);
+  } finally {
+    delete process.env.KWEAVER_BASE_URL;
+    delete process.env.KWEAVER_TOKEN;
+    globalThis.fetch = fetch;
+  }
+});

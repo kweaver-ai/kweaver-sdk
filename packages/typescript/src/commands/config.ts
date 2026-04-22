@@ -1,5 +1,5 @@
 import { listBusinessDomains } from "../api/business-domains.js";
-import { normalizeBaseUrl, withTokenRetry } from "../auth/oauth.js";
+import { normalizeBaseUrl, requireUserToken, withTokenRetry } from "../auth/oauth.js";
 
 // Resolve platform URL: saved current platform > KWEAVER_BASE_URL (normalized to
 // match what `auth login` writes, so env users share the same platforms/<key>/ dir).
@@ -78,13 +78,17 @@ export async function runConfigCommand(args: string[]): Promise<number> {
       return 1;
     }
     try {
-      const rows = await withTokenRetry((token) =>
-        listBusinessDomains({
+      const rows = await withTokenRetry((token) => {
+        // business-system requires a user-bound token; app tokens get a cryptic
+        // 401/invalid_user_id from the backend. Fail fast with a clear message
+        // that includes the caller's resolved identity.
+        requireUserToken(token);
+        return listBusinessDomains({
           baseUrl: platform,
           accessToken: token.accessToken,
           tlsInsecure: token.tlsInsecure,
-        }),
-      );
+        });
+      });
       const currentId = resolveBusinessDomain(platform);
       const payload = {
         currentId,

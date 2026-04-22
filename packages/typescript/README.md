@@ -31,7 +31,7 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
-With both set, API commands use that token even if you never ran `auth login`. You can also run **`kweaver auth status`**, **`kweaver auth whoami`** (supports `--json`), and **`kweaver config show`** when there is **no** current platform in `~/.kweaver/` — the CLI decodes the token locally (JWT only). If the token is opaque, identity fields are omitted and a short hint is printed.
+With both set, API commands use that token even if you never ran `auth login`. You can also run **`kweaver auth status`**, **`kweaver auth whoami`** (supports `--json`), and **`kweaver config show`** when there is **no** current platform in `~/.kweaver/` — the CLI first asks EACP (`/api/eacp/v1/user/get`) to resolve the bound identity (works for both user and app tokens), and falls back to local JWT decoding when EACP is unreachable. Set `KWEAVER_SKIP_ENRICH=1` to skip the EACP probe entirely. Commands that strictly require a user-bound token (e.g. `config list-bd`) refuse `type: "app"` tokens up front with an actionable message instead of letting the backend return a cryptic `invalid user_id` error.
 
 ### Business domain (platform)
 

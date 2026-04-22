@@ -4,6 +4,7 @@ import { createPublicKey, constants as cryptoConstants, publicEncrypt, randomByt
 import { isNoAuth } from "../config/no-auth.js";
 import {
   type ClientConfig,
+  type EacpUserInfo,
   type TokenConfig,
   deleteClientConfig,
   getCurrentPlatform,
@@ -292,12 +293,22 @@ function extractRsaPublicKeyMaterialFromPageProps(pageProps: Record<string, unkn
   return deepFindSigninRsaMaterial(pageProps, 5, new Set());
 }
 
-/** Best-effort fetch of display name via EACP userinfo (ShareServer). */
-async function fetchDisplayName(
+/**
+ * Best-effort fetch of the bound identity via EACP `/api/eacp/v1/user/get`.
+ *
+ * EACP returns a different shape per token type (see ncEACUserHandler.cpp in isf):
+ *  - `type: "user"` → `{ userid, account, name, csflevel, ... }`
+ *  - `type: "app"`  → `{ id, name }`
+ *
+ * Returns `null` on any failure (network, non-2xx, malformed JSON). The SDK treats
+ * absence of identity as a soft signal (whoami falls back, error formatter still works);
+ * we never want this probe to break the user's actual command.
+ */
+export async function fetchEacpUserInfo(
   baseUrl: string,
   accessToken: string,
   tlsInsecure?: boolean,
-): Promise<string | null> {
+): Promise<EacpUserInfo | null> {
   try {
     const res = await runWithTlsInsecure(tlsInsecure, () =>
       fetch(`${baseUrl}/api/eacp/v1/user/get`, {
@@ -305,14 +316,29 @@ async function fetchDisplayName(
       }),
     );
     if (!res.ok) return null;
-    const info = (await res.json()) as Record<string, unknown>;
-    if (typeof info.account === "string") return info.account;
-    if (typeof info.name === "string") return info.name;
-    if (typeof info.mail === "string") return info.mail;
+    const raw = (await res.json()) as Record<string, unknown>;
+    const type = raw.type;
+    if (type !== "user" && type !== "app") return null;
+
+    const idCandidate = type === "user" ? raw.userid : raw.id;
+    const id = typeof idCandidate === "string" ? idCandidate : "";
+    if (!id) return null;
+
+    const account = typeof raw.account === "string" ? raw.account : undefined;
+    const name = typeof raw.name === "string" ? raw.name : undefined;
+    return { type, id, account, name, raw };
   } catch {
-    /* Non-critical — displayName will be absent. */
+    return null;
   }
-  return null;
+}
+
+/**
+ * Derive a single human-readable label from EACP info, mirroring legacy `displayName` semantics.
+ * Preference: account (login name) > name (display name).
+ */
+function pickDisplayName(info: EacpUserInfo | null): string | undefined {
+  if (!info) return undefined;
+  return info.account || info.name || undefined;
 }
 
 /**
@@ -1091,8 +1117,12 @@ async function exchangeCodeForToken(
     ...(tlsInsecure ? { tlsInsecure: true } : {}),
   };
 
-  const displayName = await fetchDisplayName(baseUrl, data.access_token, tlsInsecure);
-  if (displayName) token.displayName = displayName;
+  const userInfo = await fetchEacpUserInfo(baseUrl, data.access_token, tlsInsecure);
+  if (userInfo) {
+    token.userInfo = userInfo;
+    const displayName = pickDisplayName(userInfo);
+    if (displayName) token.displayName = displayName;
+  }
 
   saveTokenConfig(token);
   return token;
@@ -1803,10 +1833,14 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
 
   const now = new Date();
   const expiresIn = typeof data.expires_in === "number" ? data.expires_in : 3600;
-  let displayName = token.displayName;
-  if (!displayName) {
-    displayName = (await fetchDisplayName(baseUrl, data.access_token, token.tlsInsecure)) ?? undefined;
+
+  // Reuse cached identity if we already have it (refresh keeps the same subject).
+  // Only re-probe EACP when we have nothing cached, to keep refresh fast.
+  let userInfo = token.userInfo;
+  if (!userInfo) {
+    userInfo = (await fetchEacpUserInfo(baseUrl, data.access_token, token.tlsInsecure)) ?? undefined;
   }
+  const displayName = token.displayName ?? pickDisplayName(userInfo ?? null);
 
   const newToken: TokenConfig = {
     baseUrl,
@@ -1820,6 +1854,7 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
     obtainedAt: now.toISOString(),
     ...(token.tlsInsecure ? { tlsInsecure: true } : {}),
     ...(displayName ? { displayName } : {}),
+    ...(userInfo ? { userInfo } : {}),
   };
   saveTokenConfig(newToken);
   return newToken;
@@ -1834,17 +1869,72 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
  *
  * Static env `KWEAVER_TOKEN` bypasses refresh (see implementation).
  */
+/**
+ * In-process cache for env-token identity. Keyed by `baseUrl|accessToken` so that:
+ *  - changing `KWEAVER_TOKEN` mid-process forces a re-probe (different key)
+ *  - we never pay the EACP round-trip more than once per command set
+ *  - `null` is cached too: failed probes don't retry on every command in the same process
+ *
+ * Not persisted to disk: env tokens are by definition ephemeral, and adding a
+ * cross-process cache would force us to manage TTL / hash / cleanup. Keep it simple.
+ *
+ * Skipped entirely when `KWEAVER_SKIP_ENRICH=1` (escape hatch for noisy networks
+ * or environments where EACP is unreachable).
+ */
+const envTokenInfoCache = new Map<string, EacpUserInfo | null>();
+
+async function enrichEnvToken(baseUrl: string, accessToken: string): Promise<EacpUserInfo | null> {
+  if (isNoAuth(accessToken)) return null;
+  if (process.env.KWEAVER_SKIP_ENRICH === "1") return null;
+  const key = `${baseUrl}|${accessToken}`;
+  if (envTokenInfoCache.has(key)) return envTokenInfoCache.get(key) ?? null;
+  const info = await fetchEacpUserInfo(baseUrl, accessToken);
+  envTokenInfoCache.set(key, info);
+  return info;
+}
+
+/** Test-only: clear the in-process env-token enrichment cache. */
+export function __resetEnvTokenInfoCacheForTests(): void {
+  envTokenInfoCache.clear();
+}
+
+/**
+ * Refuse the operation when the caller is authenticated as an application token
+ * (no bound user). Used to gate user-scoped endpoints whose backend cannot
+ * resolve a `user_id` from app tokens (e.g. `business-system/v1/business-domain`).
+ *
+ * Failing fast here gives a precise, actionable error message including the
+ * caller's identity, rather than letting the backend return a cryptic
+ * `{"code":1,"message":"invalid user_id","cause":"get userinfo failed: %!s(<nil>)"}`.
+ */
+export function requireUserToken(token: TokenConfig): void {
+  if (token.userInfo?.type === "app") {
+    const idLabel = token.userInfo.id;
+    const nameLabel = token.userInfo.name ? `, name: "${token.userInfo.name}"` : "";
+    throw new Error(
+      `This command requires a user-bound token, but you are authenticated as an application ` +
+        `(type: "app", id: ${idLabel}${nameLabel}).\n` +
+        `App tokens have no associated user, so this endpoint cannot resolve a user_id.\n` +
+        `  - Use a user-bound token instead (export KWEAVER_TOKEN=<user-token>), or\n` +
+        `  - Run \`kweaver auth login ${token.baseUrl}\` to start an interactive user session.`,
+    );
+  }
+}
+
 export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promise<TokenConfig> {
   const envToken = process.env.KWEAVER_TOKEN;
   const envBaseUrl = process.env.KWEAVER_BASE_URL;
   if (!opts?.forceRefresh && envToken && envBaseUrl) {
     const rawToken = envToken.replace(/^Bearer\s+/i, "");
+    const baseUrl = normalizeBaseUrl(envBaseUrl);
+    const userInfo = await enrichEnvToken(baseUrl, rawToken);
     return {
-      baseUrl: normalizeBaseUrl(envBaseUrl),
+      baseUrl,
       accessToken: rawToken,
       tokenType: isNoAuth(rawToken) ? "none" : "bearer",
       scope: "",
       obtainedAt: new Date().toISOString(),
+      ...(userInfo ? { userInfo, displayName: pickDisplayName(userInfo) } : {}),
     };
   }
 
@@ -1852,12 +1942,15 @@ export async function ensureValidToken(opts?: { forceRefresh?: boolean }): Promi
     const currentPlatformForEnv = getCurrentPlatform();
     if (currentPlatformForEnv) {
       const rawToken = envToken.replace(/^Bearer\s+/i, "");
+      const baseUrl = normalizeBaseUrl(currentPlatformForEnv);
+      const userInfo = await enrichEnvToken(baseUrl, rawToken);
       return {
-        baseUrl: normalizeBaseUrl(currentPlatformForEnv),
+        baseUrl,
         accessToken: rawToken,
         tokenType: isNoAuth(rawToken) ? "none" : "bearer",
         scope: "",
         obtainedAt: new Date().toISOString(),
+        ...(userInfo ? { userInfo, displayName: pickDisplayName(userInfo) } : {}),
       };
     }
   }
@@ -2093,7 +2186,26 @@ export function formatHttpError(error: unknown): string {
     if (oauthMessage) {
       return `HTTP ${error.status} ${error.statusText}\n\n${oauthMessage}`;
     }
-    return `${error.message}\n${error.body}`.trim();
+    const base = `${error.message}\n${error.body}`.trim();
+    // Backend bug compensation: several BKN list/search endpoints return 403
+    // (instead of 404) when the kn-id doesn't exist, which misleads users
+    // into thinking it's a permission problem. Tracked upstream:
+    // https://github.com/kweaver-ai/kweaver-core/issues/262
+    if (
+      (error.status === 403 || error.status === 404) &&
+      /BknBackend\.KnowledgeNetwork\.NotFound/.test(error.body)
+    ) {
+      return `${base}\nHint: this is a "knowledge network not found" error (the kn-id does not exist), not a permission/auth issue. Verify the kn-id you passed.`;
+    }
+    // KWeaver `business-system` (and similar user-scoped services) return 401
+    // with "invalid user_id" when the token is an app/service token that has
+    // no bound user. Empirically the backend ignores any client-supplied
+    // x-user-id header, so the SDK cannot work around this. Tracked upstream:
+    // https://github.com/kweaver-ai/kweaver-core/issues/263
+    if (error.status === 401 && /invalid user_id|get userinfo failed/.test(error.body)) {
+      return `${base}\nHint: this endpoint requires a user-bound token, but your token is not associated with a user (e.g. an application/service token). Use a token obtained via \`kweaver auth login\` instead, or have an admin issue a user-scoped token.`;
+    }
+    return base;
   }
 
   if (error instanceof NetworkRequestError) {

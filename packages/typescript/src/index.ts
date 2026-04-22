@@ -238,6 +238,7 @@ export { HttpError, NetworkRequestError, fetchTextOrThrow } from "./utils/http.j
 
 // ── Config / credential store (read-only helpers) ─────────────────────────────
 export type {
+  EacpUserInfo,
   TokenConfig,
   ContextLoaderEntry,
   ContextLoaderConfig,

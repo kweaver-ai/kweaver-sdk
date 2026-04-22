@@ -39,6 +39,31 @@ export function saveNoAuthPlatform(baseUrl: string, opts?: { tlsInsecure?: boole
   return token;
 }
 
+/**
+ * Identity resolved from EACP `/api/eacp/v1/user/get` for the bound access token.
+ *
+ * Two shapes mirror the EACP backend:
+ *  - `type: "user"` — interactive end-user (login / OIDC). Has `account` (login name)
+ *    and usually `name` (display name).
+ *  - `type: "app"` — service / application identity (client_credentials). Only `id`
+ *    and `name` are meaningful; there is no bound user, so endpoints that need
+ *    `user_id` (e.g. `business-system/v1/business-domain`) will reject these.
+ *
+ * The `raw` field preserves the full EACP payload for forward compatibility
+ * (csflevel, freezestatus, ismanager, …) without locking the SDK to a fixed schema.
+ */
+export interface EacpUserInfo {
+  type: "user" | "app";
+  /** EACP user id (`userid` for users, `id` for apps). */
+  id: string;
+  /** Login name (e.g. "alice@example.com"). User tokens only. */
+  account?: string;
+  /** Display name — `visionName` for users, app name for apps. */
+  name?: string;
+  /** Original EACP response, preserved for forward compatibility. */
+  raw?: Record<string, unknown>;
+}
+
 export interface TokenConfig {
   baseUrl: string;
   accessToken: string;
@@ -53,6 +78,8 @@ export interface TokenConfig {
   tlsInsecure?: boolean;
   /** Human-readable display name fetched from userinfo at login time. */
   displayName?: string;
+  /** Full identity resolved from EACP, populated at login/refresh and on first env-token use. */
+  userInfo?: EacpUserInfo;
 }
 
 /** OAuth2 client registration (per platform), used for refresh_token grant. */

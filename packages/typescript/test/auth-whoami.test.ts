@@ -126,12 +126,43 @@ describe("kweaver auth whoami", () => {
     assert.match(stderr, /No saved token/);
   });
 
-  it("fails when id_token is missing from saved token", async () => {
+  it("fails when both userInfo and id_token are missing from saved token", async () => {
     setupPlatform();
 
     const { code, stderr } = await runCli(["auth", "whoami"]);
     assert.equal(code, 1);
-    assert.match(stderr, /No id_token/);
+    assert.match(stderr, /No identity available/);
+  });
+
+  it("prefers userInfo over id_token when present", async () => {
+    setupPlatform({
+      idToken: makeJwt({ sub: "jwt-sub-old", iss: "https://example.com:443" }),
+      userInfo: {
+        type: "user",
+        id: "eacp-user-99",
+        account: "alice@example.com",
+        name: "Alice",
+      },
+    });
+
+    const { code, stdout } = await runCli(["auth", "whoami"]);
+    assert.equal(code, 0);
+    assert.match(stdout, /Type:\s+user/);
+    assert.match(stdout, /User ID:\s+eacp-user-99/);
+    assert.match(stdout, /Account:\s+alice@example\.com/);
+    assert.match(stdout, /Name:\s+Alice/);
+  });
+
+  it("shows app token identity from userInfo", async () => {
+    setupPlatform({
+      userInfo: { type: "app", id: "app-id-1", name: "demo-service" },
+    });
+
+    const { code, stdout } = await runCli(["auth", "whoami"]);
+    assert.equal(code, 0);
+    assert.match(stdout, /Type:\s+app/);
+    assert.match(stdout, /User ID:\s+app-id-1/);
+    assert.match(stdout, /Name:\s+demo-service/);
   });
 
   it("shows help with --help", async () => {

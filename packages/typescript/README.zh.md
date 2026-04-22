@@ -31,7 +31,7 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
-两者同时设置时，即使未执行 `auth login`，业务命令也会使用该 token。若 **`~/.kweaver/` 无当前平台**，仍可使用 **`kweaver auth status`**、**`kweaver auth whoami`**（支持 `--json`）、**`kweaver config show`**：CLI 会在本地解 JWT 展示身份；若 token 为 opaque，则省略身份字段并给出简短提示。
+两者同时设置时，即使未执行 `auth login`，业务命令也会使用该 token。若 **`~/.kweaver/` 无当前平台**，仍可使用 **`kweaver auth status`**、**`kweaver auth whoami`**（支持 `--json`）、**`kweaver config show`**：CLI 会优先调 EACP `/api/eacp/v1/user/get` 解析当前身份（user 与 app 两种 token 都支持），EACP 不可达时回退到本地 JWT 解码。设置 `KWEAVER_SKIP_ENRICH=1` 可完全跳过 EACP 探测。强依赖用户的命令（如 `config list-bd`）会主动拦截 `type: "app"` 的 token，给出含身份信息的明确提示，避免后端返回令人困惑的 `invalid user_id`。
 
 ### 业务域（平台配置）
 

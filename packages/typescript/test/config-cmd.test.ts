@@ -68,6 +68,36 @@ describe("kweaver config", () => {
     assert.ok(stdout.includes("list-bd"));
   });
 
+  it("config list-bd refuses app tokens with actionable hint (and never hits the backend)", async () => {
+    const platformsDir = join(tempDir, "platforms", "aHR0cHM6Ly9leGFtcGxlLmNvbQ");
+    writeFileSync(
+      join(platformsDir, "token.json"),
+      JSON.stringify({
+        baseUrl: "https://example.com",
+        accessToken: "tok",
+        tokenType: "Bearer",
+        scope: "openid",
+        obtainedAt: "2020-01-01T00:00:00Z",
+        userInfo: { type: "app", id: "app-42", name: "demo-svc" },
+      }),
+    );
+    const origFetch = globalThis.fetch;
+    let backendCalled = false;
+    globalThis.fetch = async () => {
+      backendCalled = true;
+      throw new Error("backend should not be called for app tokens");
+    };
+    try {
+      const { code, stderr } = await runCli(["config", "list-bd"]);
+      assert.equal(code, 1);
+      assert.ok(backendCalled === false, "list-bd should not call the backend for app tokens");
+      assert.match(stderr, /requires a user-bound token/);
+      assert.match(stderr, /app-42/);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
   it("config list-bd prints domains from API", async () => {
     const platformsDir = join(tempDir, "platforms", "aHR0cHM6Ly9leGFtcGxlLmNvbQ");
     writeFileSync(

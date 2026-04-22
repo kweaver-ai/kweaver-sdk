@@ -316,21 +316,37 @@ async function fetchDisplayName(
 }
 
 /**
+ * Characters that bash/zsh/sh AND cmd.exe/PowerShell all leave untouched when
+ * a value is written without surrounding quotes. Real-world OAuth values
+ * (URLs, UUID-like client IDs, base64url refresh tokens) live in this set, so
+ * we can emit them bare and the resulting command is portable across macOS,
+ * Linux, Windows cmd, and PowerShell — including the copy-mac-paste-to-windows
+ * (and the reverse) workflow.
+ */
+const SHELL_SAFE_VALUE = /^[A-Za-z0-9._:/+=@-]+$/;
+
+/**
  * Quote a value for safe copy-paste into a shell command.
  *
- * - POSIX (bash/zsh/sh): single-quote wrap; embedded `'` becomes `'\''`.
- *   Single quotes prevent any further interpretation by the shell.
- * - Windows (cmd.exe / PowerShell): double-quote wrap; embedded `"` becomes `""`.
- *   cmd.exe treats single quotes as literal characters (issue #74), so we must
- *   use double quotes there.
+ * Strategy:
+ * - If the value only contains "shell-safe" characters, return it bare. This
+ *   keeps the printed command portable across shells (issue #74: POSIX single
+ *   quotes are literal in cmd.exe, so any quoting locks the line to one OS).
+ * - Otherwise the value contains characters the shell would interpret
+ *   (space, `&`, `|`, `$`, `*`, ...), so we must quote per host shell:
+ *     - win32 (cmd.exe / PowerShell): wrap in `"..."`; embedded `"` -> `""`
+ *     - POSIX (bash/zsh/sh): wrap in `'...'`; embedded `'` -> `'\''`
  *
- * The `platform` argument defaults to `process.platform` so the printed command
- * matches the shell where the user is running `kweaver` right now.
+ * `platform` defaults to `process.platform`; passable for tests and for
+ * generating commands targeted at a specific shell.
  */
 export function shellQuoteForShell(
   value: string,
   platform: NodeJS.Platform = process.platform,
 ): string {
+  if (value !== "" && SHELL_SAFE_VALUE.test(value)) {
+    return value;
+  }
   if (platform === "win32") {
     return `"${value.replace(/"/g, `""`)}"`;
   }

@@ -2095,7 +2095,7 @@ export function formatHttpError(error: unknown): string {
       (error.status === 403 || error.status === 404) &&
       /BknBackend\.KnowledgeNetwork\.NotFound/.test(error.body)
     ) {
-      return `${base}\nHint: this is a "knowledge network not found" error (the kn-id does not exist), not a permission/auth issue. Verify the kn-id you passed.`;
+      return `Hint: this is a "knowledge network not found" error (the kn-id does not exist), not a permission/auth issue. Verify the kn-id you passed.\n${base}`;
     }
     return base;
   }

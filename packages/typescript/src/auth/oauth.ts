@@ -292,12 +292,32 @@ function extractRsaPublicKeyMaterialFromPageProps(pageProps: Record<string, unkn
   return deepFindSigninRsaMaterial(pageProps, 5, new Set());
 }
 
-/** Best-effort fetch of display name via EACP userinfo (ShareServer). */
-async function fetchDisplayName(
+/** Identity resolved from EACP `/api/eacp/v1/user/get` for the bound access token. */
+export interface EacpUserInfo {
+  /** "user" — interactive end-user; "app" — service / application identity. */
+  type: "user" | "app";
+  /** EACP id (`userid` for users, `id` for apps). */
+  id: string;
+  /** Login name (e.g. "alice@example.com"). User tokens only. */
+  account?: string;
+  /** Display name — `visionName` for users, app name for apps. */
+  name?: string;
+}
+
+/**
+ * Probe EACP for the bound identity. Returns `null` on any failure (network,
+ * non-2xx, malformed JSON, unknown `type`). Callers must treat absence as a
+ * soft signal — this never throws and never blocks the user's actual command.
+ *
+ * The shape differs per token type, mirroring the EACP backend:
+ *   - `type: "user"` → `{ userid, account, name, ... }`
+ *   - `type: "app"`  → `{ id, name }`
+ */
+export async function fetchEacpUserInfo(
   baseUrl: string,
   accessToken: string,
   tlsInsecure?: boolean,
-): Promise<string | null> {
+): Promise<EacpUserInfo | null> {
   try {
     const res = await runWithTlsInsecure(tlsInsecure, () =>
       fetch(`${baseUrl}/api/eacp/v1/user/get`, {
@@ -305,14 +325,31 @@ async function fetchDisplayName(
       }),
     );
     if (!res.ok) return null;
-    const info = (await res.json()) as Record<string, unknown>;
-    if (typeof info.account === "string") return info.account;
-    if (typeof info.name === "string") return info.name;
-    if (typeof info.mail === "string") return info.mail;
+    const raw = (await res.json()) as Record<string, unknown>;
+    const type = raw.type;
+    if (type !== "user" && type !== "app") return null;
+    const idCandidate = type === "user" ? raw.userid : raw.id;
+    const id = typeof idCandidate === "string" ? idCandidate : "";
+    if (!id) return null;
+    return {
+      type,
+      id,
+      account: typeof raw.account === "string" ? raw.account : undefined,
+      name: typeof raw.name === "string" ? raw.name : undefined,
+    };
   } catch {
-    /* Non-critical — displayName will be absent. */
+    return null;
   }
-  return null;
+}
+
+/** Best-effort fetch of display name via EACP userinfo (ShareServer). */
+async function fetchDisplayName(
+  baseUrl: string,
+  accessToken: string,
+  tlsInsecure?: boolean,
+): Promise<string | null> {
+  const info = await fetchEacpUserInfo(baseUrl, accessToken, tlsInsecure);
+  return info?.account ?? info?.name ?? null;
 }
 
 /**
@@ -447,6 +484,36 @@ function buildCallbackExchangeErrorHtml(message: string): string {
 
 export function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+/**
+ * Resolve the platform URL the CLI should act on, with explicit precedence:
+ *
+ *   1. **positional**  — caller passed a URL/alias (always wins)
+ *   2. **env**         — `KWEAVER_BASE_URL` is set (explicit user intent;
+ *                        wins over a stale `~/.kweaver/` saved session)
+ *   3. **saved**       — `getCurrentPlatform()` from local config
+ *
+ * `source` lets callers print provenance without re-deriving it. This mirrors
+ * `ensureValidToken()` (which is already env-first), so introspection
+ * commands (`auth status`, `auth whoami`, `config show|list-bd|set-bd`) and
+ * data-path commands agree on which platform "current" means.
+ */
+export function resolveActivePlatform(positional?: string | null): {
+  url: string;
+  source: "positional" | "env" | "saved";
+} | null {
+  if (positional) {
+    const url = /^https?:\/\//.test(positional) ? normalizeBaseUrl(positional) : positional;
+    return { url, source: "positional" };
+  }
+  const envRaw = process.env.KWEAVER_BASE_URL?.trim();
+  if (envRaw) {
+    return { url: normalizeBaseUrl(envRaw), source: "env" };
+  }
+  const saved = getCurrentPlatform();
+  if (saved) return { url: saved, source: "saved" };
+  return null;
 }
 
 /**
@@ -2049,7 +2116,14 @@ export function formatHttpError(error: unknown): string {
     if (oauthMessage) {
       return `HTTP ${error.status} ${error.statusText}\n\n${oauthMessage}`;
     }
-    return `${error.message}\n${error.body}`.trim();
+    const base = `${error.message}\n${error.body}`.trim();
+    if (
+      (error.status === 403 || error.status === 404) &&
+      /BknBackend\.KnowledgeNetwork\.NotFound/.test(error.body)
+    ) {
+      return `Hint: this is a "knowledge network not found" error (the kn-id does not exist), not a permission/auth issue. Verify the kn-id you passed.\n${base}`;
+    }
+    return base;
   }
 
   if (error instanceof NetworkRequestError) {

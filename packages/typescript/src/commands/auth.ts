@@ -28,6 +28,7 @@ import { decodeJwtPayload } from "../config/jwt.js";
 import { eacpModifyPassword } from "../auth/eacp-modify-password.js";
 import {
   buildCopyCommand,
+  fetchEacpUserInfo,
   formatHttpError,
   InitialPasswordChangeRequiredError,
   normalizeBaseUrl,
@@ -36,6 +37,7 @@ import {
   promptForUsername,
   promptForPassword,
   refreshTokenLogin,
+  resolveActivePlatform,
 } from "../auth/oauth.js";
 
 export async function runAuthCommand(args: string[]): Promise<number> {
@@ -95,7 +97,7 @@ Login options:
   }
 
   if (target === "whoami") {
-    return runAuthWhoamiCommand(rest);
+    return await runAuthWhoamiCommand(rest);
   }
 
   if (target === "export") {
@@ -303,26 +305,33 @@ Login options:
     const resolvedTarget = args[1] ? resolvePlatformIdentifier(args[1]) : undefined;
     const statusTarget =
       resolvedTarget && /^https?:\/\//.test(resolvedTarget) ? normalizeBaseUrl(resolvedTarget) : resolvedTarget ?? undefined;
+    const active = resolveActivePlatform(statusTarget);
 
-    const platform = statusTarget ?? getCurrentPlatform();
-    if (!platform) {
-      const envRaw = process.env.KWEAVER_BASE_URL?.trim();
-      const envUrl = envRaw ? normalizeBaseUrl(envRaw) : undefined;
+    if (!active) {
+      console.error(
+        "No active platform. Run `kweaver auth login <platform-url>` first.\n" +
+        "  Tip: set KWEAVER_BASE_URL and KWEAVER_TOKEN to use this command without a saved login.",
+      );
+      return 1;
+    }
+
+    if (active.source === "env") {
       const envToken = process.env.KWEAVER_TOKEN?.trim();
-      if (!envUrl || !envToken) {
+      if (!envToken) {
         console.error(
-          "No active platform. Run `kweaver auth login <platform-url>` first.\n" +
-          "  Tip: set KWEAVER_BASE_URL and KWEAVER_TOKEN to use this command without a saved login.",
+          `KWEAVER_BASE_URL is set to ${active.url} but KWEAVER_TOKEN is missing. ` +
+          "Set KWEAVER_TOKEN, or unset KWEAVER_BASE_URL to fall back to the saved session.",
         );
         return 1;
       }
       console.log(`Config directory: ${getConfigDir()}`);
-      console.log(`Platform:         ${envUrl} (KWEAVER_BASE_URL)`);
+      console.log(`Platform:         ${active.url} (KWEAVER_BASE_URL)`);
       console.log(`Token present:    yes (KWEAVER_TOKEN)`);
       console.log(`Refresh token:    n/a (env)`);
       return 0;
     }
 
+    const platform = active.url;
     const token = loadTokenConfig(platform);
     if (!token) {
       console.error(
@@ -570,11 +579,13 @@ You can specify either the userId (sub claim) or the username (preferred_usernam
   return 0;
 }
 
-function runAuthWhoamiCommand(args: string[]): number {
+async function runAuthWhoamiCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
     console.log(`kweaver auth whoami [platform-url|alias] [--json]
 
-Show current user identity decoded from the saved id_token.
+Show current user identity. For env-token mode (KWEAVER_TOKEN), the bound
+identity is resolved live from EACP /api/eacp/v1/user/get; for saved sessions
+it is decoded from the local id_token.
 
 Options:
   --json   Output as JSON (machine-readable)`);
@@ -584,38 +595,66 @@ Options:
   const jsonOutput = args.includes("--json");
   const positional = args.find((a) => !a.startsWith("-"));
   const resolved = positional ? resolvePlatformIdentifier(positional) : null;
-  const platform = resolved && /^https?:\/\//.test(resolved) ? normalizeBaseUrl(resolved) : resolved ?? getCurrentPlatform();
+  const active = resolveActivePlatform(resolved);
 
-  if (!platform) {
-    const envRaw = process.env.KWEAVER_BASE_URL?.trim();
-    const envUrl = envRaw ? normalizeBaseUrl(envRaw) : undefined;
+  if (!active) {
+    console.error("No active platform. Run `kweaver auth login <platform-url>` first.");
+    return 1;
+  }
+
+  // Env mode requires both URL and token. resolveActivePlatform() returns
+  // source="env" as soon as KWEAVER_BASE_URL is set; if KWEAVER_TOKEN is
+  // missing we cannot inspect identity at all, so guide the user explicitly.
+  if (active.source === "env") {
     const envToken = process.env.KWEAVER_TOKEN?.trim();
-    if (!envUrl || !envToken) {
-      console.error("No active platform. Run `kweaver auth login <platform-url>` first.");
+    if (!envToken) {
+      console.error(
+        `KWEAVER_BASE_URL is set to ${active.url} but KWEAVER_TOKEN is missing. ` +
+        "Set KWEAVER_TOKEN, or unset KWEAVER_BASE_URL to fall back to the saved session.",
+      );
       return 1;
     }
     const accessToken = envToken.replace(/^Bearer\s+/i, "");
-    const payload = decodeJwtPayload(accessToken);
+    const envUrl = active.url;
+    const userInfo = await fetchEacpUserInfo(envUrl!, accessToken);
+    // Always decode the JWT in env mode so we can render Issuer/Issued/Expires
+    // alongside EACP's Type/Account/Name. The two carry different facts: EACP
+    // tells us *who* the token belongs to (works for opaque tokens too); the
+    // JWT claims tell us *when* it was issued and when it expires (only
+    // available when the token is a JWT). Showing both gives the user the
+    // complete picture without forcing them to pick a mode.
+    const jwtPayload = decodeJwtPayload(accessToken);
     if (jsonOutput) {
-      console.log(JSON.stringify({ platform: envUrl, source: "env", ...(payload ?? {}) }, null, 2));
+      const out: Record<string, unknown> = { platform: envUrl, source: "env" };
+      if (userInfo) out.userInfo = userInfo;
+      if (jwtPayload) Object.assign(out, jwtPayload);
+      console.log(JSON.stringify(out, null, 2));
       return 0;
     }
     console.log(`Platform: ${envUrl}`);
     console.log(`Source:   env (KWEAVER_TOKEN)`);
-    if (payload) {
-      const uname = payload.preferred_username ?? payload.name;
+    if (userInfo) {
+      console.log(`Type:     ${userInfo.type}`);
+      console.log(`User ID:  ${userInfo.id}`);
+      if (userInfo.account) console.log(`Account:  ${userInfo.account}`);
+      if (userInfo.name) console.log(`Name:     ${userInfo.name}`);
+    } else if (jwtPayload) {
+      const uname = jwtPayload.preferred_username ?? jwtPayload.name;
       if (uname) console.log(`Username: ${uname}`);
-      console.log(`User ID:  ${payload.sub ?? "(unknown)"}`);
-      console.log(`Issuer:   ${payload.iss ?? "(unknown)"}`);
-      if (payload.iat) console.log(`Issued:   ${new Date((payload.iat as number) * 1000).toISOString()}`);
-      if (payload.exp) console.log(`Expires:  ${new Date((payload.exp as number) * 1000).toISOString()}`);
+      console.log(`User ID:  ${jwtPayload.sub ?? "(unknown)"}`);
     } else {
-      console.log(`User info unavailable: opaque access token.`);
-      console.log(`Hint: run \`kweaver auth login ${envUrl}\` to obtain a full session.`);
+      console.log(`User info unavailable: opaque access token and EACP did not respond.`);
+      console.log(`Hint: run \`kweaver auth login ${envUrl}\` to obtain a full session, or check connectivity to ${envUrl}.`);
+    }
+    if (jwtPayload) {
+      if (jwtPayload.iss) console.log(`Issuer:   ${jwtPayload.iss}`);
+      if (jwtPayload.iat) console.log(`Issued:   ${new Date((jwtPayload.iat as number) * 1000).toISOString()}`);
+      if (jwtPayload.exp) console.log(`Expires:  ${new Date((jwtPayload.exp as number) * 1000).toISOString()}`);
     }
     return 0;
   }
 
+  const platform = active.url;
   const token = loadTokenConfig(platform);
   if (!token) {
     console.error(`No saved token for ${platform}.`);

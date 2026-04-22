@@ -31,7 +31,9 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
-With both set, API commands use that token even if you never ran `auth login`. You can also run **`kweaver auth status`**, **`kweaver auth whoami`** (supports `--json`), and **`kweaver config show`** when there is **no** current platform in `~/.kweaver/` — the CLI decodes the token locally (JWT only). If the token is opaque, identity fields are omitted and a short hint is printed.
+With both set, API commands use that token even if you never ran `auth login`. You can also run **`kweaver auth status`**, **`kweaver auth whoami`** (supports `--json`), and **`kweaver config show`** when there is **no** current platform in `~/.kweaver/`. In env-token mode, `whoami` resolves the bound identity from EACP `/api/eacp/v1/user/get` and prints `Type` (user/app), `User ID`, `Account` and `Name`; this works for both opaque and JWT tokens. If EACP is unreachable, the CLI falls back to local JWT decode and prints a short hint when the token is opaque.
+
+`kweaver config list-bd` lists business domains for the current user. App (service) tokens are not bound to an end-user — when the backend rejects the call with `401 invalid user_id`, the CLI re-checks the token type via EACP and, if confirmed `type:"app"`, replaces the cryptic backend body with `This command does not support app accounts.`. Use a user token (interactive `auth login`) for user-bound endpoints.
 
 ### Business domain (platform)
 

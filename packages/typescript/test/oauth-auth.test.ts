@@ -1109,12 +1109,20 @@ test("ensureValidToken (env mode): enriches token with EACP userInfo and caches 
   }
 });
 
-test("ensureValidToken (env mode): KWEAVER_SKIP_ENRICH=1 bypasses EACP probe", async () => {
+test("ensureValidToken (env mode): second 'process' reads from disk without re-probing EACP", async () => {
   const configDir = createConfigDir();
-  const { oauth } = await importOauthAndStore(configDir);
-  process.env.KWEAVER_BASE_URL = "https://x.example.com";
-  process.env.KWEAVER_TOKEN = "ory_at_yyy";
-  process.env.KWEAVER_SKIP_ENRICH = "1";
+  const { oauth, store } = await importOauthAndStore(configDir);
+  process.env.KWEAVER_BASE_URL = "https://disk.example.com";
+  process.env.KWEAVER_TOKEN = "ory_at_disk";
+
+  // Pre-seed disk cache as if a previous CLI invocation already probed EACP.
+  // pickDisplayName prefers `account` over `name`, mirroring the legacy display rule.
+  store.saveEnvUserInfo("https://disk.example.com", {
+    type: "user",
+    id: "u-disk",
+    account: "u@disk",
+    name: "Disk User",
+  });
 
   let called = false;
   globalThis.fetch = async () => {
@@ -1123,14 +1131,48 @@ test("ensureValidToken (env mode): KWEAVER_SKIP_ENRICH=1 bypasses EACP probe", a
   };
 
   try {
-    oauth.__resetEnvTokenInfoCacheForTests();
+    oauth.__resetEnvTokenInfoCacheForTests(); // simulate fresh process: in-memory empty
     const tok = await oauth.ensureValidToken();
-    assert.equal(tok.userInfo, undefined);
-    assert.equal(called, false);
+    assert.equal(tok.userInfo?.type, "user");
+    assert.equal(tok.userInfo?.id, "u-disk");
+    assert.equal(tok.displayName, "u@disk");
+    assert.equal(called, false, "disk cache hit must not trigger EACP fetch");
   } finally {
     delete process.env.KWEAVER_BASE_URL;
     delete process.env.KWEAVER_TOKEN;
-    delete process.env.KWEAVER_SKIP_ENRICH;
+    globalThis.fetch = fetch;
+  }
+});
+
+test("enrichEnvToken: forceRefresh bypasses both caches and overwrites disk", async () => {
+  const configDir = createConfigDir();
+  const { oauth, store } = await importOauthAndStore(configDir);
+  const baseUrl = "https://refresh.example.com";
+
+  store.saveEnvUserInfo(baseUrl, { type: "user", id: "stale", account: "old@x" });
+
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    // EACP user shape uses `userid` (not `id`) — see fetchEacpUserInfo for the mapping.
+    return new Response(
+      JSON.stringify({ type: "user", userid: "fresh", account: "new@x", name: "Fresh" }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  try {
+    oauth.__resetEnvTokenInfoCacheForTests();
+    const info = await oauth.enrichEnvToken(baseUrl, "ory_at_refresh", { forceRefresh: true });
+    assert.equal(info?.id, "fresh");
+    assert.equal(calls, 1, "forceRefresh must probe EACP");
+    // Disk should now reflect the fresh identity for next process.
+    const onDisk = store.loadEnvUserInfo(baseUrl);
+    assert.equal(onDisk?.type, "user");
+    assert.equal(onDisk?.id, "fresh");
+    assert.equal(onDisk?.account, "new@x");
+    assert.equal(onDisk?.name, "Fresh");
+  } finally {
     globalThis.fetch = fetch;
   }
 });

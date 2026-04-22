@@ -6,13 +6,16 @@ import {
   type ClientConfig,
   type EacpUserInfo,
   type TokenConfig,
+  clearEnvUserInfo,
   deleteClientConfig,
   getCurrentPlatform,
   loadClientConfig,
+  loadEnvUserInfo,
   loadTokenConfig,
   loadUserTokenConfig,
   resolveUserId,
   saveClientConfig,
+  saveEnvUserInfo,
   saveNoAuthPlatform,
   saveTokenConfig,
   setCurrentPlatform,
@@ -1870,27 +1873,51 @@ export async function refreshAccessToken(token: TokenConfig): Promise<TokenConfi
  * Static env `KWEAVER_TOKEN` bypasses refresh (see implementation).
  */
 /**
- * In-process cache for env-token identity. Keyed by `baseUrl|accessToken` so that:
- *  - changing `KWEAVER_TOKEN` mid-process forces a re-probe (different key)
- *  - we never pay the EACP round-trip more than once per command set
- *  - `null` is cached too: failed probes don't retry on every command in the same process
+ * Three-tier lookup for env-token identity, in order:
+ *   1. In-process Map (covers tight loops within one CLI invocation).
+ *   2. Disk cache (`platforms/<base>/env-userinfo.json`, never expires).
+ *   3. EACP `/api/eacp/v1/user/get` (probe and persist for next time).
  *
- * Not persisted to disk: env tokens are by definition ephemeral, and adding a
- * cross-process cache would force us to manage TTL / hash / cleanup. Keep it simple.
+ * The in-process Map is keyed by `baseUrl|accessToken` so swapping `KWEAVER_TOKEN`
+ * mid-process invalidates correctly without touching disk. The disk cache is
+ * keyed by baseUrl alone (no token / no hash stored) and is invalidated by
+ * `withTokenRetry` on 401, or by `kweaver auth whoami --refresh`.
  *
- * Skipped entirely when `KWEAVER_SKIP_ENRICH=1` (escape hatch for noisy networks
- * or environments where EACP is unreachable).
+ * `null` results are remembered in-process only — a transient EACP failure
+ * shouldn't repeat for every command in the same process, but should be
+ * retried on the next CLI invocation.
  */
 const envTokenInfoCache = new Map<string, EacpUserInfo | null>();
 
-async function enrichEnvToken(baseUrl: string, accessToken: string): Promise<EacpUserInfo | null> {
+/**
+ * Resolve the env-token's EACP identity, going through the three-tier cache.
+ * `forceRefresh: true` (used by `whoami --refresh`) bypasses both layers and
+ * re-probes EACP, persisting the fresh result back to disk.
+ */
+export async function enrichEnvToken(
+  baseUrl: string,
+  accessToken: string,
+  opts?: { forceRefresh?: boolean },
+): Promise<EacpUserInfo | null> {
   if (isNoAuth(accessToken)) return null;
-  if (process.env.KWEAVER_SKIP_ENRICH === "1") return null;
   const key = `${baseUrl}|${accessToken}`;
-  if (envTokenInfoCache.has(key)) return envTokenInfoCache.get(key) ?? null;
-  const info = await fetchEacpUserInfo(baseUrl, accessToken);
-  envTokenInfoCache.set(key, info);
-  return info;
+
+  if (opts?.forceRefresh) {
+    envTokenInfoCache.delete(key);
+    clearEnvUserInfo(baseUrl);
+  } else {
+    if (envTokenInfoCache.has(key)) return envTokenInfoCache.get(key) ?? null;
+    const cached = loadEnvUserInfo(baseUrl);
+    if (cached) {
+      envTokenInfoCache.set(key, cached);
+      return cached;
+    }
+  }
+
+  const fresh = await fetchEacpUserInfo(baseUrl, accessToken);
+  envTokenInfoCache.set(key, fresh);
+  if (fresh) saveEnvUserInfo(baseUrl, fresh);
+  return fresh;
 }
 
 /** Test-only: clear the in-process env-token enrichment cache. */
@@ -2111,8 +2138,11 @@ export async function withTokenRetry<T>(
       const platformUrl = normalizeBaseUrl(token.baseUrl);
       // env-sourced token: no refresh_token / OAuth client — refresh is impossible.
       // Probe above already confirmed the token is dead, so surface an env-aware hint
-      // instead of telling the user to `auth login` (which writes to disk).
+      // instead of telling the user to `auth login` (which writes to disk). Also drop
+      // the cached env-userinfo: the user likely rotated `KWEAVER_TOKEN` to a different
+      // identity, so any persisted display would lie until the next manual refresh.
       if (process.env.KWEAVER_TOKEN && !token.refreshToken) {
+        clearEnvUserInfo(platformUrl);
         throw new Error(
           `Authentication failed (401) for ${platformUrl}. Your KWEAVER_TOKEN appears to be invalid or expired.\n` +
             `  - Refresh the token and re-export: export KWEAVER_TOKEN=<new-token>\n` +

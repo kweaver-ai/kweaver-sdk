@@ -1,4 +1,4 @@
-import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
+import { ensureValidToken, formatHttpError, resolveActivePlatform, with401RefreshRetry } from "../auth/oauth.js";
 import type { ConditionSpec, RelationTypePath } from "../api/context-loader.js";
 import {
   knSearch,
@@ -17,7 +17,6 @@ import {
 import {
   addContextLoaderEntry,
   getCurrentContextLoaderKn,
-  getCurrentPlatform,
   loadContextLoaderConfig,
   removeContextLoaderEntry,
   setCurrentContextLoader,
@@ -31,9 +30,11 @@ function ensureContextLoaderConfig(): {
   knId: string;
   accessToken: string;
 } {
-  const platform = getCurrentPlatform();
-  if (!platform) {
-    throw new Error("No platform selected. Run: kweaver auth <platform-url>");
+  const active = resolveActivePlatform();
+  if (!active) {
+    throw new Error(
+      "No platform selected. Set KWEAVER_BASE_URL or run: kweaver auth <platform-url>",
+    );
   }
 
   const kn = getCurrentContextLoaderKn();
@@ -146,11 +147,14 @@ Subcommands:
     return 0;
   }
 
-  const platform = getCurrentPlatform();
-  if (!platform) {
-    console.error("No platform selected. Run: kweaver auth <platform-url>");
+  const active = resolveActivePlatform();
+  if (!active) {
+    console.error(
+      "No platform selected. Set KWEAVER_BASE_URL or run: kweaver auth <platform-url>",
+    );
     return 1;
   }
+  const platform = active.url;
 
   if (action === "show") {
     const kn = getCurrentContextLoaderKn();

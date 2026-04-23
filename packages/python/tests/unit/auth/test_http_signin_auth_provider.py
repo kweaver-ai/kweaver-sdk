@@ -31,8 +31,7 @@ def test_http_signin_auth_lazy_login_on_first_use(tmp_kweaver_home) -> None:
     respx.post(f"{base}/oauth2/clients").mock(
         return_value=httpx.Response(201, json={"client_id": "c", "client_secret": "s"})
     )
-    respx.get(f"{base}/oauth2/auth").mock(return_value=httpx.Response(200, text="ok"))
-    respx.get(f"{base}/api/dip-hub/v1/login").mock(
+    respx.get(f"{base}/oauth2/auth").mock(
         return_value=httpx.Response(302, headers={"location": f"{base}/oauth2/signin?login_challenge=c"})
     )
     respx.get(f"{base}/oauth2/signin").mock(

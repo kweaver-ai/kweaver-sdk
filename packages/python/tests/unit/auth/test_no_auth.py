@@ -38,16 +38,19 @@ def test_http_signin_falls_back_on_oauth2_clients_404(tmp_kweaver_home) -> None:
 
 
 @respx.mock
-def test_http_signin_falls_back_on_dip_login_404(tmp_kweaver_home) -> None:
+def test_http_signin_falls_back_on_oauth2_auth_404(tmp_kweaver_home) -> None:
     base = "https://noauth.example.com"
     respx.post(f"{base}/oauth2/clients").mock(
         return_value=httpx.Response(201, json={"client_id": "c", "client_secret": "s"})
     )
-    respx.get(f"{base}/oauth2/auth").mock(return_value=httpx.Response(200, text="ok"))
-    respx.get(f"{base}/api/dip-hub/v1/login").mock(return_value=httpx.Response(404, text=""))
+    respx.get(f"{base}/oauth2/auth").mock(return_value=httpx.Response(404, text=""))
 
-    token = http_signin(base, username="alice", password="x")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        token = http_signin(base, username="alice", password="x")
+
     assert token["accessToken"] == NO_AUTH_TOKEN
+    assert any("no-auth" in str(w.message).lower() for w in caught)
 
 
 @respx.mock

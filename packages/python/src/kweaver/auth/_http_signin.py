@@ -7,10 +7,11 @@ from __future__ import annotations
 import base64
 import os
 import re
+import secrets
 import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 import httpx
 
@@ -179,8 +180,30 @@ def _challenge_from_url(url: str) -> str | None:
     return v if isinstance(v, str) and v else None
 
 
-def _follow_to_signin_page(cx: httpx.Client, base: str) -> str:
-    url = f"{base}/api/dip-hub/v1/login"
+def _build_auth_url(
+    base: str,
+    client: dict[str, Any],
+    *,
+    lang: str,
+    product: str,
+    state: str,
+) -> str:
+    """Build the GET /oauth2/auth URL (mirrors TS oauth2PasswordSigninLogin)."""
+    params = {
+        "redirect_uri": client["redirectUri"],
+        "x-forwarded-prefix": "",
+        "client_id": client["clientId"],
+        "scope": client.get("scope") or _DEFAULT_SCOPE,
+        "response_type": "code",
+        "state": state,
+        "lang": lang,
+        "product": product,
+    }
+    return f"{base}/oauth2/auth?{urlencode(params)}"
+
+
+def _follow_to_signin_page(cx: httpx.Client, auth_url: str) -> str:
+    url = auth_url
     for _ in range(20):
         r = cx.get(url, headers={"Accept": "text/html"}, timeout=30.0)
         if r.status_code == 404:
@@ -195,7 +218,7 @@ def _follow_to_signin_page(cx: httpx.Client, base: str) -> str:
             continue
         if r.status_code == 200 and "/oauth2/signin" in str(r.url):
             return str(r.url)
-        raise RuntimeError(f"Failed to reach signin page from {base}: HTTP {r.status_code}")
+        raise RuntimeError(f"Failed to reach signin page: HTTP {r.status_code}")
     raise RuntimeError("Too many redirects en route to /oauth2/signin")
 
 
@@ -242,6 +265,7 @@ def http_signin(
     signin_public_key_pem: str | None = None,
     tls_insecure: bool = False,
     lang: str = "zh-cn",
+    oauth_product: str | None = None,
     redirect_port: int = _DEFAULT_REDIRECT_PORT,
     _retry_count: int = 0,
 ) -> dict[str, Any]:
@@ -252,6 +276,11 @@ def http_signin(
         raise ValueError("password must be a non-empty string")
 
     base = base_url.rstrip("/")
+    product = (
+        oauth_product
+        or os.environ.get("KWEAVER_OAUTH_PRODUCT", "").strip()
+        or "adp"
+    )
 
     try:
         if client_id and client_secret:
@@ -268,7 +297,10 @@ def http_signin(
         with httpx.Client(
             cookies=cookies, verify=not tls_insecure, follow_redirects=False, timeout=30.0
         ) as cx:
-            signin_url = _follow_to_signin_page(cx, base)
+            auth_url = _build_auth_url(
+                base, client, lang=lang, product=product, state=secrets.token_urlsafe(16)
+            )
+            signin_url = _follow_to_signin_page(cx, auth_url)
             page_resp = cx.get(
                 signin_url,
                 headers={
@@ -333,6 +365,7 @@ def http_signin(
                             signin_public_key_pem=signin_public_key_pem,
                             tls_insecure=tls_insecure,
                             lang=lang,
+                            oauth_product=product,
                             redirect_port=redirect_port,
                             _retry_count=_retry_count + 1,
                         )

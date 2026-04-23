@@ -7,6 +7,7 @@ from kweaver.auth._crypto import (
     encrypt_pkcs1_v15,
     rsa_modulus_hex_to_spki_pem,
 )
+from kweaver.auth._http_signin import http_signin
 from kweaver.auth._signin_html import parse_signin_page_html_props
 from kweaver.auth.eacp import (
     EacpModifyPasswordResult,
@@ -25,6 +26,7 @@ __all__ = [
     "encrypt_modify_pwd",
     "encrypt_pkcs1_v15",
     "fetch_eacp_user_info",
+    "http_signin",
     "parse_signin_page_html_props",
     "rsa_modulus_hex_to_spki_pem",
 ]

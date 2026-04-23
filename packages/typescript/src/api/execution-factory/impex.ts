@@ -68,8 +68,8 @@ export async function importData(options: ImportOptions): Promise<string> {
   if (filePath) {
     const fileContent = await import("fs").then((fs) => fs.promises.readFile(filePath));
     const formData = new FormData();
-    const blob = new Blob([fileContent], { type: "application/msaccess" });
-    formData.append("data", blob, filePath.split("/").pop() || "upload.adp");
+    const blob = new Blob([fileContent], { type: "application/octet-stream" });
+    formData.append("data", blob, filePath.split("/").pop() || "upload.json");
     formData.append("mode", "upsert");
 
     const response = await fetch(url, {

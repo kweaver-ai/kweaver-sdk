@@ -420,12 +420,19 @@ async function runToolboxCommand(args: string[]): Promise<number> {
 
   switch (cmd) {
     case "list": {
-      const opts = parseListOptions(remaining);
+      const raw = parseListOptions(remaining);
       const body = await listToolBoxes({
         baseUrl: token.baseUrl,
         accessToken: token.accessToken,
         businessDomain,
-        ...opts,
+        page: raw.page as number | undefined,
+        page_size: raw.page_size as number | undefined,
+        box_id: raw.box_id as string | undefined,
+        box_name: raw.name as string | undefined,
+        status: raw.status as string | undefined,
+        category_type: raw.category as string | undefined,
+        source: raw.source as string | undefined,
+        create_user: raw.create_user as string | undefined,
       });
       console.log(formatCallOutput(body, pretty));
       return 0;
@@ -668,12 +675,17 @@ async function runToolboxCommand(args: string[]): Promise<number> {
     }
 
     case "market": {
-      const opts = parseListOptions(remaining);
+      const raw = parseListOptions(remaining);
       const body = await listToolBoxMarket({
         baseUrl: token.baseUrl,
         accessToken: token.accessToken,
         businessDomain,
-        ...opts,
+        page: raw.page as number | undefined,
+        page_size: raw.page_size as number | undefined,
+        box_id: raw.box_id as string | undefined,
+        box_name: raw.name as string | undefined,
+        category_type: raw.category as string | undefined,
+        source: raw.source as string | undefined,
       });
       console.log(formatCallOutput(body, pretty));
       return 0;

@@ -377,7 +377,7 @@ test("runExecCommand toolbox tool-get calls API correctly", async () => {
     assert.equal(code, 0, `Expected code 0 but got ${code}. Errors: ${calls.map(c => c.url).join(", ")}`);
     assert.equal(calls.length, 2);
     assert.equal(calls[0].url, "https://mock.kweaver.test/api/agent-operator-integration/v1/tool-box/box-1");
-    assert.equal(calls[1].url, "http://agent-operator-integration:9000/tool-box/box-1/tools/tool-1");
+    assert.equal(calls[1].url, "http://agent-operator-integration:9000/api/agent-operator-integration/v1/tool-box/box-1/tools/tool-1");
   } finally {
     globalThis.fetch = orig;
     auth.restore();

@@ -41,7 +41,7 @@ export async function listOperators(options: ListOperatorsOptions): Promise<stri
     accessToken,
     businessDomain = "bd_public",
     page = 1,
-    page_size = 10,
+    page_size = 30,
     operator_id,
     name,
     status = "published",
@@ -302,7 +302,7 @@ export async function listOperatorHistory(options: ListOperatorHistoryOptions): 
     businessDomain = "bd_public",
     operatorId,
     page = 1,
-    page_size = 10,
+    page_size = 30,
   } = options;
 
   const base = getBaseUrl(baseUrl);
@@ -342,7 +342,7 @@ export async function listOperatorMarket(options: ListOperatorMarketOptions): Pr
     accessToken,
     businessDomain = "bd_public",
     page = 1,
-    page_size = 10,
+    page_size = 30,
     operator_id,
     name,
     category,

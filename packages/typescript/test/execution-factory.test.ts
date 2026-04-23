@@ -431,7 +431,7 @@ test("getTool sends GET to /tool-box/:boxId/tools/:toolId", async () => {
     });
     assert.equal(mock.calls[0].method, "GET");
     const url = new URL(mock.calls[0].url);
-    assert.equal(url.pathname, "/tool-box/box-1/tools/tool-1");
+    assert.equal(url.pathname, "/api/agent-operator-integration/v1/tool-box/box-1/tools/tool-1");
   } finally {
     mock.restore();
   }

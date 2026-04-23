@@ -60,7 +60,7 @@ export async function listToolBoxes(options: ListToolBoxesOptions): Promise<stri
     accessToken,
     businessDomain = "bd_public",
     page = 1,
-    page_size = 10,
+    page_size = 30,
     box_id,
     box_name,
     status = "published",
@@ -280,7 +280,7 @@ export async function listTools(options: ListToolsOptions): Promise<string> {
     businessDomain = "bd_public",
     boxId,
     page = 1,
-    page_size = 10,
+    page_size = 30,
     tool_id,
     name,
     status,
@@ -328,14 +328,7 @@ export async function getTool(options: GetToolOptions): Promise<string> {
   } = options;
 
   const base = getBaseUrl(baseUrl);
-  let url: string;
-  if (/^https?:\/\/[^\/]+$/i.test(base)) {
-    url = `${base}/tool-box/${encodeURIComponent(boxId)}/tools/${encodeURIComponent(toolId)}`;
-  } else if (base.includes("/api/")) {
-    url = `${base}/tool-box/${encodeURIComponent(boxId)}/tools/${encodeURIComponent(toolId)}`;
-  } else {
-    url = `${base}${API_PREFIX}/tool-box/${encodeURIComponent(boxId)}/tools/${encodeURIComponent(toolId)}`;
-  }
+  const url = `${base}${API_PREFIX}/tool-box/${encodeURIComponent(boxId)}/tools/${encodeURIComponent(toolId)}`;
 
   const response = await fetch(url, {
     method: "GET",
@@ -579,7 +572,7 @@ export async function listToolBoxMarket(options: ListToolBoxMarketOptions): Prom
     accessToken,
     businessDomain = "bd_public",
     page = 1,
-    page_size = 10,
+    page_size = 30,
     box_id,
     box_name,
     category_type,

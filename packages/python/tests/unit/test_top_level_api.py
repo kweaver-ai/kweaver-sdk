@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 import kweaver
+from kweaver._auth import HttpSigninAuth
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +49,9 @@ class TestConfigure:
     def test_username_password_auth(self):
         kweaver.configure("https://example.com", username="user", password="pass")
         assert kweaver._default_client is not None
+        auth = kweaver._default_client._auth_provider
+        assert isinstance(auth, HttpSigninAuth)
+        assert auth._base_url == "https://example.com"
 
     def test_sets_defaults(self):
         kweaver.configure("https://example.com", token="tok", bkn_id="kn99", agent_id="ag99")

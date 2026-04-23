@@ -180,6 +180,17 @@ const results = await cl.search({ query: "hypertension treatment" });
 
 ## Python SDK Usage
 
+### Pure Python authentication
+
+You can sign in from Python alone; tokens land in `~/.kweaver/` just like the CLIs:
+
+- **HTTP sign-in** (RSA-encrypted password, aligned with `kweaver auth login --http-signin`): `kweaver.login("https://…", username="…", password="…")`. Use `new_password=` when the server requires an initial password change (`401001017`).
+- **Refresh token**: `kweaver.login("https://…", refresh_token="…", client_id="…", client_secret="…")`.
+- **No-auth hosts**: `kweaver.login("https://…", no_auth=True)`.
+- **Browser OAuth**: `kweaver.login("https://…")` opens a browser; `open_browser=False` matches the headless paste flow.
+
+Helpers such as `http_signin`, `whoami`, and `list_platforms` live in `kweaver.auth`. For lazy sign-in on first API call, use `kweaver.configure(..., username=…, password=…)` or `HttpSigninAuth`.
+
 ### Simple API (recommended)
 
 ```python

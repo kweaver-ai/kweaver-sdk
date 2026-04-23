@@ -11,7 +11,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kweaver._auth import ConfigAuth, NoAuth, OAuth2Auth, OAuth2BrowserAuth, PasswordAuth, TokenAuth
+import warnings
+
+import httpx
+import respx
+
+from kweaver._auth import ConfigAuth, NoAuth, OAuth2Auth, OAuth2BrowserAuth, TokenAuth
 
 
 # ── NoAuth ───────────────────────────────────────────────────────────────────
@@ -217,21 +222,6 @@ def test_oauth2_auth_repr():
     assert "secret" not in r
 
 
-# ── PasswordAuth ─────────────────────────────────────────────────────────────
-
-
-def test_password_auth_repr():
-    with patch("kweaver._auth.PasswordAuth.__init__", return_value=None):
-        auth = PasswordAuth.__new__(PasswordAuth)
-        auth._username = "user@example.com"
-    assert "user@example.com" in repr(auth)
-
-
-def test_password_auth_refresh_interval():
-    """PasswordAuth has a 240-second refresh interval."""
-    assert PasswordAuth._REFRESH_INTERVAL == 240
-
-
 # ── TLS insecure ─────────────────────────────────────────────────────────────
 
 
@@ -409,3 +399,54 @@ def test_token_auth_thread_safe():
 
     assert all(r == "Bearer test" for r in results)
     assert len(results) == 10
+
+
+# ── OAuth2BrowserAuth refresh-token login + 404 no-auth ──────────────────────
+
+
+@respx.mock
+def test_login_with_refresh_token_writes_credentials(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    base = "https://example.com"
+    respx.post(f"{base}/oauth2/token").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "access_token": "NEW_AT",
+                "refresh_token": "NEW_RT",
+                "id_token": "NEW_IT",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "scope": "openid",
+            },
+        )
+    )
+
+    auth = OAuth2BrowserAuth(base)
+    auth.login_with_refresh_token(
+        client_id="cid", client_secret="csec", refresh_token="OLD_RT"
+    )
+    headers = auth.auth_headers()
+    assert headers == {"Authorization": "Bearer NEW_AT"}
+
+
+@respx.mock
+def test_browser_login_404_falls_back_to_no_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    base = "https://noauth.example.com"
+    respx.post(f"{base}/oauth2/clients").mock(return_value=httpx.Response(404, text=""))
+
+    auth = OAuth2BrowserAuth(base)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        auth.login()
+
+    headers = auth.auth_headers()
+    assert headers == {}
+    assert any("no-auth" in str(w.message).lower() for w in caught)

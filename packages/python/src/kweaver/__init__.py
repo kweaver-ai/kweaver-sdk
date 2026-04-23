@@ -6,7 +6,14 @@ import os
 import threading
 from typing import Iterator
 
-from kweaver._auth import ConfigAuth, NoAuth, OAuth2Auth, OAuth2BrowserAuth, PasswordAuth, TokenAuth
+from kweaver._auth import (
+    ConfigAuth,
+    HttpSigninAuth,
+    NoAuth,
+    OAuth2Auth,
+    OAuth2BrowserAuth,
+    TokenAuth,
+)
 from kweaver._client import KWeaverClient
 from kweaver._errors import (
     KWeaverError,
@@ -33,7 +40,7 @@ __all__ = [
     # Auth
     "TokenAuth",
     "NoAuth",
-    "PasswordAuth",
+    "HttpSigninAuth",
     "OAuth2Auth",
     "ConfigAuth",
     "OAuth2BrowserAuth",
@@ -48,6 +55,7 @@ __all__ = [
     "ValidationError",
     # Module-level API
     "configure",
+    "login",
     "weaver",
     "search",
     "agents",
@@ -86,8 +94,8 @@ def configure(
         url: KWeaver base URL, e.g. "https://kweaver.example.com".
             Required unless config=True or KWEAVER_BASE_URL env var is set.
         token: Bearer token for TokenAuth.
-        username: Username for PasswordAuth (requires password).
-        password: Password for PasswordAuth (requires username).
+        username: Username for HttpSigninAuth / HTTP sign-in (requires password).
+        password: Password for HttpSigninAuth (requires username).
         auth: If False, use NoAuth (no Authorization headers). Requires ``url`` or
             ``KWEAVER_BASE_URL``. Incompatible with ``token``, ``username``/``password``, and ``config``.
             Alternatively set env ``KWEAVER_NO_AUTH=1`` (or ``true``/``yes``) with ``url`` or
@@ -149,8 +157,8 @@ def configure(
             effective_url = url or os.environ.get("KWEAVER_BASE_URL")
             if not effective_url:
                 raise ValueError("Provide url=, config=True, or set KWEAVER_BASE_URL")
-            auth_provider = PasswordAuth(
-                base_url=effective_url, username=username, password=password
+            auth_provider = HttpSigninAuth(
+                effective_url, username=username, password=password
             )
             _default_client = KWeaverClient(
                 base_url=effective_url, auth=auth_provider, business_domain=effective_domain
@@ -172,6 +180,63 @@ def configure(
             )
         _default_bkn_id = bkn_id
         _default_agent_id = agent_id
+
+
+def login(
+    base_url: str,
+    *,
+    username: str | None = None,
+    password: str | None = None,
+    refresh_token: str | None = None,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    new_password: str | None = None,
+    no_auth: bool = False,
+    tls_insecure: bool = False,
+    open_browser: bool = True,
+) -> dict:
+    """One-call login. Strategy is picked from arguments. See design spec for the full matrix."""
+    if no_auth:
+        if username or password or refresh_token:
+            raise ValueError(
+                "no_auth=True is mutually exclusive with username/password/refresh_token"
+            )
+        from kweaver.auth import save_no_auth_platform
+
+        return save_no_auth_platform(base_url, tls_insecure=tls_insecure)
+
+    if refresh_token:
+        if not (client_id and client_secret):
+            raise ValueError("refresh_token requires client_id and client_secret")
+        auth = OAuth2BrowserAuth(base_url, tls_insecure=tls_insecure)
+        auth.login_with_refresh_token(
+            client_id=client_id, client_secret=client_secret, refresh_token=refresh_token
+        )
+        from kweaver.config.store import PlatformStore
+
+        return PlatformStore().load_token(base_url.rstrip("/"))
+
+    if username and password:
+        from kweaver.auth import http_signin
+
+        return http_signin(
+            base_url,
+            username=username,
+            password=password,
+            client_id=client_id,
+            client_secret=client_secret,
+            new_password=new_password,
+            tls_insecure=tls_insecure,
+        )
+
+    if username or password:
+        raise ValueError("username and password must be provided together")
+
+    auth = OAuth2BrowserAuth(base_url, tls_insecure=tls_insecure)
+    auth.login(no_browser=not open_browser)
+    from kweaver.config.store import PlatformStore
+
+    return PlatformStore().load_token(base_url.rstrip("/"))
 
 
 def _require_client() -> KWeaverClient:

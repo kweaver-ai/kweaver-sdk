@@ -53,6 +53,23 @@ client = KWeaverClient(base_url="http://localhost:8080", auth=NoAuth())
 # or: kweaver.configure("http://localhost:8080", auth=False)
 ```
 
+### Pure Python login
+
+HTTP sign-in matches the TypeScript CLI (`--http-signin`): RSA-encrypted password, `/oauth2/signin`, token exchange—no Playwright and no Node CLI required.
+
+```python
+import kweaver
+
+kweaver.login(
+    "https://kweaver.example.com",
+    username="alice@example.com",
+    password="secret",
+    # new_password="..."  # if the server returns 401001017 (initial password change)
+)
+```
+
+`kweaver.configure(url=..., username=..., password=...)` wires `HttpSigninAuth`, which performs sign-in on the first API call.
+
 ### Client API (full control)
 
 ```python
@@ -145,7 +162,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 ```python
 KWeaverClient(
     base_url="https://...",          # KWeaver platform URL
-    auth=ConfigAuth(),               # or TokenAuth("...") or PasswordAuth(...)
+    auth=ConfigAuth(),               # or TokenAuth("...") or HttpSigninAuth(url, username=..., password=...)
     vega_url="http://vega:13014",    # optional: Vega data platform URL
     debug=False,                     # print request/response diagnostics
     dry_run=False,                   # intercept write operations

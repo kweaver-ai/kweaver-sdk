@@ -42,6 +42,34 @@ for chunk in kweaver.chat("给我生成一份风险报告", stream=True):
     print(chunk.delta, end="", flush=True)
 ```
 
+### 无鉴权实例
+
+若平台无 API 鉴权，使用 `configure(..., auth=False)` 或 `KWeaverClient(..., auth=NoAuth())`，与 TS CLI `kweaver auth <url> --no-auth` 写入的 `~/.kweaver/` 哨兵一致（`ConfigAuth` 在保存的 access token 为 `__NO_AUTH__` 时不发送 `Authorization`）。
+
+```python
+from kweaver import KWeaverClient, NoAuth
+
+client = KWeaverClient(base_url="http://localhost:8080", auth=NoAuth())
+# 或: kweaver.configure("http://localhost:8080", auth=False)
+```
+
+### 纯 Python 登录
+
+与 TypeScript CLI 的 `--http-signin` 一致：RSA 加密密码、`/oauth2/signin`、换票，无需 Playwright 与 Node CLI。
+
+```python
+import kweaver
+
+kweaver.login(
+    "https://kweaver.example.com",
+    username="alice@example.com",
+    password="secret",
+    # new_password="..."  # 若服务端返回 401001017（首次改密）
+)
+```
+
+`kweaver.configure(url=..., username=..., password=...)` 使用 `HttpSigninAuth`，在首次调用 API 时再完成登录。
+
 ### Client API（完全控制）
 
 ```python
@@ -134,7 +162,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 ```python
 KWeaverClient(
     base_url="https://...",          # KWeaver 平台 URL
-    auth=ConfigAuth(),               # 或 TokenAuth("...") 或 PasswordAuth(...)
+    auth=ConfigAuth(),               # 或 TokenAuth("...") 或 HttpSigninAuth(url, username=..., password=...)
     vega_url="http://vega:13014",    # 可选：Vega 数据平台 URL
     debug=False,                     # 打印请求/响应诊断
     dry_run=False,                   # 拦截写操作

@@ -1,0 +1,25 @@
+{
+  "_csrf": "CSRF_FIXTURE",
+  "challenge": "CHALLENGE_FIXTURE",
+  "account": "alice",
+  "password": "CIPHER_FIXTURE",
+  "vcode": {
+    "id": "",
+    "content": ""
+  },
+  "dualfactorauthinfo": {
+    "validcode": {
+      "vcode": ""
+    },
+    "OTP": {
+      "OTP": ""
+    }
+  },
+  "remember": false,
+  "device": {
+    "name": "",
+    "description": "",
+    "client_type": "console_web",
+    "udids": []
+  }
+}

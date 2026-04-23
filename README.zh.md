@@ -180,6 +180,17 @@ const results = await cl.search({ query: "高血压 治疗" });
 
 ## Python SDK 用法
 
+### 纯 Python 认证
+
+无需 Node CLI，仅 Python 即可登录，凭据写入 `~/.kweaver/`，与 CLI 一致：
+
+- **HTTP 登录**（RSA 加密密码，对齐 `kweaver auth login --http-signin`）：`kweaver.login("https://…", username="…", password="…")`。若服务端要求首次改密（`401001017`），可传 `new_password=`。
+- **Refresh token**：`kweaver.login("https://…", refresh_token="…", client_id="…", client_secret="…")`。
+- **无鉴权实例**：`kweaver.login("https://…", no_auth=True)`。
+- **浏览器 OAuth**：`kweaver.login("https://…")` 会打开浏览器；`open_browser=False` 对应无浏览器的粘贴流程。
+
+`http_signin`、`whoami`、`list_platforms` 等位于 `kweaver.auth`。若希望首次调用 API 时再登录，可用 `kweaver.configure(..., username=…, password=…)` 或 `HttpSigninAuth`。
+
 ### 简洁 API（推荐）
 
 ```python

@@ -18,7 +18,9 @@ from pathlib import Path
 from typing import Any
 
 
-_DEFAULT_ROOT = Path.home() / ".kweaver"
+def _default_kweaver_root() -> Path:
+    """Resolve store root at use time so tests (and shells) can override HOME."""
+    return Path.home() / ".kweaver"
 
 _USER_SCOPED_FILES = {"token.json", "config.json", "context-loader.json"}
 
@@ -89,7 +91,7 @@ class PlatformStore:
     """Manage multi-platform KWeaver credentials in ~/.kweaver/."""
 
     def __init__(self, root: Path | None = None) -> None:
-        self._root = root or _DEFAULT_ROOT
+        self._root = root if root is not None else _default_kweaver_root()
         self._migrate_all_to_user_scoped()
 
     def _state_path(self) -> Path:
@@ -465,7 +467,9 @@ class PlatformStore:
         udir.mkdir(parents=True, exist_ok=True)
         if sys.platform != "win32":
             os.chmod(udir, 0o700)
-        _write_json(udir / "token.json", data)
+        base = url.rstrip("/")
+        record = {**data, "baseUrl": base}
+        _write_json(udir / "token.json", record)
         # When KWEAVER_USER is set the caller is doing a one-off operation;
         # don't change the persisted active user.
         if not os.environ.get("KWEAVER_USER"):

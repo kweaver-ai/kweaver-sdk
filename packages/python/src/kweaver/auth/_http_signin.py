@@ -7,7 +7,7 @@ from __future__ import annotations
 import base64
 import os
 import re
-import secrets
+import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -20,11 +20,15 @@ from kweaver.auth._crypto import (
     rsa_modulus_hex_to_spki_pem,
 )
 from kweaver.auth._signin_html import parse_signin_page_html_props
-from kweaver.auth.eacp import InitialPasswordChangeRequiredError
+from kweaver.auth.eacp import InitialPasswordChangeRequiredError, eacp_modify_password
 from kweaver.config.store import PlatformStore
 
 _DEFAULT_REDIRECT_PORT = 9010
 _DEFAULT_SCOPE = "openid offline all"
+
+
+class _NoAuthFallback(Exception):
+    """Internal sentinel: caught by http_signin → save_no_auth_platform + warning."""
 
 
 def _resolve_public_key_pem(explicit: str | None, page_material: str | None) -> str:
@@ -46,7 +50,6 @@ def _resolve_public_key_pem(explicit: str | None, page_material: str | None) -> 
             and re.fullmatch(r"[0-9a-fA-F]+", hex_norm) is not None
         ):
             return rsa_modulus_hex_to_spki_pem(hex_norm)
-        # Base64 SPKI: wrap to PEM (same shape as TS/browser imports)
         b64 = re.sub(r"\s+", "", s)
         return f"-----BEGIN PUBLIC KEY-----\n{b64}\n-----END PUBLIC KEY-----"
     return STUDIOWEB_LOGIN_PUBLIC_KEY_PEM
@@ -115,6 +118,8 @@ def _resolve_or_register_client(base: str, port: int, *, tls_insecure: bool) -> 
         verify=not tls_insecure,
         timeout=30.0,
     )
+    if resp.status_code == 404:
+        raise _NoAuthFallback()
     resp.raise_for_status()
     data = resp.json()
     client: dict[str, Any] = {
@@ -178,6 +183,8 @@ def _follow_to_signin_page(cx: httpx.Client, base: str) -> str:
     url = f"{base}/api/dip-hub/v1/login"
     for _ in range(20):
         r = cx.get(url, headers={"Accept": "text/html"}, timeout=30.0)
+        if r.status_code == 404:
+            raise _NoAuthFallback()
         if r.status_code in (302, 303, 307, 308):
             loc = r.headers.get("location")
             if not loc:
@@ -220,6 +227,10 @@ def _follow_to_callback(
     raise RuntimeError("Too many OAuth redirects")
 
 
+def _is_initial_password_code(code: Any) -> bool:
+    return code == 401001017 or code == "401001017"
+
+
 def http_signin(
     base_url: str,
     *,
@@ -235,8 +246,6 @@ def http_signin(
     _retry_count: int = 0,
 ) -> dict[str, Any]:
     """HTTP /oauth2/signin login. See design spec for full semantics."""
-    # lang / new_password / _retry_count: reserved for TS parity (Task 5+).
-    _ = (lang, new_password, _retry_count)
     if not isinstance(username, str) or not username:
         raise ValueError("username must be a non-empty string")
     if not isinstance(password, str) or not password:
@@ -244,83 +253,125 @@ def http_signin(
 
     base = base_url.rstrip("/")
 
-    if client_id and client_secret:
-        client: dict[str, Any] = {
-            "baseUrl": base,
-            "clientId": client_id,
-            "clientSecret": client_secret,
-            "redirectUri": f"http://127.0.0.1:{redirect_port}/callback",
-        }
-    else:
-        client = _resolve_or_register_client(base, redirect_port, tls_insecure=tls_insecure)
+    try:
+        if client_id and client_secret:
+            client: dict[str, Any] = {
+                "baseUrl": base,
+                "clientId": client_id,
+                "clientSecret": client_secret,
+                "redirectUri": f"http://127.0.0.1:{redirect_port}/callback",
+            }
+        else:
+            client = _resolve_or_register_client(base, redirect_port, tls_insecure=tls_insecure)
 
-    cookies = httpx.Cookies()
-    with httpx.Client(
-        cookies=cookies, verify=not tls_insecure, follow_redirects=False, timeout=30.0
-    ) as cx:
-        signin_url = _follow_to_signin_page(cx, base)
-        page_resp = cx.get(signin_url, headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"})
-        page_resp.raise_for_status()
-        page = parse_signin_page_html_props(page_resp.text)
-        challenge = page.get("challenge") or _challenge_from_url(signin_url) or ""
-        if not challenge:
-            raise RuntimeError("Sign-in page did not expose login_challenge.")
+        cookies = httpx.Cookies()
+        with httpx.Client(
+            cookies=cookies, verify=not tls_insecure, follow_redirects=False, timeout=30.0
+        ) as cx:
+            signin_url = _follow_to_signin_page(cx, base)
+            page_resp = cx.get(
+                signin_url,
+                headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                },
+            )
+            page_resp.raise_for_status()
+            page = parse_signin_page_html_props(page_resp.text)
+            challenge = page.get("challenge") or _challenge_from_url(signin_url) or ""
+            if not challenge:
+                raise RuntimeError("Sign-in page did not expose login_challenge.")
 
-        pem = _resolve_public_key_pem(signin_public_key_pem, page.get("rsa_public_key_material"))
-        cipher = encrypt_pkcs1_v15(password, pem)
+            pem = _resolve_public_key_pem(signin_public_key_pem, page.get("rsa_public_key_material"))
+            cipher = encrypt_pkcs1_v15(password, pem)
 
-        body = _build_signin_post_body(
-            csrftoken=page["csrftoken"],
-            challenge=challenge,
-            account=username,
-            password_cipher=cipher,
-            remember=bool(page.get("remember") or False),
-        )
+            body = _build_signin_post_body(
+                csrftoken=page["csrftoken"],
+                challenge=challenge,
+                account=username,
+                password_cipher=cipher,
+                remember=bool(page.get("remember") or False),
+            )
 
-        post_url = f"{base}/oauth2/signin"
-        _origin = urlparse(base)
-        post_resp = cx.post(
-            post_url,
-            json=body,
-            headers={
-                "Accept": "application/json, text/plain, */*",
-                "Content-Type": "application/json",
-                "Origin": f"{_origin.scheme}://{_origin.netloc}",
-                "Referer": signin_url,
-            },
-        )
-        if post_resp.status_code == 401:
-            try:
-                err_json = post_resp.json()
-            except Exception:
-                err_json = {}
-            code = err_json.get("code")
-            if code == 401001017 or code == "401001017":
-                raise InitialPasswordChangeRequiredError(
-                    account=username,
-                    base_url=base,
-                    server_message=str(err_json.get("message", "")),
+            post_url = f"{base}/oauth2/signin"
+            _origin = urlparse(base)
+            post_resp = cx.post(
+                post_url,
+                json=body,
+                headers={
+                    "Accept": "application/json, text/plain, */*",
+                    "Content-Type": "application/json",
+                    "Origin": f"{_origin.scheme}://{_origin.netloc}",
+                    "Referer": signin_url,
+                },
+            )
+            if post_resp.status_code == 401:
+                try:
+                    err_json = post_resp.json()
+                except Exception:
+                    err_json = {}
+                err_code = err_json.get("code")
+                if _is_initial_password_code(err_code):
+                    if new_password and _retry_count < 1:
+                        res = eacp_modify_password(
+                            base,
+                            account=username,
+                            old_password=password,
+                            new_password=new_password,
+                            tls_insecure=tls_insecure,
+                        )
+                        if not res["ok"]:
+                            raise RuntimeError(
+                                f"Auto change-password failed: {res['status']} {res['body'][:300]}"
+                            )
+                        return http_signin(
+                            base_url,
+                            username=username,
+                            password=new_password,
+                            client_id=client_id,
+                            client_secret=client_secret,
+                            new_password=None,
+                            signin_public_key_pem=signin_public_key_pem,
+                            tls_insecure=tls_insecure,
+                            lang=lang,
+                            redirect_port=redirect_port,
+                            _retry_count=_retry_count + 1,
+                        )
+                    raise InitialPasswordChangeRequiredError(
+                        account=username,
+                        base_url=base,
+                        server_message=str(err_json.get("message", "")),
+                    )
+                raise RuntimeError(f"OAuth2 sign-in failed: 401 {post_resp.text[:500]}")
+            if post_resp.status_code not in (302, 303, 307, 308):
+                raise RuntimeError(
+                    f"OAuth2 sign-in failed: {post_resp.status_code} {post_resp.text[:500]}"
                 )
-            raise RuntimeError(f"OAuth2 sign-in failed: 401 {post_resp.text[:500]}")
-        if post_resp.status_code not in (302, 303, 307, 308):
-            raise RuntimeError(f"OAuth2 sign-in failed: {post_resp.status_code} {post_resp.text[:500]}")
-        loc = post_resp.headers.get("location")
-        if not loc:
-            raise RuntimeError("OAuth2 sign-in redirect missing Location header.")
-        code = _follow_to_callback(cx, post_url, loc, client["redirectUri"])
+            loc = post_resp.headers.get("location")
+            if not loc:
+                raise RuntimeError("OAuth2 sign-in redirect missing Location header.")
+            code = _follow_to_callback(cx, post_url, loc, client["redirectUri"])
 
-    token = _exchange_code(
-        base,
-        code=code,
-        client_id=client["clientId"],
-        client_secret=client["clientSecret"],
-        redirect_uri=client["redirectUri"],
-        tls_insecure=tls_insecure,
-    )
-    if tls_insecure:
-        token["tlsInsecure"] = True
+        token = _exchange_code(
+            base,
+            code=code,
+            client_id=client["clientId"],
+            client_secret=client["clientSecret"],
+            redirect_uri=client["redirectUri"],
+            tls_insecure=tls_insecure,
+        )
+        if tls_insecure:
+            token["tlsInsecure"] = True
 
-    store = PlatformStore()
-    store.save_token(base, token)
-    store.use(base)
-    return token
+        store = PlatformStore()
+        store.save_token(base, token)
+        store.use(base)
+        return token
+    except _NoAuthFallback:
+        warnings.warn(
+            "OAuth2 endpoint not found (404). Saving platform in no-auth mode.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        from kweaver.auth.store_helpers import save_no_auth_platform
+
+        return save_no_auth_platform(base, tls_insecure=tls_insecure)

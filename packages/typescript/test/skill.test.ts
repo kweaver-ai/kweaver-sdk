@@ -48,7 +48,7 @@ test("client.skills.list unwraps envelope data", async () => {
     const client = new KWeaverClient({ baseUrl: BASE, accessToken: TOKEN });
     const result = await client.skills.list();
     assert.equal(result.data.length, 1);
-    assert.equal(result.data[0]?.skill_id, "skill-1");
+    assert.equal(result.data[0]?.id, "skill-1");
   } finally {
     globalThis.fetch = orig;
   }

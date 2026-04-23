@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kweaver-sdk"
-version = "0.5.2"
+version = "0.6.8"
 description = "KWeaver Python SDK — client library for knowledge network construction and querying"
 requires-python = ">=3.10"
 dependencies = [
@@ -28,11 +28,8 @@ packages = ["src/kweaver"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
-    "e2e: end-to-end tests against a live KWeaver instance",
     "destructive: tests that mutate KWeaver state (create/build/delete KN)",
 ]
-# Default: only run unit + integration; e2e requires explicit opt-in
-addopts = "--ignore=tests/e2e"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Coverage

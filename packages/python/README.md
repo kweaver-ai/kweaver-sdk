@@ -42,6 +42,17 @@ for chunk in kweaver.chat("Generate a risk report", stream=True):
     print(chunk.delta, end="", flush=True)
 ```
 
+### No-auth servers
+
+If the platform has no API authentication, use `configure(..., auth=False)` or pass `NoAuth()` to `KWeaverClient`. This matches the TypeScript CLI `kweaver auth <url> --no-auth` token stored in `~/.kweaver/` (`ConfigAuth` then sends no `Authorization` header when the saved token is the `__NO_AUTH__` sentinel).
+
+```python
+from kweaver import KWeaverClient, NoAuth
+
+client = KWeaverClient(base_url="http://localhost:8080", auth=NoAuth())
+# or: kweaver.configure("http://localhost:8080", auth=False)
+```
+
 ### Client API (full control)
 
 ```python
@@ -71,6 +82,9 @@ models = client.vega.metric_models.list()
 # Vega — Query
 result = client.vega.query.dsl(body={"query": {"match_all": {}}, "size": 10})
 result = client.vega.query.execute(tables=[...], output_fields=["*"], limit=20)
+# Direct SQL or OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+# Use {{resource_id}} placeholders so vega-backend routes to the correct catalog connector.
+rows = client.vega.query.sql_query({"query": "SELECT * FROM {{<resource-id>}} LIMIT 5", "resource_type": "mysql"})
 
 # Vega — Diagnostics
 info = client.vega.health()
@@ -105,6 +119,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Agents | `client.agents` | `list`, `get`, `get_by_key`, `create`, `update`, `delete`, `publish`, `unpublish` |
 | Conversations | `client.conversations` | `send_message`, `list_messages` |
 | Dataflows | `client.dataflows` | `create`, `run`, `poll`, `delete`, `execute` |
+| Dataflow v2 | `client.dataflow_v2` | `list_dataflows`, `run_dataflow_with_file`, `run_dataflow_with_remote_url`, `list_dataflow_runs`, `get_dataflow_logs_page` |
 | Data Views | `client.dataviews` | `create`, `list`, `get`, `delete`, `find_by_table`, `query` (SQL via mdl-uniquery) |
 | Skills | `client.skills` | `list`, `market`, `get`, `register_content`, `register_zip`, `update_status`, `content`, `read_file`, `download`, `install` |
 
@@ -121,7 +136,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Data Views | `client.vega.data_views` | `list`, `get` |
 | Data Dicts | `client.vega.data_dicts` | `list`, `get` |
 | Objective Models | `client.vega.objective_models` | `list`, `get` |
-| Query | `client.vega.query` | `execute`, `dsl`, `dsl_count`, `promql`, `promql_instant`, `events` |
+| Query | `client.vega.query` | `execute`, `sql_query`, `dsl`, `dsl_count`, `promql`, `promql_instant`, `events` |
 | Tasks | `client.vega.tasks` | `list_discover`, `get_discover`, `wait_discover`, `get_metric` |
 | Namespace | `client.vega` | `health`, `stats`, `inspect` |
 
@@ -146,6 +161,45 @@ KWeaverClient(
 | `KWEAVER_DEBUG` | Enable debug mode (`true`) |
 | `KWEAVER_FORMAT` | Output format (`md`/`json`/`yaml`) |
 | `KWEAVER_TLS_INSECURE` | Set to `1` or `true` to skip TLS verification for HTTPS (dev only; `kweaver auth … --insecure` persists per platform in `token.json`) |
+
+---
+
+## Dataflow v2 Example
+
+```python
+from kweaver import KWeaverClient, ConfigAuth
+
+client = KWeaverClient(auth=ConfigAuth())
+
+flows = client.dataflow_v2.list_dataflows()
+
+file_run = client.dataflow_v2.run_dataflow_with_file(
+    "dag-id",
+    file_path="./demo.pdf",
+)
+
+remote_run = client.dataflow_v2.run_dataflow_with_remote_url(
+    "dag-id",
+    url="https://example.com/demo.pdf",
+    name="demo.pdf",
+)
+
+runs = client.dataflow_v2.list_dataflow_runs(
+    "dag-id",
+    limit=20,
+    sort_by="started_at",
+    order="desc",
+)
+
+logs = client.dataflow_v2.get_dataflow_logs_page(
+    "dag-id",
+    remote_run["dag_instance_id"],
+    page=0,
+    limit=10,
+)
+```
+
+The Python package remains SDK-only. The `dataflow` CLI commands are provided by the TypeScript package.
 
 ---
 

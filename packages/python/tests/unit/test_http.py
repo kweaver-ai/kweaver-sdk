@@ -6,7 +6,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 from kweaver._http import HttpClient
-from kweaver._auth import TokenAuth
+from kweaver._auth import NoAuth, TokenAuth
 from kweaver._errors import NetworkError, ServerError
 
 
@@ -84,6 +84,24 @@ def test_custom_headers_injected():
     client = _make_client(handler)
     client.get("/api/test", headers={"X-Custom": "value"})
     assert captured["headers"].get("x-custom") == "value"
+
+
+def test_no_auth_omits_authorization():
+    """NoAuth provider must not add Authorization header."""
+    captured = {}
+
+    def handler(req):
+        captured["headers"] = dict(req.headers)
+        return httpx.Response(200, json={})
+
+    transport = httpx.MockTransport(handler)
+    client = HttpClient(
+        base_url="https://mock",
+        auth=NoAuth(),
+        transport=transport,
+    )
+    client.get("/api/test")
+    assert "authorization" not in {k.lower() for k in captured["headers"]}
 
 
 def test_post_multipart_returns_status_and_bytes():

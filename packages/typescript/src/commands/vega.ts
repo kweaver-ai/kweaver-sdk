@@ -23,8 +23,6 @@ import {
   updateVegaConnectorType,
   deleteVegaConnectorType,
   setVegaConnectorTypeEnabled,
-  listVegaDiscoverTasks,
-  getVegaDiscoverTask,
   createVegaDatasetDocs,
   updateVegaDatasetDocs,
   deleteVegaDatasetDocs,
@@ -32,6 +30,7 @@ import {
   buildVegaDataset,
   getVegaDatasetBuildStatus,
   executeVegaQuery,
+  vegaSQLQuery,
   listAllVegaResources,
 } from "../api/vega.js";
 import { formatCallOutput } from "./call.js";
@@ -70,16 +69,15 @@ Subcommands:
   dataset delete-docs-query <resource-id> -d <filter-json>
   dataset build <resource-id> [--mode full|incremental|realtime]
   dataset build-status <resource-id> <task-id>
-  query execute -d <json>
+  query execute -d <json>               Structured query (tables, joins, filters)
+  sql --resource-type <t> --query <sql>  Direct SQL / DSL; use {{<resource_id>}} in SQL (quoted)
+  sql -d <json>                         Same API with full JSON body (advanced)
   connector-type list                 List connector types
   connector-type get <type>           Get connector type details
   connector-type register -d <json>   Register a new connector type
   connector-type update <type> -d <json>  Update connector type
   connector-type delete <type> [-y]   Delete connector type
   connector-type enable <type> --enabled <bool>  Enable/disable connector type
-  discovery-task list [--status X] [--limit N]
-  discovery-task get <id>
-
 Common flags:
   -bd, --biz-domain <s>   Business domain (default: bd_public)
   --pretty                Pretty-print JSON (default)`);
@@ -146,8 +144,8 @@ export async function runVegaCommand(args: string[]): Promise<number> {
     if (subcommand === "resource") return runVegaResourceCommand(rest);
     if (subcommand === "dataset") return runVegaDatasetCommand(rest);
     if (subcommand === "query") return runVegaQueryCommand(rest);
+    if (subcommand === "sql") return runVegaSql(rest);
     if (subcommand === "connector-type") return runVegaConnectorTypeCommand(rest);
-    if (subcommand === "discovery-task") return runVegaDiscoveryTaskCommand(rest);
     return Promise.resolve(-1);
   };
 
@@ -226,7 +224,7 @@ async function runVegaStatsCommand(args: string[]): Promise<number> {
 
 async function runVegaInspectCommand(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega inspect\n\nHealth + catalog summary + running discover tasks.");
+    console.log("kweaver vega inspect\n\nHealth + catalog summary.");
     return 0;
   }
 
@@ -254,17 +252,6 @@ async function runVegaInspectCommand(args: string[]): Promise<number> {
   } catch (err) {
     console.error(`warn: catalog list failed: ${err instanceof Error ? err.message : String(err)}`);
     result.catalog_count = null;
-  }
-
-  // Running discover tasks — best-effort
-  try {
-    const tasksBody = await listVegaDiscoverTasks({ ...base, status: "running" });
-    const parsed = JSON.parse(tasksBody) as Record<string, unknown>;
-    const entries = Array.isArray(parsed) ? parsed : (parsed.entries ?? parsed.data ?? parsed.items ?? parsed.tasks ?? []);
-    result.running_discover_tasks = Array.isArray(entries) ? entries.length : 0;
-  } catch (err) {
-    console.error(`warn: discover tasks query failed: ${err instanceof Error ? err.message : String(err)}`);
-    result.running_discover_tasks = null;
   }
 
   console.log(pretty ? JSON.stringify(result, null, 2) : JSON.stringify(result));
@@ -1441,6 +1428,108 @@ Options:
 }
 
 // ---------------------------------------------------------------------------
+// sql (POST /resources/query)
+// ---------------------------------------------------------------------------
+
+async function runVegaSql(args: string[]): Promise<number> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`kweaver vega sql --resource-type <type> --query "<sql-or-dsl>"
+kweaver vega sql -d <json>
+
+POST /api/vega-backend/v1/resources/query — execute SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL.
+
+Simple mode (no JSON escaping for query + type):
+  --resource-type <t>   Required with --query unless using -d
+  --query <string>      One shell argument: the full SQL (or DSL string). Always quote it.
+
+Advanced mode (full request body, optional fields):
+  -d, --data <json>     Raw JSON body. When present, this mode is used and any --query / --resource-type are ignored.
+
+Resource placeholders (how to reference Vega tables in SQL):
+  {{<resource_id>}}     Required token form: double braces around the Vega resource id (from vega resource list / get).
+  {{.<resource_id>}}    Alternate form with a dot after {{ ; same replacement and routing.
+
+  The backend swaps each placeholder for that resource's physical SourceIdentifier and picks the catalog connector.
+  Without at least one placeholder, queries often fail (e.g. connector config is incomplete) unless a default connector exists.
+
+  Shell (simple mode) — wrap the whole SQL so braces are not interpreted by the shell:
+    kweaver vega sql --resource-type mysql --query "SELECT * FROM {{abc123xyz}} LIMIT 5"
+
+  Shell (-d mode) — placeholders live inside the JSON string value; use single quotes around the JSON so inner double quotes work:
+    kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{abc123xyz}} LIMIT 5"}'
+
+Body fields (JSON / simple mode mapping):
+  query          (required) SQL string or OpenSearch DSL object
+  resource_type  (required) e.g. mysql, mariadb, postgresql, opensearch (see vega connector-type list)
+  stream_size    optional batch size for streaming (100–10000, default 10000)
+  query_timeout  optional seconds (1–3600, default 60)
+  query_id       optional cursor session id
+
+Do not use --type; use --resource-type.
+
+Common flags:
+  -bd, --biz-domain <s>   Business domain (default: bd_public)
+  --pretty               Pretty-print JSON (default)`);
+    return 0;
+  }
+
+  let data: string | undefined;
+  let query: string | undefined;
+  let resourceType: string | undefined;
+  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
+
+  for (let i = 0; i < remaining.length; i += 1) {
+    const arg = remaining[i];
+    if (arg === "--type") {
+      console.error("Use --resource-type instead of --type (e.g. --resource-type mysql).");
+      return 1;
+    }
+    if ((arg === "-d" || arg === "--data") && remaining[i + 1]) {
+      data = remaining[++i];
+      continue;
+    }
+    if (arg === "--query" && remaining[i + 1]) {
+      query = remaining[++i];
+      continue;
+    }
+    if (arg === "--resource-type" && remaining[i + 1]) {
+      resourceType = remaining[++i];
+      continue;
+    }
+  }
+
+  let requestBody: string;
+
+  if (data !== undefined) {
+    try {
+      JSON.parse(data);
+    } catch {
+      console.error(`Invalid JSON: ${data}`);
+      return 1;
+    }
+    requestBody = data;
+  } else {
+    if (!query || !resourceType) {
+      console.error(
+        "Usage: kweaver vega sql --resource-type <type> --query \"<sql-or-dsl>\"\n       kweaver vega sql -d <json>",
+      );
+      return 1;
+    }
+    requestBody = JSON.stringify({ query, resource_type: resourceType });
+  }
+
+  const token = await ensureValidToken();
+  const body = await vegaSQLQuery({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    body: requestBody,
+    businessDomain,
+  });
+  console.log(formatCallOutput(body, pretty));
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Connector-type router
 // ---------------------------------------------------------------------------
 
@@ -1683,91 +1772,3 @@ async function runConnectorTypeEnable(args: string[]): Promise<number> {
   return 0;
 }
 
-// ---------------------------------------------------------------------------
-// Discovery-task router
-// ---------------------------------------------------------------------------
-
-async function runVegaDiscoveryTaskCommand(args: string[]): Promise<number> {
-  const [sub, ...rest] = args;
-
-  if (!sub || sub === "--help" || sub === "-h") {
-    console.log(`kweaver vega discovery-task
-
-Subcommands:
-  list [--status X] [--limit N]
-  get <id>`);
-    return 0;
-  }
-
-  if (sub === "list") return await runDiscoveryTaskList(rest);
-  if (sub === "get") return await runDiscoveryTaskGet(rest);
-
-  console.error(`Unknown discovery-task subcommand: ${sub}`);
-  return 1;
-}
-
-// ---------------------------------------------------------------------------
-// discovery-task list
-// ---------------------------------------------------------------------------
-
-async function runDiscoveryTaskList(args: string[]): Promise<number> {
-  if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega discovery-task list [options]
-
-Options:
-  --catalog-id <cid>  Filter by catalog (reserved)
-  --status <s>        Filter by status
-  --limit <n>         Max results`);
-    return 0;
-  }
-
-  let status: string | undefined;
-  let limit: number | undefined;
-  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
-
-  for (let i = 0; i < remaining.length; i += 1) {
-    const arg = remaining[i];
-    if (arg === "--status" && remaining[i + 1]) { status = remaining[++i]; continue; }
-    if (arg === "--limit" && remaining[i + 1]) { limit = parseInt(remaining[++i], 10); continue; }
-    if (arg === "--catalog-id" && remaining[i + 1]) { remaining[++i]; continue; }
-  }
-
-  const token = await ensureValidToken();
-  const body = await listVegaDiscoverTasks({
-    baseUrl: token.baseUrl,
-    accessToken: token.accessToken,
-    status,
-    limit,
-    businessDomain,
-  });
-  console.log(formatCallOutput(body, pretty));
-  return 0;
-}
-
-// ---------------------------------------------------------------------------
-// discovery-task get
-// ---------------------------------------------------------------------------
-
-async function runDiscoveryTaskGet(args: string[]): Promise<number> {
-  if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega discovery-task get <id>");
-    return 0;
-  }
-
-  const { remaining, businessDomain, pretty } = parseCommonFlags(args);
-  const id = remaining.find((a) => !a.startsWith("-"));
-  if (!id) {
-    console.error("Usage: kweaver vega discovery-task get <id>");
-    return 1;
-  }
-
-  const token = await ensureValidToken();
-  const body = await getVegaDiscoverTask({
-    baseUrl: token.baseUrl,
-    accessToken: token.accessToken,
-    id,
-    businessDomain,
-  });
-  console.log(formatCallOutput(body, pretty));
-  return 0;
-}

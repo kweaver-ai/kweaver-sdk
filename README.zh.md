@@ -234,12 +234,16 @@ result = client.dataflows.execute(
 ## 命令速查
 
 ```bash
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
+# -u/-p（无论是否带 --http-signin）：HTTP POST /oauth2/signin（可拿 refresh_token）；缺失的用户名/密码会从 stdin 提示输入（TTY 下密码隐藏）
+# 初始密码 401001017：TTY 会提示修改；脚本请加 --new-password <pwd>。
+kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   （无浏览器主机）
-kweaver auth export [url|alias] [--json]   auth status/list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # 平台业务域，登录后优先执行
+kweaver auth export [url|alias] [--json]
+kweaver auth status / whoami [url|alias] [--json]   # 无 ~/.kweaver/ 当前平台时可配 KWEAVER_BASE_URL+KWEAVER_TOKEN
+kweaver auth list/use/delete/logout
+kweaver config show / list-bd / set-bd <value>   # 业务域；show/list-bd 可配合 KWEAVER_BASE_URL（list-bd 还需 KWEAVER_TOKEN）
 kweaver token
-kweaver config show / set-bd <value>
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
 kweaver dataview|dv list/find/get/query/delete
@@ -256,7 +260,7 @@ kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/get-by-key/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
-kweaver vega health/stats/inspect/catalog/resource/connector-type
+kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
@@ -382,8 +386,8 @@ npx skills add https://github.com/kweaver-ai/kweaver-sdk \
   --skill kweaver-core --skill create-bkn
 ```
 
-[![skills.sh](https://skills.sh/badge/kweaver-core)](https://skills.sh/kweaver-ai/kweaver-sdk)
-[![skills.sh](https://skills.sh/badge/create-bkn)](https://skills.sh/kweaver-ai/kweaver-sdk)
+[![kweaver-core（skills.sh）](https://img.shields.io/badge/skills.sh-kweaver--core-6366f1?style=flat-square)](https://skills.sh/kweaver-ai/kweaver-sdk)
+[![create-bkn（skills.sh）](https://img.shields.io/badge/skills.sh-create--bkn-6366f1?style=flat-square)](https://skills.sh/kweaver-ai/kweaver-sdk)
 
 使用 **kweaver-core** 前需先安装 CLI 并完成认证：
 

@@ -63,7 +63,14 @@ kweaver dataview query <view-id> --sql "SELECT * FROM my_table LIMIT 10" --prett
 
 ## 与 BKN 的关系
 
-- 数据视图通过 Object Type 的 `Data Source` 段绑定：在 `.bkn` 文件中声明 `type = data_view`，填入视图 ID 和名称即可关联。
+数据视图通过 Object Type 的 `Data Source` 段绑定到知识网络。后端支持两种绑定方式：
+
+| Data Source Type | ID 来源 | 说明 |
+|---|---|---|
+| `data_view` | `dataview list` 返回的 mdl UUID | 传统 mdl-data-model 路径 |
+| `resource` | `vega resource list` 返回的 Vega 资源 ID | Vega 路径（`create-from-ds` 内部使用） |
+
+两种类型在后端均能成功创建对象类。`dataview` 命令和 `vega resource` 命令实际操作不同的后端接口，返回不同格式的 ID，但都可用于绑定。
 
 ### 知识网络 → SQL JOIN（高级用法）
 

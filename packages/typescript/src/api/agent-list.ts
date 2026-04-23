@@ -1,4 +1,4 @@
-import { HttpError } from "../utils/http.js";
+import { HttpError, fetchWithRetry } from "../utils/http.js";
 import { buildHeaders } from "./headers.js";
 
 // ── List published agents ────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ export async function listAgents(options: ListAgentsOptions): Promise<string> {
     is_to_square,
   });
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "POST",
     headers: buildHeaders(accessToken, businessDomain),
     body,
@@ -73,7 +73,7 @@ export async function getAgent(options: GetAgentOptions): Promise<string> {
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/agent/${encodeURIComponent(agentId)}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -105,7 +105,7 @@ export async function getAgentByKey(options: GetAgentByKeyOptions): Promise<stri
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/agent/by-key/${encodeURIComponent(key)}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -137,7 +137,7 @@ export async function createAgent(options: CreateAgentOptions): Promise<string> 
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/agent`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "POST",
     headers: {
       ...buildHeaders(accessToken, businessDomain),
@@ -175,7 +175,7 @@ export async function updateAgent(options: UpdateAgentOptions): Promise<string> 
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/agent/${encodeURIComponent(agentId)}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "PUT",
     headers: {
       ...buildHeaders(accessToken, businessDomain),
@@ -211,7 +211,7 @@ export async function deleteAgent(options: DeleteAgentOptions): Promise<void> {
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/agent/${encodeURIComponent(agentId)}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "DELETE",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -256,7 +256,7 @@ export async function publishAgent(options: PublishAgentOptions): Promise<string
     pms_control: null,
   });
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "POST",
     headers: {
       ...buildHeaders(accessToken, businessDomain),
@@ -292,7 +292,7 @@ export async function unpublishAgent(options: UnpublishAgentOptions): Promise<vo
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/agent/${encodeURIComponent(agentId)}/unpublish`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "PUT",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -338,7 +338,7 @@ export async function listPersonalAgents(options: ListPersonalAgentsOptions): Pr
 
   const url = `${base}/api/agent-factory/v3/personal-space/agent-list?${params.toString()}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -382,7 +382,7 @@ export async function listPublishedAgentTemplates(options: ListPublishedAgentTem
 
   const url = `${base}/api/agent-factory/v3/published/agent-tpl?${params.toString()}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -414,7 +414,7 @@ export async function getPublishedAgentTemplate(options: GetPublishedAgentTempla
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/published/agent-tpl/${encodeURIComponent(templateId)}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
   });
@@ -444,7 +444,7 @@ export async function listAgentCategories(options: ListAgentCategoriesOptions): 
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/agent-factory/v3/category`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: "GET",
     headers: buildHeaders(accessToken, businessDomain),
   });

@@ -1,5 +1,6 @@
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { runAgentChatCommand } from "./agent-chat.js";
+import { runAgentSkillCommand } from "./agent-members.js";
 import {
   listAgents, getAgent, getAgentByKey,
   createAgent, updateAgent, deleteAgent,
@@ -11,6 +12,49 @@ import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { promises as fs } from "fs";
 import { join, dirname, basename, extname } from "path";
+import { HttpError } from "../utils/http.js";
+import { buildHeaders } from "../api/headers.js";
+
+/** Build llm_config with valid defaults for fields that mf-model-api validates. */
+export function buildLlmConfig(id: string, name: string, maxTokens: number): Record<string, unknown> {
+  return {
+    id,
+    name,
+    max_tokens: maxTokens,
+    temperature: 0.7,
+    top_p: 1,
+    top_k: 1,
+  };
+}
+
+/** Resolve LLM model name from mf-model-manager API by model ID. Falls back to llmId on failure. */
+export async function resolveLlmName(options: {
+  baseUrl: string;
+  accessToken: string;
+  llmId: string;
+  businessDomain?: string;
+}): Promise<string> {
+  const { baseUrl, accessToken, llmId, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/mf-model-manager/v1/llm/list?page=1&size=50`;
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: buildHeaders(accessToken, businessDomain),
+    });
+    if (!response.ok) return llmId;
+    const body = (await response.json()) as Record<string, unknown>;
+    const items = (body.data ?? body.entries ?? []) as Array<Record<string, unknown>>;
+    const match = items.find((m) => String(m.model_id ?? m.id) === llmId);
+    if (match) {
+      const name = match.model_name ?? match.name;
+      if (typeof name === "string" && name) return name;
+    }
+    return llmId;
+  } catch {
+    return llmId;
+  }
+}
 
 /**
  * 生成带时间戳的文件路径
@@ -641,9 +685,10 @@ Subcommands:
   unpublish <agent_id>               Unpublish an agent
   chat <agent_id>                    Start interactive chat with an agent
   chat <agent_id> -m "message"       Send a single message (non-interactive)
+  skill <verb> ...                   Manage skills attached to an agent (add/remove/list)
   sessions <agent_id>                List all conversations for an agent
   history <agent_id> <conversation_id> Show message history for a conversation
-  trace <conversation_id>            Get trace data for a conversation`);
+  trace <agent_id> <conversation_id>  Get trace data for a conversation`);
     return Promise.resolve(0);
   }
 
@@ -664,6 +709,7 @@ Subcommands:
     if (subcommand === "delete") return runAgentDeleteCommand(rest);
     if (subcommand === "publish") return runAgentPublishCommand(rest);
     if (subcommand === "unpublish") return runAgentUnpublishCommand(rest);
+    if (subcommand === "skill") return runAgentSkillCommand(rest);
     return -1;
   };
 
@@ -1295,9 +1341,6 @@ Optional:
       output: { default_format: "markdown" },
       system_prompt: systemPrompt,
     };
-    if (llmId) {
-      config.llms = [{ is_default: true, llm_config: { id: llmId, name: llmId, max_tokens: llmMaxTokens } }];
-    }
   }
 
   const payload: Record<string, unknown> = {
@@ -1313,6 +1356,12 @@ Optional:
 
   try {
     const token = await ensureValidToken();
+
+    // Resolve LLM model name from model-factory before creating agent
+    if (llmId && !configStr) {
+      const llmName = await resolveLlmName({ baseUrl: token.baseUrl, accessToken: token.accessToken, llmId, businessDomain });
+      config.llms = [{ is_default: true, llm_config: buildLlmConfig(llmId, llmName, llmMaxTokens) }];
+    }
     const body = await createAgent({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,

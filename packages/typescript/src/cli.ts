@@ -1,3 +1,4 @@
+import { NO_AUTH_TOKEN } from "./config/no-auth.js";
 import { applyTlsEnvFromSavedTokens } from "./config/tls-env.js";
 import { runAgentCommand } from "./commands/agent.js";
 import { runAuthCommand } from "./commands/auth.js";
@@ -5,30 +6,38 @@ import { runKnCommand } from "./commands/bkn.js";
 import { runCallCommand } from "./commands/call.js";
 import { runConfigCommand } from "./commands/config.js";
 import { runContextLoaderCommand } from "./commands/context-loader.js";
+import { runDataflowCommand } from "./commands/dataflow.js";
 import { runDsCommand } from "./commands/ds.js";
+import { runExploreCommand } from "./commands/explore.js";
 import { runDataviewCommand } from "./commands/dataview.js";
 import { runExecCommand } from "./commands/exec.js";
 import { runSkillCommand } from "./commands/skill.js";
 import { runTokenCommand } from "./commands/token.js";
+import { runToolboxCommand } from "./commands/toolbox.js";
+import { runToolCommand } from "./commands/tool.js";
 import { runVegaCommand } from "./commands/vega.js";
 
 function printHelp(): void {
   console.log(`kweaver
 
 Usage:
+  kweaver [--user <userId|username>] <command> [options]
   kweaver --version | -V
   kweaver --help | -h
 
-  kweaver auth <platform-url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+  kweaver auth <platform-url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
   kweaver auth login <platform-url>          (alias for auth <url>)
   kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (run on host without browser)
+  kweaver auth change-password [<platform-url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
   kweaver auth whoami [platform-url|alias] [--json]
   kweaver auth export [platform-url|alias] [--json]
   kweaver auth status [platform-url|alias]
   kweaver auth list
   kweaver auth use <platform-url|alias>
-  kweaver auth logout [platform-url|alias]
-  kweaver auth delete <platform-url|alias>
+  kweaver auth users [platform-url|alias]
+  kweaver auth switch [platform-url|alias] --user <userId|username>
+  kweaver auth logout [platform-url|alias] [--user <userId>]
+  kweaver auth delete <platform-url|alias> [--user <userId>]
   kweaver token
 
   kweaver call <url> [-X METHOD] [-H "Name: value"] [-d BODY] [--data-raw BODY]
@@ -53,6 +62,11 @@ Usage:
   kweaver ds delete <id> [-y]
   kweaver ds tables <id> [--keyword X] [--pretty]
   kweaver ds connect <db_type> <host> <port> <database> --account X --password Y [--schema S] [--name N]
+
+  kweaver dataflow list [-bd value]
+  kweaver dataflow run <dagId> (--file <path> | --url <remote-url> --name <filename>) [-bd value]
+  kweaver dataflow runs <dagId> [--since <date-like>] [-bd value]
+  kweaver dataflow logs <dagId> <instanceId> [--detail] [-bd value]
 
   kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value] [--pretty]
   kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value] [--pretty]
@@ -90,9 +104,19 @@ Usage:
   kweaver skill read-file <skill-id> <rel-path> [--raw] [--output file]
   kweaver skill download|install <skill-id> [path] [options]
 
+  kweaver toolbox create --name <n> --service-url <url> [--description <d>] [-bd value]
+  kweaver toolbox list [--keyword X] [--limit N] [--offset N] [-bd value]
+  kweaver toolbox publish|unpublish <box-id> [-bd value]
+  kweaver toolbox delete <box-id> [-y] [-bd value]
+
+  kweaver tool upload --toolbox <box-id> <openapi-spec-path> [--metadata-type openapi]
+  kweaver tool list --toolbox <box-id> [-bd value]
+  kweaver tool enable|disable --toolbox <box-id> <tool-id>... [-bd value]
+
   kweaver vega health|stats|inspect
   kweaver vega catalog list|get|health|test-connection|discover|resources [options]
   kweaver vega resource list|get|query [options]
+  kweaver vega query execute|sql [options]
   kweaver vega connector-type list|get [options]
 
   kweaver context-loader config set|use|list|remove|show [options]
@@ -109,18 +133,24 @@ Usage:
   kweaver exec mcp <command>         MCP server management
   kweaver exec impex <command>       Import/Export operations
 
+Global options:
+  --user <id|name>  Use a specific user's credentials for this command (env: KWEAVER_USER)
+
 Commands:
   auth           Login, list, inspect, and switch saved platform auth profiles
   token          Print the current access token, refreshing it first if needed
   call (curl)    Call an API with curl-style flags and auto-injected token headers
   agent          Agent CRUD, chat, sessions, history, publish/unpublish
   ds             Manage datasources (list, get, delete, tables, connect)
+  dataflow       Dataflow document workflows (list, run, runs, logs)
   dataview|dv    List, find, get, query (SQL), delete data views (atomic / custom)
   bkn            Knowledge network (CRUD, build, validate, export, stats, push/pull,
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
   skill          Skill registry and market (register, search, progressive read, download/install)
-  vega           Vega observability (catalog, resource, connector-type, health/stats/inspect)
+  toolbox        Agent toolbox lifecycle (create, list, publish, delete)
+  tool           Tools inside a toolbox (upload OpenAPI spec, list, enable/disable)
+  vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)
   context-loader Context-loader MCP (config, tools, resources, prompts, kn-search, query-*, etc.)
   exec           Execution factory (operator, toolbox, mcp, impex)
   help           Show this message`);
@@ -129,7 +159,23 @@ Commands:
 export async function run(argv: string[]): Promise<number> {
   applyTlsEnvFromSavedTokens();
 
-  const [command, ...rest] = argv;
+  const noAuthEnv = process.env.KWEAVER_NO_AUTH;
+  if (
+    (noAuthEnv === "1" || noAuthEnv === "true" || noAuthEnv === "yes") &&
+    !process.env.KWEAVER_TOKEN
+  ) {
+    process.env.KWEAVER_TOKEN = NO_AUTH_TOKEN;
+  }
+
+  // Global --user flag: override active user for this invocation
+  const userIdx = argv.indexOf("--user");
+  let filteredArgv = argv;
+  if (userIdx !== -1 && userIdx + 1 < argv.length) {
+    process.env.KWEAVER_USER = argv[userIdx + 1];
+    filteredArgv = [...argv.slice(0, userIdx), ...argv.slice(userIdx + 2)];
+  }
+
+  const [command, ...rest] = filteredArgv;
 
   if (command === "--version" || command === "-V" || command === "version") {
     const { createRequire } = await import("node:module");
@@ -156,6 +202,10 @@ export async function run(argv: string[]): Promise<number> {
     return runDsCommand(rest);
   }
 
+  if (command === "dataflow") {
+    return runDataflowCommand(rest);
+  }
+
   if (command === "dataview" || command === "dv") {
     return runDataviewCommand(rest);
   }
@@ -166,6 +216,10 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "agent") {
     return runAgentCommand(rest);
+  }
+
+  if (command === "explore") {
+    return runExploreCommand(rest);
   }
 
   if (command === "bkn") {
@@ -182,6 +236,14 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "skill") {
     return runSkillCommand(rest);
+  }
+
+  if (command === "toolbox") {
+    return runToolboxCommand(rest);
+  }
+
+  if (command === "tool") {
+    return runToolCommand(rest);
   }
 
   if (command === "context-loader" || command === "context") {

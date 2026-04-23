@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { KWeaverClient } from "../src/client.js";
+import { runVegaCommand } from "../src/commands/vega.js";
 
 const BASE = "https://mock.kweaver.test";
 const TOKEN = "test-token-abc";
@@ -145,6 +150,21 @@ test("deleteVegaResources sends DELETE to /resources/:ids", async () => {
   }
 });
 
+test("listAllResources uses GET /resources (not /resources/list — avoids id=list routing)", async () => {
+  const mock = mockFetch({ entries: [{ id: "r1" }] });
+  try {
+    const client = makeClient();
+    await client.vega.listAllResources({ limit: 30, offset: 0 });
+    assert.equal(mock.calls[0].method, "GET");
+    const url = new URL(mock.calls[0].url);
+    assert.equal(url.pathname, "/api/vega-backend/v1/resources");
+    assert.equal(url.searchParams.get("limit"), "30");
+    assert.equal(url.searchParams.get("offset"), "0");
+  } finally {
+    mock.restore();
+  }
+});
+
 test("registerVegaConnectorType sends POST to /connector-types", async () => {
   const mock = mockFetch({ type: "my-type" }, 201);
   try {
@@ -199,29 +219,20 @@ test("setVegaConnectorTypeEnabled sends POST to /connector-types/:type/enabled",
   }
 });
 
-test("getVegaDiscoverTask sends GET to /discover-tasks/:id", async () => {
-  const mock = mockFetch({ id: "task-1", status: "completed" });
+test("sqlQuery sends POST to /resources/query with JSON body", async () => {
+  const mock = mockFetch({ columns: [{ name: "x", type: "int" }], entries: [{ x: 1 }], total_count: 1 });
   try {
     const client = makeClient();
-    await client.vega.getDiscoverTask("task-1");
-    assert.equal(mock.calls[0].method, "GET");
+    const result = await client.vega.sqlQuery(
+      JSON.stringify({ query: "SELECT 1 AS x", resource_type: "mysql" }),
+    );
+    assert.equal(mock.calls[0].method, "POST");
     const url = new URL(mock.calls[0].url);
-    assert.equal(url.pathname, "/api/vega-backend/v1/discover-tasks/task-1");
-  } finally {
-    mock.restore();
-  }
-});
-
-test("listVegaDiscoverTasks sends GET to /discover-tasks with query params", async () => {
-  const mock = mockFetch({ entries: [] });
-  try {
-    const client = makeClient();
-    await client.vega.listDiscoverTasks({ status: "running", limit: 10 });
-    assert.equal(mock.calls[0].method, "GET");
-    const url = new URL(mock.calls[0].url);
-    assert.equal(url.pathname, "/api/vega-backend/v1/discover-tasks");
-    assert.equal(url.searchParams.get("status"), "running");
-    assert.equal(url.searchParams.get("limit"), "10");
+    assert.equal(url.pathname, "/api/vega-backend/v1/resources/query");
+    const body = JSON.parse(mock.calls[0].body!);
+    assert.equal(body.query, "SELECT 1 AS x");
+    assert.equal(body.resource_type, "mysql");
+    assert.deepEqual((result as Record<string, unknown>).entries, [{ x: 1 }]);
   } finally {
     mock.restore();
   }
@@ -234,4 +245,135 @@ test("vega resource has no previewResource method (backend has no preview endpoi
     "undefined",
     "previewResource should not exist — backend has no /resources/{id}/preview endpoint",
   );
+});
+
+// ── vega sql CLI: flag mode vs -d ───────────────────────────────────────────
+
+function createVegaCliConfigDir(): string {
+  return mkdtempSync(join(tmpdir(), "kweaver-vega-sql-cli-"));
+}
+
+async function importStoreForVegaCli(configDir: string) {
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+  const moduleUrl = pathToFileURL(join(process.cwd(), "src/config/store.ts")).href;
+  return import(`${moduleUrl}?t=${Date.now()}-${Math.random()}`);
+}
+
+async function setupVegaCliToken(configDir: string, baseUrl = "https://mock.kweaver.test"): Promise<void> {
+  const store = await importStoreForVegaCli(configDir);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "token-abc",
+    tokenType: "Bearer",
+    scope: "openid offline all",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform(baseUrl);
+}
+
+async function runVegaSqlCli(
+  configDir: string,
+  sqlArgs: string[],
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const origLog = console.log;
+  const origErr = console.error;
+  console.log = (...values: unknown[]) => stdout.push(values.map(String).join(" "));
+  console.error = (...values: unknown[]) => stderr.push(values.map(String).join(" "));
+  try {
+    const code = await runVegaCommand(["sql", ...sqlArgs]);
+    return { code, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+  } finally {
+    console.log = origLog;
+    console.error = origErr;
+  }
+}
+
+test("vega sql flag mode posts query and resource_type JSON", async () => {
+  const configDir = createVegaCliConfigDir();
+  await setupVegaCliToken(configDir);
+  const mock = mockFetch({ columns: [{ name: "x" }], entries: [{ x: 1 }], total_count: 1 });
+  try {
+    const r = await runVegaSqlCli(configDir, [
+      "--resource-type",
+      "mysql",
+      "--query",
+      "SELECT 1 AS x",
+    ]);
+    assert.equal(r.code, 0);
+    assert.equal(mock.calls[0].method, "POST");
+    const url = new URL(mock.calls[0].url);
+    assert.equal(url.pathname, "/api/vega-backend/v1/resources/query");
+    const body = JSON.parse(mock.calls[0].body!);
+    assert.equal(body.query, "SELECT 1 AS x");
+    assert.equal(body.resource_type, "mysql");
+  } finally {
+    mock.restore();
+  }
+});
+
+test("vega sql rejects --type with guidance", async () => {
+  const configDir = createVegaCliConfigDir();
+  await setupVegaCliToken(configDir);
+  const mock = mockFetch({});
+  try {
+    const r = await runVegaSqlCli(configDir, ["--type", "mysql", "--query", "SELECT 1"]);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /--resource-type/);
+    assert.equal(mock.calls.length, 0);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("vega sql flag mode requires both --query and --resource-type", async () => {
+  const configDir = createVegaCliConfigDir();
+  await setupVegaCliToken(configDir);
+  const mock = mockFetch({});
+  try {
+    const r = await runVegaSqlCli(configDir, ["--resource-type", "mysql"]);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /Usage:/);
+    assert.equal(mock.calls.length, 0);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("vega sql flag mode passes arbitrary --resource-type to backend", async () => {
+  const configDir = createVegaCliConfigDir();
+  await setupVegaCliToken(configDir);
+  const mock = mockFetch({ ok: true });
+  try {
+    const r = await runVegaSqlCli(configDir, ["--resource-type", "oracle", "--query", "SELECT 1"]);
+    assert.equal(r.code, 0);
+    const body = JSON.parse(mock.calls[0].body!);
+    assert.equal(body.resource_type, "oracle");
+  } finally {
+    mock.restore();
+  }
+});
+
+test("vega sql -d mode ignores --query and --resource-type (precedence)", async () => {
+  const configDir = createVegaCliConfigDir();
+  await setupVegaCliToken(configDir);
+  const mock = mockFetch({ ok: true });
+  try {
+    const r = await runVegaSqlCli(configDir, [
+      "-d",
+      JSON.stringify({ query: "SELECT 1", resource_type: "mysql" }),
+      "--resource-type",
+      "postgresql",
+      "--query",
+      "SELECT 2",
+    ]);
+    assert.equal(r.code, 0);
+    const body = JSON.parse(mock.calls[0].body!);
+    assert.equal(body.query, "SELECT 1");
+    assert.equal(body.resource_type, "mysql");
+  } finally {
+    mock.restore();
+  }
 });

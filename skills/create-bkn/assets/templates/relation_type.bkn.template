@@ -21,13 +21,13 @@ tags: [{标签1}, {标签2}]
 |-----------------|-----------------|
 | {source_prop} | {target_prop} |
 
-<!-- 当 Type 为 data_view 时，用以下节替换 Mapping Rules：
+<!-- 当 Type 为 data_view 或 resource 时，用以下节替换 Mapping Rules：
 
 ### Mapping View
 
 | Type | ID |
 |------|-----|
-| data_view | {view_id} |
+| resource | {resource_or_view_id} |
 
 ### Source Mapping
 

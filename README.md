@@ -234,10 +234,15 @@ result = client.dataflows.execute(
 ## CLI Quick Reference
 
 ```bash
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
+# -u/-p (with or without --http-signin): HTTP POST /oauth2/signin (yields refresh_token). Missing -u/-p are prompted from stdin (password hidden on TTY).
+# Initial-password lockout (401001017): TTY prompts to change password; scripts use --new-password <pwd>.
+kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless host)
-kweaver auth export [url|alias] [--json]   auth status/list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # platform business domain — run after login
+kweaver auth export [url|alias] [--json]
+kweaver auth status / whoami [url|alias] [--json]   # with KWEAVER_BASE_URL+KWEAVER_TOKEN when no ~/.kweaver/ platform
+kweaver auth list/use/delete/logout
+kweaver config show / list-bd / set-bd <value>   # business domain; show/list-bd work with KWEAVER_BASE_URL (+ KWEAVER_TOKEN for list-bd)
 kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
@@ -255,7 +260,7 @@ kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
-kweaver vega health/stats/inspect/catalog/resource/connector-type
+kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
@@ -327,8 +332,8 @@ npx skills add https://github.com/kweaver-ai/kweaver-sdk \
   --skill kweaver-core --skill create-bkn
 ```
 
-[![skills.sh](https://skills.sh/badge/kweaver-core)](https://skills.sh/kweaver-ai/kweaver-sdk)
-[![skills.sh](https://skills.sh/badge/create-bkn)](https://skills.sh/kweaver-ai/kweaver-sdk)
+[![kweaver-core on skills.sh](https://img.shields.io/badge/skills.sh-kweaver--core-6366f1?style=flat-square)](https://skills.sh/kweaver-ai/kweaver-sdk)
+[![create-bkn on skills.sh](https://img.shields.io/badge/skills.sh-create--bkn-6366f1?style=flat-square)](https://skills.sh/kweaver-ai/kweaver-sdk)
 
 Before using **kweaver-core**, authenticate with your KWeaver instance:
 

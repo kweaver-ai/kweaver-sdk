@@ -110,6 +110,42 @@ test("parseCallArgs supports custom business domain", () => {
   assert.equal(parsed.businessDomain, "bd_enterprise");
 });
 
+test("parseCallArgs accepts -F string field", () => {
+  const inv = parseCallArgs(["/api/x", "-F", "metadata_type=openapi"]);
+  assert.equal(inv.method, "POST");
+  assert.ok(inv.formFields, "formFields should be set");
+  assert.deepEqual(inv.formFields, [{ name: "metadata_type", kind: "string", value: "openapi" }]);
+});
+
+test("parseCallArgs accepts -F file field", () => {
+  const inv = parseCallArgs(["/api/x", "-F", "data=@/tmp/spec.json"]);
+  assert.deepEqual(inv.formFields, [{ name: "data", kind: "file", path: "/tmp/spec.json" }]);
+});
+
+test("parseCallArgs rejects mixing -F and -d", () => {
+  assert.throws(
+    () => parseCallArgs(["/api/x", "-F", "a=b", "-d", "{}"]),
+    /-F.*-d/i
+  );
+});
+
+test("parseCallArgs rejects malformed -F", () => {
+  assert.throws(() => parseCallArgs(["/api/x", "-F", "noequalsign"]), /-F/);
+});
+
+test("parseCallArgs accumulates multiple -F fields in order", () => {
+  const inv = parseCallArgs([
+    "/api/x",
+    "-F", "metadata_type=openapi",
+    "-F", "data=@/tmp/spec.json",
+  ]);
+  assert.equal(inv.formFields?.length, 2);
+  assert.equal(inv.formFields?.[0].name, "metadata_type");
+  assert.equal(inv.formFields?.[0].kind, "string");
+  assert.equal(inv.formFields?.[1].name, "data");
+  assert.equal(inv.formFields?.[1].kind, "file");
+});
+
 test("parseTokenArgs accepts no flags", () => {
   assert.doesNotThrow(() => parseTokenArgs([]));
   assert.throws(() => parseTokenArgs(["--verbose"]), /Usage: kweaver token/);
@@ -136,9 +172,14 @@ test("help text shows dv alias", async () => {
     const text = lines.join("\n");
     assert.ok(text.includes("dataview|dv"), "help should mention dv alias");
     assert.ok(text.includes("skill"), "help should mention skill command");
+    assert.ok(text.includes("dataflow"), "help should mention dataflow command");
   } finally {
     console.log = orig;
   }
+});
+
+test("run dataflow --help shows subcommand help", async () => {
+  assert.equal(await run(["dataflow", "--help"]), 0);
 });
 
 test("run agent shows subcommand help", async () => {
@@ -467,6 +508,148 @@ test("run auth login with --refresh-token exchanges and saves access token", asy
   assert.equal(client?.clientSecret, "h-sec");
 });
 
+test("run auth login --no-auth saves no-auth platform and exits 0", async () => {
+  const configDir = createConfigDir();
+  const store = await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const base = "https://noauth.example.com";
+  const code = await auth.runAuthCommand([base, "--no-auth"]);
+  assert.equal(code, 0);
+
+  assert.equal(store.getCurrentPlatform(), base);
+  const tok = store.loadTokenConfig(base);
+  assert.ok(tok, "token should be saved");
+  assert.equal(tok?.accessToken, "__NO_AUTH__");
+});
+
+test("run auth login --no-auth with --insecure persists tlsInsecure", async () => {
+  const configDir = createConfigDir();
+  const store = await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const base = "https://self-signed.example.com";
+  const code = await auth.runAuthCommand([base, "--no-auth", "-k"]);
+  assert.equal(code, 0);
+
+  const tok = store.loadTokenConfig(base);
+  assert.equal(tok?.tlsInsecure, true);
+});
+
+test("run auth login --no-auth with --refresh-token is rejected", async () => {
+  const configDir = createConfigDir();
+  await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const errors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
+  try {
+    const code = await auth.runAuthCommand([
+      "https://example.com", "--no-auth", "--refresh-token", "rt",
+      "--client-id", "cid", "--client-secret", "csec",
+    ]);
+    assert.equal(code, 1);
+    assert.ok(errors.some((e) => e.includes("--no-auth cannot be used with --refresh-token")));
+  } finally {
+    console.error = origError;
+  }
+});
+
+test("run auth login --no-auth with -u/-p is rejected", async () => {
+  const configDir = createConfigDir();
+  await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const errors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
+  try {
+    const code = await auth.runAuthCommand([
+      "https://example.com", "--no-auth", "-u", "user", "-p", "pass",
+    ]);
+    assert.equal(code, 1);
+    assert.ok(errors.some((e) => e.includes("--no-auth cannot be used with HTTP sign-in")));
+  } finally {
+    console.error = origError;
+  }
+});
+
+test("run auth login --no-auth with alias saves alias", async () => {
+  const configDir = createConfigDir();
+  const store = await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const base = "https://noauth-alias.example.com";
+  const code = await auth.runAuthCommand([base, "--no-auth", "--alias", "na"]);
+  assert.equal(code, 0);
+
+  assert.equal(store.getPlatformAlias(base), "na");
+});
+
+test("run auth login rejects unknown flags", async () => {
+  const configDir = createConfigDir();
+  await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const errors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
+  try {
+    const code = await auth.runAuthCommand([
+      "https://example.com",
+      "--redict-uri",
+      "http://127.0.0.1:9010/callback",
+    ]);
+    assert.equal(code, 1);
+    assert.ok(errors.some((e) => e.includes("Unknown option: --redict-uri")));
+  } finally {
+    console.error = origError;
+  }
+});
+
+test("run auth login accepts all known flags without unknown-flag error", async () => {
+  const configDir = createConfigDir();
+  await importStoreModule(configDir);
+  const auth = await importAuthModule(configDir);
+
+  const errors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
+  try {
+    await auth.runAuthCommand([
+      "https://headless.example.com",
+      "--refresh-token", "rt",
+      "--client-id", "cid",
+      "--client-secret", "csec",
+      "--port", "9010",
+      "--insecure",
+    ]);
+    assert.ok(!errors.some((e) => e.includes("Unknown option")));
+    errors.length = 0;
+
+    await auth.runAuthCommand([
+      "https://headless2.example.com",
+      "--no-browser",
+      "--no-auth",
+    ]);
+    assert.ok(!errors.some((e) => e.includes("Unknown option")));
+    errors.length = 0;
+
+    await auth.runAuthCommand([
+      "https://headless3.example.com",
+      "-u",
+      "u",
+      "-p",
+      "p",
+      "--http-signin",
+    ]);
+    assert.ok(!errors.some((e) => e.includes("Unknown option")));
+  } finally {
+    console.error = origError;
+  }
+});
+
 test("formatHttpError expands network request failures with url and cause", () => {
   const message = formatHttpError(
     new NetworkRequestError(
@@ -494,6 +677,30 @@ test("formatHttpError formats OAuth invalid_grant with readable hint", () => {
   assert.ok(message.startsWith("HTTP 400 Bad Request"));
   assert.ok(message.includes("OAuth error: invalid_grant"));
   assert.ok(message.includes("Run `kweaver auth <platform-url>` again to log in"));
+});
+
+test("formatHttpError avoids insecure hint when tls verification is already disabled", () => {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+  try {
+    const message = formatHttpError(
+      new Error("fetch failed", {
+        cause: new Error("Client network socket disconnected before secure TLS connection was established"),
+      })
+    );
+
+    assert.equal(
+      message,
+      "fetch failed: Client network socket disconnected before secure TLS connection was established\nHint: TLS verification is already disabled for this process. Check network reachability, TLS termination, or proxy stability."
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    } else {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+    }
+  }
 });
 
 test("formatCallOutput pretty prints json when requested", () => {
@@ -727,6 +934,48 @@ test("parseKnObjectTypeQueryArgs validates --search-after json array", () => {
     () => parseKnObjectTypeQueryArgs(["kn-123", "pod", "--limit", "10", "--search-after", '{"cursor":"x"}']),
     /Expected a JSON array string/
   );
+});
+
+test("parseKnObjectTypeQueryArgs rejects misplaced filter fields", () => {
+  assert.throws(
+    () => parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"material_number":"130-000238"}']),
+    /Likely misplaced filter field.*"material_number"/
+  );
+});
+
+test("parseKnObjectTypeQueryArgs rejects multiple misplaced filter fields", () => {
+  assert.throws(
+    () => parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"status":"active","price":100}']),
+    /Likely misplaced filter field.*"status".*"price"/
+  );
+});
+
+test("parseKnObjectTypeQueryArgs rejects mixed valid and misplaced keys", () => {
+  assert.throws(
+    () => parseKnObjectTypeQueryArgs(["kn-123", "pod", '{"limit":20,"material_number":"130-000238"}']),
+    /Likely misplaced filter field.*"material_number"/
+  );
+});
+
+test("parseKnObjectTypeQueryArgs allows unknown keys when condition is present", () => {
+  const opts = parseKnObjectTypeQueryArgs([
+    "kn-123",
+    "pod",
+    '{"condition":{"field":"name","operation":"==","value":"test"},"some_future_param":"x"}',
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.strictEqual(body.some_future_param, "x");
+});
+
+test("parseKnObjectTypeQueryArgs accepts valid top-level keys", () => {
+  const opts = parseKnObjectTypeQueryArgs([
+    "kn-123",
+    "pod",
+    '{"limit":20,"condition":{"field":"name","operation":"==","value":"test"}}',
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.strictEqual(body.limit, 20);
+  assert.deepEqual(body.condition, { field: "name", operation: "==", value: "test" });
 });
 
 test("parseAgentListArgs parses flags with defaults", () => {
@@ -1604,8 +1853,6 @@ test("run vega --help shows all subcommands", async () => {
     assert.ok(help.includes("connector-type update"));
     assert.ok(help.includes("connector-type delete"));
     assert.ok(help.includes("connector-type enable"));
-    assert.ok(help.includes("discovery-task list"));
-    assert.ok(help.includes("discovery-task get"));
   } finally {
     console.log = originalLog;
   }
@@ -1934,61 +2181,6 @@ test("run vega connector-type enable without args exits 1", async () => {
   console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
   try {
     assert.equal(await run(["vega", "connector-type", "enable"]), 1);
-    assert.ok(errors.join("\n").includes("Usage:"));
-  } finally {
-    console.error = originalErr;
-  }
-});
-
-// -- discovery-task subcommands --
-
-test("run vega discovery-task --help shows subcommands", async () => {
-  const lines: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["vega", "discovery-task", "--help"]), 0);
-    const help = lines.join("\n");
-    assert.ok(help.includes("list"));
-    assert.ok(help.includes("get"));
-  } finally {
-    console.log = originalLog;
-  }
-});
-
-test("run vega discovery-task list --help shows options", async () => {
-  const lines: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["vega", "discovery-task", "list", "--help"]), 0);
-    const help = lines.join("\n");
-    assert.ok(help.includes("--status"));
-    assert.ok(help.includes("--limit"));
-  } finally {
-    console.log = originalLog;
-  }
-});
-
-test("run vega discovery-task get --help shows usage", async () => {
-  const lines: string[] = [];
-  const originalLog = console.log;
-  console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["vega", "discovery-task", "get", "--help"]), 0);
-    const help = lines.join("\n");
-    assert.ok(help.includes("discovery-task get"));
-  } finally {
-    console.log = originalLog;
-  }
-});
-
-test("run vega discovery-task get without id exits 1", async () => {
-  const errors: string[] = [];
-  const originalErr = console.error;
-  console.error = (...args: unknown[]) => { errors.push(args.map(String).join(" ")); };
-  try {
-    assert.equal(await run(["vega", "discovery-task", "get"]), 1);
     assert.ok(errors.join("\n").includes("Usage:"));
   } finally {
     console.error = originalErr;

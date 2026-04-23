@@ -47,10 +47,11 @@ describe("kweaver auth whoami", () => {
   });
 
   function setupPlatform(tokenOverrides: Record<string, unknown> = {}): void {
-    const platformsDir = join(tempDir, "platforms", PLATFORM_DIR_NAME);
-    mkdirSync(platformsDir, { recursive: true });
+    const userId = "test-user";
+    const userDir = join(tempDir, "platforms", PLATFORM_DIR_NAME, "users", userId);
+    mkdirSync(userDir, { recursive: true });
     writeFileSync(
-      join(platformsDir, "token.json"),
+      join(userDir, "token.json"),
       JSON.stringify({
         baseUrl: BASE_URL,
         accessToken: "at-1",
@@ -63,7 +64,7 @@ describe("kweaver auth whoami", () => {
     );
     writeFileSync(
       join(tempDir, "state.json"),
-      JSON.stringify({ currentPlatform: BASE_URL }),
+      JSON.stringify({ currentPlatform: BASE_URL, activeUsers: { [BASE_URL]: userId } }),
     );
   }
 

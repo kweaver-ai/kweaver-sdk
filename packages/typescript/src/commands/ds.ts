@@ -422,6 +422,7 @@ export async function resolveFiles(pattern: string): Promise<string[]> {
 export interface ImportCsvResult {
   code: number;
   tables: string[]; // successfully imported table names
+  failed: string[]; // failed table names
   tableColumns: Record<string, string[]>; // tableName → column names
   sampleRows: Record<string, Array<Record<string, string | null>>>; // tableName → first 100 rows
 }
@@ -433,18 +434,18 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
       console.log(IMPORT_CSV_HELP);
-      return { code: 0, tables: [], tableColumns: {}, sampleRows: {} };
+      return { code: 0, tables: [], failed: [], tableColumns: {}, sampleRows: {} };
     }
     throw error;
   }
 
   if (!options.datasourceId) {
     console.error("Usage: kweaver ds import-csv <ds-id> --files <glob_or_list> [options]");
-    return { code: 1, tables: [], tableColumns: {}, sampleRows: {} };
+    return { code: 1, tables: [], failed: [], tableColumns: {}, sampleRows: {} };
   }
   if (!options.files) {
     console.error("Error: --files is required");
-    return { code: 1, tables: [], tableColumns: {}, sampleRows: {} };
+    return { code: 1, tables: [], failed: [], tableColumns: {}, sampleRows: {} };
   }
 
   // 1. Get credentials
@@ -492,7 +493,7 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
 
   if (parsed.length === 0) {
     console.error("All files were skipped — nothing to import");
-    return { code: 1, tables: [], tableColumns: {}, sampleRows: {} };
+    return { code: 1, tables: [], failed: [], tableColumns: {}, sampleRows: {} };
   }
 
   // Phase 2: Import each file in batches
@@ -534,7 +535,7 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
         const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
         process.stderr.write(`${elapsed}s\n`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = formatHttpError(err);
         process.stderr.write(`FAILED\n`);
         console.error(`[${tableName}] batch ${batchLabel} error: ${msg}`);
         batchFailed = true;
@@ -559,22 +560,21 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
     console.error(`Failed tables: ${failed.join(", ")}`);
   }
 
+  return { code: failed.length > 0 ? 1 : 0, tables: succeeded, failed, tableColumns, sampleRows };
+}
+
+export async function runDsImportCsvCommand(args: string[]): Promise<number> {
+  const result = await runDsImportCsv(args);
   console.log(
     JSON.stringify(
       {
-        tables: succeeded,
-        failed,
-        summary: { succeeded: succeeded.length, failed: failed.length },
+        tables: result.tables,
+        failed: result.failed,
+        summary: { succeeded: result.tables.length, failed: result.failed.length },
       },
       null,
       2
     )
   );
-
-  return { code: failed.length > 0 ? 1 : 0, tables: succeeded, tableColumns, sampleRows };
-}
-
-export async function runDsImportCsvCommand(args: string[]): Promise<number> {
-  const result = await runDsImportCsv(args);
   return result.code;
 }

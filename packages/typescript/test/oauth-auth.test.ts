@@ -235,18 +235,147 @@ test("ensureValidToken: forceRefresh calls token endpoint", async () => {
     obtainedAt: new Date().toISOString(),
   });
 
-  let calls = 0;
+  let tokenCalls = 0;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
-    calls += 1;
-    return new Response(JSON.stringify({ access_token: "forced", expires_in: 3600 }), { status: 200 });
+  globalThis.fetch = async (input: any) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.includes("/oauth2/token")) {
+      tokenCalls += 1;
+      return new Response(JSON.stringify({ access_token: "forced", expires_in: 3600 }), { status: 200 });
+    }
+    return new Response("", { status: 404 });
   };
   try {
     const t = await oauth.ensureValidToken({ forceRefresh: true });
     assert.equal(t.accessToken, "forced");
-    assert.equal(calls, 1);
+    assert.equal(tokenCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("ensureValidToken: no-auth token returns without calling fetch", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://plain.example.com";
+  store.saveNoAuthPlatform(baseUrl);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("fetch should not be called for no-auth ensureValidToken");
+  };
+  try {
+    const t = await oauth.ensureValidToken();
+    assert.ok(store.isNoAuth(t.accessToken));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("ensureValidToken: KWEAVER_TOKEN without KWEAVER_BASE_URL honors env over saved token", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://env-override.example.com";
+  store.setCurrentPlatform(baseUrl);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "saved-real-token",
+    tokenType: "Bearer",
+    scope: "",
+    obtainedAt: new Date().toISOString(),
+  });
+
+  const { NO_AUTH_TOKEN } = await import("../src/config/no-auth.js");
+  process.env.KWEAVER_TOKEN = NO_AUTH_TOKEN;
+  try {
+    const t = await oauth.ensureValidToken();
+    assert.equal(t.accessToken, NO_AUTH_TOKEN);
+    assert.equal(t.baseUrl.replace(/\/+$/, ""), baseUrl.replace(/\/+$/, ""));
+  } finally {
+    delete process.env.KWEAVER_TOKEN;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// KWEAVER_USER env var: load a specific user's token
+// ---------------------------------------------------------------------------
+
+function makeJwt(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${header}.${body}.fake-signature`;
+}
+
+test("ensureValidToken: KWEAVER_USER loads specific user token", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://multi.example.com";
+  store.setCurrentPlatform(baseUrl);
+
+  // Save two users
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "token-alice",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-alice" }),
+    displayName: "alice",
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    obtainedAt: new Date().toISOString(),
+  });
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "token-bob",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-bob" }),
+    displayName: "bob",
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  // Active user is bob (last saved)
+  const defaultToken = await oauth.ensureValidToken();
+  assert.equal(defaultToken.accessToken, "token-bob");
+
+  // KWEAVER_USER=alice → loads alice's token
+  process.env.KWEAVER_USER = "alice";
+  try {
+    const aliceToken = await oauth.ensureValidToken();
+    assert.equal(aliceToken.accessToken, "token-alice");
+  } finally {
+    delete process.env.KWEAVER_USER;
+  }
+
+  // KWEAVER_USER=uid-alice also works (by userId)
+  process.env.KWEAVER_USER = "uid-alice";
+  try {
+    const aliceToken = await oauth.ensureValidToken();
+    assert.equal(aliceToken.accessToken, "token-alice");
+  } finally {
+    delete process.env.KWEAVER_USER;
+  }
+});
+
+test("ensureValidToken: KWEAVER_USER with unknown user throws", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://multi.example.com";
+  store.setCurrentPlatform(baseUrl);
+  store.saveTokenConfig({
+    baseUrl,
+    accessToken: "a",
+    tokenType: "Bearer",
+    scope: "",
+    idToken: makeJwt({ sub: "uid-1" }),
+    obtainedAt: new Date().toISOString(),
+  });
+
+  process.env.KWEAVER_USER = "nonexistent";
+  try {
+    await assert.rejects(() => oauth.ensureValidToken(), /not found/);
+  } finally {
+    delete process.env.KWEAVER_USER;
   }
 });
 
@@ -280,6 +409,29 @@ test("withTokenRetry: returns on first success", async () => {
   assert.equal(n, 1);
 });
 
+test("withTokenRetry: no-auth session does not attempt refresh on 401", async () => {
+  const configDir = createConfigDir();
+  const { store, oauth } = await importOauthAndStore(configDir);
+  const baseUrl = "https://plain.example.com";
+  store.saveNoAuthPlatform(baseUrl);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("fetch should not be called");
+  };
+  try {
+    await assert.rejects(
+      () =>
+        oauth.withTokenRetry(async () => {
+          throw new HttpError(401, "Unauthorized", "{}");
+        }),
+      HttpError,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("withTokenRetry: retries once after 401 when refresh succeeds", async () => {
   const configDir = createConfigDir();
   const { store, oauth } = await importOauthAndStore(configDir);
@@ -296,11 +448,15 @@ test("withTokenRetry: retries once after 401 when refresh succeeds", async () =>
     obtainedAt: new Date().toISOString(),
   });
 
-  let fetchCalls = 0;
+  let tokenCalls = 0;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
-    fetchCalls += 1;
-    return new Response(JSON.stringify({ access_token: "a2", expires_in: 3600 }), { status: 200 });
+  globalThis.fetch = async (input: any) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url.includes("/oauth2/token")) {
+      tokenCalls += 1;
+      return new Response(JSON.stringify({ access_token: "a2", expires_in: 3600 }), { status: 200 });
+    }
+    return new Response("", { status: 404 });
   };
 
   try {
@@ -316,7 +472,7 @@ test("withTokenRetry: retries once after 401 when refresh succeeds", async () =>
     });
     assert.equal(r, "ok");
     assert.equal(attempts, 2);
-    assert.equal(fetchCalls, 1);
+    assert.equal(tokenCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -597,6 +753,74 @@ test("buildCopyCommand: omits --refresh-token when undefined", async () => {
   const { oauth } = await importOauthAndStore(configDir);
   const cmd = oauth.buildCopyCommand("https://ex.com", "c", "s", undefined, false);
   assert.ok(!cmd.includes("--refresh-token"));
+});
+
+// Regression for issue #74: real-world OAuth values use only shell-safe
+// characters, so the printed command should be quote-free and thus portable
+// across mac/linux/cmd/PowerShell (including copy-from-mac-paste-to-windows).
+test("buildCopyCommand: real-world values are emitted without quotes", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  const cmd = oauth.buildCopyCommand(
+    "https://1.2.3.4",
+    "abc-123-def",
+    "Sk2_aB-cD.ef",
+    "eyJhbGci.OiJSUzI1Ni-Is_Q",
+    true,
+    "win32",
+  );
+  assert.ok(!cmd.includes("'"), `expected no single quotes, got: ${cmd}`);
+  assert.ok(!cmd.includes(`"`), `expected no double quotes, got: ${cmd}`);
+  assert.match(cmd, / https:\/\/1\.2\.3\.4 /);
+  assert.match(cmd, /--client-id abc-123-def/);
+  assert.match(cmd, /--client-secret Sk2_aB-cD\.ef/);
+  assert.match(cmd, /--refresh-token eyJhbGci\.OiJSUzI1Ni-Is_Q/);
+  assert.match(cmd, /--insecure$/);
+});
+
+test("buildCopyCommand: same on POSIX — quote-free for safe values", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  const cmd = oauth.buildCopyCommand(
+    "https://1.2.3.4",
+    "abc-123",
+    "sec_value-1",
+    "rt.token-Z",
+    false,
+    "linux",
+  );
+  assert.ok(!cmd.includes("'"));
+  assert.ok(!cmd.includes(`"`));
+});
+
+// Edge case: if a value really contains shell-special chars, fall back to
+// host-appropriate quoting so the line is at least correct on this OS.
+test("shellQuoteForShell: unsafe value gets win32 double quotes", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  assert.equal(oauth.shellQuoteForShell(`a&b`, "win32"), `"a&b"`);
+  assert.equal(oauth.shellQuoteForShell(`a"b`, "win32"), `"a""b"`);
+});
+
+test("shellQuoteForShell: unsafe value gets POSIX single quotes", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  assert.equal(oauth.shellQuoteForShell(`a b`, "linux"), `'a b'`);
+  assert.equal(oauth.shellQuoteForShell(`a'b`, "linux"), `'a'\\''b'`);
+});
+
+test("shellQuoteForShell: empty string is quoted (otherwise it disappears)", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  assert.equal(oauth.shellQuoteForShell("", "linux"), `''`);
+  assert.equal(oauth.shellQuoteForShell("", "win32"), `""`);
+});
+
+test("shellQuoteForShell: safe value passes through bare on every platform", async () => {
+  const configDir = createConfigDir();
+  const { oauth } = await importOauthAndStore(configDir);
+  assert.equal(oauth.shellQuoteForShell("abc-123_def.ghi", "win32"), "abc-123_def.ghi");
+  assert.equal(oauth.shellQuoteForShell("https://x.y/z", "linux"), "https://x.y/z");
 });
 
 // --- buildCallbackHtml ---

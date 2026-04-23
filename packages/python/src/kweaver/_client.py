@@ -15,6 +15,7 @@ from kweaver.resources.agents import AgentsResource
 from kweaver.resources.concept_groups import ConceptGroupsResource
 from kweaver.resources.conversations import ConversationsResource
 from kweaver.resources.dataflows import DataflowsResource
+from kweaver.resources.dataflow_v2 import DataflowV2Resource
 from kweaver.resources.datasources import DataSourcesResource
 from kweaver.resources.dataviews import DataViewsResource
 from kweaver.resources.impex import ImpexResource
@@ -101,6 +102,7 @@ class KWeaverClient:
         self._log_requests = log_requests or debug
 
         self.dataflows = DataflowsResource(self._http)
+        self.dataflow_v2 = DataflowV2Resource(self._http)
         self.datasources = DataSourcesResource(self._http)
         self.dataviews = DataViewsResource(self._http)
         self.knowledge_networks = KnowledgeNetworksResource(self._http)

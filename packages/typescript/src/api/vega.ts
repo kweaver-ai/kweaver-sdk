@@ -651,47 +651,6 @@ export async function setVegaConnectorTypeEnabled(options: SetVegaConnectorTypeE
   return body;
 }
 
-// ---------------------------------------------------------------------------
-// Discover Tasks
-// ---------------------------------------------------------------------------
-
-export interface ListVegaDiscoverTasksOptions {
-  baseUrl: string;
-  accessToken: string;
-  status?: string;
-  limit?: number;
-  offset?: number;
-  businessDomain?: string;
-}
-
-export async function listVegaDiscoverTasks(options: ListVegaDiscoverTasksOptions): Promise<string> {
-  const {
-    baseUrl,
-    accessToken,
-    status,
-    limit,
-    offset,
-    businessDomain = "bd_public",
-  } = options;
-
-  const base = baseUrl.replace(/\/+$/, "");
-  const url = new URL(`${base}${VEGA_BASE}/discover-tasks`);
-  if (status) url.searchParams.set("status", status);
-  if (limit !== undefined) url.searchParams.set("limit", String(limit));
-  if (offset !== undefined) url.searchParams.set("offset", String(offset));
-
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(accessToken, businessDomain),
-  });
-
-  const body = await response.text();
-  if (!response.ok) {
-    throw new HttpError(response.status, response.statusText, body);
-  }
-  return body;
-}
-
 // ── Dataset Docs CRUD ────────────────────────────────────────────────────────
 
 export interface CreateVegaDatasetDocsOptions {
@@ -879,6 +838,35 @@ export async function executeVegaQuery(options: ExecuteVegaQueryOptions): Promis
   return body;
 }
 
+// ── Resources SQL Query ──────────────────────────────────────────────────────
+
+export interface VegaSQLQueryOptions {
+  baseUrl: string;
+  accessToken: string;
+  body: string;
+  businessDomain?: string;
+}
+
+/** POST /api/vega-backend/v1/resources/query — direct SQL (or OpenSearch DSL) against catalog-backed resources. */
+export async function vegaSQLQuery(options: VegaSQLQueryOptions): Promise<string> {
+  const { baseUrl, accessToken, body: requestBody, businessDomain = "bd_public" } = options;
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}${VEGA_BASE}/resources/query`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...buildHeaders(accessToken, businessDomain),
+      "content-type": "application/json",
+    },
+    body: requestBody,
+  });
+
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
+  return body;
+}
+
 // ── Resource List All ────────────────────────────────────────────────────────
 
 export interface ListAllVegaResourcesOptions {
@@ -889,41 +877,16 @@ export interface ListAllVegaResourcesOptions {
   businessDomain?: string;
 }
 
+/** List all Vega resources (no catalog filter). Uses GET /resources — not /resources/list, which
+ * conflicts with GET /resources/{id} on some gateways (path segment "list" is treated as an id). */
 export async function listAllVegaResources(options: ListAllVegaResourcesOptions): Promise<string> {
   const { baseUrl, accessToken, limit, offset, businessDomain = "bd_public" } = options;
-  const base = baseUrl.replace(/\/+$/, "");
-  const url = new URL(`${base}${VEGA_BASE}/resources/list`);
-  if (limit !== undefined) url.searchParams.set("limit", String(limit));
-  if (offset !== undefined) url.searchParams.set("offset", String(offset));
-
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: buildHeaders(accessToken, businessDomain),
+  return listVegaResources({
+    baseUrl,
+    accessToken,
+    limit,
+    offset,
+    businessDomain,
   });
-
-  const body = await response.text();
-  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
-  return body;
 }
 
-export interface GetVegaDiscoverTaskOptions {
-  baseUrl: string;
-  accessToken: string;
-  id: string;
-  businessDomain?: string;
-}
-
-export async function getVegaDiscoverTask(options: GetVegaDiscoverTaskOptions): Promise<string> {
-  const { baseUrl, accessToken, id, businessDomain = "bd_public" } = options;
-  const base = baseUrl.replace(/\/+$/, "");
-  const url = `${base}${VEGA_BASE}/discover-tasks/${encodeURIComponent(id)}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(accessToken, businessDomain),
-  });
-
-  const body = await response.text();
-  if (!response.ok) throw new HttpError(response.status, response.statusText, body);
-  return body;
-}

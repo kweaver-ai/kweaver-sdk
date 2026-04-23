@@ -22,7 +22,7 @@ export interface DagBodyOptions {
   tableExist: boolean;
   data: Array<Record<string, string | null>>;
   fieldMappings: FieldMapping[];
-  /** When true on the first batch (`tableExist` false), use overwrite to drop/recreate table before import. */
+  /** When true on the first batch (`tableExist` false), use "insert" to force table recreation. */
   recreate?: boolean;
 }
 
@@ -123,7 +123,9 @@ export function buildFieldMappings(headers: string[]): FieldMapping[] {
 export function buildDagBody(options: DagBodyOptions): DataflowCreateBody {
   const { datasourceId, datasourceType, tableName, tableExist, data, fieldMappings, recreate } = options;
   const ts = Date.now();
-  const operateType = tableExist ? "append" : recreate ? "overwrite" : "append";
+  // "insert" creates/replaces the table; "append" adds rows to an existing table.
+  // With --recreate, use "insert" on first batch to force table recreation when schema changed.
+  const operateType = tableExist ? "append" : recreate ? "insert" : "append";
 
   const triggerStep = {
     id: "step-trigger",

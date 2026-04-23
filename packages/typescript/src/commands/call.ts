@@ -1,12 +1,20 @@
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
+import { isNoAuth } from "../config/no-auth.js";
 import { HttpError } from "../utils/http.js";
 import { resolveBusinessDomain } from "../config/store.js";
+
+export type FormField =
+  | { name: string; kind: "string"; value: string }
+  | { name: string; kind: "file"; path: string };
 
 export interface CallInvocation {
   url: string;
   method: string;
   headers: Headers;
   body?: string;
+  formFields?: FormField[];
   pretty: boolean;
   verbose: boolean;
   businessDomain: string;
@@ -16,6 +24,7 @@ export function parseCallArgs(args: string[]): CallInvocation {
   const headers = new Headers();
   let method = "GET";
   let body: string | undefined;
+  const formFields: FormField[] = [];
   let url: string | undefined;
   let pretty = true;
   let verbose = false;
@@ -51,6 +60,23 @@ export function parseCallArgs(args: string[]): CallInvocation {
       if (method === "GET") {
         method = "POST";
       }
+      index += 1;
+      continue;
+    }
+
+    if (arg === "-F" || arg === "--form") {
+      const raw = args[index + 1];
+      if (!raw) throw new Error("Missing value for -F flag");
+      const eq = raw.indexOf("=");
+      if (eq === -1) throw new Error(`Invalid -F format: ${raw} (expected key=value or key=@path)`);
+      const name = raw.slice(0, eq);
+      const rhs = raw.slice(eq + 1);
+      if (rhs.startsWith("@")) {
+        formFields.push({ name, kind: "file", path: rhs.slice(1) });
+      } else {
+        formFields.push({ name, kind: "string", value: rhs });
+      }
+      if (method === "GET") method = "POST";
       index += 1;
       continue;
     }
@@ -92,17 +118,32 @@ export function parseCallArgs(args: string[]): CallInvocation {
     throw new Error("Missing request URL");
   }
 
+  if (formFields.length > 0 && body !== undefined) {
+    throw new Error("-F and -d are mutually exclusive");
+  }
+
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { url, method, headers, body, pretty, verbose, businessDomain };
+  return {
+    url,
+    method,
+    headers,
+    body,
+    formFields: formFields.length > 0 ? formFields : undefined,
+    pretty,
+    verbose,
+    businessDomain,
+  };
 }
 
 function injectAuthHeaders(headers: Headers, accessToken: string, businessDomain: string): void {
-  if (!headers.has("authorization")) {
-    headers.set("authorization", `Bearer ${accessToken}`);
-  }
+  if (!isNoAuth(accessToken)) {
+    if (!headers.has("authorization")) {
+      headers.set("authorization", `Bearer ${accessToken}`);
+    }
 
-  if (!headers.has("token")) {
-    headers.set("token", accessToken);
+    if (!headers.has("token")) {
+      headers.set("token", accessToken);
+    }
   }
 
   if (!headers.has("x-business-domain")) {
@@ -143,13 +184,18 @@ export function formatVerboseRequest(invocation: CallInvocation): string[] {
     lines.push(`  ${name}: ${value}`);
   }
 
-  lines.push(`Body: ${invocation.body ? "present" : "empty"}`);
+  const bodyDesc = invocation.formFields && invocation.formFields.length > 0
+    ? `multipart (${invocation.formFields.length} field${invocation.formFields.length > 1 ? "s" : ""})`
+    : invocation.body
+      ? "present"
+      : "empty";
+  lines.push(`Body: ${bodyDesc}`);
   return lines;
 }
 
 export async function runCallCommand(args: string[]): Promise<number> {
   if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver call <url> [-X METHOD] [-H "Name: value"] [-d BODY] [--pretty] [--verbose] [-bd value]
+    console.log(`kweaver call <url> [-X METHOD] [-H "Name: value"] [-d BODY] [-F key=value] [--pretty] [--verbose] [-bd value]
 
 Call an API with curl-style flags and auto-injected token headers.
 
@@ -158,6 +204,7 @@ Options:
   -X, --request      HTTP method (default: GET)
   -H, --header       Extra header (repeatable)
   -d, --data, --data-raw   JSON request body (sets Content-Type: application/json if not set)
+  -F, --form         Multipart form field. -F key=value or -F key=@/path/to/file. Repeatable. Mutually exclusive with -d.
   -bd, --biz-domain  Override x-business-domain (default: bd_public)
   -v, --verbose      Print request info to stderr
   --pretty           Pretty-print JSON output (default)`);
@@ -183,7 +230,25 @@ Options:
     const headers = new Headers(invocation.headers);
     injectAuthHeaders(headers, token.accessToken, invocation.businessDomain);
 
-    if (
+    let requestBody: BodyInit | undefined = invocation.body;
+
+    if (invocation.formFields && invocation.formFields.length > 0) {
+      const form = new FormData();
+      for (const field of invocation.formFields) {
+        if (field.kind === "string") {
+          form.append(field.name, field.value);
+        } else {
+          const buf = await readFile(field.path);
+          form.append(
+            field.name,
+            new Blob([buf]),
+            basename(field.path),
+          );
+        }
+      }
+      requestBody = form;
+      // do not set content-type — fetch sets multipart boundary
+    } else if (
       invocation.body !== undefined &&
       invocation.body.length > 0 &&
       !headers.has("content-type") &&
@@ -201,7 +266,7 @@ Options:
     const response = await fetch(url, {
       method: invocation.method,
       headers,
-      body: invocation.body,
+      body: requestBody,
     });
 
     const rawText = await response.text();

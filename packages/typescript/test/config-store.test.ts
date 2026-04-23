@@ -4,9 +4,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  getCurrentPlatform,
+  isNoAuth,
   loadPlatformBusinessDomain,
-  savePlatformBusinessDomain,
+  loadTokenConfig,
   resolveBusinessDomain,
+  saveNoAuthPlatform,
+  savePlatformBusinessDomain,
 } from "../src/config/store.js";
 
 describe("platform config (businessDomain)", () => {
@@ -50,5 +54,16 @@ describe("platform config (businessDomain)", () => {
     assert.equal(resolveBusinessDomain("https://no-config.com"), "bd_public");
     savePlatformBusinessDomain("https://example.com", "uuid-bd");
     assert.equal(resolveBusinessDomain("https://example.com"), "uuid-bd");
+  });
+
+  it("saveNoAuthPlatform persists sentinel and sets current platform", () => {
+    const url = "https://no-oauth.example.com";
+    const tok = saveNoAuthPlatform(url);
+    assert.ok(isNoAuth(tok.accessToken));
+    assert.equal(getCurrentPlatform(), url.replace(/\/+$/, ""));
+    const loaded = loadTokenConfig(url);
+    assert.ok(loaded);
+    assert.ok(isNoAuth(loaded!.accessToken));
+    assert.equal(loaded!.tokenType, "none");
   });
 });

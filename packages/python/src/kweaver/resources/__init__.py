@@ -1,4 +1,5 @@
 from kweaver.resources.dataflows import DataflowsResource
+from kweaver.resources.dataflow_v2 import DataflowV2Resource
 from kweaver.resources.datasources import DataSourcesResource
 from kweaver.resources.dataviews import DataViewsResource
 from kweaver.resources.knowledge_networks import KnowledgeNetworksResource
@@ -8,6 +9,7 @@ from kweaver.resources.relation_types import RelationTypesResource
 
 __all__ = [
     "DataflowsResource",
+    "DataflowV2Resource",
     "DataSourcesResource",
     "DataViewsResource",
     "KnowledgeNetworksResource",

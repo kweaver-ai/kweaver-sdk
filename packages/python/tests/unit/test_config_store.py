@@ -1,10 +1,12 @@
 """Tests for PlatformStore credential storage."""
 
+import base64
+import json
 from pathlib import Path
 
 import pytest
 
-from kweaver.config.store import PlatformStore, _encode_url
+from kweaver.config.store import PlatformStore, _encode_url, _extract_user_id
 
 
 def _make_store(tmp_path: Path) -> PlatformStore:
@@ -136,3 +138,205 @@ def test_encode_url_is_url_safe_base64():
     assert len(encoded) > 0
     # Should be deterministic
     assert _encode_url("https://adp.example.com:8443/path") == encoded
+
+
+# ---------------------------------------------------------------------------
+# Multi-account support tests
+# ---------------------------------------------------------------------------
+
+
+def _make_jwt(payload: dict) -> str:
+    """Build a fake JWT (no signature verification)."""
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256", "typ": "JWT"}).encode()).decode().rstrip("=")
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    return f"{header}.{body}.fake-sig"
+
+
+def test_extract_user_id_from_id_token():
+    token_data = {
+        "idToken": _make_jwt({"sub": "alice"}),
+        "accessToken": "opaque",
+    }
+    assert _extract_user_id(token_data) == "alice"
+
+
+def test_extract_user_id_fallback_access_token():
+    token_data = {
+        "accessToken": _make_jwt({"sub": "bob"}),
+    }
+    assert _extract_user_id(token_data) == "bob"
+
+
+def test_extract_user_id_fallback_default():
+    token_data = {"accessToken": "opaque-no-jwt"}
+    assert _extract_user_id(token_data) == "default"
+
+
+def test_save_token_routes_to_user_dir(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://multi.example.com"
+    id_token = _make_jwt({"sub": "user-abc"})
+    store.save_token(url, {
+        "baseUrl": url,
+        "accessToken": "at-1",
+        "idToken": id_token,
+    })
+    assert store.get_active_user(url) == "user-abc"
+    loaded = store.load_token(url)
+    assert loaded["accessToken"] == "at-1"
+
+
+def test_multiple_users_on_same_platform(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://multi.example.com"
+
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-alice",
+        "idToken": _make_jwt({"sub": "alice"}),
+    })
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-bob",
+        "idToken": _make_jwt({"sub": "bob"}),
+    })
+
+    users = store.list_users(url)
+    assert "alice" in users
+    assert "bob" in users
+    assert store.get_active_user(url) == "bob"
+    assert store.load_token(url)["accessToken"] == "at-bob"
+
+    store.set_active_user(url, "alice")
+    assert store.get_active_user(url) == "alice"
+    assert store.load_token(url)["accessToken"] == "at-alice"
+
+
+def test_delete_user(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://del.example.com"
+
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-1",
+        "idToken": _make_jwt({"sub": "user-1"}),
+    })
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-2",
+        "idToken": _make_jwt({"sub": "user-2"}),
+    })
+
+    assert store.get_active_user(url) == "user-2"
+    store.delete_user(url, "user-2")
+    assert store.list_users(url) == ["user-1"]
+    assert store.get_active_user(url) == "user-1"
+
+
+def test_migration_flat_to_user_scoped(tmp_path: Path):
+    root = tmp_path / ".kweaver"
+    url = "https://migrate.example.com"
+    encoded = _encode_url(url)
+    plat_dir = root / "platforms" / encoded
+    plat_dir.mkdir(parents=True)
+
+    id_token = _make_jwt({"sub": "migrated-user"})
+    (plat_dir / "token.json").write_text(json.dumps({
+        "baseUrl": url, "accessToken": "at-m", "idToken": id_token,
+    }))
+    (plat_dir / "config.json").write_text(json.dumps({"businessDomain": "bd_test"}))
+    (plat_dir / "client.json").write_text(json.dumps({
+        "baseUrl": url, "clientId": "cid", "clientSecret": "csec",
+    }))
+
+    store = PlatformStore(root=root)
+
+    assert store.get_active_user(url) == "migrated-user"
+    assert store.load_token(url)["accessToken"] == "at-m"
+    # client.json stays at platform root
+    assert (plat_dir / "client.json").exists()
+    # token.json moved to users/
+    assert not (plat_dir / "token.json").exists()
+    assert (plat_dir / "users" / "migrated-user" / "token.json").exists()
+    assert (plat_dir / "users" / "migrated-user" / "config.json").exists()
+
+
+def test_list_platforms_includes_user_id(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://platform.example.com"
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-1",
+        "idToken": _make_jwt({"sub": "the-user"}),
+    })
+    platforms = store.list_platforms()
+    assert len(platforms) == 1
+    assert platforms[0].user_id == "the-user"
+
+
+def test_display_name_persisted_and_surfaced(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://display.example.com"
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-display",
+        "idToken": _make_jwt({"sub": "uid-42"}),
+        "displayName": "alice",
+    })
+
+    platforms = store.list_platforms()
+    assert len(platforms) == 1
+    assert platforms[0].user_id == "uid-42"
+    assert platforms[0].display_name == "alice"
+
+    profiles = store.list_user_profiles(url)
+    assert len(profiles) == 1
+    assert profiles[0]["userId"] == "uid-42"
+    assert profiles[0]["username"] == "alice"
+
+    tok = store.load_user_token(url, "uid-42")
+    assert tok["displayName"] == "alice"
+
+
+def test_delete_client_removes_cached_file(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://del-client.example.com"
+    store.save_client(url, {"clientId": "stale-cid", "clientSecret": "stale-secret"})
+    assert store.load_client(url).get("clientId") == "stale-cid"
+
+    store.delete_client(url)
+    assert store.load_client(url) == {}
+
+    # Idempotent
+    store.delete_client(url)
+
+
+def test_list_user_profiles_falls_back_to_id_token_claims(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://fallback.example.com"
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-fb",
+        "idToken": _make_jwt({"sub": "uid-99", "preferred_username": "bob", "email": "bob@example.com"}),
+    })
+
+    profiles = store.list_user_profiles(url)
+    assert len(profiles) == 1
+    assert profiles[0]["username"] == "bob"
+    assert profiles[0]["email"] == "bob@example.com"
+
+
+def test_resolve_user_id(tmp_path: Path):
+    store = _make_store(tmp_path)
+    url = "https://resolve.example.com"
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-a",
+        "idToken": _make_jwt({"sub": "uid-alice"}),
+        "displayName": "alice",
+    })
+    store.save_token(url, {
+        "baseUrl": url, "accessToken": "at-b",
+        "idToken": _make_jwt({"sub": "uid-bob"}),
+        "displayName": "bob",
+    })
+
+    # Resolve by userId
+    assert store.resolve_user_id(url, "uid-alice") == "uid-alice"
+    # Resolve by displayName (username)
+    assert store.resolve_user_id(url, "alice") == "uid-alice"
+    assert store.resolve_user_id(url, "bob") == "uid-bob"
+    # Unknown
+    assert store.resolve_user_id(url, "nonexistent") is None

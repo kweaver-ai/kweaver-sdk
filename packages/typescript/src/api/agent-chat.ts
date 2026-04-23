@@ -1,4 +1,5 @@
-import { fetchTextOrThrow, HttpError } from "../utils/http.js";
+import { isNoAuth } from "../config/no-auth.js";
+import { fetchTextOrThrow, fetchWithRetry, HttpError } from "../utils/http.js";
 import { normalizeDisplayText } from "../utils/display-text.js";
 
 export interface SendChatRequestOptions {
@@ -52,6 +53,10 @@ interface StreamAccumulator {
   result: Record<string, unknown>;
   conversationId?: string;
   lastText: string;
+  /** Completed text segments from earlier steps (preserved when answer.text is cleared). */
+  completedSegments: string[];
+  /** The raw text from extractText in the previous tick — used to detect clears. */
+  prevRawText: string;
 }
 
 const CHAT_PATH = "/api/agent-factory/v1/app";
@@ -76,16 +81,19 @@ export async function fetchAgentInfo(options: {
 }): Promise<AgentInfo> {
   const { baseUrl, accessToken, agentId, version, businessDomain = "bd_public" } = options;
   const url = buildAgentInfoUrl(baseUrl, agentId, version);
+  const agentHeaders: Record<string, string> = {
+    accept: "application/json, text/plain, */*",
+    "x-business-domain": businessDomain,
+    "x-language": "zh-CN",
+    "x-requested-with": "XMLHttpRequest",
+  };
+  if (!isNoAuth(accessToken)) {
+    agentHeaders.Authorization = `Bearer ${accessToken}`;
+    agentHeaders.token = accessToken;
+  }
   const { body } = await fetchTextOrThrow(url, {
     method: "GET",
-    headers: {
-      accept: "application/json, text/plain, */*",
-      Authorization: `Bearer ${accessToken}`,
-      token: accessToken,
-      "x-business-domain": businessDomain,
-      "x-language": "zh-CN",
-      "x-requested-with": "XMLHttpRequest",
-    },
+    headers: agentHeaders,
   });
 
   const data = JSON.parse(body) as Partial<AgentInfo>;
@@ -134,6 +142,19 @@ function stringFromAnswerObject(obj: Record<string, unknown>): string {
   return parts.join("\n");
 }
 
+/** Format answer_type_other which may be an array of strings or an object. */
+function stringFromAnswerTypeOther(other: unknown): string {
+  if (Array.isArray(other)) {
+    const strings = other.filter((s) => typeof s === "string" && s);
+    if (strings.length > 0) return JSON.stringify(strings);
+    return "";
+  }
+  if (other && typeof other === "object") {
+    return stringFromAnswerObject(other as Record<string, unknown>);
+  }
+  return "";
+}
+
 export function extractText(data: unknown): string {
   if (!data || typeof data !== "object") return "";
 
@@ -142,41 +163,41 @@ export function extractText(data: unknown): string {
   const fa = obj.final_answer as Record<string, unknown> | undefined;
   if (fa?.answer && typeof fa.answer === "object") {
     const ans = fa.answer as Record<string, unknown>;
-    if (typeof ans.text === "string") return ans.text;
+    if (typeof ans.text === "string" && ans.text) return ans.text;
   }
-  if (typeof fa?.text === "string") {
+  if (typeof fa?.text === "string" && fa.text) {
     return fa.text;
+  }
+  // Check answer_type_other at final_answer level (for content_type "other")
+  if (fa?.answer_type_other) {
+    const desc = stringFromAnswerTypeOther(fa.answer_type_other);
+    if (desc) return desc;
   }
 
   const msg = obj.message as Record<string, unknown> | undefined;
-  if (typeof msg?.text === "string") {
+  if (typeof msg?.text === "string" && msg.text) {
     return msg.text;
   }
   if (msg?.content && typeof msg.content === "object") {
     const content = msg.content as Record<string, unknown>;
-    if (typeof content.text === "string") return content.text;
+    if (typeof content.text === "string" && content.text) return content.text;
     const contentFinalAnswer = content.final_answer as Record<string, unknown> | undefined;
     if (contentFinalAnswer?.answer && typeof contentFinalAnswer.answer === "object") {
       const answer = contentFinalAnswer.answer as Record<string, unknown>;
-      if (typeof answer.text === "string") return answer.text;
+      if (typeof answer.text === "string" && answer.text) return answer.text;
     }
-    if (typeof contentFinalAnswer?.text === "string") {
+    if (typeof contentFinalAnswer?.text === "string" && contentFinalAnswer.text) {
       return contentFinalAnswer.text;
     }
-    const other = contentFinalAnswer?.answer_type_other as Record<string, unknown> | undefined;
-    if (other && typeof other === "object") {
-      const desc = stringFromAnswerObject(other);
+    // Check answer_type_other at content.final_answer level
+    if (contentFinalAnswer?.answer_type_other) {
+      const desc = stringFromAnswerTypeOther(contentFinalAnswer.answer_type_other);
       if (desc) return desc;
     }
   }
-  const topOther = fa?.answer_type_other as Record<string, unknown> | undefined;
-  if (topOther && typeof topOther === "object") {
-    const desc = stringFromAnswerObject(topOther);
-    if (desc) return desc;
-  }
 
   const answer = obj.answer as Record<string, unknown> | undefined;
-  if (typeof answer?.text === "string") {
+  if (typeof answer?.text === "string" && answer.text) {
     return answer.text;
   }
 
@@ -275,8 +296,11 @@ function applySseDataLine(
   line: string,
   state: StreamAccumulator,
   verbose?: boolean,
-  onTextDelta?: (fullText: string) => void,
-  onProgress?: (progress: ProgressItem[]) => void
+  onTextDelta?: (fullText: string, currentSegmentText: string) => void,
+  onProgress?: (progress: ProgressItem[]) => void,
+  onSegmentComplete?: (segmentText: string, segmentIndex: number) => void,
+  onStepMeta?: (meta: Record<string, unknown>) => void,
+  onConversationId?: (conversationId: string) => void,
 ): void {
   if (!line.startsWith("data: ")) {
     return;
@@ -299,6 +323,18 @@ function applySseDataLine(
     if (data.key?.length === 1 && data.key[0] === "conversation_id" && data.action === "upsert") {
       state.conversationId =
         typeof data.content === "string" ? data.content : String(data.content ?? "");
+      if (state.conversationId && onConversationId) {
+        onConversationId(state.conversationId);
+      }
+    }
+
+    // Detect answer_type_other changes (step metadata: status, end_time, etc.)
+    if (data.key && data.key.join(".").includes("answer_type_other") && data.action === "upsert") {
+      const ato = getByPath(state.result, ["message", "content", "final_answer", "answer_type_other"]);
+      console.error(`[STEP_META] ${JSON.stringify(ato).slice(0, 500)}`);
+      if (ato && typeof ato === "object" && onStepMeta) {
+        onStepMeta(ato as Record<string, unknown>);
+      }
     }
 
     const progress = getProgressFromResult(state.result);
@@ -306,15 +342,31 @@ function applySseDataLine(
       onProgress(progress);
     }
 
-    const text = normalizeDisplayText(extractText(state.result));
-    if (text && text !== state.lastText) {
+    const rawText = normalizeDisplayText(extractText(state.result));
+
+    // Detect when the upstream clears text between steps: previous had content, now empty or
+    // significantly shorter (new segment starting). Save the completed segment.
+    if (state.prevRawText && (!rawText || rawText.length < state.prevRawText.length * 0.5)) {
+      state.completedSegments.push(state.prevRawText);
+      if (onSegmentComplete) {
+        onSegmentComplete(state.prevRawText, state.completedSegments.length - 1);
+      }
+    }
+    state.prevRawText = rawText;
+
+    // Build full text: completed segments + current segment
+    const fullText = state.completedSegments.length > 0
+      ? state.completedSegments.join("\n\n") + (rawText ? "\n\n" + rawText : "")
+      : rawText;
+
+    if (fullText && fullText !== state.lastText) {
       if (onTextDelta) {
-        onTextDelta(text);
+        onTextDelta(fullText, rawText);
       } else {
-        const delta = text.slice(state.lastText.length);
+        const delta = fullText.slice(state.lastText.length);
         process.stdout.write(delta);
       }
-      state.lastText = text;
+      state.lastText = fullText;
     }
   } catch {
     if (verbose) {
@@ -352,11 +404,13 @@ export async function sendChatRequest(options: SendChatRequestOptions): Promise<
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     accept: stream ? "text/event-stream" : "application/json",
-    Authorization: `Bearer ${accessToken}`,
     "Accept-Language": "zh-CN",
     "x-Language": "zh-CN",
     "x-business-domain": businessDomain,
   };
+  if (!isNoAuth(accessToken)) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
 
   if (verbose) {
     console.error(`POST ${url}`);
@@ -371,7 +425,7 @@ export async function sendChatRequest(options: SendChatRequestOptions): Promise<
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithRetry(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -402,9 +456,15 @@ export async function sendChatRequest(options: SendChatRequestOptions): Promise<
 }
 
 export interface SendChatRequestStreamCallbacks {
-  onTextDelta: (fullText: string) => void;
+  onTextDelta: (fullText: string, currentSegmentText: string) => void;
   /** Optional: called when message.content.middle_answer.progress updates (tool/skill steps). */
   onProgress?: (progress: ProgressItem[]) => void;
+  /** Optional: called when a text segment is completed and a new phase starts. */
+  onSegmentComplete?: (segmentText: string, segmentIndex: number) => void;
+  /** Optional: called when answer_type_other changes (step metadata like status, tool info). */
+  onStepMeta?: (meta: Record<string, unknown>) => void;
+  /** Optional: called as soon as conversationId is discovered in the stream. */
+  onConversationId?: (conversationId: string) => void;
 }
 
 /**
@@ -443,11 +503,13 @@ export async function sendChatRequestStream(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     accept: "text/event-stream",
-    Authorization: `Bearer ${accessToken}`,
     "Accept-Language": "zh-CN",
     "x-Language": "zh-CN",
     "x-business-domain": businessDomain,
   };
+  if (!isNoAuth(accessToken)) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
 
   if (verbose) {
     console.error(`POST ${url}`);
@@ -462,7 +524,7 @@ export async function sendChatRequestStream(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithRetry(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -480,22 +542,25 @@ export async function sendChatRequestStream(
   }
 
   if (contentType.includes("text/event-stream")) {
-    return handleStreamResponse(response, verbose, callbacks.onTextDelta, callbacks.onProgress);
+    return handleStreamResponse(response, verbose, callbacks.onTextDelta, callbacks.onProgress, callbacks.onSegmentComplete, callbacks.onStepMeta, callbacks.onConversationId);
   }
 
   const text = await response.text();
   const json = parseJsonResponse(text);
   const resultText = normalizeDisplayText(extractText(json));
   const convId = json.conversation_id as string | undefined;
-  callbacks.onTextDelta(resultText);
+  callbacks.onTextDelta(resultText, resultText);
   return { text: resultText, conversationId: convId, progress: getProgressFromResult(json) };
 }
 
 async function handleStreamResponse(
   response: Response,
   verbose?: boolean,
-  onTextDelta?: (fullText: string) => void,
-  onProgress?: (progress: ProgressItem[]) => void
+  onTextDelta?: (fullText: string, currentSegmentText: string) => void,
+  onProgress?: (progress: ProgressItem[]) => void,
+  onSegmentComplete?: (segmentText: string, segmentIndex: number) => void,
+  onStepMeta?: (meta: Record<string, unknown>) => void,
+  onConversationId?: (conversationId: string) => void,
 ): Promise<ChatResult> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -504,14 +569,55 @@ async function handleStreamResponse(
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let pendingEventType = "";
   const state: StreamAccumulator = {
     result: {},
     conversationId: undefined,
     lastText: "",
+    completedSegments: [],
+    prevRawText: "",
   };
 
   const applyLine = (line: string): void => {
-    applySseDataLine(line, state, verbose, onTextDelta, onProgress);
+    // Track SSE event type (e.g., "event:error")
+    if (line.startsWith("event:")) {
+      pendingEventType = line.slice(6).trim();
+      return;
+    }
+    // If we have an error event type, handle the data line as an error
+    if (pendingEventType === "error" && line.startsWith("data: ")) {
+      pendingEventType = "";
+      const errStr = line.slice(6).trim();
+      // Emit as error text rather than processing as incremental update
+      if (onTextDelta) {
+        let errMsg = errStr;
+        let errDetail = "";
+        try {
+          const errObj = JSON.parse(errStr) as Record<string, unknown>;
+          errMsg = (errObj.description as string) || (errObj.details as string) || errStr;
+          if (errObj.solution && errObj.solution !== "无") errMsg += "\n💡 " + (errObj.solution as string);
+          // Collect all remaining fields as detail context
+          const detailFields: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(errObj)) {
+            if (k !== "description" && k !== "solution" && v != null && v !== "") {
+              detailFields[k] = v;
+            }
+          }
+          if (Object.keys(detailFields).length > 0) {
+            errDetail = "\n\n<details><summary>详细错误信息</summary>\n\n```json\n" + JSON.stringify(detailFields, null, 2) + "\n```\n</details>";
+          }
+        } catch { if (verbose) console.error("Failed to parse SSE error JSON:", errStr); }
+        const errText = "⚠️ " + errMsg + errDetail;
+        const fullText = state.completedSegments.length > 0
+          ? state.completedSegments.join("\n\n") + "\n\n" + errText
+          : errText;
+        onTextDelta(fullText, errText);
+        state.lastText = fullText;
+      }
+      return;
+    }
+    pendingEventType = "";
+    applySseDataLine(line, state, verbose, onTextDelta, onProgress, onSegmentComplete, onStepMeta, onConversationId);
   };
 
   while (true) {
@@ -535,6 +641,22 @@ async function handleStreamResponse(
     process.stdout.write("\n");
   }
 
-  const finalText = normalizeDisplayText(extractText(state.result) || state.lastText);
+  // Fallback: try to extract conversationId from accumulated result if not found in stream
+  if (!state.conversationId) {
+    const r = state.result as Record<string, unknown>;
+    const candidate =
+      r.conversation_id ??
+      (r.message as Record<string, unknown> | undefined)?.conversation_id ??
+      r.conversationId;
+    if (typeof candidate === "string" && candidate) {
+      state.conversationId = candidate;
+      if (onConversationId) onConversationId(candidate);
+    }
+  }
+
+  const rawFinal = normalizeDisplayText(extractText(state.result));
+  const finalText = state.completedSegments.length > 0
+    ? state.completedSegments.join("\n\n") + (rawFinal ? "\n\n" + rawFinal : "")
+    : rawFinal || state.lastText;
   return { text: finalText, conversationId: state.conversationId };
 }

@@ -31,6 +31,10 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
+两者同时设置时，即使未执行 `auth login`，业务命令也会使用该 token。若 **`~/.kweaver/` 无当前平台**，仍可使用 **`kweaver auth status`**、**`kweaver auth whoami`**（支持 `--json`）、**`kweaver config show`**。环境变量模式下，`whoami` 会通过 EACP `/api/eacp/v1/user/get` 在线获取身份并展示 `Type`（user/app）、`User ID`、`Account`、`Name`，对 opaque 与 JWT token 都生效；若 EACP 不可达，则回退到本地 JWT 解码，opaque token 会给出简短提示。
+
+`kweaver config list-bd` 用于列出当前用户可访问的业务域。**应用（service）token 没有绑定终端用户**——当后端返回 `401 invalid user_id` 时，CLI 会再向 EACP 复核 token 类型，确认为 `type:"app"` 后将晦涩的后端原文替换为 `This command does not support app accounts.`。需要这个能力时请改用交互式 `auth login` 获得的用户 token。
+
 ### 业务域（平台配置）
 
 在调用依赖租户范围的接口前，应先确认业务域；DIP 环境通常使用 **UUID**，不能长期只依赖默认 `bd_public`。
@@ -119,6 +123,19 @@ const queryRows = await client.dataviews.query(viewId, {
   needTotal: true,
 });
 
+// Vega — 可观测性与查询
+const catalogs = await client.vega.listCatalogs();
+const health   = await client.vega.health();
+// 结构化查询 — POST /api/vega-backend/v1/query/execute（body 为 JSON 字符串）
+const structured = await client.vega.executeQuery(
+  JSON.stringify({ tables: [{ resource_id: "res-1" }], output_fields: ["*"], limit: 20 }),
+);
+// 直连 SQL 或 OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+// 使用 {{resource_id}} 占位符以路由到正确的 catalog connector
+const rows = await client.vega.sqlQuery(
+  JSON.stringify({ query: "SELECT * FROM {{res-1}} LIMIT 5", resource_type: "mysql" }),
+);
+
 // Context Loader（通过 MCP 对 BKN 做语义搜索）
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
 const results = await cl.search({ query: "高血压 治疗" });
@@ -131,13 +148,18 @@ const skillMd = await client.skills.fetchContent("skill-id");
 ## 命令速查
 
 ```
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
+# -u/-p（无论是否带 --http-signin）：HTTP POST /oauth2/signin（可拿 refresh_token）；缺失的用户名/密码会从 stdin 提示输入（TTY 下密码隐藏）
+# 若服务端返回 401001017（初始密码），交互终端会引导修改；非交互请使用 --new-password <pwd>。
+kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (无浏览器登录)
 kweaver auth export [url|alias] [--json]   (导出在无浏览器机器上运行的命令)
-kweaver auth status/list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # 平台业务域，登录后优先
+kweaver auth status / whoami [url|alias] [--json]   # whoami 支持 --json；无 ~/.kweaver/ 当前平台时可配 KWEAVER_BASE_URL+KWEAVER_TOKEN
+kweaver auth list/use/delete/logout
+kweaver config show / list-bd / set-bd <value>   # 业务域；show/list-bd 在无已保存平台时可与 env 配对
 kweaver token
 kweaver ds list/get/delete/tables/connect
+kweaver dataflow list/run/runs/logs
 kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
@@ -148,10 +170,41 @@ kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
+kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]
 ```
+
+### Dataflow CLI 示例
+
+```bash
+kweaver dataflow list
+kweaver dataflow run <dagId> --file ./demo.pdf
+kweaver dataflow run <dagId> --url https://example.com/demo.pdf --name demo.pdf
+kweaver dataflow runs <dagId>
+kweaver dataflow runs <dagId> --since 2026-04-01
+kweaver dataflow logs <dagId> <instanceId>
+kweaver dataflow logs <dagId> <instanceId> --detail
+```
+
+`kweaver dataflow runs --since` 会按本地自然日过滤；如果参数无法被 `new Date(...)` 解析，CLI 会回退到最近 20 条运行记录。`kweaver dataflow logs` 默认输出摘要；加上 `--detail` 会打印带缩进的 `input` 和 `output` 载荷。
+
+### Vega `sql` CLI 示例
+
+对 Catalog 资源执行直连 SQL（`POST /api/vega-backend/v1/resources/query`）。SQL 中使用 **`{{<resource_id>}}`** 或 **`{{.<resource_id>}}`**（资源 id 来自 `vega resource list` / `get`），后端据此解析物理表与 connector。`--resource-type` 为目标数据源的连接器类型，可通过 `kweaver vega connector-type list` 查看。简单模式下请**用引号包住整个 `--query` 参数**，避免 shell 对花括号做特殊处理。
+
+```bash
+# 简单模式（推荐）：避免在 JSON 里转义整段 SQL
+kweaver vega sql --resource-type mysql --query "SELECT * FROM {{res-1}} LIMIT 5"
+
+# 高级模式：完整 JSON（可带 query_timeout、stream_size，或 OpenSearch DSL 对象等）
+kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{res-1}} LIMIT 5"}'
+```
+
+若同时提供 `-d` 与 `--query` / `--resource-type`，**仅以 `-d` 为准**。
+
+**无 OAuth 的平台：** 使用 `kweaver auth <url> --no-auth`，或照常 `auth login`；若 `POST /oauth2/clients` 返回 **404**，CLI 会提示并自动保存为 no-auth。凭据仍在 `~/.kweaver/`，可用 `auth use` / `auth list` 切换。可选环境变量 `KWEAVER_NO_AUTH=1`（未设置 `KWEAVER_TOKEN` 时）配合 `KWEAVER_BASE_URL`。SDK：`new KWeaverClient({ baseUrl, auth: false })` 或 `kweaver.configure({ baseUrl, auth: false })`。
 
 ## 环境变量
 
@@ -160,6 +213,7 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header]
 | `KWEAVER_BASE_URL` | KWeaver 实例地址 |
 | `KWEAVER_BUSINESS_DOMAIN` | 业务域标识 |
 | `KWEAVER_TOKEN` | 访问令牌 |
+| `KWEAVER_NO_AUTH` | 设为 `1`/`true`/`yes` 且未设置 `KWEAVER_TOKEN` 时使用 no-auth 占位（需 `KWEAVER_BASE_URL` 或已选平台） |
 | `KWEAVER_TLS_INSECURE` | 设为 `1` 或 `true` 时跳过 TLS 证书校验（仅开发；更推荐 `kweaver auth … --insecure` 以按平台持久化） |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js 内置 TLS 开关：设为 `0` 时在本进程内跳过 HTTPS 证书校验。`kweaver` 在 `KWEAVER_TLS_INSECURE` 生效或已保存 token 为不安全 TLS 时会设置此项（范围同上；仅开发）。 |
 

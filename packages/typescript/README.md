@@ -31,6 +31,10 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
+With both set, API commands use that token even if you never ran `auth login`. You can also run **`kweaver auth status`**, **`kweaver auth whoami`** (supports `--json`), and **`kweaver config show`** when there is **no** current platform in `~/.kweaver/`. In env-token mode, `whoami` resolves the bound identity from EACP `/api/eacp/v1/user/get` and prints `Type` (user/app), `User ID`, `Account` and `Name`; this works for both opaque and JWT tokens. If EACP is unreachable, the CLI falls back to local JWT decode and prints a short hint when the token is opaque.
+
+`kweaver config list-bd` lists business domains for the current user. App (service) tokens are not bound to an end-user — when the backend rejects the call with `401 invalid user_id`, the CLI re-checks the token type via EACP and, if confirmed `type:"app"`, replaces the cryptic backend body with `This command does not support app accounts.`. Use a user token (interactive `auth login`) for user-bound endpoints.
+
 ### Business domain (platform)
 
 Set or verify **before** calling list/query APIs that scope by tenant. DIP deployments often need a UUID, not only `bd_public`.
@@ -126,9 +130,18 @@ const result = await client.dataflows.execute({
   steps: [{ id: "s1", title: "load", operator: "csv_import", parameters: {} }],
 });
 
-// Vega observability
+// Vega — observability and query
 const catalogs = await client.vega.listCatalogs();
 const health   = await client.vega.health();
+// Structured query — POST /api/vega-backend/v1/query/execute (JSON string body)
+const structured = await client.vega.executeQuery(
+  JSON.stringify({ tables: [{ resource_id: "res-1" }], output_fields: ["*"], limit: 20 }),
+);
+// Direct SQL or OpenSearch DSL — POST /api/vega-backend/v1/resources/query
+// Use {{resource_id}} placeholders so vega-backend routes to the correct catalog connector.
+const rows = await client.vega.sqlQuery(
+  JSON.stringify({ query: "SELECT * FROM {{res-1}} LIMIT 5", resource_type: "mysql" }),
+);
 
 // Context Loader (semantic search over a BKN via MCP)
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
@@ -142,14 +155,20 @@ const skillMd = await client.skills.fetchContent("skill-id");
 ## CLI Reference
 
 ```
-kweaver auth login <url> [--alias name] [-u user] [-p pass] [--playwright] [--insecure|-k]
+kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
+# -u/-p (with or without --http-signin): HTTP POST /oauth2/signin (yields refresh_token). Missing -u/-p are prompted from stdin (password hidden when TTY).
+# If the server returns error 401001017 (initial password), TTY users get a prompt to set a new password; non-interactive scripts must pass --new-password <pwd>.
+kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
+# EACP POST /api/eacp/v1/auth1/modifypassword — no OAuth token required. Omit -o/-n on a TTY to be prompted.
 kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless login)
 kweaver auth export [url|alias] [--json]   (export command to run on a headless host)
-kweaver auth status/list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # platform business domain — after login
+kweaver auth status / whoami [url|alias] [--json]   # whoami: --json; with KWEAVER_BASE_URL+KWEAVER_TOKEN when no ~/.kweaver/ platform
+kweaver auth list/use/delete/logout
+kweaver config show / list-bd / set-bd <value>   # platform business domain — show/list-bd work with KWEAVER_BASE_URL (+ KWEAVER_TOKEN for list-bd)
 kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
+kweaver dataflow list/run/runs/logs
 kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
@@ -163,11 +182,62 @@ kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
-kweaver vega health/stats/inspect/catalog/resource/connector-type
+kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
 kweaver context-loader kn-search/query-object-instance/...
-kweaver call <path> [-X METHOD] [-d BODY] [-H header]
+kweaver toolbox create/list/publish/unpublish/delete
+kweaver tool upload/list/enable/disable
+kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-F key=value]
 ```
+
+### Dataflow CLI examples
+
+```bash
+kweaver dataflow list
+kweaver dataflow run <dagId> --file ./demo.pdf
+kweaver dataflow run <dagId> --url https://example.com/demo.pdf --name demo.pdf
+kweaver dataflow runs <dagId>
+kweaver dataflow runs <dagId> --since 2026-04-01
+kweaver dataflow logs <dagId> <instanceId>
+kweaver dataflow logs <dagId> <instanceId> --detail
+```
+
+`kweaver dataflow runs --since` filters one local natural day. If the value cannot be parsed by `new Date(...)`, the CLI falls back to the most recent 20 runs. `kweaver dataflow logs` defaults to summary output; add `--detail` to print indented `input` and `output` payloads.
+
+### Vega `sql` CLI examples
+
+Direct SQL against catalog-backed resources (`POST /api/vega-backend/v1/resources/query`). In SQL, use **`{{<resource_id>}}`** or **`{{.<resource_id>}}`** (Vega resource id from `vega resource list` / `get`) so the backend resolves the physical table and connector. `--resource-type` accepts the connector type of the target data source (run `kweaver vega connector-type list` to see available types). In simple mode, **quote the entire `--query` value** so the shell does not treat `{` / `}` specially.
+
+```bash
+# Simple mode (recommended): avoid JSON-escaping the query string
+kweaver vega sql --resource-type mysql --query "SELECT * FROM {{res-1}} LIMIT 5"
+
+# Advanced mode: full JSON body (optional fields like query_timeout, stream_size, OpenSearch DSL object)
+kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{res-1}} LIMIT 5"}'
+```
+
+If both `-d` and `--query` / `--resource-type` are present, **only `-d` is used**.
+
+### Register an Agent toolbox
+
+```bash
+# 1. Create a toolbox pointing at your service
+kweaver toolbox create \
+  --name my_actions \
+  --service-url http://my-svc:8080 \
+  --description "Demo action backend"
+# → {"box_id":"<BOX_ID>"}
+
+# 2. Upload an OpenAPI spec as a tool
+kweaver tool upload --toolbox <BOX_ID> ./openapi.json
+# → {"success_ids":["<TOOL_ID>"]}
+
+# 3. Publish the toolbox and enable the tool
+kweaver toolbox publish <BOX_ID>
+kweaver tool enable --toolbox <BOX_ID> <TOOL_ID>
+```
+
+**No-auth platforms:** If OAuth is not enabled, use `kweaver auth <url> --no-auth` (or run a normal `auth login`; a **404** on `POST /oauth2/clients` switches to no-auth automatically). Credentials are still saved under `~/.kweaver/` and work with `auth use` / `auth list`. Optional: `KWEAVER_NO_AUTH=1` with `KWEAVER_BASE_URL` when no token env is set. SDK: `new KWeaverClient({ baseUrl, auth: false })` or `kweaver.configure({ baseUrl, auth: false })`.
 
 ## Environment Variables
 
@@ -176,6 +246,7 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header]
 | `KWEAVER_BASE_URL` | KWeaver instance URL |
 | `KWEAVER_BUSINESS_DOMAIN` | Business domain identifier |
 | `KWEAVER_TOKEN` | Access token |
+| `KWEAVER_NO_AUTH` | Set to `1`/`true`/`yes` to use no-auth sentinel when `KWEAVER_TOKEN` is unset (with `KWEAVER_BASE_URL` or active platform) |
 | `KWEAVER_TLS_INSECURE` | Set to `1` or `true` to skip TLS certificate verification for all HTTPS in the process (dev only; prefer `kweaver auth … --insecure` which saves per platform) |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js built-in TLS switch: set to `0` to skip certificate verification for HTTPS in this process. The `kweaver` CLI sets this when `KWEAVER_TLS_INSECURE` is set or the saved token has insecure TLS (same scope as above; dev only). |
 

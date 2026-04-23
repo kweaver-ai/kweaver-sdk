@@ -64,6 +64,13 @@ kweaver context-loader get-action-info '{"at_id": "at-1", "_instance_identity": 
 }
 ```
 
-支持的 operation: `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `not_in`, `like`（模糊匹配）
+支持的 operation：`==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `not_in`, `like`, `not_like`，以及逻辑组合 `and` / `or`（配合 `sub_conditions`）。
 
-> **注意**：`match`（全文检索）仅在 OpenSearch 索引模式下可用，SQL 视图数据源会返回 500 错误。优先使用 `like` 做文本模糊匹配。`eq`、`gt`、`lt` 等不是合法操作符，请用 `==`、`>`、`<`。
+> 完整的「属性类型 → 可用操作符」对照表、`exist`/`not_exist` 用法、SQL 视图与 OpenSearch 兼容性差异，见 [`bkn.md` 的 object-type query 条件过滤一节](bkn.md#object-type-query-条件过滤)。实际可用操作符以对象类 `data_properties` 中各属性的 `condition_operations` 字段为准。
+>
+> **常见错误**：
+> - `match` / `contain` / `prefix` 等仅 OpenSearch 索引模式可用，SQL 视图数据源会返回 500；做文本模糊匹配优先 `like`。
+> - `eq`、`gt`、`lt`、`gte`、`lte` 不是合法操作符，请用 `==`、`>`、`<`、`>=`、`<=`。
+> - **string** 字段更常用 `like` / `in`；**keyword** 字段为不分词关键字，不要使用 `like`。
+> - `like` / `not_like` 不支持通配符 `%` / `_`，`value` 直接写普通子串。
+> - `exist` / `not_exist` 不需要 `value` 字段。

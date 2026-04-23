@@ -87,6 +87,21 @@ kweaver bkn object-type properties <kn_id> <ot_id> '<json>' # 查询实例属性
 }}
 ```
 
+### 属性类型与可用操作符
+
+写 `condition` 前先看 object type 的 `data_properties` 中各属性的 `type` 与 `condition_operations`。常见类型与推荐操作符：
+
+| 属性类型 | 推荐操作符 |
+|----------|------------|
+| 数值 (short, integer, long, float, double, decimal) | `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `not_in` |
+| string（变长字符串） | `like`, `not_like`, `in`, `not_in`（避免用 `==` 做「包含」类需求；`==` 为精确等值，语义不直观时优先 `like` 或 `in`） |
+| keyword（不分词关键字） | `==`, `!=` |
+| text（分词文本） | `==`, `!=`, `match`（`match` 仅 OpenSearch 索引模式可用；SQL 视图见上表） |
+| boolean | `==`, `!=`, `exist`, `not_exist` |
+| timestamp / datetime | `==`, `!=`, `>`, `>=`, `<`, `<=` |
+
+> 实际可用操作符以各属性的 **`condition_operations`** 为准；需要完整定义时可 `bkn object-type get <kn_id> <ot_id> -v` 查看 `data_properties`。
+
 ### 支持的 operation
 
 | 类型 | operation | SQL 视图兼容 |
@@ -100,9 +115,15 @@ kweaver bkn object-type properties <kn_id> <ot_id> '<json>' # 查询实例属性
 | 全文搜索 | `match`, `match_phrase`, `multi_match` | ❌ SQL 视图报 500 |
 | 空值/存在 | `exist`, `not_exist`, `null`, `not_null`, `empty`, `not_empty` | ⚠️ 仅 OpenSearch |
 
+- **`exist` / `not_exist`**：不需要 `value` 字段。例：`{"field": "description", "operation": "exist"}`。
+- **`like` / `not_like`**：不支持通配符 `%` / `_`；`value` 为普通子串，按「是否包含子串」匹配（大小写等取决于后端/数据源配置）。
+
 > **重要**：大部分数据源（MySQL / PostgreSQL）通过 SQL 视图查询。上表"SQL 视图兼容"列为 ✅ 的操作符可安全使用；标 ⚠️ 或 ❌ 的仅在 OpenSearch 索引模式下可用，SQL 视图下会返回 400 或 500 错误。
 >
-> **常见错误**：`eq`、`gt`、`lt`、`gte`、`lte` **不是合法操作符**，会返回 400 InvalidParameter。正确写法是 `==`、`>`、`<`、`>=`、`<=`。
+> **常见错误**：
+> - `eq`、`gt`、`lt`、`gte`、`lte` **不是合法操作符**，会返回 400 InvalidParameter。正确写法是 `==`、`>`、`<`、`>=`、`<=`。
+> - **string** 字段更常用 `like` / `in` 做「子串包含 / 多值」筛选；若用 `==` 须明确是精确等值需求。
+> - **keyword** 字段为精确关键字，**不要**使用 `like`（不适用或行为与预期不符）。
 
 ### 分页与大数据量查询
 
@@ -127,7 +148,7 @@ kweaver bkn object-type query <kn-id> <ot-id> '{"limit":20,"search_after":["val1
 kweaver bkn object-type query <kn-id> <ot-id> '{"limit":30,"condition":{"field":"quantity","operation":">","value":4000}}'
 
 # 名称模糊匹配"手机"且价格 >= 1000
-kweaver bkn object-type query <kn-id> <ot-id> '{"limit":30,"condition":{"operation":"and","sub_conditions":[{"field":"name","operation":"like","value":"%手机%"},{"field":"price","operation":">=","value":1000}]}}'
+kweaver bkn object-type query <kn-id> <ot-id> '{"limit":30,"condition":{"operation":"and","sub_conditions":[{"field":"name","operation":"like","value":"手机"},{"field":"price","operation":">=","value":1000}]}}'
 
 # 状态为 active 或 pending（用 in）
 kweaver bkn object-type query <kn-id> <ot-id> '{"limit":30,"condition":{"field":"status","operation":"in","value":["active","pending"]}}'

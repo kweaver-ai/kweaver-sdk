@@ -1,5 +1,5 @@
 // Monorepo import — published users would use: import { KWeaverClient } from "@kweaver-ai/kweaver-sdk";
-import { KWeaverClient } from "../../packages/typescript/src/index.js";
+import { KWeaverClient } from "../../../packages/typescript/src/index.js";
 
 /**
  * Initialize a KWeaverClient from ~/.kweaver/ credentials.
@@ -19,8 +19,11 @@ export async function createClient(): Promise<KWeaverClient> {
 }
 
 /**
- * Find the first BKN that has object types with data.
- * Returns { knId, knName } or throws if none found.
+ * Find the first BKN that has object types, otherwise exit 0.
+ *
+ * Examples need a populated BKN to be useful; we treat "no data" as an
+ * expected, environment-driven outcome (not an example bug) and print a
+ * friendly message instead of throwing.
  */
 export async function findKnWithData(
   client: KWeaverClient,
@@ -34,20 +37,28 @@ export async function findKnWithData(
       return { knId: item.id, knName: item.name ?? item.id };
     }
   }
-  throw new Error("No BKN with data found. Ensure your KWeaver instance has at least one BKN with object types.");
+  console.error(
+    "No BKN with object types found for the current user. " +
+    "Create or get access to a populated BKN, then re-run.",
+  );
+  process.exit(0);
 }
 
-/**
- * Find the first accessible agent.
- * Returns { agentId, agentName } or throws if none found.
- */
+/** Find the first accessible agent, otherwise exit 0 (see findKnWithData). */
 export async function findAgent(
   client: KWeaverClient,
 ): Promise<{ agentId: string; agentName: string }> {
-  const list = await client.agents.list({ limit: 10 });
+  let list: unknown[];
+  try {
+    list = await client.agents.list({ limit: 10 });
+  } catch (e) {
+    console.error(`Agent service unavailable (${(e as Error).message}); skipping example.`);
+    process.exit(0);
+  }
   const first = list[0] as { id?: string; name?: string } | undefined;
   if (!first?.id) {
-    throw new Error("No accessible agent found.");
+    console.error("No accessible agent for the current user; skipping example.");
+    process.exit(0);
   }
   return { agentId: first.id, agentName: first.name ?? first.id };
 }

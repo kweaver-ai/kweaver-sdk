@@ -100,12 +100,19 @@ export class AgentsResource {
     const { keyword, ...rest } = opts;
     const raw = await listAgents({ ...this.ctx.base(), name: keyword, ...rest });
     const parsed = JSON.parse(raw) as unknown;
-    const items =
-      parsed && typeof parsed === "object" && "data" in parsed
-        ? (parsed as { data: { records?: unknown[] } }).data?.records ?? []
-        : Array.isArray(parsed)
-          ? parsed
-          : [];
+    const items = (() => {
+      if (Array.isArray(parsed)) return parsed;
+      if (!parsed || typeof parsed !== "object") return [];
+      const obj = parsed as { data?: unknown; entries?: unknown[] };
+      if (Array.isArray(obj.entries)) return obj.entries;
+      if (Array.isArray(obj.data)) return obj.data;
+      if (obj.data && typeof obj.data === "object") {
+        const dataObj = obj.data as { records?: unknown[]; entries?: unknown[] };
+        if (Array.isArray(dataObj.records)) return dataObj.records;
+        if (Array.isArray(dataObj.entries)) return dataObj.entries;
+      }
+      return [];
+    })();
     return items;
   }
 

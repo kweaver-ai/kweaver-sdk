@@ -57,14 +57,14 @@ class KWeaverClient:
                 raise ValueError("Either 'token' or 'auth' must be provided")
             auth = TokenAuth(token)
 
-        # ConfigAuth carries its own base_url
-        if base_url is None:
-            if isinstance(auth, ConfigAuth):
+        # ConfigAuth carries its own base_url + saved tlsInsecure flag
+        if isinstance(auth, ConfigAuth):
+            if base_url is None:
                 base_url = auth.base_url
-            else:
-                raise ValueError(
-                    "base_url is required (unless using ConfigAuth)"
-                )
+            if not tls_insecure and auth.tls_insecure:
+                tls_insecure = True
+        elif base_url is None:
+            raise ValueError("base_url is required (unless using ConfigAuth)")
 
         middlewares: list[Middleware] = []
         if debug:

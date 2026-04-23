@@ -16,6 +16,12 @@ from kweaver.auth.eacp import (
     encrypt_modify_pwd,
     fetch_eacp_user_info,
 )
+
+# User-facing alias — `eacp_modify_password` exposes an internal product code name
+# (EACP = the platform's underlying account service). New code should prefer
+# ``change_password``; the old name stays for backwards compatibility.
+change_password = eacp_modify_password
+ChangePasswordResult = EacpModifyPasswordResult
 from kweaver.auth.store_helpers import (
     NO_AUTH_TOKEN,
     ExportedCredentials,
@@ -35,6 +41,7 @@ from kweaver.auth.store_helpers import (
 __all__ = [
     "DEFAULT_SIGNIN_RSA_MODULUS_HEX",
     "STUDIOWEB_LOGIN_PUBLIC_KEY_PEM",
+    "ChangePasswordResult",
     "EacpModifyPasswordResult",
     "ExportedCredentials",
     "InitialPasswordChangeRequiredError",
@@ -42,6 +49,7 @@ __all__ = [
     "PlatformInfoDict",
     "UserProfile",
     "WhoamiInfo",
+    "change_password",
     "eacp_modify_password",
     "encrypt_modify_pwd",
     "encrypt_pkcs1_v15",

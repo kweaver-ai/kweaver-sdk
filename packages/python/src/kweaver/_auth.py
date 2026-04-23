@@ -148,6 +148,20 @@ class ConfigAuth:
             raise RuntimeError("No active platform. Run 'kweaver auth login' first.")
         return url
 
+    @property
+    def tls_insecure(self) -> bool:
+        """Return the saved ``tlsInsecure`` flag for the active platform.
+
+        Lets ``KWeaverClient`` automatically skip TLS verification for self-signed
+        deployments without callers having to repeat ``tls_insecure=True`` after
+        ``kweaver auth login --insecure`` succeeded.
+        """
+        try:
+            token = self._store.load_token(self.base_url)
+        except Exception:
+            return _env_tls_insecure()
+        return bool(token.get("tlsInsecure")) or _env_tls_insecure()
+
     def auth_headers(self) -> dict[str, str]:
         with self._lock:
             url = self.base_url

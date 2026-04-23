@@ -7,13 +7,19 @@
  */
 import { createClient, findAgent, pp } from "./setup.js";
 // Monorepo import — published users would use: import type { ProgressItem } from "@kweaver-ai/kweaver-sdk";
-import type { ProgressItem } from "../../packages/typescript/src/index.js";
+import type { ProgressItem } from "../../../packages/typescript/src/index.js";
 
 async function main() {
   const client = await createClient();
 
   // 1. List available agents
-  const agentList = await client.agents.list({ limit: 10 });
+  let agentList: unknown[];
+  try {
+    agentList = await client.agents.list({ limit: 10 });
+  } catch (e) {
+    console.error(`Agent service unavailable (${(e as Error).message}); skipping example.`);
+    return;
+  }
   console.log(`=== Available Agents (${agentList.length}) ===`);
   for (const a of agentList as Array<{ id?: string; name?: string; description?: string }>) {
     console.log(`  ${a.name} (${a.id}) — ${a.description ?? ""}`);
@@ -71,7 +77,7 @@ async function main() {
   const conversationId = reply.conversationId;
   if (conversationId) {
     console.log("=== Conversation History ===");
-    const messages = await client.conversations.listMessages(conversationId, { limit: 10 });
+    const messages = await client.conversations.listMessages(agentId, conversationId);
     console.log(`${(messages as unknown[]).length} message(s) in conversation ${conversationId}:`);
     for (const msg of messages as Array<{ role?: string; content?: string }>) {
       const preview = (msg.content ?? "").slice(0, 80);

@@ -40,11 +40,26 @@ export async function listAgents(options: ListAgentsOptions): Promise<string> {
     is_to_square,
   });
 
-  const response = await fetchWithRetry(url, {
-    method: "POST",
-    headers: buildHeaders(accessToken, businessDomain),
-    body,
-  });
+  // Some deployments (observed on dip-poc.aishu.cn) return an empty entries
+  // array when this endpoint is called with `application/json`; the same
+  // payload sent as `text/plain` works. Other deployments only accept
+  // `application/json` (and reject text/plain with 4xx). Try text/plain first
+  // and fall back to application/json on 4xx so both platform variants work
+  // out of the box.
+  const tryPost = async (contentType: string) =>
+    fetchWithRetry(url, {
+      method: "POST",
+      headers: {
+        ...buildHeaders(accessToken, businessDomain),
+        "content-type": contentType,
+      },
+      body,
+    });
+
+  let response = await tryPost("text/plain;charset=UTF-8");
+  if (!response.ok && response.status >= 400 && response.status < 500) {
+    response = await tryPost("application/json");
+  }
 
   const responseBody = await response.text();
   if (!response.ok) {

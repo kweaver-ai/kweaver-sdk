@@ -55,7 +55,12 @@ class HttpClient:
         self._auth = auth
         self._account_id = account_id
         self._account_type = account_type
-        self._business_domain = business_domain
+        # TS CLI defaults x-business-domain to "bd_public" everywhere; mirror that
+        # so Python callers don't get backend 400s like "biz domain id is required".
+        # Pass explicit ``business_domain=""`` to opt out.
+        self._business_domain = (
+            "bd_public" if business_domain is None else (business_domain or None)
+        )
         self._log_requests = log_requests
         self._middlewares = middlewares or []
 
@@ -67,6 +72,9 @@ class HttpClient:
         client_kwargs: dict[str, Any] = {
             "base_url": base_url,
             "timeout": timeout,
+            # Match TS fetch: follow 3xx redirects (e.g. trailing-slash
+            # normalization on /action-types/{id}/) so callers don't get null.
+            "follow_redirects": True,
         }
         if transport is not None:
             client_kwargs["transport"] = transport

@@ -6,7 +6,7 @@
  * Run: npx tsx examples/sdk/01-quick-start.ts
  */
 // Monorepo import — published users would use: import kweaver from "@kweaver-ai/kweaver-sdk/kweaver";
-import kweaver from "../../packages/typescript/src/kweaver.js";
+import kweaver from "../../../packages/typescript/src/kweaver.js";
 
 async function main() {
   // 1. Configure — reads credentials from ~/.kweaver/ automatically

@@ -12,6 +12,35 @@
 
 ---
 
+## Test environment (use throughout)
+
+All `pip` / `pytest` / `python` commands MUST use the existing venv at
+`packages/python/.venv` so we don't pollute the system interpreter:
+
+```bash
+# from repo root
+export PY=$(pwd)/packages/python/.venv/bin/python
+export PIP="$PY -m pip"
+export PYTEST="$PY -m pytest"
+```
+
+Whenever a step says `pytest …` it means `$PYTEST …`; whenever it says
+`pip install …` it means `$PIP install …`. The venv already has
+`httpx, cryptography, pytest, pytest-cov, pydantic, playwright` and an editable
+install of `kweaver-sdk 0.6.6` — only `respx` is missing (Task 0 step 2).
+
+When changing `pyproject.toml` deps, re-sync with:
+
+```bash
+$PIP install -e 'packages/python[dev]'
+```
+
+> The `playwright` package will remain installed in the venv after Task 12
+> (cleanup) because we only remove it from `pyproject.toml`; uninstall it
+> manually with `$PIP uninstall -y playwright` if you want a clean check.
+
+---
+
 ## Task 0: Branch + dev fixtures + respx dep
 
 **Files:**
@@ -78,7 +107,7 @@ def tmp_kweaver_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 - [ ] **Step 4: Install + verify**
 
 ```bash
-cd packages/python && pip install -e '.[dev]'
+$PIP install -e 'packages/python[dev]'
 pytest tests/unit/auth -v
 ```
 Expected: 0 tests collected, exit 0.
@@ -166,7 +195,7 @@ def test_encrypt_pkcs1_v15_invalid_pem_raises() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_signin_crypto.py -v
+$PYTEST tests/unit/auth/test_signin_crypto.py -v
 ```
 Expected: ImportError / ModuleNotFoundError on `kweaver.auth._crypto`.
 
@@ -252,7 +281,7 @@ def encrypt_pkcs1_v15(plain: str, public_key_pem: str) -> str:
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_signin_crypto.py -v
+$PYTEST tests/unit/auth/test_signin_crypto.py -v
 ```
 Expected: 5 passed.
 
@@ -380,7 +409,7 @@ def test_rsa_material_under_props_outside_pageprops() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_signin_html.py -v
+$PYTEST tests/unit/auth/test_signin_html.py -v
 ```
 Expected: ModuleNotFoundError on `kweaver.auth._signin_html`.
 
@@ -506,7 +535,7 @@ Append `"parse_signin_page_html_props",` to `__all__`.
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_signin_html.py -v
+$PYTEST tests/unit/auth/test_signin_html.py -v
 ```
 Expected: 10 passed.
 
@@ -647,7 +676,7 @@ def test_initial_password_change_required_error_fields() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_eacp_modify_password.py tests/unit/auth/test_eacp_user_info.py -v
+$PYTEST tests/unit/auth/test_eacp_modify_password.py tests/unit/auth/test_eacp_user_info.py -v
 ```
 Expected: ModuleNotFoundError on `kweaver.auth.eacp`.
 
@@ -801,7 +830,7 @@ Append the 5 names to `__all__`.
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_eacp_modify_password.py tests/unit/auth/test_eacp_user_info.py -v
+$PYTEST tests/unit/auth/test_eacp_modify_password.py tests/unit/auth/test_eacp_user_info.py -v
 ```
 Expected: 6 passed.
 
@@ -913,7 +942,7 @@ def test_http_signin_happy_path(tmp_kweaver_home) -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_http_signin.py::test_http_signin_happy_path -v
+$PYTEST tests/unit/auth/test_http_signin.py::test_http_signin_happy_path -v
 ```
 Expected: ImportError on `http_signin`.
 
@@ -1233,7 +1262,7 @@ Append `"http_signin",` to `__all__`.
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_http_signin.py::test_http_signin_happy_path -v
+$PYTEST tests/unit/auth/test_http_signin.py::test_http_signin_happy_path -v
 ```
 Expected: 1 passed.
 
@@ -1365,7 +1394,7 @@ def test_http_signin_does_not_retry_more_than_once(tmp_kweaver_home) -> None:
 - [ ] **Step 2: Run tests to confirm failure**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_http_signin.py -v
+$PYTEST tests/unit/auth/test_http_signin.py -v
 ```
 Expected: 2 of 3 new tests fail (`auto_retries_once` and `does_not_retry_more_than_once`).
 
@@ -1422,7 +1451,7 @@ Replace the 401001017 branch in `http_signin` with:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_http_signin.py -v
+$PYTEST tests/unit/auth/test_http_signin.py -v
 ```
 Expected: 4 passed.
 
@@ -1512,7 +1541,7 @@ def test_http_signin_does_not_fall_back_on_500(tmp_kweaver_home) -> None:
 - [ ] **Step 2: Run tests to confirm failure**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_no_auth.py -v
+$PYTEST tests/unit/auth/test_no_auth.py -v
 ```
 Expected: ImportError on `save_no_auth_platform` / `is_no_auth` / `NO_AUTH_TOKEN`.
 
@@ -1601,7 +1630,7 @@ Append the 3 names to `__all__`.
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_no_auth.py tests/unit/auth/test_http_signin.py -v
+$PYTEST tests/unit/auth/test_no_auth.py tests/unit/auth/test_http_signin.py -v
 ```
 Expected: 4 (no_auth) + 4 (http_signin) = 8 passed.
 
@@ -1690,7 +1719,7 @@ def test_http_signin_auth_lazy_login_on_first_use(tmp_kweaver_home) -> None:
 - [ ] **Step 2: Run tests to confirm failure**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_http_signin_auth_provider.py -v
+$PYTEST tests/unit/auth/test_http_signin_auth_provider.py -v
 ```
 Expected: ImportError on `HttpSigninAuth`.
 
@@ -1771,7 +1800,7 @@ def _token_expired(token_data: dict) -> bool:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_http_signin_auth_provider.py -v
+$PYTEST tests/unit/auth/test_http_signin_auth_provider.py -v
 ```
 Expected: 2 passed.
 
@@ -1844,7 +1873,7 @@ def test_browser_login_404_falls_back_to_no_auth(tmp_path, monkeypatch) -> None:
 - [ ] **Step 2: Run tests to confirm failure**
 
 ```bash
-cd packages/python && pytest tests/unit/test_auth.py::test_login_with_refresh_token_writes_credentials tests/unit/test_auth.py::test_browser_login_404_falls_back_to_no_auth -v
+$PYTEST tests/unit/test_auth.py::test_login_with_refresh_token_writes_credentials tests/unit/test_auth.py::test_browser_login_404_falls_back_to_no_auth -v
 ```
 Expected: AttributeError (no `login_with_refresh_token`) and 404 not handled.
 
@@ -1922,7 +1951,7 @@ Modify `OAuth2BrowserAuth.auth_headers` to also detect no-auth tokens (likely al
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd packages/python && pytest tests/unit/test_auth.py -v
+$PYTEST tests/unit/test_auth.py -v
 ```
 Expected: all `test_auth.py` cases pass (existing + 2 new).
 
@@ -2046,7 +2075,7 @@ def test_export_credentials_returns_dict(tmp_kweaver_home) -> None:
 - [ ] **Step 2: Run tests to confirm failure**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_store_helpers.py -v
+$PYTEST tests/unit/auth/test_store_helpers.py -v
 ```
 Expected: ImportError on `whoami` / `list_platforms` / etc.
 
@@ -2216,7 +2245,7 @@ Update `auth/__init__.py` to re-export the new helpers (`whoami`, `list_platform
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_store_helpers.py -v
+$PYTEST tests/unit/auth/test_store_helpers.py -v
 ```
 Expected: 6 passed.
 
@@ -2297,7 +2326,7 @@ def test_login_no_browser_paste_flow(tmp_kweaver_home) -> None:
 - [ ] **Step 2: Run tests to confirm failure**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_login_top_level.py -v
+$PYTEST tests/unit/auth/test_login_top_level.py -v
 ```
 Expected: AttributeError on `kweaver.login`.
 
@@ -2368,7 +2397,7 @@ Add `"login"` to `__all__`.
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/ -v
+$PYTEST tests/unit/auth/ -v
 ```
 Expected: full auth/ subdir green.
 
@@ -2476,7 +2505,7 @@ def test_default_modulus_pem_byte_equal_with_ts() -> None:
 - [ ] **Step 3: Run test to verify it passes**
 
 ```bash
-cd packages/python && pytest tests/unit/auth/test_ts_parity.py -v
+$PYTEST tests/unit/auth/test_ts_parity.py -v
 ```
 Expected: 2 passed.
 
@@ -2555,7 +2584,7 @@ Delete each test function or rewrite to use `HttpSigninAuth` if the assertion is
 - [ ] **Step 6: Verify install + tests**
 
 ```bash
-cd packages/python && pip install -e '.[dev]'
+$PIP install -e 'packages/python[dev]'
 pytest tests -v
 ```
 Expected: all tests green; `playwright` not installed; `kweaver.cli` import fails.
@@ -2621,7 +2650,7 @@ Mirror in `README.zh.md` with a Chinese translation.
 - [ ] **Step 3: Verify**
 
 ```bash
-cd packages/python && python -c "
+$PY -c "
 import kweaver
 import kweaver.auth as a
 print(kweaver.login.__doc__[:80])
@@ -2634,7 +2663,7 @@ Expected: docstring snippet + the full sorted public name list including
 - [ ] **Step 4: Run full test suite**
 
 ```bash
-cd packages/python && pytest -v --cov=src/kweaver --cov-report=term-missing
+$PYTEST -v --cov=src/kweaver --cov-report=term-missing
 ```
 Expected: all green, coverage ≥ 65% (matches `pyproject.toml fail_under`).
 

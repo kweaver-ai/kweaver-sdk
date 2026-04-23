@@ -562,7 +562,8 @@ Subcommands:
   action-type update <kn-id> <at-id> '<json>'   Update action type
   action-type delete <kn-id> <at-ids> [-y]   Delete action type(s)
   action-type query <kn-id> <at-id> '<json>'   Query action info
-  action-type execute <kn-id> <at-id> '<json>'   Execute action (has side effects)
+  action-type inputs <kn-id> <at-id>   List value_from=input params + dynamic_params template
+  action-type execute <kn-id> <at-id> '<envelope-json>' | --dynamic-params '<json>' [--instance '<json>']... [--trigger-type <v>]   Execute action (has side effects)
   action-execution get <kn-id> <execution-id>   Get execution status
   action-log list <kn-id> [options]   List action execution logs
   action-log get <kn-id> <log-id>   Get single execution log

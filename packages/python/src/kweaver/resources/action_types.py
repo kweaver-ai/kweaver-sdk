@@ -38,19 +38,101 @@ class ActionTypesResource:
         )
         return data or {}
 
-    def execute(self, kn_id: str, action_type_id: str, params: dict[str, Any] | None = None) -> ActionExecution:
+    def inputs(self, kn_id: str, action_type_id: str) -> list[dict[str, Any]]:
+        """Return ActionType parameters with ``value_from == "input"``.
+
+        These are exactly the parameters the caller MUST supply via
+        ``dynamic_params`` when calling :meth:`execute`. Each returned dict
+        keeps the original parameter fields (``name``, ``type``, ``source``,
+        ``required``, ``description``, ...) so callers can build their own
+        validation or template logic on top.
+        """
+        raw = self._http.get(
+            f"{_OM_PREFIX}/{kn_id}/action-types/{action_type_id}",
+        )
+        params = _collect_input_parameters(raw)
+        return params
+
+    def execute(
+        self,
+        kn_id: str,
+        action_type_id: str,
+        params: dict[str, Any] | None = None,
+        *,
+        dynamic_params: dict[str, Any] | None = None,
+        instances: list[dict[str, Any]] | None = None,
+        trigger_type: str = "manual",
+    ) -> ActionExecution:
         """Execute an Action Type, returns an async execution object.
 
         Args:
             kn_id: Knowledge network ID.
             action_type_id: Action type ID.
-            params: Request body. Must include ``_instance_identities`` — a list
-                of dicts identifying the instances to act on, e.g.
-                ``{"_instance_identities": [{"pod_ip": "1.2.3.4"}]}``.
+            params: Pre-assembled envelope body. Mutually exclusive with the
+                ``dynamic_params`` / ``instances`` / ``trigger_type`` kwargs;
+                use this only when you already have a full envelope JSON.
+            dynamic_params: Mapping of input parameters (the ones with
+                ``value_from == "input"``). Includes any header-source params
+                like ``Authorization`` that the ActionType declares as inputs.
+            instances: List of identity objects appended to
+                ``_instance_identities``. Empty list (default) is correct for
+                "create"-style actions that don't target an existing instance.
+            trigger_type: Envelope ``trigger_type`` field, defaults to ``manual``.
+
+            When the kwargs are used, the SDK assembles the envelope below.
+            **Must use the envelope shape** below — top-
+                level fields other than ``trigger_type`` / ``_instance_identities``
+                are silently dropped by the backend, leaving ``dynamic_params``
+                empty and downstream tools receiving ``null`` parameters
+                (typically surfacing as 401 token expired or 500 type errors).
+
+                ::
+
+                    {
+                      "trigger_type": "manual",
+                      "_instance_identities": [{"<primary_key>": "<value>"}],
+                      "dynamic_params": {
+                        "<param>": "<value>",
+                        "Authorization": "Bearer <token>",
+                      },
+                    }
+
+                - ``_instance_identities`` may be ``[]`` for "create"-style actions.
+                - Each ActionType parameter has a ``value_from`` discriminator:
+
+                    * ``input``    — caller MUST supply via ``dynamic_params``.
+                      Includes ``source: header`` params (e.g.
+                      ``Authorization``/``token``), which are usually
+                      credentials for the DOWNSTREAM system the action calls —
+                      NOT the platform session token. The SDK never
+                      auto-forwards its session token.
+                    * ``const``    — frozen in the ActionType snapshot; values
+                      in body are silently ignored. Edit the ActionType
+                      definition to ``input`` first if caller override is needed.
+                    * ``property`` — auto-populated from the resolved instance's
+                      property; do not (and cannot) supply via body.
+
+                Practical recipe: query the ActionType, filter parameters where
+                ``value_from == "input"``, put exactly those names into
+                ``dynamic_params``.
+
+                See ``skills/kweaver-core/references/bkn.md`` for the full contract.
         """
+        using_kwargs = dynamic_params is not None or instances is not None
+        if params is not None and using_kwargs:
+            raise ValueError(
+                "execute(): `params` (envelope) and `dynamic_params`/`instances` "
+                "are mutually exclusive — pick one form."
+            )
+        if params is None:
+            params = {
+                "trigger_type": trigger_type,
+                "_instance_identities": list(instances or []),
+                "dynamic_params": dict(dynamic_params or {}),
+            }
         data = self._http.post(
             f"{_PREFIX}/{kn_id}/action-types/{action_type_id}/execute",
-            json=params or {},
+            json=params,
             timeout=120.0,
         )
         execution_id = data.get("execution_id") or data.get("id") or ""
@@ -114,3 +196,38 @@ class ActionTypesResource:
     def cancel(self, kn_id: str, log_id: str) -> None:
         """Cancel a running Action execution."""
         self._http.post(f"{_PREFIX}/{kn_id}/action-logs/{log_id}/cancel")
+
+
+def _collect_input_parameters(node: Any) -> list[dict[str, Any]]:
+    """Walk an ActionType response and pull every parameter with
+    ``value_from == "input"``. The exact response envelope varies between
+    endpoints (root, ``data.action_type``, ``entries[*]`` ...), so we walk all
+    nested dicts/lists and de-dup by parameter name.
+    """
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+
+    def walk(n: Any) -> None:
+        if isinstance(n, list):
+            for item in n:
+                walk(item)
+            return
+        if not isinstance(n, dict):
+            return
+        params = n.get("parameters")
+        if isinstance(params, list):
+            for p in params:
+                if not isinstance(p, dict):
+                    continue
+                if p.get("value_from") != "input":
+                    continue
+                name = p.get("name")
+                if not isinstance(name, str) or name in seen:
+                    continue
+                seen.add(name)
+                out.append(p)
+        for v in n.values():
+            walk(v)
+
+    walk(node)
+    return out

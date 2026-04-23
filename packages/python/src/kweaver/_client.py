@@ -25,6 +25,7 @@ from kweaver.resources.query import QueryResource
 from kweaver.resources.jobs import JobsResource
 from kweaver.resources.relation_types import RelationTypesResource
 from kweaver.resources.skills import SkillsResource
+from kweaver.resources.toolboxes import ToolboxesResource
 from kweaver.resources.vega import VegaNamespace
 
 
@@ -111,6 +112,7 @@ class KWeaverClient:
         self.jobs = JobsResource(self._http)
         self.concept_groups = ConceptGroupsResource(self._http)
         self.skills = SkillsResource(self._http)
+        self.toolboxes = ToolboxesResource(self._http)
 
     @property
     def vega(self) -> VegaNamespace:

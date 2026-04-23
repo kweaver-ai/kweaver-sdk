@@ -167,6 +167,8 @@ export { BknResource } from "./resources/bkn.js";
 export { ConversationsResource } from "./resources/conversations.js";
 export { ContextLoaderResource } from "./resources/context-loader.js";
 export { SkillsResource } from "./resources/skills.js";
+export { ToolboxesResource } from "./resources/toolboxes.js";
+export type { InvokeToolArgs } from "./resources/toolboxes.js";
 
 // ── Skills (agent-operator-integration) ──────────────────────────────────────
 export type {
@@ -232,6 +234,29 @@ export { DataViewsResource } from "./resources/dataviews.js";
 // ── Business domains (platform API) ───────────────────────────────────────────
 export type { BusinessDomain, ListBusinessDomainsOptions } from "./api/business-domains.js";
 export { listBusinessDomains } from "./api/business-domains.js";
+
+// ── Toolboxes / tools (agent-operator-integration) ────────────────────────────
+export type {
+  CreateToolboxOptions,
+  DeleteToolboxOptions,
+  SetToolboxStatusOptions,
+  UploadToolOptions,
+  SetToolStatusesOptions,
+  ListToolboxesOptions,
+  ListToolsOptions,
+  InvokeToolOptions,
+} from "./api/toolboxes.js";
+export {
+  createToolbox,
+  deleteToolbox,
+  setToolboxStatus,
+  uploadTool,
+  setToolStatuses,
+  listToolboxes,
+  listTools,
+  executeTool,
+  debugTool,
+} from "./api/toolboxes.js";
 
 // ── HTTP utilities ────────────────────────────────────────────────────────────
 export { HttpError, NetworkRequestError, fetchTextOrThrow } from "./utils/http.js";

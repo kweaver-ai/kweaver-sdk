@@ -206,12 +206,130 @@ kweaver bkn subgraph <kn_id> '<json>'   # 子图查询
 ```bash
 kweaver bkn action-type list <kn_id>
 kweaver bkn action-type query <kn_id> <at_id> '<json>'
-kweaver bkn action-type execute <kn_id> <at_id> '<json>'   # 有副作用，执行前确认
+kweaver bkn action-type inputs <kn_id> <at_id>             # 列出 value_from=input 的参数 + dynamic_params 模板
+kweaver bkn action-type execute <kn_id> <at_id> '<envelope-json>'  # 形式 A：传完整信封
+kweaver bkn action-type execute <kn_id> <at_id> \           # 形式 B：CLI 帮你拼信封（推荐）
+  --dynamic-params '<json>' [--instance '<json>']... [--trigger-type manual]
 kweaver bkn action-execution get <kn_id> <execution_id> [--wait/--no-wait] [--timeout 300]
 kweaver bkn action-log list <kn_id> [--offset 0] [--limit 20] [--sort create_time] [--direction desc]
 kweaver bkn action-log get <kn_id> <log_id>
 kweaver bkn action-log cancel <kn_id> <log_id> [--yes/-y]
 ```
+
+### `action-type execute` 请求体契约（重要）
+
+后端只识别下面这种"信封"结构，**顶层散字段会被静默丢弃**——这是新手最常见的踩坑点：
+
+```json
+{
+  "trigger_type": "manual",
+  "_instance_identities": [{ "<primary_key>": "<value>" }],
+  "dynamic_params": {
+    "<param_name>": "<value>",
+    "Authorization": "Bearer <token>"
+  }
+}
+```
+
+| 字段 | 必需性 | 说明 |
+|---|---|---|
+| `trigger_type` | 推荐 | 触发来源标识，常用值 `manual`；缺省时后端会用默认值，但显式写更利于排查 |
+| `_instance_identities` | 看 ActionType 定义 | 数组，标识要操作的实例；"创建类"动作可传 `[]` |
+| `dynamic_params` | **必填** | ActionType 中所有 `value_from: input` 的参数都放这里——**包括声明为 header 的 `Authorization`/`token`**（注意：这里的 `Authorization` 通常是**下游被调系统**的凭证，不一定等于你登录 KWeaver 的会话 token，先看参数 `description`） |
+
+#### `value_from` 参数来源（决定调用方要不要传）
+
+ActionType 的每个 `parameter` 都带一个 `value_from` 字段，**只有 `input` 类型需要调用方在 `dynamic_params` 里传值**，其余两种你不用管：
+
+| value_from | 含义 | 调用方要做什么 | 传了会怎样 |
+|---|---|---|---|
+| `input` | 值由调用方在执行时通过 body 传入（含 `source: header` 的参数，如 `Authorization`/`token`） | **必须**塞进 `dynamic_params`，缺一个下游就拿到 `null` | 正常生效 |
+| `const` | 值在 ActionType 定义里写死，执行时直接用 snapshot 里的常量 | 不用管 | 传了也被丢弃，最终用定义里的常量 |
+| `property` | 值从 `_instance_identities` 解析出的目标实例属性自动取（参数名对应 ObjectType 的 property 名） | 不用管，确保 `_instance_identities` 能解析出实例即可 | 传了也以实例真实属性值为准 |
+
+> 还有一种 `param` 仅出现在 RiskFunction 体系，普通 `action-type execute` 用不到。
+
+##### 实战速查：用 `action-type inputs` 一步查完
+
+```bash
+# 直接列出该 ActionType 的所有 value_from=input 参数（含 type/source/required/description）
+# 并附带一份可直接复制的 dynamic_params 模板
+kweaver bkn action-type inputs <kn_id> <at_id>
+
+# 只要模板（适合脚本）：
+kweaver bkn action-type inputs <kn_id> <at_id> --template
+
+# 只要原始 JSON：
+kweaver bkn action-type inputs <kn_id> <at_id> --json
+```
+
+> 老办法（也能用）：`kweaver bkn action-type query <kn_id> <at_id> '{}' | jq '.parameters[] | select(.value_from=="input")'`。
+
+#### ⚠️ 三条必知规则
+
+1. **顶层散字段会被吞**：`{"_instance_identities":[], "task_id": "x"}` 这种写法里 `task_id` **不会**到达下游，落库后 `dynamic_params` 为 `undefined`。表现是下游 tool 拿到一堆 `null`，可能直接 401（缺 Authorization）或 500（缺必填业务字段）。
+2. **`Authorization` 是 ActionType 自定义的普通参数，不是平台会话 token**：当 ActionType 把它声明为 `value_from: input` + `source: header` 时，**它的语义由 ActionType 自己决定**，通常是要传给下游被调系统的凭证（ERP、外部 LLM、第三方 API 等）。先看参数 `description` 确认要谁的 token，**不要无脑把 `kweaver auth` 的输出粘进去**——SDK 也不会自动塞，避免误把平台 token 泄漏给不相干的下游服务。
+3. **`value_from: const` 无法被 body 覆盖**：要让调用方传值生效，先在 ActionType 定义里把对应参数改为 `value_from: input`；否则 `dynamic_params` 里塞了也会被 snapshot 里的常量盖掉。
+
+#### 推荐：用 flag 形式，让 CLI 帮你拼信封
+
+不想手写整段 envelope JSON？直接传语义槽位，CLI 内部组装出与上面**完全一样**的 body 发出去：
+
+```bash
+kweaver bkn action-type execute supplychain_bkn_v4 create_monitoring_task \
+  --dynamic-params '{
+    "task_id":"demo-001","task_name":"demo task","task_status":"开始",
+    "product_code":"P-001","product_name":"demo product",
+    "demand_start":"2026-04-20","demand_end":"2026-04-21","demand_quantity":3,
+    "production_start":"2026-04-22","production_end":"2026-04-25","production_quantity":3,
+    "created_by":"you",
+    "Authorization":"Bearer <下游系统的 token>"
+  }' \
+  --no-wait
+# 需要操作已有实例时再加 --instance（可重复）：
+#   --instance '{"task_id":"demo-001"}'
+# trigger_type 缺省为 manual，需覆盖时：--trigger-type schedule
+```
+
+互斥规则：positional envelope JSON 和 `--dynamic-params` / `--instance` / `--trigger-type` 不能同时出现，CLI 会直接报错。
+
+#### 完整示例（envelope 形式，生产环境验证通过）
+
+```bash
+TOK=<your bearer token>
+kweaver bkn action-type execute supplychain_bkn_v4 create_monitoring_task \
+  "$(printf '{
+    "trigger_type": "manual",
+    "_instance_identities": [],
+    "dynamic_params": {
+      "task_id": "demo-001",
+      "task_name": "demo task",
+      "task_status": "开始",
+      "product_code": "P-001",
+      "product_name": "demo product",
+      "demand_start": "2026-04-20",
+      "demand_end": "2026-04-21",
+      "demand_quantity": 3,
+      "production_start": "2026-04-22",
+      "production_end": "2026-04-25",
+      "production_quantity": 3,
+      "created_by": "you",
+      "Authorization": "Bearer %s"
+    }
+  }' "$TOK")" \
+  --no-wait
+# 拿到 execution_id 后用 action-log get 看结果
+kweaver bkn action-log get <kn_id> <execution_id>
+```
+
+#### 排错速查
+
+| 现象 | 大概率原因 |
+|---|---|
+| 下游 `401 token expired` / `Common.UnAuthorization` | `dynamic_params` 里没有 `Authorization`（或参数还在顶层散着） |
+| 下游 500 `could not convert ... 'null'` | `dynamic_params` 缺业务必填字段（如 `product_code`） |
+| `action-log get` 看到 `dynamic_params: undefined`、各 result 的 `parameters: {}` | body 是扁平形式，整体被后端丢弃 |
+| 改了 body 仍然走旧值 | ActionType 定义里该参数是 `value_from: const`，需平台侧改为 `input` |
 
 ## Data Source 绑定类型
 

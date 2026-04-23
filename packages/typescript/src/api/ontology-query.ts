@@ -243,11 +243,40 @@ export async function actionTypeQuery(options: ActionTypeQueryOptions): Promise<
 /**
  * Action-type execute: POST (has side effects).
  *
- * The request body must include `_instance_identities` — an array of objects
- * identifying which instances the action operates on:
+ * The request body must use the envelope shape below — top-level scalar fields
+ * (other than `trigger_type` and `_instance_identities`) are silently dropped
+ * by the backend, which causes downstream tools to receive `null` parameters
+ * (and typically respond with 401 token expired or 500 type errors).
+ *
  * ```json
- * {"_instance_identities": [{"<primary_key>": "<value>"}], ...otherParams}
+ * {
+ *   "trigger_type": "manual",
+ *   "_instance_identities": [{"<primary_key>": "<value>"}],
+ *   "dynamic_params": {
+ *     "<param_name>": "<value>",
+ *     "Authorization": "Bearer <token>"
+ *   }
+ * }
  * ```
+ *
+ * - `_instance_identities` may be `[]` for "create"-style actions.
+ * - Each ActionType parameter has a `value_from` discriminator:
+ *     • `input`    — caller MUST supply via `dynamic_params`. Includes
+ *                    `source: header` params (e.g. `Authorization`/`token`),
+ *                    which are usually credentials for the DOWNSTREAM system
+ *                    the action calls — NOT the platform session token. The
+ *                    SDK never auto-forwards its session token.
+ *     • `const`    — frozen in the ActionType snapshot; values in body are
+ *                    silently ignored. Edit the ActionType definition to
+ *                    `input` first if you need caller override.
+ *     • `property` — auto-populated from the resolved instance's property;
+ *                    do not (and cannot) supply via body.
+ *
+ * Practical recipe: query the ActionType, filter parameters where
+ * `value_from == "input"`, put exactly those names into `dynamic_params`.
+ *
+ * See `skills/kweaver-core/references/bkn.md` ("action-type execute 请求体契约")
+ * for the full contract and troubleshooting table.
  */
 export interface ActionTypeExecuteOptions extends OntologyQueryBaseOptions {
   atId: string;

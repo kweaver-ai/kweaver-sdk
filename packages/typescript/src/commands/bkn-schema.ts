@@ -735,6 +735,9 @@ export function parseKnActionTypeExecuteArgs(args: string[]): KnActionTypeExecut
   let businessDomain = "";
   let wait = true;
   let timeout = 300;
+  let dynamicParamsJson: string | undefined;
+  let triggerType: string | undefined;
+  const instanceJsons: string[] = [];
   const positional: string[] = [];
 
   for (let i = 0; i < args.length; i += 1) {
@@ -765,12 +768,42 @@ export function parseKnActionTypeExecuteArgs(args: string[]): KnActionTypeExecut
       i += 1;
       continue;
     }
+    if (arg === "--dynamic-params" && args[i + 1]) {
+      dynamicParamsJson = args[++i];
+      continue;
+    }
+    if (arg === "--instance" && args[i + 1]) {
+      instanceJsons.push(args[++i]);
+      continue;
+    }
+    if (arg === "--trigger-type" && args[i + 1]) {
+      triggerType = args[++i];
+      continue;
+    }
     positional.push(arg);
   }
 
-  const [knId, atId, body] = positional;
-  if (!knId || !atId || !body) {
-    throw new Error("Missing kn-id, at-id, or body. Usage: kweaver bkn action-type execute <kn-id> <at-id> '<json>' [options]");
+  const usingFlags = dynamicParamsJson !== undefined || instanceJsons.length > 0 || triggerType !== undefined;
+  const [knId, atId, positionalBody] = positional;
+  if (!knId || !atId) {
+    throw new Error("Missing kn-id or at-id. Usage: kweaver bkn action-type execute <kn-id> <at-id> [<json>|--dynamic-params '<json>' --instance '<json>'] [options]");
+  }
+  if (positionalBody && usingFlags) {
+    throw new Error("Positional body and --dynamic-params/--instance/--trigger-type are mutually exclusive. Use one form.");
+  }
+  if (!positionalBody && !usingFlags) {
+    throw new Error("Missing body. Provide a positional JSON envelope, or use --dynamic-params / --instance / --trigger-type.");
+  }
+
+  let body: string;
+  if (positionalBody) {
+    body = positionalBody;
+  } else {
+    body = buildExecuteEnvelope({
+      triggerType: triggerType ?? "manual",
+      dynamicParamsJson,
+      instanceJsons,
+    });
   }
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
@@ -783,6 +816,148 @@ export function parseKnActionTypeExecuteArgs(args: string[]): KnActionTypeExecut
     wait,
     timeout,
   };
+}
+
+/**
+ * Assemble the action-type execute envelope from CLI flags. Each flag is
+ * parsed as JSON; instance entries must be JSON objects; dynamic_params must
+ * be a JSON object. The shape produced is the contract documented in
+ * skills/kweaver-core/references/bkn.md.
+ */
+export function buildExecuteEnvelope(opts: {
+  triggerType: string;
+  dynamicParamsJson?: string;
+  instanceJsons: string[];
+}): string {
+  const envelope: Record<string, unknown> = {
+    trigger_type: opts.triggerType,
+    _instance_identities: opts.instanceJsons.map((s, idx) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(s);
+      } catch (e) {
+        throw new Error(`--instance #${idx + 1} is not valid JSON: ${(e as Error).message}`);
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`--instance #${idx + 1} must be a JSON object, got ${Array.isArray(parsed) ? "array" : typeof parsed}`);
+      }
+      return parsed;
+    }),
+  };
+  if (opts.dynamicParamsJson !== undefined) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(opts.dynamicParamsJson);
+    } catch (e) {
+      throw new Error(`--dynamic-params is not valid JSON: ${(e as Error).message}`);
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(`--dynamic-params must be a JSON object, got ${Array.isArray(parsed) ? "array" : typeof parsed}`);
+    }
+    envelope.dynamic_params = parsed;
+  } else {
+    envelope.dynamic_params = {};
+  }
+  return JSON.stringify(envelope);
+}
+
+// ── Action-type inputs helpers ────────────────────────────────────────────────
+
+export interface InputParameterSummary {
+  name: string;
+  type?: string;
+  source?: string;
+  required?: boolean;
+  description?: string;
+}
+
+/**
+ * Walk a getActionType response and collect parameters where
+ * `value_from === "input"`. The exact response shape varies (sometimes the
+ * action-type is at the root, sometimes nested under data/result/...), so we
+ * search a few likely locations.
+ */
+export function extractInputParameters(rawJson: string): InputParameterSummary[] {
+  let root: unknown;
+  try {
+    root = JSON.parse(rawJson);
+  } catch {
+    return [];
+  }
+  const candidates = collectParameterArrays(root);
+  const seen = new Set<string>();
+  const out: InputParameterSummary[] = [];
+  for (const params of candidates) {
+    for (const p of params) {
+      if (!p || typeof p !== "object") continue;
+      const obj = p as Record<string, unknown>;
+      if (obj.value_from !== "input") continue;
+      const name = typeof obj.name === "string" ? obj.name : "";
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      out.push({
+        name,
+        type: typeof obj.type === "string" ? obj.type : undefined,
+        source: typeof obj.source === "string" ? obj.source : undefined,
+        required: typeof obj.required === "boolean" ? obj.required : undefined,
+        description: typeof obj.description === "string" ? obj.description : undefined,
+      });
+    }
+  }
+  return out;
+}
+
+function collectParameterArrays(node: unknown, acc: unknown[][] = []): unknown[][] {
+  if (!node) return acc;
+  if (Array.isArray(node)) {
+    for (const item of node) collectParameterArrays(item, acc);
+    return acc;
+  }
+  if (typeof node !== "object") return acc;
+  const obj = node as Record<string, unknown>;
+  if (Array.isArray(obj.parameters)) acc.push(obj.parameters);
+  for (const v of Object.values(obj)) collectParameterArrays(v, acc);
+  return acc;
+}
+
+export function buildDynamicParamsTemplate(inputs: InputParameterSummary[]): Record<string, unknown> {
+  const tpl: Record<string, unknown> = {};
+  for (const p of inputs) {
+    tpl[p.name] = placeholderForType(p);
+  }
+  return tpl;
+}
+
+function placeholderForType(p: InputParameterSummary): unknown {
+  const hint = p.description ? ` (${p.description})` : "";
+  const t = (p.type ?? "").toLowerCase();
+  if (t === "int" || t === "integer" || t === "long" || t === "number" || t === "float" || t === "double") return 0;
+  if (t === "bool" || t === "boolean") return false;
+  if (t === "array" || t === "list") return [];
+  if (t === "object" || t === "dict" || t === "map") return {};
+  return `<${p.type ?? "string"}${p.required === false ? "?" : ""}>${hint}`;
+}
+
+export function renderInputsTable(atId: string, inputs: InputParameterSummary[]): string {
+  if (inputs.length === 0) {
+    return `Action type ${atId} has no parameters with value_from=input. dynamic_params can be {}.`;
+  }
+  const rows = inputs.map(p => [
+    p.name,
+    p.type ?? "-",
+    p.source ?? "-",
+    p.required === undefined ? "-" : p.required ? "yes" : "no",
+    truncate(p.description ?? "", 60),
+  ]);
+  const header = ["NAME", "TYPE", "SOURCE", "REQUIRED", "DESCRIPTION"];
+  const widths = header.map((h, i) => Math.max(h.length, ...rows.map(r => r[i].length)));
+  const fmt = (cols: string[]) => cols.map((c, i) => c.padEnd(widths[i])).join("  ");
+  const lines = [fmt(header), fmt(widths.map(w => "-".repeat(w))), ...rows.map(fmt)];
+  return `Action type ${atId} input parameters (value_from=input):\n${lines.join("\n")}`;
+}
+
+function truncate(s: string, n: number): string {
+  return s.length <= n ? s : s.slice(0, n - 1) + "…";
 }
 
 // ── Action-type execute helpers ────────────────────────────────────────────────
@@ -1335,17 +1510,30 @@ kweaver bkn action-type create <kn-id> '<json>' [--pretty] [-bd value]
 kweaver bkn action-type update <kn-id> <at-id> '<json>' [--pretty] [-bd value]
 kweaver bkn action-type delete <kn-id> <at-ids> [-y] [--pretty] [-bd value]
 kweaver bkn action-type query <kn-id> <at-id> '<json>' [--pretty] [-bd value]
-kweaver bkn action-type execute <kn-id> <at-id> '<json>' [--pretty] [-bd value] [--wait|--no-wait] [--timeout n]
+kweaver bkn action-type inputs <kn-id> <at-id> [--json|--template] [-bd value]
+kweaver bkn action-type execute <kn-id> <at-id> [<json>|--dynamic-params '<json>' --instance '<json>' --trigger-type <v>] [--pretty] [-bd value] [--wait|--no-wait] [--timeout n]
 
 list: List action types (schema) from ontology-manager.
 get: Get a single action type by ID.
 create: Create action type(s) (POST JSON body).
 update: Update an action type (PUT JSON body).
 delete: Delete action type(s) by ID(s).
-query/execute: Query or execute actions. execute has side effects - only use when explicitly requested.
+query: Query actions backing this action type.
+inputs: List parameters with value_from=input that the caller MUST supply.
+        Default prints a table + a starter dynamic_params template.
+        --json     dump filtered parameters as raw JSON
+        --template print only the dynamic_params template object
+execute: Run an action (has side effects - only use when explicitly requested).
+  Body forms (mutually exclusive):
+    1. Positional envelope JSON: '{"trigger_type":"manual","_instance_identities":[],"dynamic_params":{...}}'
+    2. Flag form (CLI assembles the envelope):
+         --dynamic-params '<json object>'   parameters with value_from=input
+         --instance '<json object>'         repeatable; one per identity
+         --trigger-type <value>             defaults to "manual"
   --wait (default)    Poll until execution completes
   --no-wait           Return immediately after starting execution
-  --timeout <seconds> Max wait time when --wait (default: 300)`);
+  --timeout <seconds> Max wait time when --wait (default: 300)
+See skills/kweaver-core/references/bkn.md for the full payload contract.`);
     return 0;
   }
 
@@ -1494,6 +1682,48 @@ query/execute: Query or execute actions. execute has side effects - only use whe
     }
   }
 
+  if (action === "inputs") {
+    const parsed = parseOntologyQueryFlags(rest);
+    const flags = new Set(parsed.filteredArgs.filter(a => a.startsWith("--")));
+    const positional = parsed.filteredArgs.filter(a => !a.startsWith("--"));
+    const [knId, atId] = positional;
+    if (!knId || !atId) {
+      console.error("Usage: kweaver bkn action-type inputs <kn-id> <at-id> [--json|--template]");
+      return 1;
+    }
+    if (flags.has("--json") && flags.has("--template")) {
+      console.error("--json and --template are mutually exclusive.");
+      return 1;
+    }
+    try {
+      const token = await ensureValidToken();
+      const raw = await getActionType({
+        baseUrl: token.baseUrl,
+        accessToken: token.accessToken,
+        knId,
+        atId,
+        businessDomain: parsed.businessDomain,
+      });
+      const inputs = extractInputParameters(raw);
+      if (flags.has("--json")) {
+        console.log(formatCallOutput(JSON.stringify(inputs), parsed.pretty));
+        return 0;
+      }
+      const template = buildDynamicParamsTemplate(inputs);
+      if (flags.has("--template")) {
+        console.log(JSON.stringify(template, null, 2));
+        return 0;
+      }
+      console.log(renderInputsTable(atId, inputs));
+      console.log("\n# Starter dynamic_params (fill in real values, then pass via --dynamic-params):");
+      console.log(JSON.stringify(template, null, 2));
+      return 0;
+    } catch (error) {
+      console.error(formatHttpError(error));
+      return 1;
+    }
+  }
+
   if (action === "execute") {
     let options: KnActionTypeExecuteOptions;
     try {
@@ -1557,7 +1787,7 @@ query/execute: Query or execute actions. execute has side effects - only use whe
     }
   }
 
-  console.error(`Unknown action-type action: ${action}. Use list, get, create, update, delete, query, or execute.`);
+  console.error(`Unknown action-type action: ${action}. Use list, get, create, update, delete, query, inputs, or execute.`);
   return 1;
 }
 

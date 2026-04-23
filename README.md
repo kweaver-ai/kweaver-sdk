@@ -265,7 +265,7 @@ kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]
 kweaver bkn validate/push/pull
 kweaver bkn object-type list/get/create/update/delete/query/properties
 kweaver bkn relation-type list/get/create/update/delete
-kweaver bkn action-type list/query/execute
+kweaver bkn action-type list/query/inputs/execute
 kweaver bkn subgraph / search
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel

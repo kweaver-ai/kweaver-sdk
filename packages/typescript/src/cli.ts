@@ -89,7 +89,8 @@ Usage:
   kweaver bkn object-type list|get|create|update|delete|query|properties <kn-id> ...
   kweaver bkn relation-type list|get|create|update|delete <kn-id> ...
   kweaver bkn subgraph <kn-id> <body-json>
-  kweaver bkn action-type list|query|execute <kn-id> ... [--wait] [--no-wait] [--timeout N]
+  kweaver bkn action-type list|query|inputs|execute <kn-id> ... [--wait] [--no-wait] [--timeout N]
+  kweaver bkn action-type execute <kn-id> <at-id> [<envelope-json>|--dynamic-params '<json>' --instance '<json>' --trigger-type <v>]
   kweaver bkn action-execution get <kn-id> <execution-id>
   kweaver bkn action-log list|get|cancel <kn-id> ...
 
@@ -111,6 +112,9 @@ Usage:
   kweaver tool upload --toolbox <box-id> <openapi-spec-path> [--metadata-type openapi]
   kweaver tool list --toolbox <box-id> [-bd value]
   kweaver tool enable|disable --toolbox <box-id> <tool-id>... [-bd value]
+  kweaver tool execute|debug --toolbox <box-id> <tool-id>
+                             [--body '<json>'|--body-file <path>]
+                             [--header '<json>'] [--query '<json>'] [--timeout <s>]
 
   kweaver vega health|stats|inspect
   kweaver vega catalog list|get|health|test-connection|discover|resources [options]

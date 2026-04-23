@@ -15,6 +15,7 @@ import { DataViewsResource } from "./resources/dataviews.js";
 import { KnowledgeNetworksResource } from "./resources/knowledge-networks.js";
 import { BknResource } from "./resources/bkn.js";
 import { SkillsResource } from "./resources/skills.js";
+import { ToolboxesResource } from "./resources/toolboxes.js";
 import { VegaResource } from "./resources/vega.js";
 
 // ── ClientContext ─────────────────────────────────────────────────────────────
@@ -129,6 +130,9 @@ export class KWeaverClient implements ClientContext {
   /** ADP/KWeaver skill registry, market, progressive read, and install helpers. */
   readonly skills: SkillsResource;
 
+  /** Toolbox / tool management plus execute & debug invocation. */
+  readonly toolboxes: ToolboxesResource;
+
   constructor(opts: KWeaverClientOptions = {}) {
     const envDomain = process.env.KWEAVER_BUSINESS_DOMAIN;
 
@@ -168,6 +172,7 @@ export class KWeaverClient implements ClientContext {
       this.dataviews = new DataViewsResource(this);
       this.vega = new VegaResource(this);
       this.skills = new SkillsResource(this);
+      this.toolboxes = new ToolboxesResource(this);
       return;
     }
 
@@ -228,6 +233,7 @@ export class KWeaverClient implements ClientContext {
     this.dataviews = new DataViewsResource(this);
     this.vega = new VegaResource(this);
     this.skills = new SkillsResource(this);
+    this.toolboxes = new ToolboxesResource(this);
   }
 
   /**

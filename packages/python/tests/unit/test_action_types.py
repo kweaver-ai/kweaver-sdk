@@ -1,7 +1,11 @@
 """Tests for ActionTypesResource."""
 
-import httpx
+import json
 
+import httpx
+import pytest
+
+from kweaver.resources.action_types import _collect_input_parameters
 from tests.conftest import RequestCapture, make_client
 
 
@@ -61,6 +65,78 @@ def test_list_logs(capture: RequestCapture):
     assert "offset=10" in url
     assert "limit=5" in url
     assert capture.requests[-1].method == "GET"
+
+
+def test_execute_assembles_envelope_from_kwargs(capture: RequestCapture):
+    """execute(dynamic_params=..., instances=...) wraps into the envelope shape."""
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"execution_id": "exec_1", "status": "running"})
+
+    client = make_client(handler, capture)
+    client.action_types.execute(
+        "kn_1", "at_1",
+        dynamic_params={"task_id": "x", "qty": 3},
+        instances=[{"task_id": "x"}],
+    )
+    sent = json.loads(capture.requests[-1].content)
+    assert sent == {
+        "trigger_type": "manual",
+        "_instance_identities": [{"task_id": "x"}],
+        "dynamic_params": {"task_id": "x", "qty": 3},
+    }
+
+
+def test_execute_kwargs_default_to_empty_lists(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"execution_id": "exec_1", "status": "running"})
+
+    client = make_client(handler, capture)
+    client.action_types.execute("kn_1", "at_1", dynamic_params={"a": 1})
+    sent = json.loads(capture.requests[-1].content)
+    assert sent["_instance_identities"] == []
+    assert sent["trigger_type"] == "manual"
+
+
+def test_execute_rejects_params_and_kwargs_together(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:  # not reached
+        return httpx.Response(200, json={})
+
+    client = make_client(handler, capture)
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        client.action_types.execute(
+            "kn_1", "at_1",
+            params={"trigger_type": "manual"},
+            dynamic_params={"a": 1},
+        )
+
+
+def test_inputs_filters_value_from_input(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "id": "at_1",
+            "parameters": [
+                {"name": "task_id", "value_from": "input", "type": "string", "required": True},
+                {"name": "Authorization", "value_from": "input", "type": "string", "source": "header"},
+                {"name": "tenant", "value_from": "const"},
+                {"name": "name", "value_from": "property"},
+            ],
+        })
+
+    client = make_client(handler, capture)
+    inputs = client.action_types.inputs("kn_1", "at_1")
+    names = sorted(p["name"] for p in inputs)
+    assert names == ["Authorization", "task_id"]
+    assert capture.requests[-1].method == "GET"
+    assert "/kn_1/action-types/at_1" in capture.last_url()
+
+
+def test_collect_input_parameters_walks_nested_response():
+    raw = {"data": {"action_type": {"parameters": [
+        {"name": "x", "value_from": "input"},
+        {"name": "y", "value_from": "const"},
+    ]}}}
+    out = _collect_input_parameters(raw)
+    assert [p["name"] for p in out] == ["x"]
 
 
 def test_cancel(capture: RequestCapture):

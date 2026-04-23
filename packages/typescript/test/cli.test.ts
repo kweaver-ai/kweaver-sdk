@@ -1459,6 +1459,60 @@ test("parseKnActionTypeExecuteArgs parses --timeout", () => {
   assert.equal(opts.timeout, 60);
 });
 
+test("parseKnActionTypeExecuteArgs assembles envelope from --dynamic-params/--instance/--trigger-type", () => {
+  const opts = parseKnActionTypeExecuteArgs([
+    "kn-1",
+    "at-1",
+    "--dynamic-params", '{"task_id":"x","qty":3}',
+    "--instance", '{"task_id":"x"}',
+    "--instance", '{"task_id":"y"}',
+    "--trigger-type", "manual",
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.equal(body.trigger_type, "manual");
+  assert.deepEqual(body._instance_identities, [{ task_id: "x" }, { task_id: "y" }]);
+  assert.deepEqual(body.dynamic_params, { task_id: "x", qty: 3 });
+});
+
+test("parseKnActionTypeExecuteArgs defaults trigger-type=manual and dynamic_params={}", () => {
+  const opts = parseKnActionTypeExecuteArgs([
+    "kn-1", "at-1",
+    "--instance", '{"id":"x"}',
+  ]);
+  const body = JSON.parse(opts.body);
+  assert.equal(body.trigger_type, "manual");
+  assert.deepEqual(body.dynamic_params, {});
+  assert.deepEqual(body._instance_identities, [{ id: "x" }]);
+});
+
+test("parseKnActionTypeExecuteArgs rejects positional body + flag form combined", () => {
+  assert.throws(
+    () => parseKnActionTypeExecuteArgs(["kn-1", "at-1", "{}", "--dynamic-params", "{}"]),
+    /mutually exclusive/,
+  );
+});
+
+test("parseKnActionTypeExecuteArgs rejects no body and no flags", () => {
+  assert.throws(
+    () => parseKnActionTypeExecuteArgs(["kn-1", "at-1"]),
+    /Missing body/,
+  );
+});
+
+test("parseKnActionTypeExecuteArgs rejects non-object --instance JSON", () => {
+  assert.throws(
+    () => parseKnActionTypeExecuteArgs(["kn-1", "at-1", "--instance", "[1,2]"]),
+    /must be a JSON object/,
+  );
+});
+
+test("parseKnActionTypeExecuteArgs rejects invalid --dynamic-params JSON", () => {
+  assert.throws(
+    () => parseKnActionTypeExecuteArgs(["kn-1", "at-1", "--dynamic-params", "not-json"]),
+    /not valid JSON/,
+  );
+});
+
 test("parseAgentSessionsArgs requires agent_id", () => {
   assert.throws(() => parseAgentSessionsArgs([]), /Missing agent_id/);
 });
@@ -2487,4 +2541,69 @@ test("parseRelationTypeDeleteArgs throws on missing args", () => {
     () => parseRelationTypeDeleteArgs(["kn-1"]),
     /Usage|Missing/
   );
+});
+
+import {
+  extractInputParameters,
+  buildDynamicParamsTemplate,
+  renderInputsTable,
+  buildExecuteEnvelope,
+} from "../src/commands/bkn-schema.js";
+
+test("extractInputParameters filters value_from=input only", () => {
+  const raw = JSON.stringify({
+    parameters: [
+      { name: "task_id", value_from: "input", type: "string", source: "body", required: true, description: "Task id" },
+      { name: "Authorization", value_from: "input", type: "string", source: "header" },
+      { name: "tenant", value_from: "const" },
+      { name: "name", value_from: "property" },
+    ],
+  });
+  const inputs = extractInputParameters(raw);
+  assert.deepEqual(
+    inputs.map(p => p.name).sort(),
+    ["Authorization", "task_id"],
+  );
+  const taskId = inputs.find(p => p.name === "task_id")!;
+  assert.equal(taskId.required, true);
+  assert.equal(taskId.source, "body");
+});
+
+test("extractInputParameters walks nested action-type response shapes", () => {
+  const raw = JSON.stringify({
+    data: { action_type: { parameters: [{ name: "x", value_from: "input" }] } },
+  });
+  const inputs = extractInputParameters(raw);
+  assert.deepEqual(inputs.map(p => p.name), ["x"]);
+});
+
+test("buildDynamicParamsTemplate uses type-aware placeholders", () => {
+  const tpl = buildDynamicParamsTemplate([
+    { name: "qty", type: "int" },
+    { name: "ok", type: "bool" },
+    { name: "tags", type: "array" },
+    { name: "title", type: "string", description: "Title", required: true },
+  ]);
+  assert.equal(tpl.qty, 0);
+  assert.equal(tpl.ok, false);
+  assert.deepEqual(tpl.tags, []);
+  assert.match(String(tpl.title), /^<string>/);
+});
+
+test("renderInputsTable handles empty input list", () => {
+  const out = renderInputsTable("at-1", []);
+  assert.match(out, /no parameters with value_from=input/);
+});
+
+test("buildExecuteEnvelope produces canonical shape", () => {
+  const body = buildExecuteEnvelope({
+    triggerType: "manual",
+    dynamicParamsJson: '{"a":1}',
+    instanceJsons: ['{"id":"x"}'],
+  });
+  assert.deepEqual(JSON.parse(body), {
+    trigger_type: "manual",
+    _instance_identities: [{ id: "x" }],
+    dynamic_params: { a: 1 },
+  });
 });

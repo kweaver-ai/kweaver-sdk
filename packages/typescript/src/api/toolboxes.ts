@@ -6,15 +6,24 @@ import { buildHeaders } from "./headers.js";
 // Backend endpoints under /api/agent-operator-integration/v1/tool-box.
 //
 // Verified against kweaver/examples/03-action-lifecycle/run.sh (lines 78–197):
-//   POST   /tool-box                   create
-//   DELETE /tool-box/{id}              delete
-//   POST   /tool-box/{id}/status       publish/draft
-//   POST   /tool-box/{id}/tool         upload tool (multipart)
-//   POST   /tool-box/{id}/tools/status enable/disable (batch)
+//   POST   /tool-box                       create
+//   DELETE /tool-box/{id}                  delete
+//   POST   /tool-box/{id}/status           publish/draft
+//   POST   /tool-box/{id}/tool             upload tool (multipart)
+//   POST   /tool-box/{id}/tools/status     enable/disable (batch)
 //
 // Verified during Task 8 e2e against the live backend (2026-04-18):
 //   GET    /tool-box/list?keyword=&limit=&offset=  list toolboxes
 //   GET    /tool-box/{id}/tools/list               list tools
+//
+// Verified live on 2026-04-23 against dip-poc.aishu.cn:
+//   POST   /tool-box/{box}/proxy/{tool}            execute tool (envelope JSON)
+//   POST   /tool-box/{box}/tool/{tool}/debug       debug tool (envelope JSON)
+//
+// Envelope shape required by /proxy and /debug:
+//   { "timeout": <s>, "header": {...}, "query": {...}, "body": {...} }
+// Flat-shape requests cause the forwarder to drop downstream Authorization
+// headers, which manifests as 401 "token expired" from the underlying tool.
 
 const PATH = "/api/agent-operator-integration/v1/tool-box";
 
@@ -138,4 +147,52 @@ export async function listTools(opts: ListToolsOptions): Promise<string> {
     headers: buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"),
   });
   return body;
+}
+
+// ── execute / debug ──────────────────────────────────────────────────────────
+//
+// Both endpoints share the same envelope payload and forwarder; the only
+// observable differences are:
+//   - debug bypasses the "tool must be enabled" gate (dev-time invocation),
+//   - audit log records DebugTool vs ExecuteTool.
+
+export interface InvokeToolOptions extends BaseOpts {
+  boxId: string;
+  toolId: string;
+  /** Optional headers to forward to the downstream tool (e.g. Authorization). */
+  header?: Record<string, unknown>;
+  /** Optional query params to forward. */
+  query?: Record<string, unknown>;
+  /** JSON body forwarded to the downstream tool. */
+  body?: unknown;
+  /** Per-call timeout in seconds; backend default applies when omitted. */
+  timeout?: number;
+}
+
+function buildEnvelope(opts: InvokeToolOptions): string {
+  const envelope: Record<string, unknown> = {};
+  if (opts.timeout !== undefined) envelope.timeout = opts.timeout;
+  envelope.header = opts.header ?? {};
+  envelope.query = opts.query ?? {};
+  envelope.body = opts.body ?? {};
+  return JSON.stringify(envelope);
+}
+
+async function invokeTool(opts: InvokeToolOptions, suffix: string): Promise<string> {
+  const { body } = await fetchTextOrThrow(url(opts.baseUrl, suffix), {
+    method: "POST",
+    headers: { ...buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"), "content-type": "application/json" },
+    body: buildEnvelope(opts),
+  });
+  return body;
+}
+
+/** Execute a published+enabled tool through the toolbox proxy. */
+export async function executeTool(opts: InvokeToolOptions): Promise<string> {
+  return invokeTool(opts, `/${encodeURIComponent(opts.boxId)}/proxy/${encodeURIComponent(opts.toolId)}`);
+}
+
+/** Debug a tool through the toolbox proxy (works on draft/disabled tools too). */
+export async function debugTool(opts: InvokeToolOptions): Promise<string> {
+  return invokeTool(opts, `/${encodeURIComponent(opts.boxId)}/tool/${encodeURIComponent(opts.toolId)}/debug`);
 }

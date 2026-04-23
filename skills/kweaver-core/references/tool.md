@@ -11,6 +11,12 @@ kweaver tool upload  --toolbox <box-id> <openapi-spec-path> [--metadata-type ope
 kweaver tool list    --toolbox <box-id> [-bd value] [--pretty|--compact]
 kweaver tool enable  --toolbox <box-id> <tool-id>... [-bd value]
 kweaver tool disable --toolbox <box-id> <tool-id>... [-bd value]
+kweaver tool execute --toolbox <box-id> <tool-id> [--body '<json>'|--body-file <path>]
+                     [--header '<json>'] [--query '<json>'] [--timeout <s>]
+                     [-bd value] [--pretty|--compact]
+kweaver tool debug   --toolbox <box-id> <tool-id> [--body '<json>'|--body-file <path>]
+                     [--header '<json>'] [--query '<json>'] [--timeout <s>]
+                     [-bd value] [--pretty|--compact]
 ```
 
 ## 子命令说明
@@ -49,13 +55,53 @@ kweaver tool enable  --toolbox 1234567890123456789 tool-a tool-b
 kweaver tool disable --toolbox 1234567890123456789 tool-c
 ```
 
+### `execute` / `debug`
+
+通过 toolbox 转发器调用一个 tool。两者共用同一个请求载荷与转发逻辑，唯一区别：
+
+| 子命令 | 调用前置条件 | 后端路由 |
+|--------|--------------|----------|
+| `execute` | tool 已发布且处于 `enabled` 状态 | `POST /tool-box/{box}/proxy/{tool}` |
+| `debug`   | 任意状态（含草稿、`disabled`） | `POST /tool-box/{box}/tool/{tool}/debug` |
+
+**关键：信封（envelope）格式。** 后端期望的请求体是固定结构：
+
+```json
+{
+  "timeout": 60,
+  "header": { "Authorization": "Bearer ..." },
+  "query":  { "key": "value" },
+  "body":   { "...": "..." }
+}
+```
+
+- 若直接发"扁平 body"（不裹 `header/body/query`），转发器会因 `Headers == nil` 把下游 `Authorization` 丢掉，下游服务回 `401 token expired`。
+- CLI 默认会把当前会话的 `Bearer <token>` 作为 `Authorization` 注入 `header`；如果需要匿名调用，传 `--header '{}'` 显式覆盖。
+- `--body` 与 `--body-file` 互斥；都不传则 `body` 为 `{}`。
+- `--timeout` 单位为秒；不传走后端默认。
+
+```bash
+# Execute (要求 tool 已 enabled)
+kweaver tool execute \
+  --toolbox 1234567890123456789 tool-create-task \
+  --body '{"task_id":"t-1","task_name":"demo"}'
+
+# Debug (草稿/disabled 也能跑)
+kweaver tool debug \
+  --toolbox 1234567890123456789 tool-create-task \
+  --body-file payload.json \
+  --header '{"X-Trace-Id":"local-debug-1"}' \
+  --query  '{"dry_run":"true"}' \
+  --timeout 30
+```
+
 ## 通用选项
 
 | 选项 | 说明 | 适用子命令 |
 |------|------|-----------|
 | `-bd, --biz-domain <s>` | 覆盖业务域。默认走 `resolveBusinessDomain()`（`KWEAVER_BUSINESS_DOMAIN` env → 当前平台 `config.json` → `bd_public`） | 全部 |
-| `--pretty` | 把响应体当作 JSON 解析后以 2 空格缩进重排（解析失败则按原文输出，默认） | `upload`、`list` |
-| `--compact` | 原样输出后端响应文本，不做美化（便于管道处理） | `upload`、`list` |
+| `--pretty` | 把响应体当作 JSON 解析后以 2 空格缩进重排（解析失败则按原文输出，默认） | `upload`、`list`、`execute`、`debug` |
+| `--compact` | 原样输出后端响应文本，不做美化（便于管道处理） | `upload`、`list`、`execute`、`debug` |
 
 ## 注意
 

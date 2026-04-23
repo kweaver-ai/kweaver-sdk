@@ -147,6 +147,53 @@ def test_http_signin_with_new_password_auto_retries_once(tmp_kweaver_home) -> No
 
 
 @respx.mock
+def test_http_signin_handles_200_json_redirect_body(tmp_kweaver_home) -> None:
+    """Some deployments respond to POST /oauth2/signin with HTTP 200 and {"redirect": ...}."""
+    base = "https://x.example.com"
+    redirect_uri = "http://127.0.0.1:9010/callback"
+    respx.post(f"{base}/oauth2/clients").mock(
+        return_value=httpx.Response(201, json={"client_id": "cid", "client_secret": "csec"})
+    )
+    respx.get(f"{base}/oauth2/auth", params={"client_id": "cid"}).mock(
+        return_value=httpx.Response(
+            302, headers={"location": f"{base}/oauth2/signin?login_challenge=c"}
+        )
+    )
+    respx.get(f"{base}/oauth2/signin").mock(
+        return_value=httpx.Response(200, text=_signin_html("csrf", "c"))
+    )
+    follow_url = f"{base}/oauth2/auth?login_verifier=v"
+    respx.post(f"{base}/oauth2/signin").mock(
+        return_value=httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={"redirect": follow_url},
+        )
+    )
+    respx.get(f"{base}/oauth2/auth", params={"login_verifier": "v"}).mock(
+        return_value=httpx.Response(
+            302, headers={"location": f"{redirect_uri}?code=AUTHCODE&state=STATE"}
+        )
+    )
+    respx.post(f"{base}/oauth2/token").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "access_token": "AT",
+                "refresh_token": "RT",
+                "id_token": "IT",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "scope": "openid",
+            },
+        )
+    )
+
+    token = http_signin(base, username="alice", password="hunter2")
+    assert token["accessToken"] == "AT"
+
+
+@respx.mock
 def test_http_signin_does_not_retry_more_than_once(tmp_kweaver_home) -> None:
     base = "https://x.example.com"
     respx.post(f"{base}/oauth2/clients").mock(

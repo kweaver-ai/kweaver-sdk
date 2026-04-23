@@ -375,14 +375,37 @@ def http_signin(
                         server_message=str(err_json.get("message", "")),
                     )
                 raise RuntimeError(f"OAuth2 sign-in failed: 401 {post_resp.text[:500]}")
-            if post_resp.status_code not in (302, 303, 307, 308):
+            redirect_target: str | None = None
+            if post_resp.status_code in (302, 303, 307, 308):
+                redirect_target = post_resp.headers.get("location")
+                if not redirect_target:
+                    raise RuntimeError("OAuth2 sign-in redirect missing Location header.")
+            elif post_resp.status_code == 200:
+                ct = post_resp.headers.get("content-type", "")
+                body_text = post_resp.text
+                if "application/json" in ct or body_text.lstrip().startswith("{"):
+                    try:
+                        j = post_resp.json()
+                    except Exception:
+                        j = {}
+                    redir = j.get("redirect") if isinstance(j, dict) else None
+                    if isinstance(redir, str) and redir.strip():
+                        redirect_target = redir.strip()
+                    else:
+                        msg = (
+                            j.get("message") if isinstance(j, dict) else None
+                        ) or body_text[:500]
+                        raise RuntimeError(f"OAuth2 sign-in failed: {msg}")
+                else:
+                    raise RuntimeError(
+                        "OAuth2 sign-in returned 200 without redirect; check password / CSRF / RSA public key."
+                    )
+            else:
                 raise RuntimeError(
                     f"OAuth2 sign-in failed: {post_resp.status_code} {post_resp.text[:500]}"
                 )
-            loc = post_resp.headers.get("location")
-            if not loc:
-                raise RuntimeError("OAuth2 sign-in redirect missing Location header.")
-            code = _follow_to_callback(cx, post_url, loc, client["redirectUri"])
+
+            code = _follow_to_callback(cx, post_url, redirect_target, client["redirectUri"])
 
         token = _exchange_code(
             base,

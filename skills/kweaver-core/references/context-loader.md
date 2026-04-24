@@ -63,16 +63,76 @@ kweaver context-loader get-logic-properties '{"ot_id": "ot-1", "query": "status"
 
 # 获取 Action 信息
 kweaver context-loader get-action-info '{"at_id": "at-1", "_instance_identity": {"id": "123"}}'
-
-# 召回某个对象类下的 Skill（top_k 范围 1..20，默认 10）
-kweaver context-loader find-skills ot_drug --query "treatment" --top-k 5
-# 可选：缩小到具体实例
-kweaver context-loader find-skills ot_drug \
-  --instance-identities '[{"drug_id": "DRUG_001"}]' \
-  --format json
 ```
 
-> SDK 等价方法：TS `client.contextLoader.findSkills({ object_type_id, ... })`，Python `client.context_loader.find_skills("ot_drug", skill_query=..., top_k=...)`。`object_type_id` 必填，`top_k` 必须在 1..20 之间，`response_format` 仅接受 `"json"` / `"toon"`。
+### find-skills — 召回对象类下的 Skill
+
+按对象类（可选缩小到具体实例）召回挂载的 Skill。对应 MCP tool `find_skills`，0.7.0 起可用。
+
+```bash
+# 仅按对象类召回（top_k 默认 10）
+kweaver context-loader find-skills ot_drug
+
+# 加自然语言查询和 top_k
+kweaver context-loader find-skills ot_drug --query "treatment" --top-k 5
+
+# 缩小到具体实例 + 切到 toon 输出
+kweaver context-loader find-skills ot_drug \
+  --instance-identities '[{"drug_id": "DRUG_001"}]' \
+  --format toon
+```
+
+**CLI 参数**
+
+| 参数 | 必填 | 说明 |
+|------|:----:|------|
+| `<object_type_id>` | ✅ | 位置参数，对象类 id |
+| `--query / -q <text>` | | 自然语言查询，缩小召回范围 |
+| `--top-k / -n <N>` | | 1..20，默认 10 |
+| `--instance-identities / -i '<json-array>'` | | 实例身份数组（来自 Layer 2 `_instance_identity`） |
+| `--format / -f json\|toon` | | 输出格式，默认 `json` |
+
+**返回结构**
+
+```json
+{
+  "entries": [
+    { "skill_id": "sk_xxx", "name": "Skill 1", "description": "..." }
+  ],
+  "message": "..."
+}
+```
+
+**SDK 等价**
+
+```ts
+// TypeScript
+const result = await client.contextLoader.findSkills({
+  object_type_id: "ot_drug",
+  skill_query: "treatment",
+  top_k: 5,
+  // instance_identities: [{ drug_id: "DRUG_001" }],
+  // response_format: "json",
+});
+```
+
+```python
+# Python
+result = client.context_loader.find_skills(
+    "ot_drug",
+    skill_query="treatment",
+    top_k=5,
+    # instance_identities=[{"drug_id": "DRUG_001"}],
+    # response_format="json",
+)
+```
+
+**校验规则（client side）**
+
+- `object_type_id` 必填，空字符串直接抛错。
+- `top_k`（若提供）必须在 `[1, 20]`，否则抛错；不传时由服务端按默认 10 处理。
+- `instance_identities`（若提供）必须是数组，每个元素是普通对象（复用 `validateInstanceIdentities`）。
+- `response_format` 仅接受 `"json"` / `"toon"`。
 
 ## JSON 格式
 

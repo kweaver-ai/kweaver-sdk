@@ -130,7 +130,7 @@ Usage:
   kweaver context-loader tool-call <name> --args '<json>'
   kweaver context-loader kn-search <query> [--only-schema]      (compat HTTP)
   kweaver context-loader kn-schema-search <query> [--max N]     (compat HTTP)
-  kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info ...
+  kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills ...
   (alias: kweaver context ...)
 
 Global options:

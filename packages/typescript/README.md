@@ -189,7 +189,7 @@ kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpubl
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
-kweaver context-loader search-schema/tool-call/kn-search/query-object-instance/...
+kweaver context-loader search-schema/tool-call/kn-search/query-object-instance/find-skills/...
 kweaver toolbox create/list/publish/unpublish/delete
 kweaver tool upload/list/enable/disable
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-F key=value]

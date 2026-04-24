@@ -983,8 +983,13 @@ export async function autoSelectBusinessDomain(
     savePlatformBusinessDomain(baseUrl, selected);
     return selected;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`Could not fetch business domains: ${message}. Using bd_public.`);
+    // Endpoint may be unavailable on this deployment or for this account
+    // type — fall back silently. Set KWEAVER_DEBUG=1 to surface the
+    // underlying error during diagnostics.
+    if (process.env.KWEAVER_DEBUG) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`Business domain list unavailable (${message}); defaulting to bd_public.`);
+    }
     return "bd_public";
   }
 }

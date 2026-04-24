@@ -1,8 +1,19 @@
+import { writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
-import { createToolbox, deleteToolbox, listToolboxes, setToolboxStatus } from "../api/toolboxes.js";
+import {
+  createToolbox,
+  deleteToolbox,
+  exportConfig,
+  importConfig,
+  listToolboxes,
+  setToolboxStatus,
+  type ImpexType,
+} from "../api/toolboxes.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
+
+const VALID_IMPEX_TYPES: ReadonlySet<ImpexType> = new Set(["toolbox", "mcp", "operator"]);
 
 const HELP = `kweaver toolbox
 
@@ -12,6 +23,8 @@ Subcommands:
   publish <box-id>                                            Publish a toolbox (status=published)
   unpublish <box-id>                                          Unpublish (status=draft)
   delete <box-id> [-y|--yes]                                  Delete a toolbox
+  export <box-id> [-o <file>|-] [--type toolbox|mcp|operator] Export toolbox config (.adp JSON)
+  import <file> [--type toolbox|mcp|operator]                 Import a previously exported config
 
 Options:
   -bd, --biz-domain <s>   Business domain (default: bd_public)
@@ -31,6 +44,8 @@ export async function runToolboxCommand(args: string[]): Promise<number> {
     if (subcommand === "publish") return runToolboxSetStatus(rest, "published");
     if (subcommand === "unpublish") return runToolboxSetStatus(rest, "draft");
     if (subcommand === "delete") return runToolboxDelete(rest);
+    if (subcommand === "export") return runToolboxExport(rest);
+    if (subcommand === "import") return runToolboxImport(rest);
     return Promise.resolve(-1);
   };
 
@@ -230,5 +245,121 @@ async function runToolboxDelete(args: string[]): Promise<number> {
     boxId,
   });
   console.error(`Deleted toolbox ${boxId}`);
+  return 0;
+}
+
+// ── export / import ──────────────────────────────────────────────────────────
+
+export interface ToolboxExportOptions {
+  boxId: string;
+  output: string;          // file path; "-" for stdout; "" for default <type>_<id>.adp
+  type: ImpexType;
+  businessDomain: string;
+}
+
+export function parseToolboxExportArgs(args: string[]): ToolboxExportOptions {
+  let boxId = "";
+  let output = "";
+  let type: ImpexType = "toolbox";
+  let businessDomain = "";
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if ((a === "-o" || a === "--output") && args[i + 1] !== undefined) { output = args[++i]; continue; }
+    if (a === "--type" && args[i + 1]) {
+      const v = args[++i];
+      if (!VALID_IMPEX_TYPES.has(v as ImpexType)) {
+        throw new Error(`--type must be one of: ${[...VALID_IMPEX_TYPES].join(", ")}`);
+      }
+      type = v as ImpexType;
+      continue;
+    }
+    if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) { businessDomain = args[++i]; continue; }
+    if (!a.startsWith("-")) { boxId = a; continue; }
+  }
+  if (!boxId) throw new Error("Missing required argument: <box-id>");
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+  return { boxId, output, type, businessDomain };
+}
+
+async function runToolboxExport(args: string[]): Promise<number> {
+  let opts: ToolboxExportOptions;
+  try { opts = parseToolboxExportArgs(args); }
+  catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    console.error("Usage: kweaver toolbox export <box-id> [-o <file>|-] [--type toolbox|mcp|operator]");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const buf = await exportConfig({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    businessDomain: opts.businessDomain,
+    id: opts.boxId,
+    type: opts.type,
+  });
+
+  if (opts.output === "-") {
+    process.stdout.write(buf);
+    if (buf.length === 0 || buf[buf.length - 1] !== 0x0a) process.stdout.write("\n");
+    return 0;
+  }
+
+  const target = opts.output || `${opts.type}_${opts.boxId}.adp`;
+  await writeFile(target, buf);
+  console.error(`Exported ${opts.type} ${opts.boxId} → ${target} (${buf.byteLength} bytes)`);
+  return 0;
+}
+
+export interface ToolboxImportOptions {
+  filePath: string;
+  type: ImpexType;
+  businessDomain: string;
+  pretty: boolean;
+}
+
+export function parseToolboxImportArgs(args: string[]): ToolboxImportOptions {
+  let filePath = "";
+  let type: ImpexType = "toolbox";
+  let businessDomain = "";
+  let pretty = true;
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if (a === "--type" && args[i + 1]) {
+      const v = args[++i];
+      if (!VALID_IMPEX_TYPES.has(v as ImpexType)) {
+        throw new Error(`--type must be one of: ${[...VALID_IMPEX_TYPES].join(", ")}`);
+      }
+      type = v as ImpexType;
+      continue;
+    }
+    if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) { businessDomain = args[++i]; continue; }
+    if (a === "--pretty") { pretty = true; continue; }
+    if (a === "--compact") { pretty = false; continue; }
+    if (!a.startsWith("-")) { filePath = a; continue; }
+  }
+  if (!filePath) throw new Error("Missing required argument: <file>");
+  if (!businessDomain) businessDomain = resolveBusinessDomain();
+  return { filePath, type, businessDomain, pretty };
+}
+
+async function runToolboxImport(args: string[]): Promise<number> {
+  let opts: ToolboxImportOptions;
+  try { opts = parseToolboxImportArgs(args); }
+  catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    console.error("Usage: kweaver toolbox import <file> [--type toolbox|mcp|operator]");
+    return 1;
+  }
+
+  const token = await ensureValidToken();
+  const body = await importConfig({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    businessDomain: opts.businessDomain,
+    filePath: opts.filePath,
+    type: opts.type,
+  });
+  console.log(formatCallOutput(body, opts.pretty));
   return 0;
 }

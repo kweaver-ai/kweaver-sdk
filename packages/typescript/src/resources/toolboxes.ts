@@ -2,10 +2,13 @@ import type { ClientContext } from "../client.js";
 import {
   debugTool,
   executeTool,
+  exportConfig,
+  importConfig,
   listTools,
   listToolboxes,
   setToolStatuses,
   uploadTool,
+  type ImpexType,
 } from "../api/toolboxes.js";
 
 export interface InvokeToolArgs {
@@ -69,6 +72,22 @@ export class ToolboxesResource {
       toolId,
       ...this.injectAuth(args),
     });
+  }
+
+  /**
+   * Export a toolbox/mcp/operator config (.adp JSON) as raw bytes.
+   *
+   * Returned bytes are usually UTF-8 JSON; mirrors the Python SDK's
+   * `export_config -> bytes`. Use `new TextDecoder().decode(buf)` if you
+   * need a string.
+   */
+  async exportConfig(id: string, opts: { type?: ImpexType } = {}): Promise<Uint8Array> {
+    return exportConfig({ ...this.ctx.base(), id, type: opts.type });
+  }
+
+  /** Import a previously exported config from disk. */
+  async importConfig(filePath: string, opts: { type?: ImpexType } = {}): Promise<string> {
+    return importConfig({ ...this.ctx.base(), filePath, type: opts.type });
   }
 
   // The forwarder requires every header the downstream tool expects to be set

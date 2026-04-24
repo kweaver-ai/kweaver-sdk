@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { fetchTextOrThrow } from "../utils/http.js";
+import { HttpError, fetchTextOrThrow, fetchWithRetry } from "../utils/http.js";
 import { buildHeaders } from "./headers.js";
 
 // Backend endpoints under /api/agent-operator-integration/v1/tool-box.
@@ -145,6 +145,65 @@ export async function listTools(opts: ListToolsOptions): Promise<string> {
   const { body } = await fetchTextOrThrow(url(opts.baseUrl, `/${encodeURIComponent(opts.boxId)}/tools/list`), {
     method: "GET",
     headers: buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"),
+  });
+  return body;
+}
+
+// ── impex (export / import) ──────────────────────────────────────────────────
+//
+// Backend mounts the impex endpoints on the same service but under a different
+// path:
+//
+//   GET  /api/agent-operator-integration/v1/impex/export/{type}/{id}
+//   POST /api/agent-operator-integration/v1/impex/import/{type}   (multipart, field "data")
+//
+// Supported {type} values today: "toolbox" | "mcp" | "operator".
+//
+// Export response is the raw JSON config (Content-Type: application/json) plus
+// a `Content-Disposition: attachment; filename=<type>_export_<ts>.adp` header.
+
+const IMPEX_PATH = "/api/agent-operator-integration/v1/impex";
+
+export type ImpexType = "toolbox" | "mcp" | "operator";
+
+export interface ExportConfigOptions extends BaseOpts {
+  id: string;
+  type?: ImpexType;
+}
+
+export async function exportConfig(opts: ExportConfigOptions): Promise<Uint8Array> {
+  const t = opts.type ?? "toolbox";
+  const target = `${opts.baseUrl.replace(/\/+$/, "")}${IMPEX_PATH}/export/${encodeURIComponent(t)}/${encodeURIComponent(opts.id)}`;
+  // Use raw bytes (not text) so we never lose precision on non-ASCII payloads
+  // and stay symmetric with the Python SDK's `export_config -> bytes`.
+  const response = await fetchWithRetry(target, {
+    method: "GET",
+    headers: buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"),
+  });
+  const buf = new Uint8Array(await response.arrayBuffer());
+  if (!response.ok) {
+    const text = new TextDecoder("utf-8").decode(buf);
+    throw new HttpError(response.status, response.statusText, text);
+  }
+  return buf;
+}
+
+export interface ImportConfigOptions extends BaseOpts {
+  /** Path to a previously exported `.adp` JSON file. */
+  filePath: string;
+  type?: ImpexType;
+}
+
+export async function importConfig(opts: ImportConfigOptions): Promise<string> {
+  const buf = await readFile(opts.filePath);
+  const t = opts.type ?? "toolbox";
+  const form = new FormData();
+  form.append("data", new Blob([buf]), basename(opts.filePath));
+  const target = `${opts.baseUrl.replace(/\/+$/, "")}${IMPEX_PATH}/import/${encodeURIComponent(t)}`;
+  const { body } = await fetchTextOrThrow(target, {
+    method: "POST",
+    headers: buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"),
+    body: form,
   });
   return body;
 }

@@ -40,26 +40,26 @@ Usage:
   kweaver token
 
   kweaver call <url> [-X METHOD] [-H "Name: value"] [-d BODY] [--data-raw BODY]
-             [--url URL] [--pretty] [--verbose] [-bd value]
+             [--url URL] [--verbose] [-bd value]
   (alias: kweaver curl ...)
 
   kweaver agent chat <agent_id> [-m "message"] [--version value] [--conversation-id id]
                 [--stream] [--no-stream] [--verbose] [-bd value]
-  kweaver agent list [--name X] [--limit N] [--offset N] [-bd value] [--pretty]
-  kweaver agent get <agent_id> [-bd value] [--pretty]
-  kweaver agent get-by-key <key> [-bd value] [--pretty]
-  kweaver agent sessions <agent_id> [-bd value] [--limit N] [--pretty]
-  kweaver agent history <conversation_id> [-bd value] [--limit N] [--pretty]
+  kweaver agent list [--name X] [--limit N] [--offset N] [-bd value]
+  kweaver agent get <agent_id> [-bd value]
+  kweaver agent get-by-key <key> [-bd value]
+  kweaver agent sessions <agent_id> [-bd value] [--limit N]
+  kweaver agent history <conversation_id> [-bd value] [--limit N]
   kweaver agent create [options]
   kweaver agent update <agent_id> [options]
   kweaver agent delete <agent_id> [-bd value]
   kweaver agent publish <agent_id> [-bd value]
   kweaver agent unpublish <agent_id> [-bd value]
 
-  kweaver ds list [--keyword X] [--type T] [-bd value] [--pretty]
+  kweaver ds list [--keyword X] [--type T] [-bd value]
   kweaver ds get <id>
   kweaver ds delete <id> [-y]
-  kweaver ds tables <id> [--keyword X] [--pretty]
+  kweaver ds tables <id> [--keyword X]
   kweaver ds connect <db_type> <host> <port> <database> --account X --password Y [--schema S] [--name N]
 
   kweaver dataflow list [-bd value]
@@ -67,15 +67,15 @@ Usage:
   kweaver dataflow runs <dagId> [--since <date-like>] [-bd value]
   kweaver dataflow logs <dagId> <instanceId> [--detail] [-bd value]
 
-  kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value] [--pretty]
-  kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value] [--pretty]
-  kweaver dataview get <id> [-bd value] [--pretty]
-  kweaver dataview query <id> [--sql sql] [--limit n] [--offset n] [--need-total] [--raw-sql] [-bd value] [--pretty]
+  kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value]
+  kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value]
+  kweaver dataview get <id> [-bd value]
+  kweaver dataview query <id> [--sql sql] [--limit n] [--offset n] [--need-total] [--raw-sql] [-bd value]
   kweaver dataview delete <id> [-y] [-bd value]
 
   kweaver bkn list [options]
   kweaver bkn get <kn-id> [options]
-  kweaver bkn search <kn-id> <query> [--max-concepts N] [--mode M] [--pretty] [-bd value]
+  kweaver bkn search <kn-id> <query> [--max-concepts N] [--mode M] [-bd value]
   kweaver bkn create [options]
   kweaver bkn create-from-ds [options]
   kweaver bkn update <kn-id> [options]
@@ -108,6 +108,8 @@ Usage:
   kweaver toolbox list [--keyword X] [--limit N] [--offset N] [-bd value]
   kweaver toolbox publish|unpublish <box-id> [-bd value]
   kweaver toolbox delete <box-id> [-y] [-bd value]
+  kweaver toolbox export <box-id> [-o <file>|-] [--type toolbox|mcp|operator]
+  kweaver toolbox import <file> [--type toolbox|mcp|operator]
 
   kweaver tool upload --toolbox <box-id> <openapi-spec-path> [--metadata-type openapi]
   kweaver tool list --toolbox <box-id> [-bd value]
@@ -135,6 +137,9 @@ Usage:
 
 Global options:
   --user <id|name>  Use a specific user's credentials for this command (env: KWEAVER_USER)
+  --pretty / --compact
+                    Toggle pretty-printed JSON output. Supported by every
+                    command that prints a JSON payload (default: pretty).
 
 Commands:
   auth           Login, list, inspect, and switch saved platform auth profiles
@@ -148,7 +153,7 @@ Commands:
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
   skill          Skill registry and market (register, search, progressive read, download/install)
-  toolbox        Agent toolbox lifecycle (create, list, publish, delete)
+  toolbox        Agent toolbox lifecycle (create, list, publish, delete, export, import)
   tool           Tools inside a toolbox (upload OpenAPI spec, list, enable/disable)
   vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)
   context-loader Context-loader MCP/HTTP (config, tools, resources, search-schema, tool-call, query-*, etc.)

@@ -13,7 +13,12 @@ kweaver toolbox list   [--keyword <s>] [--limit <n>] [--offset <n>] [-bd value] 
 kweaver toolbox publish   <box-id> [-bd value]
 kweaver toolbox unpublish <box-id> [-bd value]
 kweaver toolbox delete    <box-id> [-y|--yes] [-bd value]
+kweaver toolbox export    <box-id> [-o <file>|-] [--type toolbox|mcp|operator] [-bd value]
+kweaver toolbox import    <file>   [--type toolbox|mcp|operator] [-bd value] [--pretty|--compact]
 ```
+
+> `export` / `import` 走的是另一组后端入口 `/api/agent-operator-integration/v1/impex/{export|import}/{type}/...`，
+> 与上面 `tool-box` 系列接口共用同一个服务，但不在同一个 path 下。
 
 ## 子命令说明
 
@@ -64,6 +69,38 @@ kweaver toolbox unpublish 1234567890123456789
 kweaver toolbox delete 1234567890123456789          # 交互式
 kweaver toolbox delete 1234567890123456789 -y       # 自动确认
 ```
+
+### `export`
+
+- 拉取一个 toolbox / mcp / operator 的完整配置（`.adp` JSON 文件），用于跨环境迁移或备份。
+- `--type` 默认 `toolbox`，可改为 `mcp` 或 `operator`。
+- `-o <file>` 指定输出文件名；`-o -` 写到 stdout；省略则落到当前目录的 `<type>_<id>.adp`。
+- 成功在 stderr 打印 `Exported <type> <id> → <file> (<n> bytes)`，stdout 留给文件内容（仅当 `-o -` 时）。
+
+```bash
+# 导出 toolbox 到默认文件名
+kweaver toolbox export 1234567890123456789
+# → toolbox_1234567890123456789.adp
+
+# 自定义文件名
+kweaver toolbox export 1234567890123456789 -o my-backup.adp
+
+# 直接 piped 到 jq
+kweaver toolbox export 1234567890123456789 -o - | jq '.box_name'
+```
+
+### `import`
+
+- 把 `export` 拉下来的 `.adp` 文件回灌到目标环境。
+- multipart 上传，字段名 `data`（与后端 `ImportConfig` 约定一致）。
+- 成功输出后端响应（典型形如 `{"box_id": "..."}` 或 `{"imported": true}`），按 `--pretty`/`--compact` 格式化。
+
+```bash
+kweaver toolbox import my-backup.adp
+kweaver toolbox import my-backup.adp --type mcp --compact
+```
+
+> ⚠️ 导入会在目标环境**新建**对应实体（box/mcp/operator），不会就地更新。若已存在同名/同 ID 实体，按后端策略可能报冲突，请先 `delete` 或换 ID。
 
 ## 通用选项
 

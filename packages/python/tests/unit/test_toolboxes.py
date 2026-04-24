@@ -151,6 +151,88 @@ def test_execute_forward_auth_false_omits_authorization():
         client.close()
 
 
+_IMPEX_PREFIX = "/api/agent-operator-integration/v1/impex"
+
+
+def test_export_config_gets_impex_endpoint_and_returns_raw_bytes():
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["method"] = request.method
+        return httpx.Response(200, content=b'{"box":"b1"}')
+
+    client = _client(handler)
+    try:
+        result = client.toolboxes.export_config("b1")
+        assert result == b'{"box":"b1"}'
+        assert captured["path"] == f"{_IMPEX_PREFIX}/export/toolbox/b1"
+        assert captured["method"] == "GET"
+    finally:
+        client.close()
+
+
+def test_export_config_supports_mcp_type():
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        return httpx.Response(200, content=b"{}")
+
+    client = _client(handler)
+    try:
+        client.toolboxes.export_config("m1", type="mcp")
+        assert captured["path"] == f"{_IMPEX_PREFIX}/export/mcp/m1"
+    finally:
+        client.close()
+
+
+def test_import_config_posts_multipart_data_field(tmp_path):
+    src = tmp_path / "toolbox_b1.adp"
+    src.write_text('{"hello":"world"}', encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["method"] = request.method
+        captured["content_type"] = request.headers.get("content-type", "")
+        captured["body"] = request.content
+        return httpx.Response(200, json={"code": 0, "data": {"imported": True}})
+
+    client = _client(handler)
+    try:
+        result = client.toolboxes.import_config(src)
+        assert result == {"imported": True}
+        assert captured["path"] == f"{_IMPEX_PREFIX}/import/toolbox"
+        assert captured["method"] == "POST"
+        assert "multipart/form-data" in str(captured["content_type"])
+        body_bytes = captured["body"]
+        assert isinstance(body_bytes, (bytes, bytearray))
+        # multipart payload contains the field name "data" and the file content
+        assert b'name="data"' in body_bytes
+        assert b'{"hello":"world"}' in body_bytes
+    finally:
+        client.close()
+
+
+def test_import_config_raises_on_4xx(tmp_path):
+    src = tmp_path / "broken.adp"
+    src.write_text("{}", encoding="utf-8")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"code": 1, "message": "invalid file"})
+
+    client = _client(handler)
+    try:
+        import pytest
+
+        with pytest.raises(Exception):
+            client.toolboxes.import_config(src)
+    finally:
+        client.close()
+
+
 def test_execute_caller_provided_authorization_is_preserved():
     captured: dict[str, object] = {}
 

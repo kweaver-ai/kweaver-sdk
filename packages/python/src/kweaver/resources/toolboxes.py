@@ -16,9 +16,11 @@ if TYPE_CHECKING:
 
 
 _PREFIX = "/api/agent-operator-integration/v1/tool-box"
+_IMPEX_PREFIX = "/api/agent-operator-integration/v1/impex"
 
 ToolStatus = Literal["enabled", "disabled"]
 ToolboxStatus = Literal["draft", "published"]
+ImpexType = Literal["toolbox", "mcp", "operator"]
 
 
 def _unwrap_data(payload: Any) -> Any:
@@ -118,6 +120,60 @@ class ToolboxesResource:
                 tool_id, status = item
                 normalised.append({"tool_id": tool_id, "status": status})
         self._http.post(f"{_PREFIX}/{box_id}/tools/status", json={"updates": normalised})
+
+    # ── impex (export / import) ──────────────────────────────────────────────
+
+    def export_config(self, box_id: str, *, type: ImpexType = "toolbox") -> bytes:
+        """Export a toolbox/mcp/operator config; returns raw `.adp` JSON bytes.
+
+        The backend response is `application/json` with a
+        `Content-Disposition: attachment; filename=...adp` header.
+        """
+        status, content = self._http.get_bytes(
+            f"{_IMPEX_PREFIX}/export/{type}/{box_id}",
+        )
+        if status >= 400:
+            from kweaver._errors import raise_for_status_parts
+
+            raise_for_status_parts(status, content)
+        return content
+
+    def import_config(
+        self,
+        file_path: str | Path,
+        *,
+        type: ImpexType = "toolbox",
+    ) -> Any:
+        """Import a previously exported config file (multipart, field name `data`)."""
+        path = Path(file_path)
+        files = {"data": (path.name, path.read_bytes(), "application/octet-stream")}
+        status, content = self._http.post_multipart(
+            f"{_IMPEX_PREFIX}/import/{type}",
+            files=files,
+        )
+        if status >= 400:
+            from kweaver._errors import raise_for_status_parts
+
+            raise_for_status_parts(status, content)
+        if not content:
+            return None
+        import json as _json
+
+        # Backend always returns JSON on success; if it ever doesn't (e.g. a
+        # transient gateway HTML page slipped through with status 200) we
+        # surface that as the raw decoded text rather than silently returning
+        # garbage — but we ALSO log so callers notice.
+        try:
+            return _unwrap_data(_json.loads(content))
+        except _json.JSONDecodeError:
+            import sys
+
+            print(
+                "kweaver: import_config got non-JSON 2xx response; "
+                "returning raw text. Set KWEAVER_DEBUG=1 to inspect.",
+                file=sys.stderr,
+            )
+            return content.decode("utf-8", errors="replace")
 
     # ── execute / debug ──────────────────────────────────────────────────────
 

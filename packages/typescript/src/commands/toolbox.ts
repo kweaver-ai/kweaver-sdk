@@ -291,7 +291,7 @@ async function runToolboxExport(args: string[]): Promise<number> {
   }
 
   const token = await ensureValidToken();
-  const body = await exportConfig({
+  const buf = await exportConfig({
     baseUrl: token.baseUrl,
     accessToken: token.accessToken,
     businessDomain: opts.businessDomain,
@@ -300,14 +300,14 @@ async function runToolboxExport(args: string[]): Promise<number> {
   });
 
   if (opts.output === "-") {
-    process.stdout.write(body);
-    if (!body.endsWith("\n")) process.stdout.write("\n");
+    process.stdout.write(buf);
+    if (buf.length === 0 || buf[buf.length - 1] !== 0x0a) process.stdout.write("\n");
     return 0;
   }
 
   const target = opts.output || `${opts.type}_${opts.boxId}.adp`;
-  await writeFile(target, body, "utf-8");
-  console.error(`Exported ${opts.type} ${opts.boxId} → ${target} (${body.length} bytes)`);
+  await writeFile(target, buf);
+  console.error(`Exported ${opts.type} ${opts.boxId} → ${target} (${buf.byteLength} bytes)`);
   return 0;
 }
 

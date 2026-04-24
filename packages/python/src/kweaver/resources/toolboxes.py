@@ -155,12 +155,25 @@ class ToolboxesResource:
             from kweaver._errors import raise_for_status_parts
 
             raise_for_status_parts(status, content)
-        try:
-            import json as _json
+        if not content:
+            return None
+        import json as _json
 
-            return _unwrap_data(_json.loads(content) if content else None)
-        except Exception:
-            return content.decode("utf-8", errors="replace") if content else None
+        # Backend always returns JSON on success; if it ever doesn't (e.g. a
+        # transient gateway HTML page slipped through with status 200) we
+        # surface that as the raw decoded text rather than silently returning
+        # garbage — but we ALSO log so callers notice.
+        try:
+            return _unwrap_data(_json.loads(content))
+        except _json.JSONDecodeError:
+            import sys
+
+            print(
+                "kweaver: import_config got non-JSON 2xx response; "
+                "returning raw text. Set KWEAVER_DEBUG=1 to inspect.",
+                file=sys.stderr,
+            )
+            return content.decode("utf-8", errors="replace")
 
     # ── execute / debug ──────────────────────────────────────────────────────
 

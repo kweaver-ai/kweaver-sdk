@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { fetchTextOrThrow } from "../utils/http.js";
+import { HttpError, fetchTextOrThrow, fetchWithRetry } from "../utils/http.js";
 import { buildHeaders } from "./headers.js";
 
 // Backend endpoints under /api/agent-operator-integration/v1/tool-box.
@@ -171,14 +171,21 @@ export interface ExportConfigOptions extends BaseOpts {
   type?: ImpexType;
 }
 
-export async function exportConfig(opts: ExportConfigOptions): Promise<string> {
+export async function exportConfig(opts: ExportConfigOptions): Promise<Uint8Array> {
   const t = opts.type ?? "toolbox";
   const target = `${opts.baseUrl.replace(/\/+$/, "")}${IMPEX_PATH}/export/${encodeURIComponent(t)}/${encodeURIComponent(opts.id)}`;
-  const { body } = await fetchTextOrThrow(target, {
+  // Use raw bytes (not text) so we never lose precision on non-ASCII payloads
+  // and stay symmetric with the Python SDK's `export_config -> bytes`.
+  const response = await fetchWithRetry(target, {
     method: "GET",
     headers: buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"),
   });
-  return body;
+  const buf = new Uint8Array(await response.arrayBuffer());
+  if (!response.ok) {
+    const text = new TextDecoder("utf-8").decode(buf);
+    throw new HttpError(response.status, response.statusText, text);
+  }
+  return buf;
 }
 
 export interface ImportConfigOptions extends BaseOpts {

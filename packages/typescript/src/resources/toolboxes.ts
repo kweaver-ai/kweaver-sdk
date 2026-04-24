@@ -74,8 +74,14 @@ export class ToolboxesResource {
     });
   }
 
-  /** Export a toolbox/mcp/operator config (.adp JSON) and return its raw text. */
-  async exportConfig(id: string, opts: { type?: ImpexType } = {}): Promise<string> {
+  /**
+   * Export a toolbox/mcp/operator config (.adp JSON) as raw bytes.
+   *
+   * Returned bytes are usually UTF-8 JSON; mirrors the Python SDK's
+   * `export_config -> bytes`. Use `new TextDecoder().decode(buf)` if you
+   * need a string.
+   */
+  async exportConfig(id: string, opts: { type?: ImpexType } = {}): Promise<Uint8Array> {
     return exportConfig({ ...this.ctx.base(), id, type: opts.type });
   }
 

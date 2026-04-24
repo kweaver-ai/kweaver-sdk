@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exportConfig, importConfig } from "../src/api/toolboxes.js";
@@ -18,18 +18,33 @@ function mockFetch(handler: (url: RequestInfo | URL, init?: RequestInit) => Prom
 
 // ── api/toolboxes.ts ─────────────────────────────────────────────────────────
 
-test("exportConfig GETs /impex/export/{type}/{id} and returns raw body", async () => {
+test("exportConfig GETs /impex/export/{type}/{id} and returns raw bytes", async () => {
   let captured: { url: string; init?: RequestInit } | null = null;
   const restore = mockFetch(async (url, init) => {
     captured = { url: String(url), init };
     return new Response('{"box":"b1"}', { status: 200, headers: { "content-type": "application/json" } });
   });
   try {
-    const body = await exportConfig({ baseUrl: BASE, accessToken: TOKEN, id: "b1" });
-    assert.equal(body, '{"box":"b1"}');
+    const buf = await exportConfig({ baseUrl: BASE, accessToken: TOKEN, id: "b1" });
+    assert.ok(buf instanceof Uint8Array, "exportConfig must return Uint8Array");
+    assert.equal(new TextDecoder("utf-8").decode(buf), '{"box":"b1"}');
     assert.ok(captured);
     assert.equal(captured!.url, `${BASE}${IMPEX}/export/toolbox/b1`);
     assert.equal(captured!.init?.method, "GET");
+  } finally { restore(); }
+});
+
+test("exportConfig preserves multi-byte payloads byte-for-byte (no string round-trip loss)", async () => {
+  // Chinese name in the .adp content — verifies we don't go through `string`.
+  const payload = '{"name":"基础结构化数据分析工具箱2"}';
+  const expectedBytes = new TextEncoder().encode(payload);
+  const restore = mockFetch(async () =>
+    new Response(expectedBytes, { status: 200, headers: { "content-type": "application/json" } })
+  );
+  try {
+    const buf = await exportConfig({ baseUrl: BASE, accessToken: TOKEN, id: "b1" });
+    assert.equal(buf.byteLength, expectedBytes.byteLength);
+    assert.deepEqual(Array.from(buf), Array.from(expectedBytes));
   } finally { restore(); }
 });
 

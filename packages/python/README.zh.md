@@ -140,6 +140,22 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | 数据视图（mdl-data-model） | `client.dataviews` | `create`, `list`, `get`, `delete`, `find_by_table`, `query`（mdl-uniquery SQL） |
 | Skill | `client.skills` | `list`, `market`, `get`, `register_content`, `register_zip`, `update_status`, `content`, `read_file`, `download`, `install` |
 
+Context Loader MCP 可直接使用 `ContextLoaderResource`：
+
+```python
+from kweaver.resources import ContextLoaderResource
+
+cl = ContextLoaderResource(base_url, token, kn_id="kn_01")
+schema = cl.search_schema("利润率")
+raw = cl.call_tool("search_schema", {"query": "利润率"})
+```
+
+`search_schema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
+
+需要直接使用 MCP 原生 `tools/call` 时，使用 `call_tool(name, args)`。这适用于服务端新增工具但 SDK 尚未提供类型化封装的场景，参数会原样透传。
+
+自签名证书的开发环境可传入 `tls_insecure=True`。
+
 ### Vega（数据平台）
 
 | 资源 | 访问方式 | 方法 |

@@ -1,4 +1,5 @@
 import { buildHeaders } from "../api/headers.js";
+import { knSearchHttp } from "../api/semantic-search.js";
 import {
   objectTypeQuery,
   objectTypeProperties,
@@ -131,7 +132,7 @@ export class BknResource {
 
   /**
    * Search KN schema — finds matching object types, relation types, and action types.
-   * Uses MCP protocol via the context-loader (public endpoint).
+   * Uses the public agent-retrieval HTTP compatibility endpoint.
    */
   async knSearch(
     knId: string,
@@ -141,18 +142,22 @@ export class BknResource {
     object_types?: unknown[];
     relation_types?: unknown[];
     action_types?: unknown[];
+    metric_types?: unknown[];
     nodes?: unknown[];
   }> {
-    const { ContextLoaderResource } = await import("./context-loader.js");
-    const { baseUrl } = this.ctx.base();
-    const mcpUrl = `${baseUrl}/api/agent-retrieval/v1/mcp`;
-    const cl = new ContextLoaderResource(this.ctx, mcpUrl, knId);
-    const result = await cl.search({ query, only_schema: opts.onlySchema ?? false });
-    return result as {
+    const raw = await knSearchHttp({
+      ...this.ctx.base(),
+      knId,
+      query,
+      onlySchema: opts.onlySchema ?? false,
+    });
+    const result = JSON.parse(raw) as {
       object_types?: unknown[];
       relation_types?: unknown[];
       action_types?: unknown[];
+      metric_types?: unknown[];
       nodes?: unknown[];
     };
+    return result;
   }
 }

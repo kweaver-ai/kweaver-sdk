@@ -1,8 +1,8 @@
 import { ensureValidToken, formatHttpError, resolveActivePlatform, with401RefreshRetry } from "../auth/oauth.js";
-import type { ConditionSpec, RelationTypePath } from "../api/context-loader.js";
+import type { ConditionSpec, RelationTypePath, SearchSchemaScope } from "../api/context-loader.js";
 import {
-  knSearch,
-  knSchemaSearch,
+  callTool,
+  searchSchema,
   queryObjectInstance,
   queryInstanceSubgraph,
   getLogicPropertiesValues,
@@ -14,11 +14,13 @@ import {
   listPrompts,
   getPrompt,
 } from "../api/context-loader.js";
+import { knSearchHttp, semanticSearch } from "../api/semantic-search.js";
 import {
   addContextLoaderEntry,
   getCurrentContextLoaderKn,
   loadContextLoaderConfig,
   removeContextLoaderEntry,
+  resolveBusinessDomain,
   setCurrentContextLoader,
 } from "../config/store.js";
 
@@ -26,9 +28,11 @@ const MCP_NOT_CONFIGURED =
   "Context-loader MCP is not configured. Run: kweaver context-loader config set --kn-id <kn-id>";
 
 function ensureContextLoaderConfig(): {
+  baseUrl: string;
   mcpUrl: string;
   knId: string;
   accessToken: string;
+  businessDomain: string;
 } {
   const active = resolveActivePlatform();
   if (!active) {
@@ -43,9 +47,11 @@ function ensureContextLoaderConfig(): {
   }
 
   return {
+    baseUrl: active.url,
     mcpUrl: kn.mcpUrl,
     knId: kn.knId,
     accessToken: "", // filled by caller after ensureValidToken
+    businessDomain: resolveBusinessDomain(active.url),
   };
 }
 
@@ -72,8 +78,10 @@ Subcommands:
   templates                           resources/templates/list - list resource templates
   prompts                             prompts/list - list prompts
   prompt <name> [--args json]          prompts/get - get prompt by name
-  kn-search <query> [--only-schema]    Layer 1: Search schema (object_types, relation_types, action_types)
-  kn-schema-search <query> [--max N]   Layer 1: Discover candidate concepts
+  search-schema <query> [options]      MCP search_schema (object/relation/action/metric types)
+  tool-call <name> --args '<json>'     MCP tools/call for any server tool
+  kn-search <query> [--only-schema]    Compatibility: HTTP kn_search
+  kn-schema-search <query> [--max N]   Compatibility: HTTP semantic-search
   query-object-instance <json>         Layer 2: Query instances (args as JSON)
   query-instance-subgraph <json>       Layer 2: Query subgraph (args as JSON)
   get-logic-properties <json>          Layer 3: Get logic property values (args as JSON)
@@ -82,6 +90,8 @@ Subcommands:
 Examples:
   kweaver context-loader config set --kn-id d5iv6c9818p72mpje8pg
   kweaver context-loader config set --kn-id xyz123 --name project-a
+  kweaver context-loader search-schema "利润率" --scope object,metric --max 5
+  kweaver context-loader tool-call search_schema --args '{"query":"利润率"}'
   kweaver context-loader kn-search "高血压 治疗 药品" --only-schema --pretty`);
     return 0;
   }
@@ -108,6 +118,8 @@ Examples:
     if (subcommand === "templates") return runListTemplates(options, rest, pretty);
     if (subcommand === "prompts") return runListPrompts(options, rest, pretty);
     if (subcommand === "prompt") return runGetPrompt(options, rest, pretty);
+    if (subcommand === "search-schema") return runSearchSchema(options, rest, pretty);
+    if (subcommand === "tool-call") return runToolCall(options, rest, pretty);
     if (subcommand === "kn-search") return runKnSearch(options, rest, pretty);
     if (subcommand === "kn-schema-search") return runKnSchemaSearch(options, rest, pretty);
     if (subcommand === "query-object-instance") return runQueryObjectInstance(options, rest, pretty);
@@ -347,8 +359,157 @@ async function runGetPrompt(
   return 0;
 }
 
-async function runKnSearch(
+function parseResponseText(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { raw: text };
+  }
+}
+
+function parseSearchSchemaScope(raw: string): SearchSchemaScope {
+  const scope: Required<SearchSchemaScope> = {
+    include_object_types: false,
+    include_relation_types: false,
+    include_action_types: false,
+    include_metric_types: false,
+  };
+  const aliases: Record<string, keyof SearchSchemaScope> = {
+    object: "include_object_types",
+    objects: "include_object_types",
+    object_type: "include_object_types",
+    object_types: "include_object_types",
+    relation: "include_relation_types",
+    relations: "include_relation_types",
+    relation_type: "include_relation_types",
+    relation_types: "include_relation_types",
+    action: "include_action_types",
+    actions: "include_action_types",
+    action_type: "include_action_types",
+    action_types: "include_action_types",
+    metric: "include_metric_types",
+    metrics: "include_metric_types",
+    metric_type: "include_metric_types",
+    metric_types: "include_metric_types",
+  };
+
+  for (const item of raw.split(",")) {
+    const key = item.trim().toLowerCase();
+    if (!key) continue;
+    const field = aliases[key];
+    if (!field) {
+      throw new Error(`Invalid --scope value: ${item}`);
+    }
+    scope[field] = true;
+  }
+  return scope;
+}
+
+async function runSearchSchema(
   options: { mcpUrl: string; knId: string; accessToken: string },
+  args: string[],
+  pretty: boolean
+): Promise<number> {
+  let query: string | undefined;
+  let responseFormat: "json" | "toon" | undefined;
+  let searchScope: SearchSchemaScope | undefined;
+  let maxConcepts: number | undefined;
+  let schemaBrief: boolean | undefined;
+  let enableRerank: boolean | undefined;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if ((arg === "--format" || arg === "-f") && args[i + 1]) {
+      const value = args[i + 1];
+      if (value !== "json" && value !== "toon") {
+        console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--max N] [--brief] [--no-rerank]");
+        return 1;
+      }
+      responseFormat = value;
+      i += 1;
+    } else if ((arg === "--scope" || arg === "-s") && args[i + 1]) {
+      try {
+        searchScope = parseSearchSchemaScope(args[i + 1]);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        return 1;
+      }
+      i += 1;
+    } else if ((arg === "--max" || arg === "-n") && args[i + 1]) {
+      maxConcepts = parseInt(args[i + 1], 10);
+      if (!Number.isFinite(maxConcepts)) {
+        console.error("Usage: kweaver context-loader search-schema <query> [--max N]");
+        return 1;
+      }
+      i += 1;
+    } else if (arg === "--brief") {
+      schemaBrief = true;
+    } else if (arg === "--no-rerank") {
+      enableRerank = false;
+    } else if (!arg.startsWith("-") && !query) {
+      query = arg;
+    }
+  }
+
+  if (!query) {
+    console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--max N] [--brief] [--no-rerank]");
+    return 1;
+  }
+
+  const result = await searchSchema(options, {
+    query,
+    response_format: responseFormat,
+    search_scope: searchScope,
+    max_concepts: maxConcepts,
+    schema_brief: schemaBrief,
+    enable_rerank: enableRerank,
+  });
+  console.log(formatOutput(result, pretty));
+  return 0;
+}
+
+async function runToolCall(
+  options: { mcpUrl: string; knId: string; accessToken: string },
+  args: string[],
+  pretty: boolean
+): Promise<number> {
+  let toolName: string | undefined;
+  let rawArgs: string | undefined;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if ((arg === "--args" || arg === "-a") && args[i + 1]) {
+      rawArgs = args[i + 1];
+      i += 1;
+    } else if (!arg.startsWith("-") && !toolName) {
+      toolName = arg;
+    }
+  }
+
+  if (!toolName || rawArgs === undefined) {
+    console.error("Usage: kweaver context-loader tool-call <name> --args '<json>'");
+    return 1;
+  }
+
+  let parsedArgs: unknown;
+  try {
+    parsedArgs = JSON.parse(rawArgs) as unknown;
+  } catch {
+    console.error("Invalid --args JSON");
+    return 1;
+  }
+  if (parsedArgs === null || typeof parsedArgs !== "object" || Array.isArray(parsedArgs)) {
+    console.error("--args must be a JSON object");
+    return 1;
+  }
+
+  const result = await callTool(options, toolName, parsedArgs as Record<string, unknown>);
+  console.log(formatOutput(result, pretty));
+  return 0;
+}
+
+async function runKnSearch(
+  options: { baseUrl: string; knId: string; accessToken: string; businessDomain: string },
   args: string[],
   pretty: boolean
 ): Promise<number> {
@@ -373,14 +534,21 @@ async function runKnSearch(
     return 1;
   }
 
-  const effectiveOptions = knIdOverride ? { ...options, knId: knIdOverride } : options;
-  const result = await knSearch(effectiveOptions, { query, only_schema: onlySchema });
+  const raw = await knSearchHttp({
+    baseUrl: options.baseUrl,
+    accessToken: options.accessToken,
+    businessDomain: options.businessDomain,
+    knId: knIdOverride ?? options.knId,
+    query,
+    onlySchema,
+  });
+  const result = parseResponseText(raw);
   console.log(formatOutput(result, pretty));
   return 0;
 }
 
 async function runKnSchemaSearch(
-  options: { mcpUrl: string; knId: string; accessToken: string },
+  options: { baseUrl: string; knId: string; accessToken: string; businessDomain: string },
   args: string[],
   pretty: boolean
 ): Promise<number> {
@@ -402,10 +570,15 @@ async function runKnSchemaSearch(
     return 1;
   }
 
-  const result = await knSchemaSearch(options, {
+  const raw = await semanticSearch({
+    baseUrl: options.baseUrl,
+    accessToken: options.accessToken,
+    businessDomain: options.businessDomain,
+    knId: options.knId,
     query,
-    max_concepts: maxConcepts,
+    maxConcepts,
   });
+  const result = parseResponseText(raw);
   console.log(formatOutput(result, pretty));
   return 0;
 }

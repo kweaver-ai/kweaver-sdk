@@ -115,14 +115,17 @@ export type { ListConversationsOptions, ListMessagesOptions } from "./api/conver
 export { listConversations, listMessages } from "./api/conversations.js";
 
 // ── Semantic search ───────────────────────────────────────────────────────────
-export type { SemanticSearchOptions } from "./api/semantic-search.js";
-export { semanticSearch } from "./api/semantic-search.js";
+export type { SemanticSearchOptions, KnSearchHttpOptions } from "./api/semantic-search.js";
+export { semanticSearch, knSearchHttp } from "./api/semantic-search.js";
 
 // ── Context loader ────────────────────────────────────────────────────────────
 export type {
   ContextLoaderCallOptions,
   KnSearchArgs,
   KnSchemaSearchArgs,
+  SearchSchemaArgs,
+  SearchSchemaScope,
+  SearchSchemaResult,
   ConditionSpec,
   QueryObjectInstanceArgs,
   RelationTypePath,
@@ -132,8 +135,10 @@ export type {
   MissingInputParamsError,
 } from "./api/context-loader.js";
 export {
+  callTool,
   knSearch,
   knSchemaSearch,
+  searchSchema,
   queryObjectInstance,
   queryInstanceSubgraph,
   getLogicPropertiesValues,

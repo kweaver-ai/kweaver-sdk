@@ -105,7 +105,7 @@ class KWeaverClient:
         self.knowledge_networks = KnowledgeNetworksResource(self._http)
         self.object_types = ObjectTypesResource(self._http)
         self.relation_types = RelationTypesResource(self._http)
-        self.query = QueryResource(self._http)
+        self.query = QueryResource(self._http, tls_insecure=self._tls_insecure)
         self.agents = AgentsResource(self._http)
         self.conversations = ConversationsResource(self._http)
         self.action_types = ActionTypesResource(self._http)

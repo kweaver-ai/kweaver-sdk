@@ -234,7 +234,160 @@ test("run context-loader help includes standard MCP short commands", async () =>
     assert.ok(help.includes("prompt <name>"), "help should include prompt");
     assert.ok(help.includes("tools/list"), "help should map tools to tools/list");
     assert.ok(help.includes("resources/list"), "help should map resources to resources/list");
+    assert.ok(help.includes("search-schema <query>"), "help should include search-schema");
+    assert.ok(help.includes("tool-call <name>"), "help should include generic tool-call");
   } finally {
+    console.log = originalLog;
+  }
+});
+
+test("run context-loader search-schema calls MCP search_schema", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://dip.aishu.cn",
+    accessToken: "t",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://dip.aishu.cn");
+  store.addContextLoaderEntry("https://dip.aishu.cn", "default", "kn-123");
+
+  const captured: { toolName?: string; args?: Record<string, unknown> } = {};
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  console.log = () => {};
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(init?.body as string) as Record<string, unknown>;
+    if (body.method === "initialize") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), {
+        status: 200,
+        headers: { "MCP-Session-Id": "cli-session" },
+      });
+    }
+    if (body.method === "notifications/initialized") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0" }), { status: 200 });
+    }
+    if (body.method === "tools/call") {
+      const params = body.params as { name?: string; arguments?: Record<string, unknown> };
+      captured.toolName = params.name;
+      captured.args = params.arguments;
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ metric_types: [{ id: "mt_margin" }] }),
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response("{}", { status: 200 });
+  };
+
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run([
+      "context-loader",
+      "search-schema",
+      "利润率",
+      "--scope",
+      "object,metric",
+      "--max",
+      "3",
+      "--brief",
+      "--no-rerank",
+    ]);
+    assert.equal(code, 0);
+    assert.equal(captured.toolName, "search_schema");
+    assert.deepEqual(captured.args, {
+      query: "利润率",
+      response_format: "json",
+      search_scope: {
+        include_object_types: true,
+        include_relation_types: false,
+        include_action_types: false,
+        include_metric_types: true,
+      },
+      max_concepts: 3,
+      schema_brief: true,
+      enable_rerank: false,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+  }
+});
+
+test("run context-loader tool-call calls arbitrary MCP tool with JSON args", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://dip.aishu.cn",
+    accessToken: "t",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://dip.aishu.cn");
+  store.addContextLoaderEntry("https://dip.aishu.cn", "default", "kn-123");
+
+  const captured: { toolName?: string; args?: Record<string, unknown> } = {};
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  console.log = () => {};
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(init?.body as string) as Record<string, unknown>;
+    if (body.method === "initialize") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), {
+        status: 200,
+        headers: { "MCP-Session-Id": "cli-session" },
+      });
+    }
+    if (body.method === "notifications/initialized") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0" }), { status: 200 });
+    }
+    if (body.method === "tools/call") {
+      const params = body.params as { name?: string; arguments?: Record<string, unknown> };
+      captured.toolName = params.name;
+      captured.args = params.arguments;
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response("{}", { status: 200 });
+  };
+
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run([
+      "context-loader",
+      "tool-call",
+      "custom_tool",
+      "--args",
+      "{\"query\":\"订单\"}",
+    ]);
+    assert.equal(code, 0);
+    assert.equal(captured.toolName, "custom_tool");
+    assert.deepEqual(captured.args, { query: "订单" });
+  } finally {
+    globalThis.fetch = originalFetch;
     console.log = originalLog;
   }
 });

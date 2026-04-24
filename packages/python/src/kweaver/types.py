@@ -287,8 +287,9 @@ class KnSearchResult(BaseModel):
     object_types: list[dict[str, Any]] | None = None
     relation_types: list[dict[str, Any]] | None = None
     action_types: list[dict[str, Any]] | None = None
+    metric_types: list[dict[str, Any]] | None = None
     nodes: list[dict[str, Any]] | None = None
-    raw: str | None = None
+    raw: dict[str, Any] | str | None = None
 
 
 class InstanceResult(BaseModel):

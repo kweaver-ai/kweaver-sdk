@@ -72,11 +72,13 @@ class _MockTransport(httpx.BaseTransport):
     def __init__(self, queued_responses: list[dict]) -> None:
         self._call_count = 0
         self._queued = queued_responses
+        self.requests: list[dict] = []
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         self._call_count += 1
         body_text = request.content.decode()
         body = json.loads(body_text) if body_text else {}
+        self.requests.append(body)
 
         if body.get("method") == "initialize":
             return httpx.Response(
@@ -126,6 +128,22 @@ def _make_cl(queued: list[dict]) -> tuple[ContextLoaderResource, _MockTransport]
 
 
 # ── Session initialization ────────────────────────────────────────────────────
+
+
+def test_constructor_honors_tls_insecure(monkeypatch):
+    """ContextLoaderResource should allow disabling TLS verification for dev platforms."""
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    ContextLoaderResource(_BASE_URL, _TOKEN, _KN_ID, tls_insecure=True)
+
+    assert captured["follow_redirects"] is True
+    assert captured["verify"] is False
 
 
 def test_session_initialization():
@@ -182,6 +200,73 @@ def test_kn_search_only_schema_flag():
     try:
         result = cl.kn_search("patient", only_schema=True)
         assert isinstance(result, dict)
+    finally:
+        pass
+
+
+def test_call_tool_sends_generic_mcp_tool_call():
+    """call_tool: exposes arbitrary MCP tools/call."""
+    expected = {"ok": True}
+    cl, transport = _make_cl([_tool_response(expected)])
+    try:
+        result = cl.call_tool("custom_tool", {"query": "patient"})
+        assert result == expected
+        tool_request = transport.requests[-1]
+        assert tool_request["method"] == "tools/call"
+        assert tool_request["params"]["name"] == "custom_tool"
+        assert tool_request["params"]["arguments"] == {"query": "patient"}
+    finally:
+        pass
+
+
+def test_search_schema_defaults_json_and_supports_metric_types():
+    """search_schema: calls the new MCP tool with response_format=json by default."""
+    expected = {
+        "object_types": [],
+        "relation_types": [],
+        "action_types": [],
+        "metric_types": [{"id": "mt_margin", "name": "Margin"}],
+    }
+    cl, transport = _make_cl([_tool_response(expected)])
+    try:
+        result = cl.search_schema("margin")
+        assert result["metric_types"][0]["id"] == "mt_margin"
+        tool_request = transport.requests[-1]
+        assert tool_request["params"]["name"] == "search_schema"
+        assert tool_request["params"]["arguments"] == {
+            "query": "margin",
+            "response_format": "json",
+        }
+    finally:
+        pass
+
+
+def test_search_schema_passes_optional_parameters():
+    """search_schema: passes response format, scope and rerank options."""
+    cl, transport = _make_cl([_tool_response({"object_types": []})])
+    scope = {
+        "include_object_types": True,
+        "include_relation_types": False,
+        "include_action_types": False,
+        "include_metric_types": True,
+    }
+    try:
+        cl.search_schema(
+            "margin",
+            response_format="toon",
+            search_scope=scope,
+            max_concepts=3,
+            schema_brief=True,
+            enable_rerank=False,
+        )
+        assert transport.requests[-1]["params"]["arguments"] == {
+            "query": "margin",
+            "response_format": "toon",
+            "search_scope": scope,
+            "max_concepts": 3,
+            "schema_brief": True,
+            "enable_rerank": False,
+        }
     finally:
         pass
 

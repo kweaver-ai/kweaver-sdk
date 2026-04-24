@@ -7,6 +7,7 @@ import {
   queryInstanceSubgraph,
   getLogicPropertiesValues,
   getActionInfo,
+  findSkills,
   listTools,
   listResources,
   readResource,
@@ -86,6 +87,7 @@ Subcommands:
   query-instance-subgraph <json>       Layer 2: Query subgraph (args as JSON)
   get-logic-properties <json>          Layer 3: Get logic property values (args as JSON)
   get-action-info <json>               Layer 3: Get action info (args as JSON)
+  find-skills <ot_id> [options]        Layer 3: Recall skills for an object type
 
 Examples:
   kweaver context-loader config set --kn-id d5iv6c9818p72mpje8pg
@@ -126,6 +128,7 @@ Examples:
     if (subcommand === "query-instance-subgraph") return runQueryInstanceSubgraph(options, rest, pretty);
     if (subcommand === "get-logic-properties") return runGetLogicProperties(options, rest, pretty);
     if (subcommand === "get-action-info") return runGetActionInfo(options, rest, pretty);
+    if (subcommand === "find-skills") return runFindSkills(options, rest, pretty);
     return -1;
   };
 
@@ -663,6 +666,74 @@ async function runGetActionInfo(
     return 1;
   }
   const result = await getActionInfo(options, body);
+  console.log(formatOutput(result, pretty));
+  return 0;
+}
+
+async function runFindSkills(
+  options: { mcpUrl: string; knId: string; accessToken: string },
+  args: string[],
+  pretty: boolean
+): Promise<number> {
+  const usage =
+    "Usage: kweaver context-loader find-skills <object_type_id> " +
+    "[--query <text>] [--top-k N] [--instance-identities <json>] [--format json|toon]";
+
+  let objectTypeId: string | undefined;
+  let skillQuery: string | undefined;
+  let topK: number | undefined;
+  let instanceIdentities: Record<string, unknown>[] | undefined;
+  let responseFormat: "json" | "toon" | undefined;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if ((arg === "--query" || arg === "-q") && args[i + 1]) {
+      skillQuery = args[i + 1];
+      i += 1;
+    } else if ((arg === "--top-k" || arg === "-n") && args[i + 1]) {
+      topK = parseInt(args[i + 1], 10);
+      if (!Number.isFinite(topK)) {
+        console.error(usage);
+        return 1;
+      }
+      i += 1;
+    } else if ((arg === "--instance-identities" || arg === "-i") && args[i + 1]) {
+      try {
+        const parsed = JSON.parse(args[i + 1]) as unknown;
+        if (!Array.isArray(parsed)) {
+          throw new Error("--instance-identities must be a JSON array");
+        }
+        instanceIdentities = parsed as Record<string, unknown>[];
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        return 1;
+      }
+      i += 1;
+    } else if ((arg === "--format" || arg === "-f") && args[i + 1]) {
+      const value = args[i + 1];
+      if (value !== "json" && value !== "toon") {
+        console.error(usage);
+        return 1;
+      }
+      responseFormat = value;
+      i += 1;
+    } else if (!arg.startsWith("-") && !objectTypeId) {
+      objectTypeId = arg;
+    }
+  }
+
+  if (!objectTypeId) {
+    console.error(usage);
+    return 1;
+  }
+
+  const result = await findSkills(options, {
+    object_type_id: objectTypeId,
+    skill_query: skillQuery,
+    top_k: topK,
+    instance_identities: instanceIdentities,
+    response_format: responseFormat,
+  });
   console.log(formatOutput(result, pretty));
   return 0;
 }

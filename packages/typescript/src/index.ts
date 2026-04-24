@@ -130,6 +130,8 @@ export type {
   QueryInstanceSubgraphArgs,
   GetLogicPropertiesValuesArgs,
   GetActionInfoArgs,
+  FindSkillsArgs,
+  FindSkillsResult,
   MissingInputParamsError,
 } from "./api/context-loader.js";
 export {
@@ -139,6 +141,7 @@ export {
   queryInstanceSubgraph,
   getLogicPropertiesValues,
   getActionInfo,
+  findSkills,
   formatMissingInputParamsHint,
   validateCondition,
   validateInstanceIdentity,

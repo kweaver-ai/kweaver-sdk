@@ -307,6 +307,42 @@ def test_get_action_info_returns_dynamic_tools():
         pass
 
 
+# ── Layer 3: find_skills ─────────────────────────────────────────────────────
+
+
+def test_find_skills_sends_required_and_optional_args():
+    """find_skills: passes object_type_id and only the optional fields that were set."""
+    expected = {"entries": [{"skill_id": "sk1", "name": "Skill 1"}]}
+    cl, transport = _make_cl([_tool_response(expected)])
+    try:
+        result = cl.find_skills(
+            "ot_drug",
+            skill_query="treatment",
+            top_k=5,
+        )
+        assert result["entries"][0]["skill_id"] == "sk1"
+        tool_request = transport.requests[-1]
+        assert tool_request["params"]["name"] == "find_skills"
+        assert tool_request["params"]["arguments"] == {
+            "object_type_id": "ot_drug",
+            "skill_query": "treatment",
+            "top_k": 5,
+        }
+    finally:
+        pass
+
+
+def test_find_skills_validates_inputs():
+    """find_skills: rejects empty object_type_id and out-of-range top_k."""
+    cl, _ = _make_cl([])
+    with pytest.raises(ValueError, match="object_type_id is required"):
+        cl.find_skills("")
+    with pytest.raises(ValueError, match="top_k must be between 1 and 20"):
+        cl.find_skills("ot", top_k=0)
+    with pytest.raises(ValueError, match="top_k must be between 1 and 20"):
+        cl.find_skills("ot", top_k=21)
+
+
 # ── MCP introspection ─────────────────────────────────────────────────────────
 
 

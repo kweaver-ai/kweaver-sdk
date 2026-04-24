@@ -5,6 +5,7 @@ import {
   queryInstanceSubgraph,
   getLogicPropertiesValues,
   getActionInfo,
+  findSkills,
 } from "../api/context-loader.js";
 import type {
   SearchSchemaArgs,
@@ -12,6 +13,8 @@ import type {
   QueryInstanceSubgraphArgs,
   GetLogicPropertiesValuesArgs,
   GetActionInfoArgs,
+  FindSkillsArgs,
+  FindSkillsResult,
 } from "../api/context-loader.js";
 import type { ClientContext } from "../client.js";
 
@@ -54,5 +57,9 @@ export class ContextLoaderResource {
 
   async getActionInfo(args: GetActionInfoArgs): Promise<unknown> {
     return getActionInfo(this.opts(), args);
+  }
+
+  async findSkills(args: FindSkillsArgs): Promise<FindSkillsResult> {
+    return findSkills(this.opts(), args);
   }
 }

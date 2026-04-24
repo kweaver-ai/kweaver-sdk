@@ -63,7 +63,16 @@ kweaver context-loader get-logic-properties '{"ot_id": "ot-1", "query": "status"
 
 # 获取 Action 信息
 kweaver context-loader get-action-info '{"at_id": "at-1", "_instance_identity": {"id": "123"}}'
+
+# 召回某个对象类下的 Skill（top_k 范围 1..20，默认 10）
+kweaver context-loader find-skills ot_drug --query "treatment" --top-k 5
+# 可选：缩小到具体实例
+kweaver context-loader find-skills ot_drug \
+  --instance-identities '[{"drug_id": "DRUG_001"}]' \
+  --format json
 ```
+
+> SDK 等价方法：TS `client.contextLoader.findSkills({ object_type_id, ... })`，Python `client.context_loader.find_skills("ot_drug", skill_query=..., top_k=...)`。`object_type_id` 必填，`top_k` 必须在 1..20 之间，`response_format` 仅接受 `"json"` / `"toon"`。
 
 ## JSON 格式
 

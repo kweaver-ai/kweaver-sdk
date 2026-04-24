@@ -157,6 +157,22 @@ export interface GetActionInfoArgs {
   _instance_identity: Record<string, string>;
 }
 
+/** Layer 3: find_skills arguments (object_type_id is required). */
+export interface FindSkillsArgs {
+  object_type_id: string;
+  response_format?: "json" | "toon";
+  instance_identities?: Record<string, unknown>[];
+  skill_query?: string;
+  /** 1..20, default 10 on the server side. */
+  top_k?: number;
+}
+
+/** Layer 3: find_skills result. */
+export interface FindSkillsResult {
+  entries: Array<{ skill_id: string; name: string; description?: string }>;
+  message?: string;
+}
+
 /** Error when get_logic_properties_values returns MISSING_INPUT_PARAMS. */
 export interface MissingInputParamsError {
   error_code: "MISSING_INPUT_PARAMS";
@@ -402,6 +418,33 @@ export async function getActionInfo(
 ): Promise<unknown> {
   validateInstanceIdentity(args._instance_identity, "_instance_identity");
   return callTool(options, "get_action_info", { ...args });
+}
+
+/**
+ * Layer 3: find_skills. Recall skills attached to an object type or
+ * (optionally) narrowed to specific instances.
+ */
+export async function findSkills(
+  options: ContextLoaderCallOptions,
+  args: FindSkillsArgs
+): Promise<FindSkillsResult> {
+  if (!args.object_type_id || typeof args.object_type_id !== "string") {
+    throw new Error("find_skills: object_type_id is required.");
+  }
+  if (args.top_k !== undefined && (args.top_k < 1 || args.top_k > 20)) {
+    throw new Error("find_skills: top_k must be between 1 and 20.");
+  }
+  if (args.instance_identities !== undefined) {
+    validateInstanceIdentities(args.instance_identities);
+  }
+  const toolArgs: Record<string, unknown> = {
+    object_type_id: args.object_type_id,
+  };
+  if (args.response_format !== undefined) toolArgs.response_format = args.response_format;
+  if (args.instance_identities !== undefined) toolArgs.instance_identities = args.instance_identities;
+  if (args.skill_query !== undefined) toolArgs.skill_query = args.skill_query;
+  if (args.top_k !== undefined) toolArgs.top_k = args.top_k;
+  return (await callTool(options, "find_skills", toolArgs)) as FindSkillsResult;
 }
 
 /** MCP tools/list. Returns list of available tools. */

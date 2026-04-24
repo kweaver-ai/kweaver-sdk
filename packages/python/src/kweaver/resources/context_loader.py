@@ -300,6 +300,42 @@ class ContextLoaderResource:
             "_instance_identity": instance_identity,
         })
 
+    def find_skills(
+        self,
+        object_type_id: str,
+        *,
+        skill_query: str | None = None,
+        top_k: int | None = None,
+        instance_identities: list[dict[str, Any]] | None = None,
+        response_format: Literal["json", "toon"] | None = None,
+    ) -> dict[str, Any]:
+        """Recall skills attached to an object type via the find_skills MCP tool.
+
+        Args:
+            object_type_id: Required object type id whose skills should be recalled.
+            skill_query: Optional natural-language query to narrow recall.
+            top_k: Optional 1..20 cap on returned skills.
+            instance_identities: Optional list of instance identities to scope recall.
+            response_format: Optional output format ("json" or "toon").
+
+        Returns:
+            Tool payload with ``entries`` and an optional ``message``.
+        """
+        if not object_type_id:
+            raise ValueError("find_skills: object_type_id is required.")
+        if top_k is not None and not (1 <= top_k <= 20):
+            raise ValueError("find_skills: top_k must be between 1 and 20.")
+        args: dict[str, Any] = {"object_type_id": object_type_id}
+        if response_format is not None:
+            args["response_format"] = response_format
+        if instance_identities is not None:
+            args["instance_identities"] = instance_identities
+        if skill_query is not None:
+            args["skill_query"] = skill_query
+        if top_k is not None:
+            args["top_k"] = top_k
+        return self._call_tool("find_skills", args)
+
     # ── MCP introspection ────────────────────────────────────────────────────
 
     def list_tools(self, cursor: str | None = None) -> dict[str, Any]:

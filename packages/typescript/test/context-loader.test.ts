@@ -8,6 +8,7 @@ import {
   validateInstanceIdentities,
   callTool,
   searchSchema,
+  findSkills,
   listTools,
   listResources,
   readResource,
@@ -239,6 +240,73 @@ test("searchSchema preserves explicit toon response format", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("findSkills sends find_skills with required object_type_id and optional fields", async () => {
+  const received: { body: string }[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const body = (init as RequestInit)?.body as string;
+    received.push({ body });
+    const parsed = body ? (JSON.parse(body) as { method?: string }) : {};
+    if (parsed.method === "initialize") {
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2024-11-05", capabilities: {} } }),
+        { headers: { "Content-Type": "application/json", "MCP-Session-Id": "session-find" } }
+      );
+    }
+    if (parsed.method === "notifications/initialized") {
+      return new Response("", { status: 200 });
+    }
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        result: {
+          content: [
+            { type: "text", text: JSON.stringify({ entries: [{ skill_id: "s1", name: "Skill 1" }] }) },
+          ],
+        },
+        id: 1,
+      }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  try {
+    const result = await findSkills(
+      { mcpUrl: "https://mcp.example.com/mcp", knId: "kn-1", accessToken: "tok" },
+      { object_type_id: "ot_drug", skill_query: "treatment", top_k: 5 }
+    );
+    assert.equal(result.entries.length, 1);
+    assert.equal(result.entries[0].skill_id, "s1");
+    const parsed = JSON.parse(received[2].body);
+    assert.equal(parsed.params.name, "find_skills");
+    assert.equal(parsed.params.arguments.object_type_id, "ot_drug");
+    assert.equal(parsed.params.arguments.skill_query, "treatment");
+    assert.equal(parsed.params.arguments.top_k, 5);
+    assert.equal(parsed.params.arguments.instance_identities, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("findSkills rejects missing object_type_id and invalid top_k", async () => {
+  await assert.rejects(
+    () =>
+      findSkills(
+        { mcpUrl: "https://mcp.example.com/mcp", knId: "kn-1", accessToken: "tok" },
+        { object_type_id: "" }
+      ),
+    /object_type_id is required/
+  );
+  await assert.rejects(
+    () =>
+      findSkills(
+        { mcpUrl: "https://mcp.example.com/mcp", knId: "kn-1", accessToken: "tok" },
+        { object_type_id: "ot", top_k: 0 }
+      ),
+    /top_k must be between 1 and 20/
+  );
 });
 
 function installMcpListFetchMock(

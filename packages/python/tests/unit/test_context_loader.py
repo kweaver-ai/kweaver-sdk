@@ -150,7 +150,7 @@ def test_session_initialization():
     """ContextLoaderResource caches session ID after initialize + notifications/initialized."""
     cl, transport = _make_cl([_tool_response({"object_types": []})])
     try:
-        cl.kn_search("test")
+        cl.search_schema("test")
         assert transport._call_count >= 2
     finally:
         pass
@@ -167,7 +167,7 @@ def test_session_cached_on_second_call():
         _tool_response({"datas": []}),
     ])
     try:
-        cl.kn_search("test query")
+        cl.search_schema("test query")
         cl.query_object_instance("ot1", {"operation": "and", "sub_conditions": []})
         assert transport._call_count == 2
     finally:
@@ -175,33 +175,7 @@ def test_session_cached_on_second_call():
         _mod._session_cache.clear()
 
 
-# ── Layer 1: kn_search ────────────────────────────────────────────────────────
-
-
-def test_kn_search_returns_schema():
-    """kn_search: returns object_types, relation_types, action_types."""
-    expected = {
-        "object_types": [{"id": "ot1", "name": "Patient"}],
-        "relation_types": [],
-        "action_types": [],
-    }
-    cl, transport = _make_cl([_tool_response(expected)])
-    try:
-        result = cl.kn_search("patient")
-        assert result["object_types"][0]["name"] == "Patient"
-    finally:
-        pass
-
-
-def test_kn_search_only_schema_flag():
-    """kn_search: only_schema=True passes through in args."""
-    expected = {"object_types": [], "relation_types": [], "action_types": []}
-    cl, transport = _make_cl([_tool_response(expected)])
-    try:
-        result = cl.kn_search("patient", only_schema=True)
-        assert isinstance(result, dict)
-    finally:
-        pass
+# ── Layer 1: search_schema ────────────────────────────────────────────────────
 
 
 def test_call_tool_sends_generic_mcp_tool_call():
@@ -338,7 +312,7 @@ def test_get_action_info_returns_dynamic_tools():
 
 def test_list_tools():
     """list_tools: calls tools/list and returns result."""
-    expected = {"tools": [{"name": "kn_search"}, {"name": "query_object_instance"}]}
+    expected = {"tools": [{"name": "search_schema"}, {"name": "query_object_instance"}]}
     cl, transport = _make_cl([_method_response(expected)])
     try:
         result = cl.list_tools()
@@ -366,7 +340,7 @@ def test_rpc_error_raises_runtime_error():
     cl, transport = _make_cl([_error_response("tool not found")])
     try:
         with pytest.raises(RuntimeError, match="tool not found"):
-            cl.kn_search("test")
+            cl.search_schema("test")
     finally:
         pass
 

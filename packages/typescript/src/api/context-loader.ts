@@ -79,18 +79,6 @@ async function ensureSession(options: ContextLoaderCallOptions): Promise<string>
   return sessionId;
 }
 
-/** Layer 1: kn_search arguments. */
-export interface KnSearchArgs {
-  query: string;
-  only_schema?: boolean;
-}
-
-/** Layer 1: kn_schema_search arguments. */
-export interface KnSchemaSearchArgs {
-  query: string;
-  max_concepts?: number;
-}
-
 export interface SearchSchemaScope {
   include_object_types?: boolean;
   include_relation_types?: boolean;
@@ -374,32 +362,6 @@ export async function searchSchema(
   if (args.schema_brief !== undefined) toolArgs.schema_brief = args.schema_brief;
   if (args.enable_rerank !== undefined) toolArgs.enable_rerank = args.enable_rerank;
   return (await callTool(options, "search_schema", toolArgs)) as SearchSchemaResult;
-}
-
-/**
- * Layer 1: kn_search compatibility wrapper over MCP `search_schema`.
- *
- * NOTE: `only_schema` has no equivalent on MCP `search_schema` and is ignored
- * here. For full `only_schema` semantics use the public HTTP endpoint via
- * `knSearchHttp` (`api/semantic-search.ts`) or `BknResource.knSearch`.
- */
-export async function knSearch(
-  options: ContextLoaderCallOptions,
-  args: KnSearchArgs
-): Promise<SearchSchemaResult> {
-  return searchSchema(options, { query: args.query });
-}
-
-/** Layer 1: kn_schema_search compatibility wrapper over MCP `search_schema` (schema_brief mode). */
-export async function knSchemaSearch(
-  options: ContextLoaderCallOptions,
-  args: KnSchemaSearchArgs
-): Promise<SearchSchemaResult> {
-  return searchSchema(options, {
-    query: args.query,
-    max_concepts: args.max_concepts,
-    schema_brief: true,
-  });
 }
 
 /** Layer 2: query_object_instance. Returns datas with _instance_identity. */

@@ -72,6 +72,19 @@ class QueryResource:
             nodes=data.get("nodes"),
         )
 
+    def kn_schema_search(
+        self,
+        kn_id: str,
+        query: str,
+        *,
+        max_concepts: int = 10,
+        mode: str = "keyword_vector_retrieval",
+    ) -> SemanticSearchResult:
+        """Schema-only semantic search via the public HTTP compatibility endpoint."""
+        return self.semantic_search(
+            kn_id, query, mode=mode, max_concepts=max_concepts
+        )
+
     def instances(
         self,
         kn_id: str,

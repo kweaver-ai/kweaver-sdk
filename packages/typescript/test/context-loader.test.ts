@@ -7,7 +7,6 @@ import {
   validateInstanceIdentity,
   validateInstanceIdentities,
   callTool,
-  knSearch,
   searchSchema,
   listTools,
   listResources,
@@ -237,46 +236,6 @@ test("searchSchema preserves explicit toon response format", async () => {
     const parsed = JSON.parse(received[2].body);
     assert.equal(parsed.params.arguments.response_format, "toon");
     assert.equal(result.raw, "object_types: []");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("knSearch compatibility wrapper calls search_schema instead of removed kn_search tool", async () => {
-  const received: { body: string }[] = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (_input, init) => {
-    const body = (init as RequestInit)?.body as string;
-    received.push({ body });
-    const parsed = body ? (JSON.parse(body) as { method?: string }) : {};
-    if (parsed.method === "initialize") {
-      return new Response(
-        JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2024-11-05", capabilities: {} } }),
-        { headers: { "Content-Type": "application/json", "MCP-Session-Id": "session-id-compat" } }
-      );
-    }
-    if (parsed.method === "notifications/initialized") {
-      return new Response("", { status: 200 });
-    }
-    return new Response(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        result: { content: [{ type: "text", text: JSON.stringify({ object_types: [] }) }] },
-        id: 1,
-      }),
-      { headers: { "Content-Type": "application/json" } }
-    );
-  };
-
-  try {
-    await knSearch(
-      { mcpUrl: "https://mcp.example.com/mcp", knId: "kn-compat", accessToken: "token-abc" },
-      { query: "test query", only_schema: true }
-    );
-    const parsed = JSON.parse(received[2].body);
-    assert.equal(parsed.params.name, "search_schema");
-    assert.equal(parsed.params.arguments.response_format, "json");
-    assert.equal(parsed.params.arguments.query, "test query");
   } finally {
     globalThis.fetch = originalFetch;
   }

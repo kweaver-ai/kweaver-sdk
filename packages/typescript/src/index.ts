@@ -121,8 +121,6 @@ export { semanticSearch, knSearchHttp } from "./api/semantic-search.js";
 // ── Context loader ────────────────────────────────────────────────────────────
 export type {
   ContextLoaderCallOptions,
-  KnSearchArgs,
-  KnSchemaSearchArgs,
   SearchSchemaArgs,
   SearchSchemaScope,
   SearchSchemaResult,
@@ -136,8 +134,6 @@ export type {
 } from "./api/context-loader.js";
 export {
   callTool,
-  knSearch,
-  knSchemaSearch,
   searchSchema,
   queryObjectInstance,
   queryInstanceSubgraph,

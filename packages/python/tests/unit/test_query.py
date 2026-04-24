@@ -137,6 +137,31 @@ def test_kn_search_only_schema(capture: RequestCapture):
     assert capture.last_body()["only_schema"] is True
 
 
+def test_kn_schema_search_uses_semantic_search_endpoint(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "concepts": [
+                {
+                    "concept_type": "object_type",
+                    "concept_id": "ot_01",
+                    "concept_name": "产品",
+                }
+            ],
+            "hits_total": 1,
+        })
+
+    client = make_client(handler, capture)
+    result = client.query.kn_schema_search("kn_01", "产品", max_concepts=5)
+
+    assert capture.last_url() == "https://mock/api/agent-retrieval/v1/kn/semantic-search"
+    body = capture.last_body()
+    assert body["kn_id"] == "kn_01"
+    assert body["query"] == "产品"
+    assert body["max_concepts"] == 5
+    assert result.hits_total == 1
+    assert result.concepts[0].concept_id == "ot_01"
+
+
 def test_subgraph_passes_tls_insecure_to_context_loader(monkeypatch):
     captured: dict[str, object] = {}
 

@@ -70,7 +70,6 @@ class QueryResource:
             action_types=data.get("action_types"),
             metric_types=data.get("metric_types"),
             nodes=data.get("nodes"),
-            raw=data,
         )
 
     def instances(

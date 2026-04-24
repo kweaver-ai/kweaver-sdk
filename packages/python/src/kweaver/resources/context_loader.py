@@ -251,7 +251,13 @@ class ContextLoaderResource:
         return self._call_tool("search_schema", args)
 
     def kn_search(self, query: str, *, only_schema: bool = False) -> dict[str, Any]:
-        """Compatibility wrapper for the removed MCP kn_search tool."""
+        """Compatibility wrapper for the removed MCP ``kn_search`` tool.
+
+        Delegates to MCP ``search_schema``. The ``only_schema`` argument has no
+        equivalent on ``search_schema`` and is ignored. For full ``only_schema``
+        semantics use the public HTTP endpoint via ``QueryResource.kn_search``.
+        """
+        del only_schema  # not supported by MCP search_schema
         return self.search_schema(query)
 
     def kn_schema_search(self, query: str, *, max_concepts: int = 10) -> dict[str, Any]:

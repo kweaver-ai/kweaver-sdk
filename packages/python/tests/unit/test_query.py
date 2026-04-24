@@ -120,8 +120,8 @@ def test_kn_search(capture: RequestCapture):
     assert body["only_schema"] is False
     assert result.object_types is not None
     assert len(result.object_types) == 1
-    assert result.raw is not None
-    assert result.raw["metric_types"][0]["id"] == "mt_01"
+    assert result.metric_types is not None
+    assert result.metric_types[0]["id"] == "mt_01"
 
 
 def test_kn_search_only_schema(capture: RequestCapture):

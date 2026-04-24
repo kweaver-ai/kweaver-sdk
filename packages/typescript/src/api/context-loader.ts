@@ -364,7 +364,7 @@ export async function callTool(
 export async function searchSchema(
   options: ContextLoaderCallOptions,
   args: SearchSchemaArgs
-): Promise<unknown> {
+): Promise<SearchSchemaResult> {
   const toolArgs: Record<string, unknown> = {
     query: args.query,
     response_format: args.response_format ?? "json",
@@ -373,22 +373,28 @@ export async function searchSchema(
   if (args.max_concepts !== undefined) toolArgs.max_concepts = args.max_concepts;
   if (args.schema_brief !== undefined) toolArgs.schema_brief = args.schema_brief;
   if (args.enable_rerank !== undefined) toolArgs.enable_rerank = args.enable_rerank;
-  return callTool(options, "search_schema", toolArgs);
+  return (await callTool(options, "search_schema", toolArgs)) as SearchSchemaResult;
 }
 
-/** Layer 1: kn_search. Returns object_types, relation_types, action_types. */
+/**
+ * Layer 1: kn_search compatibility wrapper over MCP `search_schema`.
+ *
+ * NOTE: `only_schema` has no equivalent on MCP `search_schema` and is ignored
+ * here. For full `only_schema` semantics use the public HTTP endpoint via
+ * `knSearchHttp` (`api/semantic-search.ts`) or `BknResource.knSearch`.
+ */
 export async function knSearch(
   options: ContextLoaderCallOptions,
   args: KnSearchArgs
-): Promise<unknown> {
+): Promise<SearchSchemaResult> {
   return searchSchema(options, { query: args.query });
 }
 
-/** Layer 1: kn_schema_search. Returns concepts (candidate discovery only). */
+/** Layer 1: kn_schema_search compatibility wrapper over MCP `search_schema` (schema_brief mode). */
 export async function knSchemaSearch(
   options: ContextLoaderCallOptions,
   args: KnSchemaSearchArgs
-): Promise<unknown> {
+): Promise<SearchSchemaResult> {
   return searchSchema(options, {
     query: args.query,
     max_concepts: args.max_concepts,

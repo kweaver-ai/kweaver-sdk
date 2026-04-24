@@ -151,13 +151,25 @@ export class BknResource {
       query,
       onlySchema: opts.onlySchema ?? false,
     });
-    const result = JSON.parse(raw) as {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(
+        `kn_search returned non-JSON body (first 200 chars): ${raw.slice(0, 200)}`,
+      );
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(
+        `kn_search returned unexpected JSON shape (first 200 chars): ${raw.slice(0, 200)}`,
+      );
+    }
+    return parsed as {
       object_types?: unknown[];
       relation_types?: unknown[];
       action_types?: unknown[];
       metric_types?: unknown[];
       nodes?: unknown[];
     };
-    return result;
   }
 }

@@ -140,6 +140,22 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Data Views | `client.dataviews` | `create`, `list`, `get`, `delete`, `find_by_table`, `query` (SQL via mdl-uniquery) |
 | Skills | `client.skills` | `list`, `market`, `get`, `register_content`, `register_zip`, `update_status`, `content`, `read_file`, `download`, `install` |
 
+For Context Loader MCP access, use `ContextLoaderResource` directly:
+
+```python
+from kweaver.resources import ContextLoaderResource
+
+cl = ContextLoaderResource(base_url, token, kn_id="kn_01")
+schema = cl.search_schema("margin")
+raw = cl.call_tool("search_schema", {"query": "margin"})
+```
+
+`search_schema()` is the typed wrapper for the Context Loader MCP `search_schema` tool. It defaults `response_format` to `json` and accepts `query`, `response_format`, `search_scope`, `max_concepts`, `schema_brief`, and `enable_rerank`. The parsed response may contain `object_types`, `relation_types`, `action_types`, and `metric_types`.
+
+Use `call_tool(name, args)` when you need native MCP `tools/call` access for newly added server tools before the SDK adds a typed wrapper. Arguments are passed through unchanged.
+
+For self-signed development platforms, pass `tls_insecure=True`.
+
 ### Vega (Data Platform)
 
 | Resource | Access | Methods |

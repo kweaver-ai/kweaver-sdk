@@ -19,8 +19,9 @@ if TYPE_CHECKING:
 
 
 class QueryResource:
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(self, http: HttpClient, *, tls_insecure: bool = False) -> None:
         self._http = http
+        self._tls_insecure = tls_insecure
 
     def semantic_search(
         self,
@@ -54,19 +55,34 @@ class QueryResource:
         *,
         only_schema: bool = False,
     ) -> KnSearchResult:
-        """Search KN schema via MCP — returns object_types, relation_types, action_types."""
-        from kweaver.resources.context_loader import ContextLoaderResource
-
-        base_url = str(self._http._client.base_url).rstrip("/")
-        token = self._http._auth.auth_headers().get("Authorization", "").removeprefix("Bearer ").strip()
-        cl = ContextLoaderResource(base_url, token, kn_id=kn_id)
-        data = cl.kn_search(query, only_schema=only_schema)
+        """Search KN schema via the public HTTP compatibility endpoint."""
+        data = self._http.post(
+            "/api/agent-retrieval/v1/kn/kn_search",
+            json={
+                "kn_id": kn_id,
+                "query": query,
+                "only_schema": only_schema,
+            },
+        )
         return KnSearchResult(
             object_types=data.get("object_types"),
             relation_types=data.get("relation_types"),
             action_types=data.get("action_types"),
+            metric_types=data.get("metric_types"),
             nodes=data.get("nodes"),
-            raw=data.get("raw"),
+        )
+
+    def kn_schema_search(
+        self,
+        kn_id: str,
+        query: str,
+        *,
+        max_concepts: int = 10,
+        mode: str = "keyword_vector_retrieval",
+    ) -> SemanticSearchResult:
+        """Schema-only semantic search via the public HTTP compatibility endpoint."""
+        return self.semantic_search(
+            kn_id, query, mode=mode, max_concepts=max_concepts
         )
 
     def instances(
@@ -129,7 +145,12 @@ class QueryResource:
 
         base_url = str(self._http._client.base_url).rstrip("/")
         token = self._http._auth.auth_headers().get("Authorization", "").removeprefix("Bearer ").strip()
-        cl = ContextLoaderResource(base_url, token, kn_id=kn_id)
+        cl = ContextLoaderResource(
+            base_url,
+            token,
+            kn_id=kn_id,
+            tls_insecure=self._tls_insecure,
+        )
         data = cl.query_instance_subgraph(
             [p.model_dump() for p in paths],
         )

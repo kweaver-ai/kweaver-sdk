@@ -6,7 +6,8 @@ import {
   validateCondition,
   validateInstanceIdentity,
   validateInstanceIdentities,
-  knSearch,
+  callTool,
+  searchSchema,
   listTools,
   listResources,
   readResource,
@@ -103,7 +104,50 @@ test("formatMissingInputParamsHint builds retry hint", () => {
   assert.ok(hint.includes("start"));
 });
 
-test("knSearch sends JSON-RPC request with correct structure", async () => {
+test("callTool sends generic MCP tools/call request", async () => {
+  const received: { body: string }[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const body = (init as RequestInit)?.body as string;
+    received.push({ body });
+
+    const parsed = body ? (JSON.parse(body) as { method?: string }) : {};
+    if (parsed.method === "initialize") {
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2024-11-05", capabilities: {} } }),
+        { headers: { "Content-Type": "application/json", "MCP-Session-Id": "session-id-generic" } }
+      );
+    }
+    if (parsed.method === "notifications/initialized") {
+      return new Response("", { status: 200 });
+    }
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        result: { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] },
+        id: 1,
+      }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  try {
+    const result = await callTool(
+      { mcpUrl: "https://mcp.example.com/mcp", knId: "kn-generic", accessToken: "token-abc" },
+      "new_tool",
+      { query: "test", nested: { enabled: true } }
+    ) as { ok?: boolean };
+    assert.equal(result.ok, true);
+    const parsed = JSON.parse(received[2].body);
+    assert.equal(parsed.method, "tools/call");
+    assert.equal(parsed.params.name, "new_tool");
+    assert.deepEqual(parsed.params.arguments, { query: "test", nested: { enabled: true } });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("searchSchema sends search_schema with json response format by default", async () => {
   const received: { url: string; body: string; headers: Record<string, string> }[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -129,7 +173,7 @@ test("knSearch sends JSON-RPC request with correct structure", async () => {
     return new Response(
       JSON.stringify({
         jsonrpc: "2.0",
-        result: { content: [{ type: "text", text: JSON.stringify({ object_types: [] }) }] },
+        result: { content: [{ type: "text", text: JSON.stringify({ object_types: [], metric_types: [{ id: "mt-1" }] }) }] },
         id: 1,
       }),
       { headers: { "Content-Type": "application/json" } }
@@ -137,10 +181,10 @@ test("knSearch sends JSON-RPC request with correct structure", async () => {
   };
 
   try {
-    await knSearch(
+    const result = await searchSchema(
       { mcpUrl: "https://mcp.example.com/mcp", knId: "kn-123", accessToken: "token-abc" },
-      { query: "test query", only_schema: true }
-    );
+      { query: "test query" }
+    ) as { metric_types?: unknown[] };
     assert.equal(received.length, 3);
     assert.equal(received[0].url, "https://mcp.example.com/mcp");
     assert.equal(JSON.parse(received[0].body).method, "initialize");
@@ -149,9 +193,49 @@ test("knSearch sends JSON-RPC request with correct structure", async () => {
     assert.equal(received[2].headers["MCP-Session-Id"], "session-id-123");
     const parsed = JSON.parse(received[2].body);
     assert.equal(parsed.method, "tools/call");
-    assert.equal(parsed.params.name, "kn_search");
+    assert.equal(parsed.params.name, "search_schema");
     assert.equal(parsed.params.arguments.query, "test query");
-    assert.equal(parsed.params.arguments.only_schema, true);
+    assert.equal(parsed.params.arguments.response_format, "json");
+    assert.equal(result.metric_types?.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("searchSchema preserves explicit toon response format", async () => {
+  const received: { body: string }[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const body = (init as RequestInit)?.body as string;
+    received.push({ body });
+    const parsed = body ? (JSON.parse(body) as { method?: string }) : {};
+    if (parsed.method === "initialize") {
+      return new Response(
+        JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2024-11-05", capabilities: {} } }),
+        { headers: { "Content-Type": "application/json", "MCP-Session-Id": "session-id-toon" } }
+      );
+    }
+    if (parsed.method === "notifications/initialized") {
+      return new Response("", { status: 200 });
+    }
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        result: { content: [{ type: "text", text: "object_types: []" }] },
+        id: 1,
+      }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  try {
+    const result = await searchSchema(
+      { mcpUrl: "https://mcp.example.com/mcp", knId: "kn-toon", accessToken: "token-abc" },
+      { query: "test query", response_format: "toon" }
+    ) as { raw?: string };
+    const parsed = JSON.parse(received[2].body);
+    assert.equal(parsed.params.arguments.response_format, "toon");
+    assert.equal(result.raw, "object_types: []");
   } finally {
     globalThis.fetch = originalFetch;
   }

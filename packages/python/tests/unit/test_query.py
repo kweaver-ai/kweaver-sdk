@@ -2,6 +2,7 @@
 
 import httpx
 
+import kweaver.resources.context_loader as context_loader
 from kweaver.types import Condition
 from tests.conftest import RequestCapture, make_client
 
@@ -101,37 +102,104 @@ def test_instances_iter():
 
 
 def test_kn_search(capture: RequestCapture):
-    from unittest.mock import patch, MagicMock
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "object_types": [{"id": "ot_01", "name": "产品"}],
+            "relation_types": [],
+            "action_types": [],
+            "metric_types": [{"id": "mt_01", "name": "利润率"}],
+        })
 
-    mock_cl = MagicMock()
-    mock_cl.kn_search.return_value = {
-        "object_types": [{"id": "ot_01", "name": "产品"}],
-        "relation_types": [],
-        "action_types": [],
-    }
+    client = make_client(handler, capture)
+    result = client.query.kn_search("kn_01", "产品")
 
-    with patch("kweaver.resources.context_loader.ContextLoaderResource", return_value=mock_cl):
-        client = make_client(lambda req: httpx.Response(200, json={}), capture)
-        result = client.query.kn_search("kn_01", "产品")
-        assert result.object_types is not None
-        assert len(result.object_types) == 1
-        mock_cl.kn_search.assert_called_once_with("产品", only_schema=False)
+    assert capture.last_url() == "https://mock/api/agent-retrieval/v1/kn/kn_search"
+    body = capture.last_body()
+    assert body["kn_id"] == "kn_01"
+    assert body["query"] == "产品"
+    assert body["only_schema"] is False
+    assert result.object_types is not None
+    assert len(result.object_types) == 1
+    assert result.metric_types is not None
+    assert result.metric_types[0]["id"] == "mt_01"
 
 
 def test_kn_search_only_schema(capture: RequestCapture):
-    from unittest.mock import patch, MagicMock
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "object_types": [],
+            "relation_types": [],
+            "action_types": [],
+        })
 
-    mock_cl = MagicMock()
-    mock_cl.kn_search.return_value = {
-        "object_types": [],
-        "relation_types": [],
-        "action_types": [],
-    }
+    client = make_client(handler, capture)
+    client.query.kn_search("kn_01", "产品", only_schema=True)
+    assert capture.last_body()["only_schema"] is True
 
-    with patch("kweaver.resources.context_loader.ContextLoaderResource", return_value=mock_cl):
-        client = make_client(lambda req: httpx.Response(200, json={}), capture)
-        client.query.kn_search("kn_01", "产品", only_schema=True)
-        mock_cl.kn_search.assert_called_once_with("产品", only_schema=True)
+
+def test_kn_schema_search_uses_semantic_search_endpoint(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "concepts": [
+                {
+                    "concept_type": "object_type",
+                    "concept_id": "ot_01",
+                    "concept_name": "产品",
+                }
+            ],
+            "hits_total": 1,
+        })
+
+    client = make_client(handler, capture)
+    result = client.query.kn_schema_search("kn_01", "产品", max_concepts=5)
+
+    assert capture.last_url() == "https://mock/api/agent-retrieval/v1/kn/semantic-search"
+    body = capture.last_body()
+    assert body["kn_id"] == "kn_01"
+    assert body["query"] == "产品"
+    assert body["max_concepts"] == 5
+    assert result.hits_total == 1
+    assert result.concepts[0].concept_id == "ot_01"
+
+
+def test_subgraph_passes_tls_insecure_to_context_loader(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeContextLoader:
+        def __init__(
+            self,
+            base_url: str,
+            token: str,
+            kn_id: str,
+            *,
+            tls_insecure: bool = False,
+        ) -> None:
+            captured["base_url"] = base_url
+            captured["token"] = token
+            captured["kn_id"] = kn_id
+            captured["tls_insecure"] = tls_insecure
+
+        def query_instance_subgraph(self, relation_type_paths):
+            captured["paths"] = relation_type_paths
+            return {"entries": []}
+
+    class FakePath:
+        def model_dump(self):
+            return {"relation_types": []}
+
+    monkeypatch.setattr(context_loader, "ContextLoaderResource", FakeContextLoader)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"unused": True})
+
+    client = make_client(handler, tls_insecure=True)
+    result = client.query.subgraph("kn_01", [FakePath()])
+
+    assert result.entries == []
+    assert captured["base_url"] == "https://mock"
+    assert captured["token"] == "test-token"
+    assert captured["kn_id"] == "kn_01"
+    assert captured["tls_insecure"] is True
 
 
 def test_object_type_properties(capture: RequestCapture):

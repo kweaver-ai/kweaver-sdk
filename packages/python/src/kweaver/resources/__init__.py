@@ -1,3 +1,4 @@
+from kweaver.resources.context_loader import ContextLoaderResource
 from kweaver.resources.dataflows import DataflowsResource
 from kweaver.resources.dataflow_v2 import DataflowV2Resource
 from kweaver.resources.datasources import DataSourcesResource
@@ -9,6 +10,7 @@ from kweaver.resources.relation_types import RelationTypesResource
 from kweaver.resources.toolboxes import ToolboxesResource
 
 __all__ = [
+    "ContextLoaderResource",
     "DataflowsResource",
     "DataflowV2Resource",
     "DataSourcesResource",

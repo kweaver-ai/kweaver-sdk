@@ -126,8 +126,10 @@ Usage:
   kweaver context-loader tools|resources|templates|prompts [--cursor]
   kweaver context-loader resource <uri>
   kweaver context-loader prompt <name> [--args json]
-  kweaver context-loader kn-search <query> [--only-schema]
-  kweaver context-loader kn-schema-search <query> [--max N]
+  kweaver context-loader search-schema <query> [--scope object,relation,action,metric] [--max N]
+  kweaver context-loader tool-call <name> --args '<json>'
+  kweaver context-loader kn-search <query> [--only-schema]      (compat HTTP)
+  kweaver context-loader kn-schema-search <query> [--max N]     (compat HTTP)
   kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info ...
   (alias: kweaver context ...)
 
@@ -149,7 +151,7 @@ Commands:
   toolbox        Agent toolbox lifecycle (create, list, publish, delete)
   tool           Tools inside a toolbox (upload OpenAPI spec, list, enable/disable)
   vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)
-  context-loader Context-loader MCP (config, tools, resources, prompts, kn-search, query-*, etc.)
+  context-loader Context-loader MCP/HTTP (config, tools, resources, search-schema, tool-call, query-*, etc.)
   help           Show this message`);
 }
 

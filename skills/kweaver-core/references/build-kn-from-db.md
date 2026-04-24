@@ -169,8 +169,8 @@ kweaver bkn search <kn_id> "物料"
 # 配置 KN 上下文
 kweaver context-loader config set --kn-id <kn_id>
 
-# Schema 搜索
-kweaver context-loader kn-search "物料" --only-schema
+# Schema 搜索（推荐 MCP search_schema）
+kweaver context-loader search-schema "物料" --scope object,relation,action
 
 # 实例查询
 kweaver context-loader query-object-instance '{"ot_id":"<ot_id>","condition":{"field":"material_code","operation":"==","value_from":"const","value":"101-000025"},"limit":1}'

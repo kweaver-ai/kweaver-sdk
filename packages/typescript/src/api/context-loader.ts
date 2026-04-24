@@ -79,16 +79,30 @@ async function ensureSession(options: ContextLoaderCallOptions): Promise<string>
   return sessionId;
 }
 
-/** Layer 1: kn_search arguments. */
-export interface KnSearchArgs {
-  query: string;
-  only_schema?: boolean;
+export interface SearchSchemaScope {
+  include_object_types?: boolean;
+  include_relation_types?: boolean;
+  include_action_types?: boolean;
+  include_metric_types?: boolean;
 }
 
-/** Layer 1: kn_schema_search arguments. */
-export interface KnSchemaSearchArgs {
+/** Layer 1: search_schema arguments. */
+export interface SearchSchemaArgs {
   query: string;
+  response_format?: "json" | "toon";
+  search_scope?: SearchSchemaScope;
   max_concepts?: number;
+  schema_brief?: boolean;
+  enable_rerank?: boolean;
+}
+
+/** Layer 1: search_schema result. */
+export interface SearchSchemaResult {
+  object_types?: unknown[];
+  relation_types?: unknown[];
+  action_types?: unknown[];
+  metric_types?: unknown[];
+  raw?: string;
 }
 
 /** Condition for query_object_instance and query_instance_subgraph. */
@@ -262,10 +276,10 @@ async function callMcpMethod(
   throw new Error("Context-loader returned no result");
 }
 
-async function callTool(
+export async function callTool(
   options: ContextLoaderCallOptions,
   toolName: string,
-  args: object
+  args: Record<string, unknown>
 ): Promise<unknown> {
   const sessionId = await ensureSession(options);
   const id = (requestId += 1);
@@ -334,20 +348,20 @@ async function callTool(
   throw new Error("Context-loader returned no result");
 }
 
-/** Layer 1: kn_search. Returns object_types, relation_types, action_types. */
-export async function knSearch(
+/** Layer 1: search_schema. Returns object_types, relation_types, action_types, metric_types. */
+export async function searchSchema(
   options: ContextLoaderCallOptions,
-  args: KnSearchArgs
-): Promise<unknown> {
-  return callTool(options, "kn_search", { ...args });
-}
-
-/** Layer 1: kn_schema_search. Returns concepts (candidate discovery only). */
-export async function knSchemaSearch(
-  options: ContextLoaderCallOptions,
-  args: KnSchemaSearchArgs
-): Promise<unknown> {
-  return callTool(options, "kn_schema_search", { ...args });
+  args: SearchSchemaArgs
+): Promise<SearchSchemaResult> {
+  const toolArgs: Record<string, unknown> = {
+    query: args.query,
+    response_format: args.response_format ?? "json",
+  };
+  if (args.search_scope !== undefined) toolArgs.search_scope = args.search_scope;
+  if (args.max_concepts !== undefined) toolArgs.max_concepts = args.max_concepts;
+  if (args.schema_brief !== undefined) toolArgs.schema_brief = args.schema_brief;
+  if (args.enable_rerank !== undefined) toolArgs.enable_rerank = args.enable_rerank;
+  return (await callTool(options, "search_schema", toolArgs)) as SearchSchemaResult;
 }
 
 /** Layer 2: query_object_instance. Returns datas with _instance_identity. */

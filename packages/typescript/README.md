@@ -143,14 +143,19 @@ const rows = await client.vega.sqlQuery(
   JSON.stringify({ query: "SELECT * FROM {{res-1}} LIMIT 5", resource_type: "mysql" }),
 );
 
-// Context Loader (semantic search over a BKN via MCP)
+// Context Loader (MCP search_schema plus generic tools/call)
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
-const results = await cl.search({ query: "hypertension treatment" });
+const schema  = await cl.searchSchema({ query: "hypertension treatment" });
+const rawTool = await cl.callTool("search_schema", { query: "hypertension treatment" });
 
 // Skills (registry + market + progressive read)
 const skills = await client.skills.market({ name: "kweaver" });
 const skillMd = await client.skills.fetchContent("skill-id");
 ```
+
+`searchSchema()` is the typed wrapper for the Context Loader MCP `search_schema` tool. It defaults `response_format` to `json` and accepts `query`, `response_format`, `search_scope`, `max_concepts`, `schema_brief`, and `enable_rerank`. The parsed response may contain `object_types`, `relation_types`, `action_types`, and `metric_types`.
+
+Use `callTool(name, args)` when you need native MCP `tools/call` access for newly added server tools before the SDK adds a typed wrapper. Arguments are passed through unchanged.
 
 ## CLI Reference
 
@@ -184,7 +189,7 @@ kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpubl
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader config set/use/list/show
-kweaver context-loader kn-search/query-object-instance/...
+kweaver context-loader search-schema/tool-call/kn-search/query-object-instance/...
 kweaver toolbox create/list/publish/unpublish/delete
 kweaver tool upload/list/enable/disable
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-F key=value]

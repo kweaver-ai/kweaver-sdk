@@ -50,3 +50,44 @@ export async function semanticSearch(
   }
   return body;
 }
+
+export interface KnSearchHttpOptions {
+  baseUrl: string;
+  accessToken: string;
+  knId: string;
+  query: string;
+  businessDomain?: string;
+  onlySchema?: boolean;
+}
+
+export async function knSearchHttp(
+  options: KnSearchHttpOptions
+): Promise<string> {
+  const {
+    baseUrl,
+    accessToken,
+    knId,
+    query,
+    businessDomain = "bd_public",
+    onlySchema = false,
+  } = options;
+
+  const base = baseUrl.replace(/\/+$/, "");
+  const url = `${base}/api/agent-retrieval/v1/kn/kn_search`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { ...buildHeaders(accessToken, businessDomain), "content-type": "application/json" },
+    body: JSON.stringify({
+      kn_id: knId,
+      query,
+      only_schema: onlySchema,
+    }),
+  });
+
+  const body = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, body);
+  }
+  return body;
+}

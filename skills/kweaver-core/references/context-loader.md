@@ -16,6 +16,7 @@ kweaver context-loader config remove myconfig
 
 ```bash
 kweaver context-loader tools           # 可用工具列表
+kweaver context-loader tool-call <name> --args '<json>'  # 直接调用任意 MCP tool
 kweaver context-loader resources       # 可用资源列表
 kweaver context-loader resource <uri>  # 读取资源
 kweaver context-loader templates       # 资源模板
@@ -25,10 +26,24 @@ kweaver context-loader prompt <name> [--args '<json>']
 
 ## Layer 1 — Schema 搜索
 
+推荐使用 `search-schema`，它调用 MCP `search_schema`，支持 `object_types`、`relation_types`、`action_types`、`metric_types`。
+
+```bash
+kweaver context-loader search-schema "Pod"
+kweaver context-loader search-schema "利润率" --scope object,metric --max 10 --brief --no-rerank
+kweaver context-loader search-schema "Pod" --format toon
+```
+
+参数映射：`--format` -> `response_format`，`--scope` -> `search_scope`，`--max` -> `max_concepts`，`--brief` -> `schema_brief: true`，`--no-rerank` -> `enable_rerank: false`。
+
+兼容命令仍保留，但**全部走 Context Loader 公共 HTTP endpoint**（`/api/agent-retrieval/v1/kn/kn_search` 与 `/semantic-search`），不再触碰已被移除的 MCP `kn_search` / `kn_schema_search`：
+
 ```bash
 kweaver context-loader kn-search "Pod" [--only-schema]
 kweaver context-loader kn-schema-search "Pod" [--max 10]
 ```
+
+> SDK 层同样走 HTTP：TS `client.bkn.knSearch(...)`、Python `client.query.kn_search(...)` / `client.query.kn_schema_search(...)`。`ContextLoaderResource` 不再暴露 `kn_search` / `kn_schema_search` 方法——MCP 入口请直接用 `searchSchema` / `callTool`。
 
 ## Layer 2 — 实例查询
 

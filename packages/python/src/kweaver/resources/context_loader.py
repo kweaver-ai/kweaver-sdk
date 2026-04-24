@@ -11,9 +11,11 @@ import json
 import logging
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
+
+from kweaver._auth import _env_tls_insecure
 
 if TYPE_CHECKING:
     from kweaver._http import HttpClient
@@ -47,13 +49,23 @@ class ContextLoaderResource:
     Equivalent to TypeScript src/api/context-loader.ts.
     """
 
-    def __init__(self, base_url: str, access_token: str, kn_id: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        access_token: str,
+        kn_id: str,
+        *,
+        tls_insecure: bool = False,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._mcp_url = _build_mcp_url(base_url)
         self._access_token = access_token
         self._kn_id = kn_id
         self._cache_key = f"{self._mcp_url}:{kn_id}"
-        self._client = httpx.Client(follow_redirects=True)
+        self._client = httpx.Client(
+            follow_redirects=True,
+            verify=not (tls_insecure or _env_tls_insecure()),
+        )
 
     def close(self) -> None:
         """Close the underlying HTTP client."""
@@ -209,13 +221,34 @@ class ContextLoaderResource:
 
     # ── Layer 1 ─────────────────────────────────────────────────────────────
 
-    def kn_search(self, query: str, *, only_schema: bool = False) -> dict[str, Any]:
-        """Search schema — returns object_types, relation_types, action_types."""
-        return self._call_tool("kn_search", {"query": query, "only_schema": only_schema})
+    def call_tool(self, tool_name: str, args: dict[str, Any]) -> Any:
+        """Call an arbitrary MCP tool by name."""
+        return self._call_tool(tool_name, args)
 
-    def kn_schema_search(self, query: str, *, max_concepts: int = 10) -> dict[str, Any]:
-        """Candidate discovery — returns concepts (schema only)."""
-        return self._call_tool("kn_schema_search", {"query": query, "max_concepts": max_concepts})
+    def search_schema(
+        self,
+        query: str,
+        *,
+        response_format: Literal["json", "toon"] = "json",
+        search_scope: dict[str, bool] | None = None,
+        max_concepts: int | None = None,
+        schema_brief: bool | None = None,
+        enable_rerank: bool | None = None,
+    ) -> dict[str, Any]:
+        """Search schema via the MCP search_schema tool."""
+        args: dict[str, Any] = {
+            "query": query,
+            "response_format": response_format,
+        }
+        if search_scope is not None:
+            args["search_scope"] = search_scope
+        if max_concepts is not None:
+            args["max_concepts"] = max_concepts
+        if schema_brief is not None:
+            args["schema_brief"] = schema_brief
+        if enable_rerank is not None:
+            args["enable_rerank"] = enable_rerank
+        return self._call_tool("search_schema", args)
 
     # ── Layer 2 ─────────────────────────────────────────────────────────────
 

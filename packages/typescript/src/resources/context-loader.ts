@@ -1,14 +1,13 @@
 import {
-  knSearch,
-  knSchemaSearch,
+  callTool,
+  searchSchema,
   queryObjectInstance,
   queryInstanceSubgraph,
   getLogicPropertiesValues,
   getActionInfo,
 } from "../api/context-loader.js";
 import type {
-  KnSearchArgs,
-  KnSchemaSearchArgs,
+  SearchSchemaArgs,
   QueryObjectInstanceArgs,
   QueryInstanceSubgraphArgs,
   GetLogicPropertiesValuesArgs,
@@ -33,12 +32,12 @@ export class ContextLoaderResource {
     return { mcpUrl: this.mcpUrl, knId: this.knId, accessToken: this.ctx.base().accessToken };
   }
 
-  async search(args: KnSearchArgs): Promise<unknown> {
-    return knSearch(this.opts(), args);
+  async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
+    return callTool(this.opts(), toolName, args);
   }
 
-  async schemaSearch(args: KnSchemaSearchArgs): Promise<unknown> {
-    return knSchemaSearch(this.opts(), args);
+  async searchSchema(args: SearchSchemaArgs): Promise<unknown> {
+    return searchSchema(this.opts(), args);
   }
 
   async queryInstances(args: QueryObjectInstanceArgs): Promise<unknown> {

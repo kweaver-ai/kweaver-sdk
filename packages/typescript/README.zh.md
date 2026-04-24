@@ -136,14 +136,19 @@ const rows = await client.vega.sqlQuery(
   JSON.stringify({ query: "SELECT * FROM {{res-1}} LIMIT 5", resource_type: "mysql" }),
 );
 
-// Context Loader（通过 MCP 对 BKN 做语义搜索）
+// Context Loader（MCP search_schema + 通用 tools/call）
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
-const results = await cl.search({ query: "高血压 治疗" });
+const schema  = await cl.searchSchema({ query: "高血压 治疗" });
+const rawTool = await cl.callTool("search_schema", { query: "高血压 治疗" });
 
 // Skill（注册表/市场/渐进式读取）
 const skills = await client.skills.market({ name: "kweaver" });
 const skillMd = await client.skills.fetchContent("skill-id");
 ```
+
+`searchSchema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
+
+需要直接使用 MCP 原生 `tools/call` 时，使用 `callTool(name, args)`。这适用于服务端新增工具但 SDK 尚未提供类型化封装的场景，参数会原样透传。
 
 ## 命令速查
 
@@ -172,7 +177,7 @@ kweaver agent list/get/chat/sessions/history
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader config set/use/list/show
-kweaver context-loader kn-search/query-object-instance/...
+kweaver context-loader search-schema/tool-call/kn-search/query-object-instance/...
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]
 ```
 

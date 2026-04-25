@@ -526,9 +526,18 @@ User: "Two researchers then synthesize"
 }
 \\\`\\\`\\\`
 
+## When NOT to add structure
+
+Match the structure to the request — do not invent stages or branches the user did not ask for.
+
+- **One operation = one agent.** "Summarize X", "Translate X to Y", "Classify X", "Greet the user" are single operations. Output one agent with a one-step flow. Do NOT decompose into "read → summarize → format" — that is the same operation rewritten.
+- **"if" / "either-or" / "depending on" in the prompt does NOT mean a switch is needed.** Only add a \`switch\` when the user explicitly describes routing to *different downstream agents* based on a value. "If the user says hi, greet them" is one greeter agent — the condition is part of the agent's instructions, not a workflow branch.
+- **Sequential decomposition requires real data dependency.** Each step must produce meaningfully different output that the next step consumes. "Read the question and answer it" is one operation, not two — the answerer reads as part of answering.
+- **When uncertain, prefer fewer agents.** A correct one-agent design beats an over-engineered pipeline.
+
 ## Output Rules
 
-1. Design 2-5 agents with clear, distinct roles
+1. Choose the minimum number of agents the task actually needs (1-5). Single-operation tasks → 1 agent. Only add agents when each has a distinct, necessary role.
 2. Output ONLY a single JSON code block. No other text.
 3. System prompts should be detailed and specific.`;
 

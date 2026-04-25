@@ -184,5 +184,126 @@
     "topology_hint": "ambiguous",
     "prompt": "帮我把业务做大。",
     "expected_shape": null
+  },
+
+  {
+    "id": "nested-01-switch-with-fork-branch",
+    "topology_hint": "nested switch+fork",
+    "prompt": "Issue resolution: a classifier decides if it's a bug or a feature request. For bugs, run a log-analyzer and a code-tracer in parallel, then a fixer merges their findings. For feature requests, just route to a product-manager agent.",
+    "expected_shape": { "calls": [3, 4], "switches": 1, "parallels": 1 }
+  },
+  {
+    "id": "nested-02-zh-deep",
+    "topology_hint": "nested switch+fork",
+    "prompt": "智能客服：分流 Agent 判断是售前还是售后。售前问题转给销售 Agent；售后问题进一步由质检 Agent 和物流 Agent 并行核查，再由客服主管 Agent 给出最终答复。",
+    "expected_shape": { "calls": [3, 4], "switches": 1, "parallels": 1 }
+  },
+  {
+    "id": "nested-03-fork-then-switch",
+    "topology_hint": "fork then switch",
+    "prompt": "Resume screening: in parallel, a skills-checker and an experience-checker evaluate the candidate; then a hiring-manager merges their scores. Based on the combined score, route to the interviewer for high scores or to the rejection-letter agent for low scores.",
+    "expected_shape": { "calls": [3, 4], "switches": 1, "parallels": 1 }
+  },
+
+  {
+    "id": "long-01-context-simple",
+    "topology_hint": "long context, simple structure",
+    "prompt": "I'm a product manager at a SaaS company and I have a 30-page customer feedback report. My team is meeting tomorrow and I really need to get the key insights out of this document so I can present them effectively. Could you go through the document and pull out the three most important takeaways for me?",
+    "expected_shape": { "calls": [1, 2], "switches": 0, "parallels": 0 }
+  },
+  {
+    "id": "long-02-zh-context-simple",
+    "topology_hint": "long context, simple structure",
+    "prompt": "我们是一家做跨境电商的小公司，最近发现退货率突然升高，老板让我尽快搞清楚原因。我手上有最近三个月的订单数据、客户反馈、和物流记录。请你看一下这份数据，告诉我退货率上升的最主要原因是什么。",
+    "expected_shape": { "calls": [1, 2], "switches": 0, "parallels": 0 }
+  },
+
+  {
+    "id": "mix-lang-01",
+    "topology_hint": "mixed-language sequential",
+    "prompt": "Build a 数据 pipeline: first crawl 网页 with a crawler agent, then extract 关键信息 with an extractor, then synthesize a final 报告.",
+    "expected_shape": { "calls": [3, 3], "switches": 0, "parallels": 0 }
+  },
+  {
+    "id": "mix-lang-02",
+    "topology_hint": "mixed-language fork-join",
+    "prompt": "审查 PR：parallel 运行 lint 检查 and 单元测试; 然后 merge 两边结果 into a 综合报告。",
+    "expected_shape": { "calls": [1, 2], "switches": 0, "parallels": 1 }
+  },
+
+  {
+    "id": "boundary-01-two-agent-seq",
+    "topology_hint": "minimal sequential",
+    "prompt": "Find the bug in this code, then fix it.",
+    "expected_shape": { "calls": [2, 2], "switches": 0, "parallels": 0 }
+  },
+  {
+    "id": "boundary-02-zh-classify",
+    "topology_hint": "single-call",
+    "prompt": "判断这条邮件是垃圾邮件还是正常邮件。",
+    "expected_shape": { "calls": [1, 1], "switches": 0, "parallels": 0 }
+  },
+
+  {
+    "id": "trap-01-compare-products",
+    "topology_hint": "trap (looks simple, real fork-join)",
+    "prompt": "Compare iPhone 15 and Samsung Galaxy S24 across price, camera, and battery — then summarize which is better for a power user.",
+    "expected_shape": { "calls": [1, 3], "switches": 0, "parallels": 1 }
+  },
+  {
+    "id": "trap-02-zh-pros-cons",
+    "topology_hint": "trap (parallel research)",
+    "prompt": "对比远程办公和坐班办公的优劣，给出一个综合建议。",
+    "expected_shape": { "calls": [1, 3], "switches": 0, "parallels": 1 }
+  },
+  {
+    "id": "trap-03-multi-aspect-one-agent",
+    "topology_hint": "ambiguous (1 agent vs parallel)",
+    "prompt": "Analyze this code from both correctness and performance perspectives.",
+    "expected_shape": null
+  },
+  {
+    "id": "trap-04-zh-two-tone",
+    "topology_hint": "ambiguous (1 agent vs parallel)",
+    "prompt": "用正式和口语两种语气分别改写这段话。",
+    "expected_shape": null
+  },
+
+  {
+    "id": "anti-06-classify-only",
+    "topology_hint": "anti-pattern (single classifier)",
+    "prompt": "Tell me whether this customer review is positive, negative, or neutral.",
+    "expected_shape": { "calls": [1, 1], "switches": 0, "parallels": 0 }
+  },
+  {
+    "id": "anti-07-extract-only",
+    "topology_hint": "anti-pattern (single extractor)",
+    "prompt": "Extract the email addresses from this text.",
+    "expected_shape": { "calls": [1, 1], "switches": 0, "parallels": 0 }
+  },
+  {
+    "id": "anti-08-zh-rewrite",
+    "topology_hint": "anti-pattern (single rewriter)",
+    "prompt": "把这段文字改得更专业一点。",
+    "expected_shape": { "calls": [1, 1], "switches": 0, "parallels": 0 }
+  },
+
+  {
+    "id": "switch-06-fallback",
+    "topology_hint": "switch with default",
+    "prompt": "Email auto-responder: a tag-detector reads the incoming email; if tagged urgent, route to the human escalation agent; if tagged sales, route to the sales bot; otherwise let a generic-replier handle it.",
+    "expected_shape": { "calls": [4, 5], "switches": 1, "parallels": 0 }
+  },
+  {
+    "id": "fork-06-no-merge-3way",
+    "topology_hint": "parallel-no-merge 3-way",
+    "prompt": "Run three independent monitors concurrently and report each result separately: a CPU-monitor, a memory-monitor, and a disk-monitor. Do not combine the outputs.",
+    "expected_shape": { "calls": [0, 1], "switches": 0, "parallels": 1 }
+  },
+  {
+    "id": "seq-06-zh-short-chain",
+    "topology_hint": "sequential 4-step",
+    "prompt": "起草一封求职邮件：先列要点，再写正文，再润色措辞，最后检查语法。",
+    "expected_shape": { "calls": [4, 4], "switches": 0, "parallels": 0 }
   }
 ]

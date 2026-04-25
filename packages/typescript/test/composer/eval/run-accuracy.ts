@@ -96,6 +96,9 @@ function checkShapeMatch(
   return reasons.length === 0 ? { result: "match" } : { result: "mismatch", reason: reasons.join("; ") };
 }
 
+// NOTE: shapeOf does NOT count call children of a parallel block — it counts
+// the parallel itself. So a fork-join "parallel(a,b) + merger" reports 1 call
+// (the merger) and 1 parallel, not 3 calls. Label expected_shape accordingly.
 function shapeOf(flow: FlowDo): { calls: number; switches: number; parallels: number } {
   let calls = 0, switches = 0, parallels = 0;
   const walk = (steps: FlowStep[]) => {

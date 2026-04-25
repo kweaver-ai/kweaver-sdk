@@ -646,7 +646,7 @@ export async function ensureComposerRelay(
  * eliminates the heuristic bias of picking an arbitrary domain-specific agent
  * from listAgents).
  */
-async function findRelayAgent(
+export async function findRelayAgent(
   baseUrl: string,
   accessToken: string,
   businessDomain: string,

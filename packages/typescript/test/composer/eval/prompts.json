@@ -1,0 +1,97 @@
+[
+  {
+    "id": "seq-01-code",
+    "topology_hint": "sequential",
+    "prompt": "Implement a fibonacci function in Python: design the algorithm, write the code, then review it.",
+    "expected_shape": { "calls": [3, 3], "switches": 0, "parallels": 0 }
+  },
+  {
+    "id": "seq-02-blog",
+    "topology_hint": "sequential",
+    "prompt": "Draft a blog post about renewable energy: outline, write, then proofread.",
+    "expected_shape": { "calls": [3, 3], "switches": 0, "parallels": 0 }
+  },
+  {
+    "id": "seq-03-zh-report",
+    "topology_hint": "sequential",
+    "prompt": "撰写一份季度业务分析报告：先收集数据，再分析趋势，最后撰写结论。",
+    "expected_shape": { "calls": [3, 3], "switches": 0, "parallels": 0 }
+  },
+
+  {
+    "id": "switch-01-support",
+    "topology_hint": "switch",
+    "prompt": "Customer support workflow: a triage agent classifies the question as technical, billing, or general, then routes it to the matching specialist.",
+    "expected_shape": { "calls": [4, 5], "switches": 1, "parallels": 0 }
+  },
+  {
+    "id": "switch-02-zh-legal",
+    "topology_hint": "switch",
+    "prompt": "法律咨询助手：先由分流 Agent 判断是合同、劳动还是知识产权问题，然后转给对应的专业律师 Agent 答复。",
+    "expected_shape": { "calls": [4, 5], "switches": 1, "parallels": 0 }
+  },
+  {
+    "id": "switch-03-priority",
+    "topology_hint": "switch",
+    "prompt": "Incident response: a classifier decides severity (P0, P1, P2), and routes to the on-call engineer for P0, the regular team for P1, and a logging-only agent for P2.",
+    "expected_shape": { "calls": [4, 5], "switches": 1, "parallels": 0 }
+  },
+
+  {
+    "id": "fork-01-research",
+    "topology_hint": "fork-join",
+    "prompt": "Research a topic from two perspectives in parallel — pro and con — then a synthesizer merges both views into a balanced summary.",
+    "expected_shape": { "calls": [1, 2], "switches": 0, "parallels": 1 }
+  },
+  {
+    "id": "fork-02-zh-news",
+    "topology_hint": "fork-join",
+    "prompt": "新闻摘要：两个搜索 Agent 并行从不同来源拉取信息，最后由汇总 Agent 合并成一份中立摘要。",
+    "expected_shape": { "calls": [1, 2], "switches": 0, "parallels": 1 }
+  },
+  {
+    "id": "fork-03-translate",
+    "topology_hint": "fork-join",
+    "prompt": "Translation pipeline: in parallel, a literal translator and a natural-style translator each produce a draft, then an editor merges them into the final translation.",
+    "expected_shape": { "calls": [1, 2], "switches": 0, "parallels": 1 }
+  },
+
+  {
+    "id": "parallel-01-noMerge",
+    "topology_hint": "parallel",
+    "prompt": "Run two independent linters concurrently on a code snippet (style linter and security linter). Report both results — no need to merge.",
+    "expected_shape": { "calls": [0, 1], "switches": 0, "parallels": 1 }
+  },
+
+  {
+    "id": "mixed-01",
+    "topology_hint": "mixed-seq+switch",
+    "prompt": "First, an extractor pulls out the key fields from the user's request. Then a classifier decides whether the request is a refund or an exchange, and routes to the matching handler.",
+    "expected_shape": { "calls": [4, 5], "switches": 1, "parallels": 0 }
+  },
+  {
+    "id": "mixed-02",
+    "topology_hint": "mixed-seq+fork-join",
+    "prompt": "Plan a trip: first an interviewer collects preferences, then in parallel a flights-agent and a hotels-agent search; finally an itinerary-agent merges results into one plan.",
+    "expected_shape": { "calls": [2, 3], "switches": 0, "parallels": 1 }
+  },
+  {
+    "id": "mixed-03-zh",
+    "topology_hint": "mixed-switch+fork",
+    "prompt": "代码审查流程：先由分流 Agent 判断是性能问题还是安全问题；如果是性能问题，由两个性能优化 Agent 并行从 CPU 和内存两个角度分析后汇总；如果是安全问题，转给安全审查 Agent。",
+    "expected_shape": { "calls": [3, 5], "switches": 1, "parallels": 1 }
+  },
+
+  {
+    "id": "ambig-01-short",
+    "topology_hint": "ambiguous",
+    "prompt": "Help me understand this codebase.",
+    "expected_shape": null
+  },
+  {
+    "id": "ambig-02-vague",
+    "topology_hint": "ambiguous",
+    "prompt": "Make my product better.",
+    "expected_shape": null
+  }
+]

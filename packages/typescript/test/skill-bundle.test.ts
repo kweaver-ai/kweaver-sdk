@@ -7,6 +7,7 @@ import JSZip from "jszip";
 
 import {
   bundleSkillDirectoryToZip,
+  bundleSkillFileToZip,
   SkillBundleError,
 } from "../src/utils/skill-bundle.js";
 
@@ -83,6 +84,46 @@ test("bundleSkillDirectoryToZip: posix-style paths inside zip on any platform", 
   for (const name of Object.keys(zip.files)) {
     assert.ok(!name.includes("\\"), `entry contains backslash: ${name}`);
   }
+});
+
+test("bundleSkillFileToZip: wraps a SKILL.md into 1-file zip", async () => {
+  const dir = freshDir("single");
+  const filePath = join(dir, "SKILL.md");
+  writeFileSync(filePath, "---\nname: solo\n---\nbody");
+
+  const bytes = await bundleSkillFileToZip(filePath);
+
+  const zip = await JSZip.loadAsync(bytes);
+  const fileNames = Object.values(zip.files)
+    .filter((f) => !f.dir)
+    .map((f) => f.name);
+  assert.deepEqual(fileNames, ["SKILL.md"]);
+  assert.equal(await zip.file("SKILL.md")!.async("string"), "---\nname: solo\n---\nbody");
+});
+
+test("bundleSkillFileToZip: rejects non-SKILL.md filenames", async () => {
+  const dir = freshDir("wrong-name");
+  const filePath = join(dir, "guide.md");
+  writeFileSync(filePath, "---\nname: x\n---\n");
+  await assert.rejects(
+    () => bundleSkillFileToZip(filePath),
+    (err) => err instanceof SkillBundleError && /expects a file named SKILL\.md/.test(err.message),
+  );
+});
+
+test("bundleSkillFileToZip: case-insensitive on filename", async () => {
+  const dir = freshDir("case");
+  const filePath = join(dir, "skill.md");
+  writeFileSync(filePath, "---\nname: x\n---\n");
+  await assert.doesNotReject(() => bundleSkillFileToZip(filePath));
+});
+
+test("bundleSkillFileToZip: rejects directory paths", async () => {
+  const dir = freshDir("dir-as-file");
+  await assert.rejects(
+    () => bundleSkillFileToZip(dir),
+    (err) => err instanceof SkillBundleError && /not a file/.test(err.message),
+  );
 });
 
 test("teardown", () => {

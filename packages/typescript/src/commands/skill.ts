@@ -13,12 +13,11 @@ import {
   listSkillMarket,
   listSkills,
   readSkillFile,
-  registerSkillContent,
   registerSkillZip,
   updateSkillStatus,
   type SkillStatus,
 } from "../api/skills.js";
-import { bundleSkillDirectoryToZip } from "../utils/skill-bundle.js";
+import { bundleSkillDirectoryToZip, bundleSkillFileToZip } from "../utils/skill-bundle.js";
 
 interface BaseOptions {
   businessDomain: string;
@@ -85,8 +84,11 @@ function printSkillHelp(subcommand?: string): void {
                        [--source src] [--extend-info json] [-bd value] [--pretty|--compact]
 
   --content-file accepts either:
-    - a single SKILL.md file (registered as bare content, no assets)
-    - a skill directory containing SKILL.md (bundled into a zip and uploaded)
+    - a single file named SKILL.md (auto-bundled into a 1-file zip)
+    - a skill directory containing SKILL.md (bundled into a zip)
+  Both paths upload as multipart zip; the backend's file_type=content
+  registration is unreliable (publish-then-read returns 404) so the CLI
+  always goes through zip.
   --zip-file accepts a pre-built .zip with SKILL.md at the archive root.`);
     return;
   }
@@ -121,7 +123,7 @@ Subcommands:
   market [--name kw] [--source src] [--page N] [--page-size N] [-bd value]
   get <skill-id> [-bd value]
   register --content-file <path> | --zip-file <path> [--source src] [--extend-info json]
-           (--content-file accepts SKILL.md or a directory; directory is auto-bundled)
+           (--content-file accepts a file named SKILL.md or a directory; both auto-zip)
   set-status <skill-id> <unpublish|published|offline> [-bd value]
   delete <skill-id> [-y] [-bd value]
   content <skill-id> [--raw] [--output file] [-bd value]
@@ -473,30 +475,23 @@ export async function runSkillCommand(args: string[]): Promise<number> {
       if (subcommand === "register") {
         const opts = parseSkillRegisterArgs(rest);
         if (opts.contentFile) {
+          // Always bundle into zip — the backend's file_type=content path
+          // doesn't write skill_file_index, so SKILL.md is unreachable
+          // after publish via /skills/:id/content. Going through zip
+          // (single SKILL.md or full directory) is the only path that
+          // produces a readable skill end-to-end.
           const abs = resolve(opts.contentFile);
           const stat = statSync(abs);
-          if (stat.isDirectory()) {
-            // Server requires SKILL.md plus optional assets in a single zip.
-            // Bundle in memory so users don't need a system `zip` binary.
-            const bytes = await bundleSkillDirectoryToZip(abs);
-            const result = await registerSkillZip({
-              ...token,
-              businessDomain: opts.businessDomain,
-              source: opts.source,
-              extendInfo: opts.extendInfo,
-              filename: `${basename(abs)}.zip`,
-              bytes,
-            });
-            console.log(format(result, opts.pretty));
-            return 0;
-          }
-          const content = readFileSync(abs, "utf8");
-          const result = await registerSkillContent({
+          const bytes = stat.isDirectory()
+            ? await bundleSkillDirectoryToZip(abs)
+            : await bundleSkillFileToZip(abs);
+          const result = await registerSkillZip({
             ...token,
             businessDomain: opts.businessDomain,
-            content,
             source: opts.source,
             extendInfo: opts.extendInfo,
+            filename: `${basename(abs).replace(/\.zip$/i, "")}.zip`,
+            bytes,
           });
           console.log(format(result, opts.pretty));
           return 0;

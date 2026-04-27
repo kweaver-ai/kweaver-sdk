@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, posix, relative, sep } from "node:path";
+import { basename, join, posix, relative, sep } from "node:path";
 import JSZip from "jszip";
 
 const SKILL_MD = "SKILL.md";
@@ -61,4 +61,25 @@ export async function bundleSkillDirectoryToZip(rootDir: string): Promise<Uint8A
     compressionOptions: { level: 6 },
   });
   return buf;
+}
+
+export async function bundleSkillFileToZip(filePath: string): Promise<Uint8Array> {
+  const stat = statSync(filePath);
+  if (!stat.isFile()) {
+    throw new SkillBundleError(`not a file: ${filePath}`);
+  }
+  const fileName = basename(filePath);
+  if (fileName.toLowerCase() !== SKILL_MD.toLowerCase()) {
+    throw new SkillBundleError(
+      `--content-file expects a file named ${SKILL_MD} (got ${fileName}). ` +
+        `Pass a directory containing ${SKILL_MD} for skills with assets.`,
+    );
+  }
+  const zip = new JSZip();
+  zip.file(SKILL_MD, readFileSync(filePath));
+  return zip.generateAsync({
+    type: "uint8array",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  });
 }

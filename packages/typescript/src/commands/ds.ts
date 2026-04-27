@@ -54,7 +54,10 @@ Subcommands:
   delete <id> [-y]                  Delete a datasource
   tables <id> [--keyword X]         List tables with columns
   connect <db_type> <host> <port> <database> --account X --password Y [--schema Z] [--name N]
+                                              [--reuse-existing|--force-new]
     Test connectivity, register datasource, and discover tables.
+    By default reuses an existing ds with the same (type, host, port, database, account)
+    instead of creating a duplicate. --force-new always creates a new entry.
   import-csv <ds-id> --files <glob_or_list> [--table-prefix X] [--batch-size N]
     Import CSV files into datasource tables via dataflow API.`);
     return 0;
@@ -229,6 +232,95 @@ async function runDsTablesCommand(args: string[]): Promise<number> {
   return 0;
 }
 
+/**
+ * Match candidate signature against a list response (the kind returned by
+ * `listDatasources`). Connection metadata lives under `bin_data` — host,
+ * port, account, plus type-specific fields (`database_name` for MySQL etc.).
+ *
+ * Exported for unit testing.
+ */
+export interface DsMatchSignature {
+  type: string;
+  host: string;
+  port: number;
+  database: string;
+  account: string;
+  name?: string;
+}
+
+export interface DsMatchHit {
+  id: string;
+  name: string;
+  matchedByName: boolean;
+  matchedByTuple: boolean;
+}
+
+interface DsListEntry {
+  id?: string;
+  name?: string;
+  type?: string;
+  bin_data?: {
+    host?: string;
+    port?: number;
+    account?: string;
+    database_name?: string;
+    schema_name?: string;
+  };
+}
+
+export function findExistingDatasource(
+  listBody: string,
+  sig: DsMatchSignature,
+): DsMatchHit | undefined {
+  const parsed = JSON.parse(listBody) as { entries?: DsListEntry[] } | DsListEntry[];
+  const entries = Array.isArray(parsed) ? parsed : (parsed.entries ?? []);
+  const tupleMatch = entries.find(
+    (e) =>
+      e.id &&
+      e.type === sig.type &&
+      e.bin_data?.host === sig.host &&
+      Number(e.bin_data?.port) === Number(sig.port) &&
+      e.bin_data?.database_name === sig.database &&
+      e.bin_data?.account === sig.account,
+  );
+  if (tupleMatch) {
+    return {
+      id: String(tupleMatch.id),
+      name: String(tupleMatch.name ?? ""),
+      matchedByName: tupleMatch.name === sig.name,
+      matchedByTuple: true,
+    };
+  }
+  if (sig.name) {
+    const nameMatch = entries.find((e) => e.id && e.name === sig.name);
+    if (nameMatch) {
+      return {
+        id: String(nameMatch.id),
+        name: String(nameMatch.name),
+        matchedByName: true,
+        matchedByTuple: false,
+      };
+    }
+  }
+  return undefined;
+}
+
+export function findDatasourceIdByName(listBody: string, name: string): string | undefined {
+  const parsed = JSON.parse(listBody) as { entries?: DsListEntry[] } | DsListEntry[];
+  const entries = Array.isArray(parsed) ? parsed : (parsed.entries ?? []);
+  const hit = entries.find((e) => e.id && e.name === name);
+  return hit?.id ? String(hit.id) : undefined;
+}
+
+function isDuplicateNameError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  // HttpError.message is just "HTTP 400 ..."; the description lives in body.
+  const status = "status" in err ? Number((err as { status: unknown }).status) : NaN;
+  const body = "body" in err ? String((err as { body: unknown }).body) : "";
+  if (status !== 400) return false;
+  return /数据源名称已存在|datasource name.*exist|already exists/i.test(body);
+}
+
 async function runDsConnectCommand(args: string[]): Promise<number> {
   let dbType = "";
   let host = "";
@@ -238,6 +330,7 @@ async function runDsConnectCommand(args: string[]): Promise<number> {
   let password = "";
   let schema: string | undefined;
   let name: string | undefined;
+  let forceNew = false;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -257,6 +350,14 @@ async function runDsConnectCommand(args: string[]): Promise<number> {
       name = args[++i];
       continue;
     }
+    if (arg === "--force-new") {
+      forceNew = true;
+      continue;
+    }
+    if (arg === "--reuse-existing") {
+      forceNew = false;
+      continue;
+    }
     if (!arg.startsWith("-")) {
       if (!dbType) dbType = arg;
       else if (!host) host = arg;
@@ -267,7 +368,7 @@ async function runDsConnectCommand(args: string[]): Promise<number> {
 
   if (!dbType || !host || !database || !account || !password) {
     console.error(
-      "Usage: kweaver ds connect <db_type> <host> <port> <database> --account X --password Y [--schema Z] [--name N]"
+      "Usage: kweaver ds connect <db_type> <host> <port> <database> --account X --password Y [--schema Z] [--name N] [--reuse-existing|--force-new]"
     );
     return 1;
   }
@@ -278,6 +379,31 @@ async function runDsConnectCommand(args: string[]): Promise<number> {
 
   const token = await ensureValidToken();
   const base = { baseUrl: token.baseUrl, accessToken: token.accessToken };
+  const dsName = name ?? database;
+
+  // Pre-flight dedup: connection-tuple match is the silent-orphan vector.
+  // Backend already rejects duplicate names with 400, but won't notice
+  // tuple collisions, so we own that check.
+  if (!forceNew) {
+    const listBody = await listDatasources({ ...base });
+    const hit = findExistingDatasource(listBody, {
+      type: dbType,
+      host,
+      port,
+      database,
+      account,
+      name: dsName,
+    });
+    if (hit) {
+      const why = hit.matchedByTuple
+        ? "matched by (type,host,port,database,account)"
+        : "matched by --name";
+      console.error(
+        `Reusing existing datasource ${hit.id} (${hit.name}); ${why}. Use --force-new to override.`,
+      );
+      return printDsConnectOutput(base, hit.id);
+    }
+  }
 
   console.error("Testing connectivity ...");
   await testDatasource({
@@ -291,31 +417,55 @@ async function runDsConnectCommand(args: string[]): Promise<number> {
     schema,
   });
 
-  const dsName = name ?? database;
-  const createBody = await createDatasource({
-    ...base,
-    name: dsName,
-    type: dbType,
-    host,
-    port,
-    database,
-    account,
-    password,
-    schema,
-  });
-
-  const dsId = extractDatasourceId(createBody);
+  let dsId = "";
+  try {
+    const createBody = await createDatasource({
+      ...base,
+      name: dsName,
+      type: dbType,
+      host,
+      port,
+      database,
+      account,
+      password,
+      schema,
+    });
+    dsId = extractDatasourceId(createBody);
+  } catch (err) {
+    // Backend checks name uniqueness but not tuple. If we raced another caller
+    // (or tuple match got disabled by --force-new and the name still collides),
+    // turn the raw 400 into a useful pointer to the existing id.
+    if (isDuplicateNameError(err)) {
+      // Backend rejected the name; look it up specifically (not by tuple —
+      // sibling ds sharing the same connection would mislead the pointer).
+      const listBody = await listDatasources({ ...base });
+      const existingId = findDatasourceIdByName(listBody, dsName);
+      if (existingId) {
+        console.error(
+          `Datasource name '${dsName}' already exists as ${existingId}. Re-run without --force-new to reuse it, or pick a different --name.`,
+        );
+        return 1;
+      }
+    }
+    throw err;
+  }
   if (!dsId) {
     console.error("Failed to get datasource ID from create response");
     return 1;
   }
 
-  const tablesBody = await listTablesWithColumns({
-    ...base,
-    id: dsId,
-  });
+  return printDsConnectOutput(base, dsId);
+}
 
-  const tables = JSON.parse(tablesBody) as Array<{ name: string; columns: Array<{ name: string; type: string; comment?: string }> }>;
+async function printDsConnectOutput(
+  base: { baseUrl: string; accessToken: string },
+  dsId: string,
+): Promise<number> {
+  const tablesBody = await listTablesWithColumns({ ...base, id: dsId });
+  const tables = JSON.parse(tablesBody) as Array<{
+    name: string;
+    columns: Array<{ name: string; type: string; comment?: string }>;
+  }>;
   const output = {
     datasource_id: dsId,
     tables: tables.map((t) => ({

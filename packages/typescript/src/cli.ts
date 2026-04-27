@@ -61,6 +61,7 @@ Usage:
   kweaver ds delete <id> [-y]
   kweaver ds tables <id> [--keyword X]
   kweaver ds connect <db_type> <host> <port> <database> --account X --password Y [--schema S] [--name N]
+                     [--reuse-existing|--force-new]
 
   kweaver dataflow list [-bd value]
   kweaver dataflow run <dagId> (--file <path> | --url <remote-url> --name <filename>) [-bd value]

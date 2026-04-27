@@ -13,11 +13,14 @@ import {
   getKnowledgeNetwork,
   createKnowledgeNetwork,
   createObjectTypes,
+  deleteKnowledgeNetwork,
   buildKnowledgeNetwork,
   getBuildStatus,
 } from "../api/knowledge-networks.js";
 import { listTablesWithColumns, scanMetadata, getDatasource } from "../api/datasources.js";
 import { createDataView, findDataView } from "../api/dataviews.js";
+import { resolveFiles } from "./ds.js";
+import { buildTableName } from "./import-csv.js";
 import {
   downloadBkn,
   uploadBkn,
@@ -41,6 +44,31 @@ import {
   detectDisplayKey,
   confirmYes,
 } from "./bkn-utils.js";
+
+// ── BKN object name validation ──────────────────────────────────────────────
+// Mirrors bkn-backend OBJECT_NAME_MAX_LENGTH (interfaces/common.go:28) and
+// validateObjectName (driveradapters/validate.go:85). 40 utf-8 codepoints,
+// non-empty. Backend rejects the whole batch on first violation, so we surface
+// every offender locally before any side-effecting call.
+export const BKN_OBJECT_NAME_MAX_LENGTH = 40;
+
+export function assertValidBknObjectNames(names: string[], context: string): void {
+  const offenders: Array<{ name: string; length: number }> = [];
+  for (const name of names) {
+    const len = [...name].length;
+    if (len === 0 || len > BKN_OBJECT_NAME_MAX_LENGTH) {
+      offenders.push({ name, length: len });
+    }
+  }
+  if (offenders.length === 0) return;
+  const lines = offenders.map(
+    (o) => `  - ${o.name} (${o.length} chars)`,
+  );
+  throw new Error(
+    `${context}: ${offenders.length} name(s) violate BKN object-name limit ` +
+      `(1..${BKN_OBJECT_NAME_MAX_LENGTH} utf-8 chars):\n${lines.join("\n")}`,
+  );
+}
 
 // ── Build ───────────────────────────────────────────────────────────────────
 
@@ -548,6 +576,7 @@ Options:
   --build (default)  Build after creation
   --no-build       Skip build after creation
   --timeout <n>    Build timeout in seconds (default: 300)
+  --no-rollback    Keep partially-created KN on failure (debug; default: rollback)
   -bd, --biz-domain  Business domain (default: bd_public)
   --pretty         Pretty-print output (default)`;
 
@@ -559,6 +588,7 @@ export function parseKnCreateFromDsArgs(args: string[]): {
   timeout: number;
   businessDomain: string;
   pretty: boolean;
+  noRollback: boolean;
 } {
   let dsId = "";
   let name = "";
@@ -567,6 +597,7 @@ export function parseKnCreateFromDsArgs(args: string[]): {
   let timeout = 300;
   let businessDomain = "";
   let pretty = true;
+  let noRollback = false;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -585,6 +616,10 @@ export function parseKnCreateFromDsArgs(args: string[]): {
     }
     if (arg === "--no-build") {
       build = false;
+      continue;
+    }
+    if (arg === "--no-rollback") {
+      noRollback = true;
       continue;
     }
     if (arg === "--timeout" && args[i + 1]) {
@@ -610,7 +645,7 @@ export function parseKnCreateFromDsArgs(args: string[]): {
     throw new Error("Usage: kweaver bkn create-from-ds <ds-id> --name X [options]");
   }
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { dsId, name, tables, build, timeout, businessDomain, pretty };
+  return { dsId, name, tables, build, timeout, businessDomain, pretty, noRollback };
 }
 
 /** Sanitize a table name into a BKN-safe ID (alphanumeric + underscore). */
@@ -699,7 +734,16 @@ export async function runKnCreateFromDsCommand(
       return 1;
     }
 
-    // Phase 1: Create DataViews for each table
+    // Pre-flight: catch every offending OT name before any side effect.
+    // Backend rejects the whole batch on first violation (validate.go:90),
+    // so retroactive rollback is wasted work if we can fail fast here.
+    assertValidBknObjectNames(
+      targetTables.map((t) => t.name),
+      "Object type names derived from table names",
+    );
+
+    // Phase 1: Create DataViews for each table. findDataView is idempotent;
+    // not tracked for rollback so a retry can reuse what's already there.
     console.error(`Creating data views for ${targetTables.length} table(s) ...`);
     const viewMap: Record<string, string> = {};
     for (const t of targetTables) {
@@ -722,7 +766,8 @@ export async function runKnCreateFromDsCommand(
       viewMap[t.name] = dvId;
     }
 
-    // Phase 2: Create the KN record
+    // Phase 2: Create the KN. If any subsequent step fails we DELETE this
+    // KN — backend cascades to OTs (knowledge_network_service.go:917-969).
     const knBody = JSON.stringify({
       name: options.name,
       branch: "main",
@@ -737,74 +782,97 @@ export async function runKnCreateFromDsCommand(
     const knId = String(knItem?.id ?? "");
     console.error(`Knowledge network created: ${knId}`);
 
-    // Phase 3: Create object types via REST API
-    console.error(`Creating ${targetTables.length} object type(s) ...`);
+    let createdKnId: string | undefined = knId;
     const otResults: Array<{ name: string; id: string; field_count: number }> = [];
-    for (const t of targetTables) {
-      const pk = detectPrimaryKey(t, sampleRows?.[t.name]);
-      const dk = detectDisplayKey(t, pk);
-      const uniqueProps = [pk, dk].filter((x, i, a) => a.indexOf(x) === i);
-      const entry = {
-        branch: "main",
-        name: t.name,
-        data_source: { type: "data_view", id: viewMap[t.name] },
-        primary_keys: [pk],
-        display_key: dk,
-        data_properties: t.columns.map((c) => ({
-          name: c.name,
-          display_name: c.name,
-          type: "string",
-          mapped_field: { name: c.name, type: c.type || "varchar" },
-        })),
-      };
-      const otBody = JSON.stringify({ entries: [entry] });
+    let statusStr = "skipped";
+
+    try {
+      // Phase 3: Single batched POST. Backend wraps all entries in one tx
+      // (object_type_service.go:213-355) — all-or-nothing.
+      console.error(`Creating ${targetTables.length} object type(s) ...`);
+      const entries = targetTables.map((t) => {
+        const pk = detectPrimaryKey(t, sampleRows?.[t.name]);
+        const dk = detectDisplayKey(t, pk);
+        return {
+          branch: "main",
+          name: t.name,
+          data_source: { type: "data_view", id: viewMap[t.name] },
+          primary_keys: [pk],
+          display_key: dk,
+          data_properties: t.columns.map((c) => ({
+            name: c.name,
+            display_name: c.name,
+            type: "string",
+            mapped_field: { name: c.name, type: c.type || "varchar" },
+          })),
+          _meta: { pk, dk },
+        };
+      });
+      const wireEntries = entries.map(({ _meta: _, ...rest }) => rest);
+      const otBody = JSON.stringify({ entries: wireEntries });
       const otResponse = await createObjectTypes({
         ...base,
         knId,
         body: otBody,
       });
-      const otParsed = JSON.parse(otResponse) as { entries?: Array<{ id?: string; name?: string }> };
-      const otItem = otParsed.entries?.[0];
-      otResults.push({
-        name: t.name,
-        id: otItem?.id ?? "",
-        field_count: t.columns.length,
-      });
-      console.error(`  Created: ${t.name} (${t.columns.length} fields, pk=${pk}, dk=${dk})`);
-    }
-
-    if (otResults.length === 0) {
-      const errorOutput = {
-        kn_id: knId,
-        kn_name: options.name,
-        error: "No object types were created",
-      };
-      console.log(JSON.stringify(errorOutput, null, options.pretty ? 2 : 0));
-      return 1;
-    }
-
-    let statusStr = "skipped";
-    if (options.build) {
-      console.error("Building ...");
-      await buildKnowledgeNetwork({ ...base, knId });
-      const TERMINAL = ["completed", "failed", "success"];
-      try {
-        statusStr = await pollWithBackoff({
-          fn: async () => {
-            const statusBody = await getBuildStatus({ ...base, knId });
-            const statusParsed = JSON.parse(statusBody) as
-              | Array<{ state?: string }>
-              | { entries?: Array<{ state?: string }> };
-            const jobs = Array.isArray(statusParsed) ? statusParsed : (statusParsed.entries ?? []);
-            const state = (jobs[0]?.state ?? "running").toLowerCase();
-            if (TERMINAL.includes(state)) return { done: true, value: state };
-            return { done: false, value: "running" };
-          },
-          interval: 2000,
-          timeout: options.timeout * 1000,
+      const otParsed = JSON.parse(otResponse) as
+        | { entries?: Array<{ id?: string; name?: string }> }
+        | Array<{ id?: string; name?: string }>;
+      const otItems = Array.isArray(otParsed) ? otParsed : (otParsed.entries ?? []);
+      for (let i = 0; i < entries.length; i += 1) {
+        const t = targetTables[i];
+        const meta = entries[i]._meta;
+        otResults.push({
+          name: t.name,
+          id: otItems[i]?.id ?? "",
+          field_count: t.columns.length,
         });
-      } catch {
-        // timeout — statusStr remains "skipped"
+        console.error(`  Created: ${t.name} (${t.columns.length} fields, pk=${meta.pk}, dk=${meta.dk})`);
+      }
+
+      if (options.build) {
+        console.error("Building ...");
+        await buildKnowledgeNetwork({ ...base, knId });
+        const TERMINAL = ["completed", "failed", "success"];
+        try {
+          statusStr = await pollWithBackoff({
+            fn: async () => {
+              const statusBody = await getBuildStatus({ ...base, knId });
+              const statusParsed = JSON.parse(statusBody) as
+                | Array<{ state?: string }>
+                | { entries?: Array<{ state?: string }> };
+              const jobs = Array.isArray(statusParsed) ? statusParsed : (statusParsed.entries ?? []);
+              const state = (jobs[0]?.state ?? "running").toLowerCase();
+              if (TERMINAL.includes(state)) return { done: true, value: state };
+              return { done: false, value: "running" };
+            },
+            interval: 2000,
+            timeout: options.timeout * 1000,
+          });
+        } catch {
+          // build timeout — KN itself is fine, just mark skipped
+        }
+      }
+
+      // Reached the end without throwing — clear the rollback handle.
+      createdKnId = undefined;
+    } finally {
+      if (createdKnId !== undefined) {
+        if (options.noRollback) {
+          console.error(
+            `Leaving partial KN ${createdKnId} in place (--no-rollback)`,
+          );
+        } else {
+          console.error(`Rolling back KN ${createdKnId} ...`);
+          try {
+            await deleteKnowledgeNetwork({ ...base, knId: createdKnId });
+            console.error(`Rolled back KN ${createdKnId}`);
+          } catch (rollbackErr) {
+            console.error(
+              `Rollback failed for KN ${createdKnId}: ${formatHttpError(rollbackErr)}`,
+            );
+          }
+        }
       }
     }
 
@@ -838,6 +906,7 @@ Options:
   --no-build           Skip build
   --recreate           Use "insert" mode on first batch (only effective for new tables)
   --timeout <n>        Build timeout in seconds (default: 300)
+  --no-rollback        Keep partially-created KN on failure (debug; default: rollback)
   -bd, --biz-domain    Business domain (default: bd_public)`;
 
 export function parseKnCreateFromCsvArgs(args: string[]): {
@@ -851,6 +920,7 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
   recreate: boolean;
   timeout: number;
   businessDomain: string;
+  noRollback: boolean;
 } {
   let dsId = "";
   let files = "";
@@ -862,6 +932,7 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
   let recreate = false;
   let timeout = 300;
   let businessDomain = "";
+  let noRollback = false;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -899,6 +970,10 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
       recreate = true;
       continue;
     }
+    if (arg === "--no-rollback") {
+      noRollback = true;
+      continue;
+    }
     if (arg === "--timeout" && args[i + 1]) {
       timeout = parseInt(args[++i], 10);
       if (Number.isNaN(timeout) || timeout < 1) timeout = 300;
@@ -918,7 +993,7 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
     throw new Error("Usage: kweaver bkn create-from-csv <ds-id> --files <glob> --name X [options]");
   }
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { dsId, files, name, tablePrefix, batchSize, tables, build, recreate, timeout, businessDomain };
+  return { dsId, files, name, tablePrefix, batchSize, tables, build, recreate, timeout, businessDomain, noRollback };
 }
 
 export async function runKnCreateFromCsvCommand(args: string[]): Promise<number> {
@@ -930,6 +1005,23 @@ export async function runKnCreateFromCsvCommand(args: string[]): Promise<number>
       console.log(KN_CREATE_FROM_CSV_HELP);
       return 0;
     }
+    console.error(formatHttpError(error));
+    return 1;
+  }
+
+  // Pre-flight: predict OT names from (table-prefix + csv basename) and
+  // reject before any CSV is imported. CSV import is expensive; failing
+  // here saves the user a multi-minute round trip.
+  try {
+    const filePaths = await resolveFiles(options.files);
+    const predictedNames = options.tables.length > 0
+      ? options.tables
+      : filePaths.map((p) => buildTableName(p, options.tablePrefix));
+    assertValidBknObjectNames(
+      predictedNames,
+      "Object type names derived from CSV file names",
+    );
+  } catch (error) {
     console.error(formatHttpError(error));
     return 1;
   }
@@ -986,6 +1078,7 @@ export async function runKnCreateFromCsvCommand(args: string[]): Promise<number>
     options.build ? "--build" : "--no-build",
     "--timeout", String(options.timeout),
     "-bd", options.businessDomain,
+    ...(options.noRollback ? ["--no-rollback"] : []),
   ];
   return runKnCreateFromDsCommand(knArgs, importResult.sampleRows);
 }

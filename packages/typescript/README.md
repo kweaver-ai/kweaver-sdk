@@ -31,7 +31,7 @@ export KWEAVER_BASE_URL=https://your-kweaver-instance.com
 export KWEAVER_TOKEN=your-token
 ```
 
-With both set, API commands use that token even if you never ran `auth login`. You can also run **`kweaver auth status`**, **`kweaver auth whoami`** (supports `--json`), and **`kweaver config show`** when there is **no** current platform in `~/.kweaver/`. In env-token mode, `whoami` resolves the bound identity from EACP `/api/eacp/v1/user/get` and prints `Type` (user/app), `User ID`, `Account` and `Name`; this works for both opaque and JWT tokens. If EACP is unreachable, the CLI falls back to local JWT decode and prints a short hint when the token is opaque.
+With both set, API commands use that token even if you never ran `auth login`. The same applies to **`kweaver --base-url <url> --token <access-token> <command>`** (stateless flag mode; see [Stateless token mode](#stateless-token-mode)). You can also run **`kweaver auth status`**, **`kweaver auth whoami`** (supports `--json`), and **`kweaver config show`** when there is **no** current platform in `~/.kweaver/`. In env-token mode, `whoami` resolves the bound identity from EACP `/api/eacp/v1/user/get` and prints `Type` (user/app), `User ID`, `Account` and `Name`; this works for both opaque and JWT tokens. If EACP is unreachable, the CLI falls back to local JWT decode and prints a short hint when the token is opaque.
 
 `kweaver config list-bd` lists business domains for the current user. App (service) tokens are not bound to an end-user — when the backend rejects the call with `401 invalid user_id`, the CLI re-checks the token type via EACP and, if confirmed `type:"app"`, replaces the cryptic backend body with `This command does not support app accounts.`. Use a user token (interactive `auth login`) for user-bound endpoints.
 
@@ -188,8 +188,10 @@ kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
-kweaver context-loader config set/use/list/show
-kweaver context-loader search-schema/tool-call/kn-search/query-object-instance/find-skills/...
+kweaver context-loader tools|resources|templates|prompts <kn-id>
+kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
+kweaver context-loader config set/use/list/show                       (deprecated; <kn-id> may be omitted to fall back to saved config)
 kweaver toolbox create/list/publish/unpublish/delete
 kweaver tool upload/list/enable/disable
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-F key=value]
@@ -251,9 +253,32 @@ kweaver tool enable --toolbox <BOX_ID> <TOOL_ID>
 | `KWEAVER_BASE_URL` | KWeaver instance URL |
 | `KWEAVER_BUSINESS_DOMAIN` | Business domain identifier |
 | `KWEAVER_TOKEN` | Access token |
+| `KWEAVER_TOKEN_SOURCE` | Internal sentinel set by the CLI when `--token` is passed; do not set manually |
 | `KWEAVER_NO_AUTH` | Set to `1`/`true`/`yes` to use no-auth sentinel when `KWEAVER_TOKEN` is unset (with `KWEAVER_BASE_URL` or active platform) |
 | `KWEAVER_TLS_INSECURE` | Set to `1` or `true` to skip TLS certificate verification for all HTTPS in the process (dev only; prefer `kweaver auth … --insecure` which saves per platform) |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js built-in TLS switch: set to `0` to skip certificate verification for HTTPS in this process. The `kweaver` CLI sets this when `KWEAVER_TLS_INSECURE` is set or the saved token has insecure TLS (same scope as above; dev only). |
+
+### Stateless token mode
+
+Pass an access token via `--token` for fully stateless invocations (no read or write of `~/.kweaver/` for that token):
+
+```bash
+kweaver --base-url https://platform.example.com --token "$TOK" bkn list
+```
+
+Resolution order:
+
+| Source | base-url | token |
+|--------|----------|-------|
+| flag   | `--base-url` | `--token` |
+| env    | `KWEAVER_BASE_URL` | `KWEAVER_TOKEN` |
+| disk   | active platform | OAuth session (refreshable) |
+
+When `--token` is used, write-disk commands (`auth login` / `logout` / `use` / `delete` / `switch`, `config set-bd`, the entire `context-loader config` group) error out — drop `--token` or use `kweaver auth login` for a saved session.
+
+`auth whoami` / `auth status` distinguish the two stateless modes: `Source: CLI (flag: --token)` for flag mode, `env (KWEAVER_TOKEN)` for env mode (`whoami --json` uses `"source": "flag"` vs `"source": "env"`).
+
+`kweaver context-loader` runtime subcommands accept `<kn-id>` as the first positional (e.g. `kweaver context-loader tools <kn-id>`) or via the global `--kn-id <id>` / `-k <id>` flag, so they work in stateless mode without any saved config. The `context-loader config set|use|list|remove|show` management group is deprecated, prints a warning on use, and is disabled in its entirety under `--token`.
 
 ### TLS Certificate Troubleshooting
 

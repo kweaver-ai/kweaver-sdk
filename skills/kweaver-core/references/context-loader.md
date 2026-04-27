@@ -1,8 +1,23 @@
 # Context Loader 命令参考
 
-MCP JSON-RPC 协议的分层检索。需要先配置 KN 上下文。
+MCP JSON-RPC 协议的分层检索。
 
-## 配置
+## KN 选择
+
+运行时子命令接受 `<kn-id>` 作为**第一个位置参数**（与 `kweaver bkn …` 风格一致），MCP endpoint 自动从当前平台派生为 `<base-url>/api/agent-retrieval/v1/mcp`，无需任何持久化配置。也支持全局 `--kn-id <id>` / `-k <id>` flag。
+
+```bash
+kweaver context-loader tools <kn-id>
+kweaver context-loader search-schema <kn-id> "Pod"
+# 或者
+kweaver context-loader tools --kn-id <kn-id>
+```
+
+## 配置（已废弃）
+
+> **Deprecated**: `context-loader config` 子命令仍保留向后兼容，但每次调用打印 deprecation 警告，未来版本将移除。stateless 模式（`--token`）下整个 `config` 子命令组（`set` / `use` / `list` / `remove` / `show`）都直接被拒绝。
+>
+> 当运行时子命令省略 `<kn-id>` 且未提供 `--kn-id` flag时，会回退到此处保存的 `current` 条目（仅为兼容历史用法）。新代码请直接传 `<kn-id>`。
 
 ```bash
 kweaver context-loader config set --kn-id kn-123 [--name myconfig]
@@ -14,14 +29,16 @@ kweaver context-loader config remove myconfig
 
 ## MCP 内省
 
+下面所有示例中的 `<kn-id>` 也可以省略以回退到 deprecated 的 saved config（见上节）。
+
 ```bash
-kweaver context-loader tools           # 可用工具列表
-kweaver context-loader tool-call <name> --args '<json>'  # 直接调用任意 MCP tool
-kweaver context-loader resources       # 可用资源列表
-kweaver context-loader resource <uri>  # 读取资源
-kweaver context-loader templates       # 资源模板
-kweaver context-loader prompts         # 可用 prompt
-kweaver context-loader prompt <name> [--args '<json>']
+kweaver context-loader tools <kn-id>                       # 可用工具列表
+kweaver context-loader tool-call <kn-id> <name> --args '<json>'  # 直接调用任意 MCP tool
+kweaver context-loader resources <kn-id>                   # 可用资源列表
+kweaver context-loader resource <kn-id> <uri>              # 读取资源
+kweaver context-loader templates <kn-id>                   # 资源模板
+kweaver context-loader prompts <kn-id>                     # 可用 prompt
+kweaver context-loader prompt <kn-id> <name> [--args '<json>']
 ```
 
 ## Layer 1 — Schema 搜索
@@ -29,9 +46,9 @@ kweaver context-loader prompt <name> [--args '<json>']
 推荐使用 `search-schema`，它调用 MCP `search_schema`，支持 `object_types`、`relation_types`、`action_types`、`metric_types`。
 
 ```bash
-kweaver context-loader search-schema "Pod"
-kweaver context-loader search-schema "利润率" --scope object,metric --max 10 --brief --no-rerank
-kweaver context-loader search-schema "Pod" --format toon
+kweaver context-loader search-schema <kn-id> "Pod"
+kweaver context-loader search-schema <kn-id> "利润率" --scope object,metric --max 10 --brief --no-rerank
+kweaver context-loader search-schema <kn-id> "Pod" --format toon
 ```
 
 参数映射：`--format` -> `response_format`，`--scope` -> `search_scope`，`--max` -> `max_concepts`，`--brief` -> `schema_brief: true`，`--no-rerank` -> `enable_rerank: false`。
@@ -39,8 +56,8 @@ kweaver context-loader search-schema "Pod" --format toon
 兼容命令仍保留，但**全部走 Context Loader 公共 HTTP endpoint**（`/api/agent-retrieval/v1/kn/kn_search` 与 `/semantic-search`），不再触碰已被移除的 MCP `kn_search` / `kn_schema_search`：
 
 ```bash
-kweaver context-loader kn-search "Pod" [--only-schema]
-kweaver context-loader kn-schema-search "Pod" [--max 10]
+kweaver context-loader kn-search <kn-id> "Pod" [--only-schema]
+kweaver context-loader kn-schema-search <kn-id> "Pod" [--max 10]
 ```
 
 > SDK 层同样走 HTTP：TS `client.bkn.knSearch(...)`、Python `client.query.kn_search(...)` / `client.query.kn_schema_search(...)`。`ContextLoaderResource` 不再暴露 `kn_search` / `kn_schema_search` 方法——MCP 入口请直接用 `searchSchema` / `callTool`。
@@ -49,20 +66,20 @@ kweaver context-loader kn-schema-search "Pod" [--max 10]
 
 ```bash
 # 条件查询
-kweaver context-loader query-object-instance '{"ot_id": "ot-1", "condition": {"operation": "and", "sub_conditions": [{"field": "name", "operation": "==", "value_from": "const", "value": "web-pod"}]}, "limit": 5}'
+kweaver context-loader query-object-instance <kn-id> '{"ot_id": "ot-1", "condition": {"operation": "and", "sub_conditions": [{"field": "name", "operation": "==", "value_from": "const", "value": "web-pod"}]}, "limit": 5}'
 
 # 子图查询
-kweaver context-loader query-instance-subgraph '{"relation_type_paths": [{"start_ot_id": "ot-1", "paths": [{"rt_id": "rt-1", "direction": "positive"}]}]}'
+kweaver context-loader query-instance-subgraph <kn-id> '{"relation_type_paths": [{"start_ot_id": "ot-1", "paths": [{"rt_id": "rt-1", "direction": "positive"}]}]}'
 ```
 
 ## Layer 3 — 逻辑属性 & Action
 
 ```bash
 # 获取逻辑属性
-kweaver context-loader get-logic-properties '{"ot_id": "ot-1", "query": "status", "_instance_identities": [{"id": "123"}], "properties": ["status", "cpu"]}'
+kweaver context-loader get-logic-properties <kn-id> '{"ot_id": "ot-1", "query": "status", "_instance_identities": [{"id": "123"}], "properties": ["status", "cpu"]}'
 
 # 获取 Action 信息
-kweaver context-loader get-action-info '{"at_id": "at-1", "_instance_identity": {"id": "123"}}'
+kweaver context-loader get-action-info <kn-id> '{"at_id": "at-1", "_instance_identity": {"id": "123"}}'
 ```
 
 ### find-skills — 召回对象类下的 Skill
@@ -71,13 +88,13 @@ kweaver context-loader get-action-info '{"at_id": "at-1", "_instance_identity": 
 
 ```bash
 # 仅按对象类召回（top_k 默认 10）
-kweaver context-loader find-skills ot_drug
+kweaver context-loader find-skills <kn-id> ot_drug
 
 # 加自然语言查询和 top_k
-kweaver context-loader find-skills ot_drug --query "treatment" --top-k 5
+kweaver context-loader find-skills <kn-id> ot_drug --query "treatment" --top-k 5
 
 # 缩小到具体实例 + 切到 toon 输出
-kweaver context-loader find-skills ot_drug \
+kweaver context-loader find-skills <kn-id> ot_drug \
   --instance-identities '[{"drug_id": "DRUG_001"}]' \
   --format toon
 ```

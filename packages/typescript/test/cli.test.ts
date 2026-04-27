@@ -228,14 +228,14 @@ test("run context-loader help includes standard MCP short commands", async () =>
   try {
     await run(["context-loader"]);
     const help = lines.join("\n");
-    assert.ok(help.includes("resource <uri>"), "help should include resource");
+    assert.ok(help.includes("resource <kn-id> <uri>"), "help should include resource");
     assert.ok(help.includes("templates"), "help should include templates");
     assert.ok(help.includes("prompts"), "help should include prompts");
-    assert.ok(help.includes("prompt <name>"), "help should include prompt");
+    assert.ok(help.includes("prompt <kn-id> <name>"), "help should include prompt");
     assert.ok(help.includes("tools/list"), "help should map tools to tools/list");
     assert.ok(help.includes("resources/list"), "help should map resources to resources/list");
-    assert.ok(help.includes("search-schema <query>"), "help should include search-schema");
-    assert.ok(help.includes("tool-call <name>"), "help should include generic tool-call");
+    assert.ok(help.includes("search-schema <kn-id> <query>"), "help should include search-schema");
+    assert.ok(help.includes("tool-call <kn-id> <name>"), "help should include generic tool-call");
   } finally {
     console.log = originalLog;
   }
@@ -322,6 +322,77 @@ test("run context-loader search-schema calls MCP search_schema", async () => {
       schema_brief: true,
       enable_rerank: false,
     });
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+  }
+});
+
+test("run context-loader search-schema accepts positional <kn-id> (no saved config)", async () => {
+  // No `addContextLoaderEntry` is called: the only path from <kn-id> to mcpUrl
+  // must be the override branch in `ensureContextLoaderConfig`.
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://dip.aishu.cn",
+    accessToken: "t",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://dip.aishu.cn");
+
+  const seenUrls: string[] = [];
+  const captured: { toolName?: string; args?: Record<string, unknown> } = {};
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  console.log = () => {};
+  globalThis.fetch = async (input, init) => {
+    seenUrls.push(typeof input === "string" ? input : (input as URL | Request).toString());
+    const body = JSON.parse(init?.body as string) as Record<string, unknown>;
+    if (body.method === "initialize") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), {
+        status: 200,
+        headers: { "MCP-Session-Id": "cli-session" },
+      });
+    }
+    if (body.method === "notifications/initialized") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0" }), { status: 200 });
+    }
+    if (body.method === "tools/call") {
+      const params = body.params as { name?: string; arguments?: Record<string, unknown> };
+      captured.toolName = params.name;
+      captured.args = params.arguments;
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { content: [{ type: "text", text: "{}" }] },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response("{}", { status: 200 });
+  };
+
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run([
+      "context-loader",
+      "search-schema",
+      "kn-positional-id",
+      "Pod",
+    ]);
+    assert.equal(code, 0);
+    assert.equal(captured.toolName, "search_schema");
+    assert.ok(
+      seenUrls.some((u) => u.includes("/api/agent-retrieval/v1/mcp")),
+      "MCP URL should be derived from active platform when <kn-id> is positional",
+    );
+    // The dispatcher consumed the kn-id; only the query should reach the handler.
+    assert.equal((captured.args as { query?: string }).query, "Pod");
   } finally {
     globalThis.fetch = originalFetch;
     console.log = originalLog;

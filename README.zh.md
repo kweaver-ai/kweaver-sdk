@@ -81,7 +81,7 @@ kweaver auth login https://your-kweaver-instance.com
 kweaver auth login https://your-kweaver-instance.com --alias prod
 ```
 
-或使用环境变量：`KWEAVER_BASE_URL`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_TOKEN`。通过浏览器 OAuth2 登录写入的 `~/.kweaver/` 会话，**默认在 access token 过期时用 refresh_token 换发新 token**（OAuth2 refresh 授权，无需额外参数）。Node 版 `kweaver` CLI 的 TLS 说明见 [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md) 中「环境变量」一节（含 `KWEAVER_TLS_INSECURE`、`NODE_TLS_REJECT_UNAUTHORIZED`）。
+或使用环境变量：`KWEAVER_BASE_URL`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_TOKEN`，或 CLI flag `kweaver --base-url <url> --token <access-token> …`（stateless 模式；见 [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md#stateless-token-模式)）。通过浏览器 OAuth2 登录写入的 `~/.kweaver/` 会话，**默认在 access token 过期时用 refresh_token 换发新 token**（OAuth2 refresh 授权，无需额外参数）。Node 版 `kweaver` CLI 的 TLS 说明见 [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md) 中「环境变量」一节（含 `KWEAVER_TLS_INSECURE`、`NODE_TLS_REJECT_UNAUTHORIZED`）。
 
 ### 无浏览器环境（SSH、CI、容器）
 
@@ -272,8 +272,10 @@ kweaver bkn action-log list/get/cancel
 kweaver agent list/get/get-by-key/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
-kweaver context-loader config set/use/list/show
-kweaver context-loader search-schema/tool-call/kn-search/query-object-instance/find-skills/...
+kweaver context-loader tools|resources|templates|prompts <kn-id>
+kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
+kweaver context-loader config set/use/list/show                       （deprecated；省略 <kn-id> 时回退到已保存配置）
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 ```
 

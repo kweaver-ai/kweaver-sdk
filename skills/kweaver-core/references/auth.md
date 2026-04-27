@@ -28,13 +28,14 @@ kweaver auth delete <url|alias> [--user <id|username>]
 
 | 场景 | 是否读 `KWEAVER_TOKEN` / `KWEAVER_BASE_URL` | 说明 |
 |------|---------------------------------------------|------|
+| **CLI 全局flag** `--token` / `--base-url` | 是（注入为 env） | 最高优先级之一；`--token` 会设置内部 `KWEAVER_TOKEN_SOURCE=flag`，**禁止**写盘命令（`auth login`/`logout`/`use`/`delete`/`switch`、`config set-bd`、整个 `context-loader config` 组）。`whoami`/`status` 在 flag 模式下标注 `CLI (flag: --token)`（`whoami --json` 为 `"source":"flag"`）。 |
 | 业务命令（`bkn`、`call`、`agent`、`kn`、`vega` 等） | 是 | 解析顺序一般为 **显式参数 > 环境变量 > `~/.kweaver/`**（与 SDK 一致）。 |
-| `kweaver auth status`、`kweaver auth whoami`、`kweaver config show` | 是（兜底） | 默认读 `~/.kweaver/` 的当前平台；**若无当前平台**，可同时设置 `KWEAVER_BASE_URL` + `KWEAVER_TOKEN`。`whoami` 在 env 模式下会调用一次 EACP `/api/eacp/v1/user/get` 在线获取身份，展示 `Type`/`User ID`/`Account`/`Name`（对 opaque 与 JWT 都生效）；EACP 不可达时回退本地 JWT 解码。**不写盘、不缓存、不增加旗标**。 |
+| `kweaver auth status`、`kweaver auth whoami`、`kweaver config show` | 是（兜底） | 默认读 `~/.kweaver/` 的当前平台；**若无当前平台**，可同时设置 `KWEAVER_BASE_URL` + `KWEAVER_TOKEN`。`whoami` 在 env 模式下会调用一次 EACP `/api/eacp/v1/user/get` 在线获取身份，展示 `Type`/`User ID`/`Account`/`Name`（对 opaque 与 JWT 都生效）；EACP 不可达时回退本地 JWT 解码。**不写盘、不缓存、不增加flag**。 |
 | `kweaver auth users` / `auth switch` / `auth export`、`kweaver config set-bd` | 否 | 只操作本地已保存的多用户档案或写 `~/.kweaver/`；环境变量中的 token **不会**被这些命令读取。 |
 
-**常用环境变量**：`KWEAVER_BASE_URL`（与 `KWEAVER_TOKEN` 配对时通常必填）、`KWEAVER_TOKEN`（可带或不带 `Bearer ` 前缀）、`KWEAVER_TLS_INSECURE`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_USER`、`KWEAVER_NO_AUTH`。
+**常用环境变量**：`KWEAVER_BASE_URL`（与 `KWEAVER_TOKEN` 配对时通常必填）、`KWEAVER_TOKEN`（可带或不带 `Bearer ` 前缀）、`KWEAVER_TLS_INSECURE`、`KWEAVER_BUSINESS_DOMAIN`、`KWEAVER_USER`、`KWEAVER_NO_AUTH`。`KWEAVER_TOKEN_SOURCE` 为 CLI 内部 sentinel（`--token` flag时设为 `flag`），**请勿手动设置**。
 
-**env 模式下 `auth status` / `whoami` 输出**：`whoami` 会标注 `Source: env (KWEAVER_TOKEN)`；refresh_token 在 env 路径下为 **n/a**。`whoami --json` 输出包含 `"source": "env"`、EACP 解析出的 `userInfo: { type, id, account?, name? }`，以及（EACP 不可达时）回退的 JWT payload。
+**env / flag 模式下 `auth status` / `whoami` 输出**：纯 env 路径下 `whoami` 标注 `Source: env (KWEAVER_TOKEN)`；使用 `--token` flag时为 `Source: CLI (flag: --token)`。refresh_token 在 env/flag 路径下为 **n/a**。`whoami --json` 输出包含 `"source": "env"` 或 `"source": "flag"`、EACP 解析出的 `userInfo: { type, id, account?, name? }`，以及（EACP 不可达时）回退的 JWT payload。
 
 **应用账号（app token）调用 `config list-bd`**：后端会以 `401 invalid user_id` 拒绝。CLI 检测到 401 后会复核一次 EACP 类型，若为 `type:"app"` 则把错误改写为 `This command does not support app accounts.`；其它情况保留原始错误文本。app token 不能调用任何"按用户绑定"的接口，请改用交互式 `auth login` 获得的用户 token。
 

@@ -20,7 +20,7 @@ function printHelp(): void {
   console.log(`kweaver
 
 Usage:
-  kweaver [--user <userId|username>] <command> [options]
+  kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <command> [options]
   kweaver --version | -V
   kweaver --help | -h
 
@@ -125,18 +125,21 @@ Usage:
   kweaver vega query execute|sql [options]
   kweaver vega connector-type list|get [options]
 
-  kweaver context-loader config set|use|list|remove|show [options]
-  kweaver context-loader tools|resources|templates|prompts [--cursor]
-  kweaver context-loader resource <uri>
-  kweaver context-loader prompt <name> [--args json]
-  kweaver context-loader search-schema <query> [--scope object,relation,action,metric] [--max N]
-  kweaver context-loader tool-call <name> --args '<json>'
-  kweaver context-loader kn-search <query> [--only-schema]      (compat HTTP)
-  kweaver context-loader kn-schema-search <query> [--max N]     (compat HTTP)
-  kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills ...
+  kweaver context-loader config set|use|list|remove|show [options]                (deprecated; not supported with --token)
+  kweaver context-loader tools|resources|templates|prompts <kn-id> [--cursor]
+  kweaver context-loader resource <kn-id> <uri>
+  kweaver context-loader prompt <kn-id> <name> [--args json]
+  kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--max N]
+  kweaver context-loader tool-call <kn-id> <name> --args '<json>'
+  kweaver context-loader kn-search <kn-id> <query> [--only-schema]                 (compat HTTP)
+  kweaver context-loader kn-schema-search <kn-id> <query> [--max N]                (compat HTTP)
+  kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
+                                                          (omit <kn-id> to fall back to deprecated saved config)
   (alias: kweaver context ...)
 
 Global options:
+  --base-url <url>  Override platform base URL for this command (env: KWEAVER_BASE_URL)
+  --token <value>   Override access token for this command (env: KWEAVER_TOKEN; disables write-to-disk commands)
   --user <id|name>  Use a specific user's credentials for this command (env: KWEAVER_USER)
   --pretty / --compact
                     Toggle pretty-printed JSON output. Supported by every
@@ -172,12 +175,45 @@ export async function run(argv: string[]): Promise<number> {
     process.env.KWEAVER_TOKEN = NO_AUTH_TOKEN;
   }
 
-  // Global --user flag: override active user for this invocation
-  const userIdx = argv.indexOf("--user");
+  // Global flags consumed before subcommand dispatch.
+  // Pattern follows --user (legacy): each flag, if present, is removed from argv
+  // and projected into a process.env value that downstream resolvers already read.
   let filteredArgv = argv;
-  if (userIdx !== -1 && userIdx + 1 < argv.length) {
-    process.env.KWEAVER_USER = argv[userIdx + 1];
-    filteredArgv = [...argv.slice(0, userIdx), ...argv.slice(userIdx + 2)];
+
+  function consumeFlag(flag: string): string | undefined {
+    const idx = filteredArgv.indexOf(flag);
+    if (idx === -1 || idx + 1 >= filteredArgv.length) return undefined;
+    const value = filteredArgv[idx + 1];
+    filteredArgv = [...filteredArgv.slice(0, idx), ...filteredArgv.slice(idx + 2)];
+    return value;
+  }
+
+  const userVal = consumeFlag("--user");
+  if (userVal) process.env.KWEAVER_USER = userVal;
+
+  const tokenVal = consumeFlag("--token");
+  const baseUrlVal = consumeFlag("--base-url");
+
+  if (tokenVal) {
+    process.env.KWEAVER_TOKEN = tokenVal;
+    process.env.KWEAVER_TOKEN_SOURCE = "flag";
+  }
+  if (baseUrlVal) {
+    process.env.KWEAVER_BASE_URL = baseUrlVal;
+  }
+
+  // --token requires a base URL from somewhere; fail fast with guidance.
+  if (tokenVal && !process.env.KWEAVER_BASE_URL) {
+    const { getCurrentPlatform } = await import("./config/store.js");
+    if (!getCurrentPlatform()) {
+      console.error(
+        "--token requires a base URL. Provide one of:\n" +
+          "  --base-url <url>\n" +
+          "  export KWEAVER_BASE_URL=<url>\n" +
+          "  kweaver auth login <url>   (save once, reuse later)",
+      );
+      return 1;
+    }
   }
 
   const [command, ...rest] = filteredArgv;

@@ -1,4 +1,5 @@
 import { isNoAuth } from "../config/no-auth.js";
+import { assertNotStatelessForWrite } from "../config/stateless.js";
 import {
   autoSelectBusinessDomain,
   clearPlatformSession,
@@ -119,6 +120,12 @@ Login options:
   const LOGIN_SUBCOMMANDS = new Set(["status", "list", "use", "delete", "logout", "export", "whoami", "users", "switch"]);
   if (target && !LOGIN_SUBCOMMANDS.has(target)) {
     try {
+      try {
+        assertNotStatelessForWrite("auth login");
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        return 1;
+      }
       const normalizedTarget = normalizeBaseUrl(target);
       const alias = readOption(args, "--alias");
       let username = readOption(args, "--username") ?? readOption(args, "-u");
@@ -326,7 +333,9 @@ Login options:
       }
       console.log(`Config directory: ${getConfigDir()}`);
       console.log(`Platform:         ${active.url} (KWEAVER_BASE_URL)`);
-      console.log(`Token present:    yes (KWEAVER_TOKEN)`);
+      const tokenProvenance =
+        process.env.KWEAVER_TOKEN_SOURCE === "flag" ? "CLI (flag: --token)" : "KWEAVER_TOKEN";
+      console.log(`Token present:    yes (${tokenProvenance})`);
       console.log(`Refresh token:    n/a (env)`);
       return 0;
     }
@@ -426,6 +435,12 @@ Login options:
       console.error(`No saved token for ${useTarget}. Run \`kweaver auth login ${useTarget}\` first.`);
       return 1;
     }
+    try {
+      assertNotStatelessForWrite("auth use");
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      return 1;
+    }
     setCurrentPlatform(useTarget);
     console.log(`Current platform: ${useTarget}`);
     return 0;
@@ -443,6 +458,13 @@ Login options:
     }
     if (!hasPlatform(deleteTarget)) {
       console.error(`No saved token for ${deleteTarget}.`);
+      return 1;
+    }
+
+    try {
+      assertNotStatelessForWrite("auth delete");
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
       return 1;
     }
 
@@ -476,6 +498,12 @@ Login options:
     }
     if (!hasPlatform(logoutTarget)) {
       console.error(`No saved token for ${logoutTarget}.`);
+      return 1;
+    }
+    try {
+      assertNotStatelessForWrite("auth logout");
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
       return 1;
     }
     const logoutUserId = logoutUserArg ? resolveUserId(logoutTarget, logoutUserArg) ?? logoutUserArg : undefined;
@@ -571,6 +599,13 @@ You can specify either the userId (sub claim) or the username (preferred_usernam
     return 1;
   }
 
+  try {
+    assertNotStatelessForWrite("auth switch");
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
+
   setActiveUser(platform, resolvedId);
   const profiles = listUserProfiles(platform);
   const profile = profiles.find((p) => p.userId === resolvedId);
@@ -625,14 +660,19 @@ Options:
     // complete picture without forcing them to pick a mode.
     const jwtPayload = decodeJwtPayload(accessToken);
     if (jsonOutput) {
-      const out: Record<string, unknown> = { platform: envUrl, source: "env" };
+      const out: Record<string, unknown> = {
+        platform: envUrl,
+        source: process.env.KWEAVER_TOKEN_SOURCE === "flag" ? "flag" : "env",
+      };
       if (userInfo) out.userInfo = userInfo;
       if (jwtPayload) Object.assign(out, jwtPayload);
       console.log(JSON.stringify(out, null, 2));
       return 0;
     }
     console.log(`Platform: ${envUrl}`);
-    console.log(`Source:   env (KWEAVER_TOKEN)`);
+    console.log(
+      `Source:   ${process.env.KWEAVER_TOKEN_SOURCE === "flag" ? "CLI (flag: --token)" : "env (KWEAVER_TOKEN)"}`,
+    );
     if (userInfo) {
       console.log(`Type:     ${userInfo.type}`);
       console.log(`User ID:  ${userInfo.id}`);

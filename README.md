@@ -81,7 +81,7 @@ kweaver auth login https://your-kweaver-instance.com
 kweaver auth login https://your-kweaver-instance.com --alias prod
 ```
 
-Or use environment variables: `KWEAVER_BASE_URL`, `KWEAVER_BUSINESS_DOMAIN`, `KWEAVER_TOKEN`. With saved `~/.kweaver/` sessions from OAuth2 browser login, **the default is to exchange `refresh_token` for a new access token** when the access token expires (no extra flags). For TLS in the Node `kweaver` CLI, see `KWEAVER_TLS_INSECURE` and `NODE_TLS_REJECT_UNAUTHORIZED` in the [TypeScript README](packages/typescript/README.md#environment-variables).
+Or use environment variables: `KWEAVER_BASE_URL`, `KWEAVER_BUSINESS_DOMAIN`, `KWEAVER_TOKEN`, or the CLI flags `kweaver --base-url <url> --token <access-token> …` (stateless mode; see [TypeScript README](packages/typescript/README.md#stateless-token-mode)). With saved `~/.kweaver/` sessions from OAuth2 browser login, **the default is to exchange `refresh_token` for a new access token** when the access token expires (no extra flags). For TLS in the Node `kweaver` CLI, see `KWEAVER_TLS_INSECURE` and `NODE_TLS_REJECT_UNAUTHORIZED` in the [TypeScript README](packages/typescript/README.md#environment-variables).
 
 ### Headless hosts (SSH, CI, containers — no browser)
 
@@ -272,8 +272,10 @@ kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
-kweaver context-loader config set/use/list/show
-kweaver context-loader search-schema/tool-call/kn-search/query-object-instance/find-skills/...
+kweaver context-loader tools|resources|templates|prompts <kn-id>
+kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
+kweaver context-loader config set/use/list/show                       (deprecated; <kn-id> may be omitted to fall back to saved config)
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 ```
 

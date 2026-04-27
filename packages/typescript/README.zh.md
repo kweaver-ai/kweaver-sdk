@@ -176,8 +176,10 @@ kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
-kweaver context-loader config set/use/list/show
-kweaver context-loader search-schema/tool-call/kn-search/query-object-instance/find-skills/...
+kweaver context-loader tools|resources|templates|prompts <kn-id>
+kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
+kweaver context-loader config set/use/list/show                       （deprecated；省略 <kn-id> 时回退到已保存配置）
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]
 ```
 
@@ -218,9 +220,32 @@ kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{res-1}} L
 | `KWEAVER_BASE_URL` | KWeaver 实例地址 |
 | `KWEAVER_BUSINESS_DOMAIN` | 业务域标识 |
 | `KWEAVER_TOKEN` | 访问令牌 |
+| `KWEAVER_TOKEN_SOURCE` | CLI 传入 `--token` 时由程序设置的内部标记；请勿手动设置 |
 | `KWEAVER_NO_AUTH` | 设为 `1`/`true`/`yes` 且未设置 `KWEAVER_TOKEN` 时使用 no-auth 占位（需 `KWEAVER_BASE_URL` 或已选平台） |
 | `KWEAVER_TLS_INSECURE` | 设为 `1` 或 `true` 时跳过 TLS 证书校验（仅开发；更推荐 `kweaver auth … --insecure` 以按平台持久化） |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | Node.js 内置 TLS 开关：设为 `0` 时在本进程内跳过 HTTPS 证书校验。`kweaver` 在 `KWEAVER_TLS_INSECURE` 生效或已保存 token 为不安全 TLS 时会设置此项（范围同上；仅开发）。 |
+
+### Stateless token 模式
+
+通过 `--token` 传入访问令牌，该次调用对该 token 路径既不读也不写 `~/.kweaver/`：
+
+```bash
+kweaver --base-url https://platform.example.com --token "$TOK" bkn list
+```
+
+来源优先级：
+
+| 来源 | base-url | token |
+|------|----------|-------|
+| flag | `--base-url` | `--token` |
+| env  | `KWEAVER_BASE_URL` | `KWEAVER_TOKEN` |
+| 磁盘 | active platform | OAuth 会话（可 refresh） |
+
+`--token` 模式下会禁用写盘命令：`auth login` / `logout` / `use` / `delete` / `switch`、`config set-bd`、整个 `context-loader config` 子命令组 ——去掉 `--token` 或改用 `kweaver auth login`。
+
+`auth whoami` / `auth status` 通过文案区分来源：flag 模式为 `CLI (flag: --token)`，env 模式为 `env (KWEAVER_TOKEN)`（`whoami --json` 为 `"source": "flag"` 与 `"source": "env"`）。
+
+`kweaver context-loader` 运行时子命令将 `<kn-id>` 作为第一个位置参数（如 `kweaver context-loader tools <kn-id>`），也支持全局 `--kn-id <id>` / `-k <id>` flag，因此在 stateless 模式下可直接使用，无需任何持久化配置。`context-loader config set|use|list|remove|show` 管理子命令已被标记为 deprecated（每次调用打印警告），且在 `--token` 下整组被禁用。
 
 ### TLS 证书问题排查
 

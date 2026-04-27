@@ -24,11 +24,19 @@ import {
   resolveBusinessDomain,
   setCurrentContextLoader,
 } from "../config/store.js";
+import { assertNotStatelessForWrite } from "../config/stateless.js";
+
+const CONTEXT_LOADER_CONFIG_DEPRECATION =
+  "[deprecated] `kweaver context-loader config ...` will be removed in a future release. " +
+  "Pass <kn-id> as the first positional to runtime subcommands instead, e.g. " +
+  "`kweaver context-loader tools <kn-id>` (or use the `--kn-id <id>` flag).";
 
 const MCP_NOT_CONFIGURED =
   "Context-loader MCP is not configured. Run: kweaver context-loader config set --kn-id <kn-id>";
 
-function ensureContextLoaderConfig(): {
+const MCP_PATH = "/api/agent-retrieval/v1/mcp";
+
+function ensureContextLoaderConfig(knIdOverride?: string): {
   baseUrl: string;
   mcpUrl: string;
   knId: string;
@@ -40,6 +48,18 @@ function ensureContextLoaderConfig(): {
     throw new Error(
       "No platform selected. Set KWEAVER_BASE_URL or run: kweaver auth <platform-url>",
     );
+  }
+
+  // Override path (positional <kn-id> or --kn-id flag): derive MCP URL from
+  // the active platform; do not touch the deprecated saved config.
+  if (knIdOverride) {
+    return {
+      baseUrl: active.url,
+      mcpUrl: active.url.replace(/\/+$/, "") + MCP_PATH,
+      knId: knIdOverride,
+      accessToken: "",
+      businessDomain: resolveBusinessDomain(active.url),
+    };
   }
 
   const kn = getCurrentContextLoaderKn();
@@ -56,6 +76,51 @@ function ensureContextLoaderConfig(): {
   };
 }
 
+// Subcommands that consult `ensureContextLoaderConfig`. The number is the
+// minimum non-flag positional count expected by the handler itself (after
+// kn-id is extracted). When the leading non-flag positional count exceeds
+// this minimum, the first one is treated as <kn-id>.
+const RUNTIME_MIN_POSITIONALS: Record<string, number> = {
+  tools: 0,
+  resources: 0,
+  templates: 0,
+  prompts: 0,
+  prompt: 1,
+  resource: 1,
+  "search-schema": 1,
+  "tool-call": 1,
+  "kn-search": 1,
+  "kn-schema-search": 1,
+  "query-object-instance": 1,
+  "query-instance-subgraph": 1,
+  "get-logic-properties": 1,
+  "get-action-info": 1,
+  "find-skills": 1,
+};
+
+function extractKnIdOverride(subcommand: string, rest: string[]): string | undefined {
+  // 1) Explicit flag wins. `--kn-id <id>` / `-k <id>` is allowed for every
+  //    runtime subcommand and is consumed before the handler sees `rest`.
+  for (let i = 0; i < rest.length; i += 1) {
+    if ((rest[i] === "--kn-id" || rest[i] === "-k") && rest[i + 1]) {
+      const id = rest[i + 1];
+      rest.splice(i, 2);
+      return id;
+    }
+  }
+
+  // 2) Positional <kn-id> as the first non-flag arg, when leading non-flag
+  //    positional count exceeds what the handler itself requires.
+  const min = RUNTIME_MIN_POSITIONALS[subcommand];
+  if (min === undefined) return undefined;
+  let cut = 0;
+  while (cut < rest.length && !rest[cut].startsWith("-")) cut += 1;
+  if (cut > min) {
+    return rest.shift();
+  }
+  return undefined;
+}
+
 function formatOutput(value: unknown, pretty: boolean): string {
   const json = JSON.stringify(value, null, pretty ? 2 : 0);
   return json;
@@ -67,34 +132,38 @@ export async function runContextLoaderCommand(args: string[]): Promise<number> {
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
     console.log(`kweaver context-loader
 
+KN selection (for runtime subcommands below):
+  Pass <kn-id> as the FIRST positional, e.g. \`kweaver context-loader tools <kn-id>\`,
+  or use the global \`--kn-id <id>\` / \`-k <id>\` flag. When omitted, falls back to
+  the deprecated saved config managed by \`kweaver context-loader config\`.
+
 Subcommands:
-  config set --kn-id <id> [--name n]   Add or update kn config (MCP URL derived from platform)
-  config use <name>                    Switch current config
-  config list                         List all configs and current
-  config remove <name>                 Remove a config
-  config show                         Show current config (knId + mcpUrl)
-  tools                               tools/list - list available tools
-  resources                           resources/list - list resources
-  resource <uri>                      resources/read - read resource by URI
-  templates                           resources/templates/list - list resource templates
-  prompts                             prompts/list - list prompts
-  prompt <name> [--args json]          prompts/get - get prompt by name
-  search-schema <query> [options]      MCP search_schema (object/relation/action/metric types)
-  tool-call <name> --args '<json>'     MCP tools/call for any server tool
-  kn-search <query> [--only-schema]    Compatibility: HTTP kn_search
-  kn-schema-search <query> [--max N]   Compatibility: HTTP semantic-search
-  query-object-instance <json>         Layer 2: Query instances (args as JSON)
-  query-instance-subgraph <json>       Layer 2: Query subgraph (args as JSON)
-  get-logic-properties <json>          Layer 3: Get logic property values (args as JSON)
-  get-action-info <json>               Layer 3: Get action info (args as JSON)
-  find-skills <ot_id> [options]        Layer 3: Recall skills for an object type
+  config set --kn-id <id> [--name n]   [deprecated] Add or update kn config
+  config use <name>                    [deprecated] Switch current config
+  config list                          [deprecated] List all configs and current
+  config remove <name>                 [deprecated] Remove a config
+  config show                          [deprecated] Show current config (knId + mcpUrl)
+  tools <kn-id>                        tools/list - list available tools
+  resources <kn-id>                    resources/list - list resources
+  resource <kn-id> <uri>               resources/read - read resource by URI
+  templates <kn-id>                    resources/templates/list - list resource templates
+  prompts <kn-id>                      prompts/list - list prompts
+  prompt <kn-id> <name> [--args json]  prompts/get - get prompt by name
+  search-schema <kn-id> <query> [opts] MCP search_schema (object/relation/action/metric)
+  tool-call <kn-id> <name> --args '<json>'  MCP tools/call for any server tool
+  kn-search <kn-id> <query> [--only-schema]  Compatibility: HTTP kn_search
+  kn-schema-search <kn-id> <query> [--max N] Compatibility: HTTP semantic-search
+  query-object-instance <kn-id> <json>       Layer 2: Query instances
+  query-instance-subgraph <kn-id> <json>     Layer 2: Query subgraph
+  get-logic-properties <kn-id> <json>        Layer 3: Get logic property values
+  get-action-info <kn-id> <json>             Layer 3: Get action info
+  find-skills <kn-id> <ot_id> [options]      Layer 3: Recall skills for an object type
 
 Examples:
-  kweaver context-loader config set --kn-id d5iv6c9818p72mpje8pg
-  kweaver context-loader config set --kn-id xyz123 --name project-a
-  kweaver context-loader search-schema "利润率" --scope object,metric --max 5
-  kweaver context-loader tool-call search_schema --args '{"query":"利润率"}'
-  kweaver context-loader kn-search "高血压 治疗 药品" --only-schema --pretty`);
+  kweaver context-loader tools d5iv6c9818p72mpje8pg
+  kweaver context-loader search-schema d5iv6c9818p72mpje8pg "利润率" --scope object,metric --max 5
+  kweaver context-loader tool-call d5iv6c9818p72mpje8pg search_schema --args '{"query":"利润率"}'
+  kweaver context-loader kn-search d5iv6c9818p72mpje8pg "高血压 治疗 药品" --only-schema --pretty`);
     return 0;
   }
 
@@ -109,9 +178,13 @@ Examples:
     rest.splice(prettyIdx, 1);
   }
 
+  // Extract `<kn-id>` (positional or --kn-id/-k flag) before per-subcommand
+  // arg parsing. When provided it bypasses the deprecated saved config.
+  const knIdOverride = extractKnIdOverride(subcommand, rest);
+
   const dispatch = async (): Promise<number> => {
     const token = await ensureValidToken();
-    const base = ensureContextLoaderConfig();
+    const base = ensureContextLoaderConfig(knIdOverride);
     const options = { ...base, accessToken: token.accessToken };
 
     if (subcommand === "tools") return runListTools(options, rest, pretty);
@@ -151,16 +224,30 @@ async function runConfigCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
 
   if (!action || action === "--help" || action === "-h") {
-    console.log(`kweaver context-loader config
+    console.log(`kweaver context-loader config  [deprecated]
 
 Subcommands:
   set --kn-id <id> [--name <name>]   Add or update kn config (default name: default)
   use <name>                         Switch current config
   list                               List all configs and current
   remove <name>                      Remove a config
-  show                               Show current config (knId + mcpUrl)`);
+  show                               Show current config (knId + mcpUrl)
+
+Note: this command group is deprecated and will be removed in a future release.
+      It is disabled entirely in stateless mode (\`--token\`).`);
     return 0;
   }
+
+  // Stateless mode (`--token`) does not support any context-loader config
+  // operations; the saved config lives under `~/.kweaver/` and is foreign
+  // to the stateless paradigm.
+  try {
+    assertNotStatelessForWrite(`context-loader config ${action}`);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
+  console.warn(CONTEXT_LOADER_CONFIG_DEPRECATION);
 
   const active = resolveActivePlatform();
   if (!active) {
@@ -518,22 +605,18 @@ async function runKnSearch(
 ): Promise<number> {
   let query: string | undefined;
   let onlySchema = false;
-  let knIdOverride: string | undefined;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === "--only-schema") {
       onlySchema = true;
-    } else if ((arg === "--kn-id" || arg === "-k") && args[i + 1]) {
-      knIdOverride = args[i + 1];
-      i += 1;
     } else if (!arg.startsWith("-") && !query) {
       query = arg;
     }
   }
 
   if (!query) {
-    console.error("Usage: kweaver context-loader kn-search <query> [--kn-id <id>] [--only-schema]");
+    console.error("Usage: kweaver context-loader kn-search <kn-id> <query> [--only-schema]");
     return 1;
   }
 
@@ -541,7 +624,7 @@ async function runKnSearch(
     baseUrl: options.baseUrl,
     accessToken: options.accessToken,
     businessDomain: options.businessDomain,
-    knId: knIdOverride ?? options.knId,
+    knId: options.knId,
     query,
     onlySchema,
   });

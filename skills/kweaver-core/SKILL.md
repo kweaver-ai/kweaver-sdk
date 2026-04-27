@@ -33,7 +33,7 @@ npm install -g @kweaver-ai/kweaver-sdk
 ## 使用方式
 
 ```bash
-kweaver [--user <userId|username>] <command> [subcommand] [options]
+kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <command> [subcommand] [options]
 ```
 
 **完整子命令与参数以当前安装的 CLI 为准**：运行 `kweaver --help`（或 `-h`）查看与代码同步的用法列表；查版本用 `kweaver --version` / `-V` / `kweaver version`。子命令细节用 `kweaver <group> <subcommand> --help`（例如 `kweaver auth --help`、`kweaver bkn push --help`）。
@@ -50,9 +50,10 @@ kweaver [--user <userId|username>] <command> [subcommand] [options]
 
 ### 认证优先级
 
-1. `KWEAVER_TOKEN` + `KWEAVER_BASE_URL` 环境变量 → 静态 Token（如存在则优先使用，**不会**用 refresh 换发）
-2. `~/.kweaver/` 凭据（`kweaver auth login` 写入）→ **默认**用 refresh_token 换发 access_token（推荐）
-3. `KWEAVER_USER` 环境变量（或全局 `--user` 参数）→ 使用指定用户的凭证，不切换活跃用户
+1. CLI 全局 `--token` + `--base-url`（或已有 `KWEAVER_BASE_URL` / active platform）→ Stateless flag 模式（一次性传 token，本次调用不读写 `~/.kweaver/`；token 过期不会自动续期；不能用 `auth login` / `logout` 等会修改本地凭据的命令）
+2. `KWEAVER_TOKEN` + `KWEAVER_BASE_URL` 环境变量 → 静态 Token（如存在则优先使用，**不会**用 refresh 换发）
+3. `~/.kweaver/` 凭据（`kweaver auth login` 写入）→ **默认**用 refresh_token 换发 access_token（推荐）
+4. `KWEAVER_USER` 环境变量（或全局 `--user` 参数）→ 使用指定用户的凭证，不切换活跃用户
 
 ### 业务域优先级（与认证独立）
 
@@ -76,7 +77,7 @@ kweaver [--user <userId|username>] <command> [subcommand] [options]
 | `toolbox` | 平台工具箱（toolbox）管理 | `toolbox create --name <n> --service-url <url>`、`toolbox list`、`toolbox publish/unpublish <id>`、`toolbox delete <id> [-y]` | `references/toolbox.md` |
 | `tool` | 工具箱内 tool 注册与启停（OpenAPI） | `tool upload --toolbox <id> <openapi-spec>`、`tool list --toolbox <id>`、`tool enable/disable --toolbox <id> <tool-id>...` | `references/tool.md` |
 | `vega` | Vega 可观测平台 | `vega health`, `vega catalog list`, `vega resource list`, `vega query execute -d <json>`, `vega sql --resource-type <t> --query "<sql>"` / `vega sql -d <json>` | `references/vega.md` |
-| `context-loader` | MCP 分层检索 | `context-loader config show`, `context-loader kn-search <query>` | `references/context-loader.md` |
+| `context-loader` | MCP 分层检索 | `context-loader tools <kn-id>`, `context-loader kn-search <kn-id> <query>`（也支持 `--kn-id <id>` flag；省略时回退到 deprecated 的 `context-loader config`） | `references/context-loader.md` |
 | `call` | 通用 API 调用 | `call <url> [-X POST] [-d '...']`（可用 `curl` 别名；支持 `--url`、`--data-raw` 等，见 `kweaver --help`） | `references/call.md` |
 
 ## 操作指南

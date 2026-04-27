@@ -6,6 +6,7 @@ import {
   resolveBusinessDomain,
   savePlatformBusinessDomain,
 } from "../config/store.js";
+import { assertNotStatelessForWrite } from "../config/stateless.js";
 
 const HELP = `kweaver config
 
@@ -59,6 +60,12 @@ export async function runConfigCommand(args: string[]): Promise<number> {
       return 1;
     }
     const platform = active.url;
+    try {
+      assertNotStatelessForWrite("config set-bd");
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      return 1;
+    }
     savePlatformBusinessDomain(platform, value);
     const provenance = active.source === "env" ? `${platform} via KWEAVER_BASE_URL` : platform;
     console.log(`Business domain set to: ${value} (${provenance})`);

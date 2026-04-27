@@ -70,6 +70,30 @@ export {
   actionLogGet,
   actionLogCancel,
 } from "./api/ontology-query.js";
+export type { MetricQueryDataOptions, MetricDryRunOptions } from "./api/ontology-query-metrics.js";
+export { metricQueryData, metricDryRun } from "./api/ontology-query-metrics.js";
+export type {
+  ListMetricsOptions,
+  CreateMetricsOptions,
+  SearchMetricsOptions,
+  ValidateMetricsOptions,
+  GetMetricOptions,
+  UpdateMetricOptions,
+  DeleteMetricOptions,
+  GetMetricsByIdsOptions,
+  DeleteMetricsByIdsOptions,
+} from "./api/bkn-metrics.js";
+export {
+  listMetrics,
+  createMetrics,
+  searchMetrics,
+  validateMetrics,
+  getMetric,
+  updateMetric,
+  deleteMetric,
+  getMetrics,
+  deleteMetrics,
+} from "./api/bkn-metrics.js";
 
 // ── Agent chat ────────────────────────────────────────────────────────────────
 export type {

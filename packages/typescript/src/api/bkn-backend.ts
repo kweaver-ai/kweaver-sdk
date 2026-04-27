@@ -55,7 +55,7 @@ export interface BknBackendKnOptions extends BknBackendBaseOptions {
 
 const BKN_BASE = "/api/bkn-backend/v1";
 
-function knUrl(baseUrl: string, knId: string, path: string): string {
+export function knUrl(baseUrl: string, knId: string, path: string): string {
   const base = baseUrl.replace(/\/+$/, "");
   return `${base}${BKN_BASE}/knowledge-networks/${encodeURIComponent(knId)}/${path}`;
 }

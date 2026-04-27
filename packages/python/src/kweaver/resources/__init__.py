@@ -4,6 +4,8 @@ from kweaver.resources.dataflow_v2 import DataflowV2Resource
 from kweaver.resources.datasources import DataSourcesResource
 from kweaver.resources.dataviews import DataViewsResource
 from kweaver.resources.knowledge_networks import KnowledgeNetworksResource
+from kweaver.resources.bkn_metrics import BknMetricsResource
+from kweaver.resources.metric_query import MetricQueryResource
 from kweaver.resources.object_types import ObjectTypesResource
 from kweaver.resources.query import QueryResource
 from kweaver.resources.relation_types import RelationTypesResource
@@ -11,11 +13,13 @@ from kweaver.resources.toolboxes import ToolboxesResource
 
 __all__ = [
     "ContextLoaderResource",
+    "BknMetricsResource",
     "DataflowsResource",
     "DataflowV2Resource",
     "DataSourcesResource",
     "DataViewsResource",
     "KnowledgeNetworksResource",
+    "MetricQueryResource",
     "ObjectTypesResource",
     "QueryResource",
     "RelationTypesResource",

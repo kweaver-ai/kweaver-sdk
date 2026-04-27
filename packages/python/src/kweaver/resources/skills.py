@@ -94,15 +94,19 @@ class SkillsResource:
         source: str | None = None,
         extend_info: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {
-            "file_type": "content",
-            "file": content,
-        }
-        if source:
-            body["source"] = source
-        if extend_info is not None:
-            body["extend_info"] = extend_info
-        return _unwrap_data(self._http.post("/api/agent-operator-integration/v1/skills", json=body))
+        # Backend's file_type=content path is half-implemented: it stores
+        # the markdown body but skips skill_file_index, so the skill is
+        # unreadable after publish (GET /skills/:id/content -> 404).
+        # See kweaver-ai/kweaver-core#313. Bundle the content into a
+        # 1-file SKILL.md zip and route through the zip path, which writes
+        # skill_file_index correctly.
+        bundle = _bundle_skill_md_to_zip(content)
+        return self.register_zip(
+            "SKILL.md.zip",
+            bundle,
+            source=source,
+            extend_info=extend_info,
+        )
 
     def register_zip(
         self,
@@ -166,6 +170,14 @@ class SkillsResource:
         _, archive = self.download(skill_id)
         install_skill_archive(archive, directory, force=force)
         return {"directory": str(Path(directory).resolve())}
+
+
+def _bundle_skill_md_to_zip(content: str) -> bytes:
+    """Wrap a SKILL.md string into an in-memory zip for upload."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("SKILL.md", content)
+    return buf.getvalue()
 
 
 def install_skill_archive(data: bytes, directory: str, *, force: bool = False) -> None:

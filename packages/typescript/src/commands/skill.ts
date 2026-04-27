@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -18,6 +18,7 @@ import {
   updateSkillStatus,
   type SkillStatus,
 } from "../api/skills.js";
+import { bundleSkillDirectoryToZip } from "../utils/skill-bundle.js";
 
 interface BaseOptions {
   businessDomain: string;
@@ -81,7 +82,12 @@ function printSkillHelp(subcommand?: string): void {
   }
   if (subcommand === "register") {
     console.log(`kweaver skill register (--content-file <path> | --zip-file <path>)
-                       [--source src] [--extend-info json] [-bd value] [--pretty|--compact]`);
+                       [--source src] [--extend-info json] [-bd value] [--pretty|--compact]
+
+  --content-file accepts either:
+    - a single SKILL.md file (registered as bare content, no assets)
+    - a skill directory containing SKILL.md (bundled into a zip and uploaded)
+  --zip-file accepts a pre-built .zip with SKILL.md at the archive root.`);
     return;
   }
   if (subcommand === "set-status" || subcommand === "status") {
@@ -115,6 +121,7 @@ Subcommands:
   market [--name kw] [--source src] [--page N] [--page-size N] [-bd value]
   get <skill-id> [-bd value]
   register --content-file <path> | --zip-file <path> [--source src] [--extend-info json]
+           (--content-file accepts SKILL.md or a directory; directory is auto-bundled)
   set-status <skill-id> <unpublish|published|offline> [-bd value]
   delete <skill-id> [-y] [-bd value]
   content <skill-id> [--raw] [--output file] [-bd value]
@@ -466,7 +473,24 @@ export async function runSkillCommand(args: string[]): Promise<number> {
       if (subcommand === "register") {
         const opts = parseSkillRegisterArgs(rest);
         if (opts.contentFile) {
-          const content = readFileSync(resolve(opts.contentFile), "utf8");
+          const abs = resolve(opts.contentFile);
+          const stat = statSync(abs);
+          if (stat.isDirectory()) {
+            // Server requires SKILL.md plus optional assets in a single zip.
+            // Bundle in memory so users don't need a system `zip` binary.
+            const bytes = await bundleSkillDirectoryToZip(abs);
+            const result = await registerSkillZip({
+              ...token,
+              businessDomain: opts.businessDomain,
+              source: opts.source,
+              extendInfo: opts.extendInfo,
+              filename: `${basename(abs)}.zip`,
+              bytes,
+            });
+            console.log(format(result, opts.pretty));
+            return 0;
+          }
+          const content = readFileSync(abs, "utf8");
           const result = await registerSkillContent({
             ...token,
             businessDomain: opts.businessDomain,

@@ -263,16 +263,23 @@ export async function updateSkillStatus(options: UpdateSkillStatusOptions): Prom
 
 export async function registerSkillContent(options: RegisterSkillContentOptions): Promise<RegisterSkillResult> {
   const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills`);
-  const payload: Record<string, unknown> = {
-    file_type: "content",
-    file: options.content,
-  };
-  if (options.source) payload.source = options.source;
-  if (options.extendInfo) payload.extend_info = options.extendInfo;
+  const form = new FormData();
+  form.set("file_type", "content");
+  // Backend's gin form-binder rejects plain string field for `file`
+  // (typed json.RawMessage); needs an actual multipart file part with
+  // filename. See utils/gin.go GetBindMultipartFormRaw.
+  form.set(
+    "file",
+    new Blob([options.content], { type: "text/markdown" }),
+    "SKILL.md",
+  );
+  if (options.source) form.set("source", options.source);
+  if (options.extendInfo) form.set("extend_info", JSON.stringify(options.extendInfo));
+
   const { body } = await fetchTextOrThrow(url, {
     method: "POST",
-    headers: { ...baseHeaders(options), "content-type": "application/json" },
-    body: JSON.stringify(payload),
+    headers: baseHeaders(options),
+    body: form,
   });
   return normalizeSkillId(unwrapEnvelope<RegisterSkillResult>(body));
 }

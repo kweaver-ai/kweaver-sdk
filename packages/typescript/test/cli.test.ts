@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -51,6 +51,19 @@ import { HttpError, NetworkRequestError } from "../src/utils/http.js";
 function createConfigDir(): string {
   return mkdtempSync(join(tmpdir(), "kweaver-cli-"));
 }
+
+let savedConfigDir: string | undefined;
+before(() => {
+  savedConfigDir = process.env.KWEAVERC_CONFIG_DIR;
+  process.env.KWEAVERC_CONFIG_DIR = createConfigDir();
+});
+after(() => {
+  if (savedConfigDir !== undefined) {
+    process.env.KWEAVERC_CONFIG_DIR = savedConfigDir;
+  } else {
+    delete process.env.KWEAVERC_CONFIG_DIR;
+  }
+});
 
 async function importCliModule(configDir: string) {
   process.env.KWEAVERC_CONFIG_DIR = configDir;

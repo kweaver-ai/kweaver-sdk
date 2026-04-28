@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +6,19 @@ import { join, resolve } from "node:path";
 
 /** Shared BKN examples at repo root (examples/bkn/). Resolved from packages/typescript. */
 const FIXTURES_ROOT = resolve(process.cwd(), "..", "..", "examples", "bkn");
+
+let savedConfigDir: string | undefined;
+before(() => {
+  savedConfigDir = process.env.KWEAVERC_CONFIG_DIR;
+  process.env.KWEAVERC_CONFIG_DIR = mkdtempSync(join(tmpdir(), "kweaver-bkn-push-test-"));
+});
+after(() => {
+  if (savedConfigDir !== undefined) {
+    process.env.KWEAVERC_CONFIG_DIR = savedConfigDir;
+  } else {
+    delete process.env.KWEAVERC_CONFIG_DIR;
+  }
+});
 
 import {
   parseKnPushArgs,

@@ -1,5 +1,8 @@
-import test from "node:test";
+import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { buildContinueCommand, parseChatArgs } from "../src/commands/agent-chat.js";
 import {
@@ -13,6 +16,19 @@ import {
 
 const originalFetch = globalThis.fetch;
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+
+let savedConfigDir: string | undefined;
+before(() => {
+  savedConfigDir = process.env.KWEAVERC_CONFIG_DIR;
+  process.env.KWEAVERC_CONFIG_DIR = mkdtempSync(join(tmpdir(), "kweaver-agent-chat-test-"));
+});
+after(() => {
+  if (savedConfigDir !== undefined) {
+    process.env.KWEAVERC_CONFIG_DIR = savedConfigDir;
+  } else {
+    delete process.env.KWEAVERC_CONFIG_DIR;
+  }
+});
 
 test("parseChatArgs requires agent_id", () => {
   assert.throws(

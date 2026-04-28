@@ -11,6 +11,7 @@ import {
   deleteDatasource,
   listTables,
   listTablesWithColumns,
+  scanMetadata,
 } from "../api/datasources.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
@@ -708,6 +709,23 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
   );
   if (failed.length > 0) {
     console.error(`Failed tables: ${failed.join(", ")}`);
+  }
+
+  // Refresh the platform metadata catalog so the freshly imported tables
+  // are visible to ds tables / bkn create-from-ds without manual scan.
+  // Best-effort: scan failures shouldn't mask a successful import.
+  if (succeeded.length > 0) {
+    process.stderr.write("Scanning datasource metadata ...\n");
+    try {
+      await scanMetadata({
+        ...base,
+        id: options.datasourceId,
+        dsType: datasourceType,
+        businessDomain: options.businessDomain,
+      });
+    } catch (err) {
+      console.error(`Scan warning (continuing): ${formatHttpError(err)}`);
+    }
   }
 
   return { code: failed.length > 0 ? 1 : 0, tables: succeeded, failed, tableColumns, sampleRows };

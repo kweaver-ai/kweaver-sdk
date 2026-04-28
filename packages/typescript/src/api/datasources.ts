@@ -389,3 +389,21 @@ export async function scanMetadata(options: ScanMetadataOptions): Promise<string
 
   return taskId;
 }
+
+export interface ScanDatasourceMetadataOptions {
+  baseUrl: string;
+  accessToken: string;
+  id: string;
+  businessDomain?: string;
+}
+
+// Looks up a datasource's type then triggers a metadata scan, so callers
+// don't have to repeat the GET-then-scan dance whenever a flow needs the
+// platform catalog refreshed (after import-csv, before discovering tables).
+export async function scanDatasourceMetadata(
+  options: ScanDatasourceMetadataOptions,
+): Promise<string> {
+  const dsBody = await getDatasource(options);
+  const dsType = (JSON.parse(dsBody) as { type?: string }).type ?? "mysql";
+  return scanMetadata({ ...options, dsType });
+}

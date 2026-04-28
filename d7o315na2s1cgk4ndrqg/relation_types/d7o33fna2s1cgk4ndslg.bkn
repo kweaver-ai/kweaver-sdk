@@ -1,0 +1,21 @@
+---
+type: relation_type
+id: d7o33fna2s1cgk4ndslg
+name: partner_source
+tags: []
+---
+
+## RelationType: partner_source
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| d7o315na2s1cgk4ndrug | d7o315na2s1cgk4nds1g | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| source_comcode | comcode |
+

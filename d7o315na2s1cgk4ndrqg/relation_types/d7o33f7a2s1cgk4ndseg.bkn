@@ -1,0 +1,21 @@
+---
+type: relation_type
+id: d7o33f7a2s1cgk4ndseg
+name: node_belongs_to
+tags: []
+---
+
+## RelationType: node_belongs_to
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| d7o315na2s1cgk4nds3g | d7o315na2s1cgk4nds0g | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| node_id | node_id |
+

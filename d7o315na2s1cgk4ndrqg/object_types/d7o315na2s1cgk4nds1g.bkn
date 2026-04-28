@@ -1,0 +1,39 @@
+---
+type: object_type
+id: d7o315na2s1cgk4nds1g
+name: ht_v1_enterprise_enriched
+tags: []
+---
+
+## ObjectType: ht_v1_enterprise_enriched
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| data_view | e3397833bbbd588000a1a98c20b63266 |  |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| regcapital | regcapital | string |  | regcapital |
+| is_listed | is_listed | string |  | is_listed |
+| founddate | founddate | string |  | founddate |
+| engname | engname | string |  | engname |
+| currencycode | currencycode | string |  | currencycode |
+| comcode | comcode | string |  | comcode |
+| chinameabbr | chinameabbr | string |  | chinameabbr |
+| chiname | chiname | string |  | chiname |
+| briefing | briefing | string |  | briefing |
+| address | address | string |  | address |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: regcapital
+Display Key: engname
+Incremental Key: 
+

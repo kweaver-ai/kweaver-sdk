@@ -1,0 +1,32 @@
+---
+type: object_type
+id: d7o315na2s1cgk4ndrvg
+name: ht_v1_invests_in
+tags: []
+---
+
+## ObjectType: ht_v1_invests_in
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| data_view | ce3056c110c43db82021628de64ce9e8 |  |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| target_comcode | target_comcode | string |  | target_comcode |
+| source_comcode | source_comcode | string |  | source_comcode |
+| invest_type | invest_type | string |  | invest_type |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: target_comcode
+Display Key: target_comcode
+Incremental Key: 
+

@@ -1,0 +1,93 @@
+---
+type: knowledge_network
+id: d7o315na2s1cgk4ndrqg
+name: ht_adas_v1
+tags: []
+branch: main
+business_domain: bd_public
+---
+
+# ht_adas_v1
+
+
+## Network Overview
+
+### Object Types
+
+| ID | Name | File Path | Description |
+|----|------|-----------|-------------|
+| d7o315na2s1cgk4ndrrg | ht_v1_vehicle | `object_types/d7o315na2s1cgk4ndrrg.bkn` |  |
+| d7o315na2s1cgk4ndrsg | ht_v1_supplies_to | `object_types/d7o315na2s1cgk4ndrsg.bkn` |  |
+| d7o315na2s1cgk4ndrtg | ht_v1_supplier | `object_types/d7o315na2s1cgk4ndrtg.bkn` |  |
+| d7o315na2s1cgk4ndrug | ht_v1_partners_with | `object_types/d7o315na2s1cgk4ndrug.bkn` |  |
+| d7o315na2s1cgk4ndrvg | ht_v1_invests_in | `object_types/d7o315na2s1cgk4ndrvg.bkn` |  |
+| d7o315na2s1cgk4nds0g | ht_v1_industry_node | `object_types/d7o315na2s1cgk4nds0g.bkn` |  |
+| d7o315na2s1cgk4nds1g | ht_v1_enterprise_enriched | `object_types/d7o315na2s1cgk4nds1g.bkn` |  |
+| d7o315na2s1cgk4nds2g | ht_v1_competes_with | `object_types/d7o315na2s1cgk4nds2g.bkn` |  |
+| d7o315na2s1cgk4nds3g | ht_v1_company_node | `object_types/d7o315na2s1cgk4nds3g.bkn` |  |
+| d7o315na2s1cgk4nds4g | ht_v1_company_latest_fin | `object_types/d7o315na2s1cgk4nds4g.bkn` |  |
+
+### Relation Types
+
+| ID | Name | File Path | Description |
+|----|------|-----------|-------------|
+| d7o33f7a2s1cgk4ndsbg | has_parent | `relation_types/d7o33f7a2s1cgk4ndsbg.bkn` |  |
+| d7o33f7a2s1cgk4ndscg | has_financial | `relation_types/d7o33f7a2s1cgk4ndscg.bkn` |  |
+| d7o33f7a2s1cgk4ndsdg | company_in_node | `relation_types/d7o33f7a2s1cgk4ndsdg.bkn` |  |
+| d7o33f7a2s1cgk4ndseg | node_belongs_to | `relation_types/d7o33f7a2s1cgk4ndseg.bkn` |  |
+| d7o33f7a2s1cgk4ndsfg | supplier_company | `relation_types/d7o33f7a2s1cgk4ndsfg.bkn` |  |
+| d7o33ffa2s1cgk4ndsgg | buyer_company | `relation_types/d7o33ffa2s1cgk4ndsgg.bkn` |  |
+| d7o33ffa2s1cgk4ndshg | competitor_a | `relation_types/d7o33ffa2s1cgk4ndshg.bkn` |  |
+| d7o33ffa2s1cgk4ndsig | competitor_b | `relation_types/d7o33ffa2s1cgk4ndsig.bkn` |  |
+| d7o33ffa2s1cgk4ndsjg | investor_company | `relation_types/d7o33ffa2s1cgk4ndsjg.bkn` |  |
+| d7o33ffa2s1cgk4ndskg | investee_company | `relation_types/d7o33ffa2s1cgk4ndskg.bkn` |  |
+| d7o33fna2s1cgk4ndslg | partner_source | `relation_types/d7o33fna2s1cgk4ndslg.bkn` |  |
+| d7o33fna2s1cgk4ndsmg | partner_target | `relation_types/d7o33fna2s1cgk4ndsmg.bkn` |  |
+
+### Action Types
+
+| ID | Name | File Path | Description |
+|----|------|-----------|-------------|
+
+### Risk Types
+
+| ID | Name | File Path | Description |
+|----|------|-----------|-------------|
+
+### Concept Groups
+
+| ID | Name | File Path | Description |
+|----|------|-----------|-------------|
+
+## Directory Structure
+
+```
+.
+├── network.bkn
+├── SKILL.md
+├── CHECKSUM
+├── object_types/
+│   ├── d7o315na2s1cgk4ndrrg.bkn
+│   ├── d7o315na2s1cgk4ndrsg.bkn
+│   ├── d7o315na2s1cgk4ndrtg.bkn
+│   ├── d7o315na2s1cgk4ndrug.bkn
+│   ├── d7o315na2s1cgk4ndrvg.bkn
+│   ├── d7o315na2s1cgk4nds0g.bkn
+│   ├── d7o315na2s1cgk4nds1g.bkn
+│   ├── d7o315na2s1cgk4nds2g.bkn
+│   ├── d7o315na2s1cgk4nds3g.bkn
+│   └── d7o315na2s1cgk4nds4g.bkn
+└── relation_types/
+    ├── d7o33f7a2s1cgk4ndsbg.bkn
+    ├── d7o33f7a2s1cgk4ndscg.bkn
+    ├── d7o33f7a2s1cgk4ndsdg.bkn
+    ├── d7o33f7a2s1cgk4ndseg.bkn
+    ├── d7o33f7a2s1cgk4ndsfg.bkn
+    ├── d7o33ffa2s1cgk4ndsgg.bkn
+    ├── d7o33ffa2s1cgk4ndshg.bkn
+    ├── d7o33ffa2s1cgk4ndsig.bkn
+    ├── d7o33ffa2s1cgk4ndsjg.bkn
+    ├── d7o33ffa2s1cgk4ndskg.bkn
+    ├── d7o33fna2s1cgk4ndslg.bkn
+    └── d7o33fna2s1cgk4ndsmg.bkn
+```

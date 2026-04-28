@@ -1,0 +1,21 @@
+---
+type: relation_type
+id: d7o33f7a2s1cgk4ndsfg
+name: supplier_company
+tags: []
+---
+
+## RelationType: supplier_company
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| d7o315na2s1cgk4ndrsg | d7o315na2s1cgk4nds1g | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| source_comcode | comcode |
+

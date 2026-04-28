@@ -1,0 +1,33 @@
+---
+type: object_type
+id: d7o315na2s1cgk4nds3g
+name: ht_v1_company_node
+tags: []
+---
+
+## ObjectType: ht_v1_company_node
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| data_view | 5745b61422b6d9bb2e4e6582dd9904fa |  |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| node_id | node_id | string |  | node_id |
+| company_name | company_name | string |  | company_name |
+| comcode | comcode | string |  | comcode |
+| cn_id | cn_id | string |  | cn_id |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: cn_id
+Display Key: company_name
+Incremental Key: 
+

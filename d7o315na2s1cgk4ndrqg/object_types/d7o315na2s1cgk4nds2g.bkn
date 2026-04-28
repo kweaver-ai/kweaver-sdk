@@ -1,0 +1,31 @@
+---
+type: object_type
+id: d7o315na2s1cgk4nds2g
+name: ht_v1_competes_with
+tags: []
+---
+
+## ObjectType: ht_v1_competes_with
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| data_view | 237623ea91e8beda4db9cadb2ee3a8eb |  |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| target_comcode | target_comcode | string |  | target_comcode |
+| source_comcode | source_comcode | string |  | source_comcode |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: target_comcode
+Display Key: target_comcode
+Incremental Key: 
+

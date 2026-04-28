@@ -1,0 +1,21 @@
+---
+type: relation_type
+id: d7o33f7a2s1cgk4ndsbg
+name: has_parent
+tags: []
+---
+
+## RelationType: has_parent
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| d7o315na2s1cgk4nds0g | d7o315na2s1cgk4nds0g | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| parent_node_id | node_id |
+

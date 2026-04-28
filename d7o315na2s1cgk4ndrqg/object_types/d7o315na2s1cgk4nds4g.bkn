@@ -1,0 +1,44 @@
+---
+type: object_type
+id: d7o315na2s1cgk4nds4g
+name: ht_v1_company_latest_fin
+tags: []
+---
+
+## ObjectType: ht_v1_company_latest_fin
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| data_view | 36a3d8ea1c6d24cc31e194557b8bc1cb |  |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| totalliab | totalliab | string |  | totalliab |
+| totalasset | totalasset | string |  | totalasset |
+| roe | roe | string |  | roe |
+| reporttype | reporttype | string |  | reporttype |
+| operrevenuerate | operrevenuerate | string |  | operrevenuerate |
+| operrevenue | operrevenue | string |  | operrevenue |
+| netprofitrate | netprofitrate | string |  | netprofitrate |
+| netprofitinshareholderrate | netprofitinshareholderrate | string |  | netprofitinshareholderrate |
+| netprofitinshareholder | netprofitinshareholder | string |  | netprofitinshareholder |
+| grossprofitrate | grossprofitrate | string |  | grossprofitrate |
+| enddate_old | enddate_old | string |  | enddate_old |
+| enddate | enddate | string |  | enddate |
+| datacode | datacode | string |  | datacode |
+| comname | comname | string |  | comname |
+| comcode | comcode | string |  | comcode |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: totalliab
+Display Key: comname
+Incremental Key: 
+

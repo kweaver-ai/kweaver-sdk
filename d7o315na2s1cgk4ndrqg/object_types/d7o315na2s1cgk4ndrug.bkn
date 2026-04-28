@@ -1,0 +1,31 @@
+---
+type: object_type
+id: d7o315na2s1cgk4ndrug
+name: ht_v1_partners_with
+tags: []
+---
+
+## ObjectType: ht_v1_partners_with
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| data_view | 5d53ef043bdf61f19b913c57a1d2768d |  |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| target_comcode | target_comcode | string |  | target_comcode |
+| source_comcode | source_comcode | string |  | source_comcode |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: target_comcode
+Display Key: target_comcode
+Incremental Key: 
+

@@ -1,0 +1,21 @@
+---
+type: relation_type
+id: d7o33f7a2s1cgk4ndsdg
+name: company_in_node
+tags: []
+---
+
+## RelationType: company_in_node
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| d7o315na2s1cgk4nds3g | d7o315na2s1cgk4nds1g | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| comcode | comcode |
+

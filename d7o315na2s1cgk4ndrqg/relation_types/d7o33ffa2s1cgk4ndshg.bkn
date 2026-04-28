@@ -1,0 +1,21 @@
+---
+type: relation_type
+id: d7o33ffa2s1cgk4ndshg
+name: competitor_a
+tags: []
+---
+
+## RelationType: competitor_a
+
+### Endpoint
+
+| Source | Target | Type |
+|--------|--------|------|
+| d7o315na2s1cgk4nds2g | d7o315na2s1cgk4nds1g | direct |
+
+### Mapping Rules
+
+| Source Property | Target Property |
+|-----------------|-----------------|
+| source_comcode | comcode |
+

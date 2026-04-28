@@ -1,0 +1,35 @@
+---
+type: object_type
+id: d7o315na2s1cgk4ndrtg
+name: ht_v1_supplier
+tags: []
+---
+
+## ObjectType: ht_v1_supplier
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| data_view | 0916b70cb63a87bc2970b6f42b5a942b |  |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| SUPPLIERIFCHINESE | SUPPLIERIFCHINESE | string |  | SUPPLIERIFCHINESE |
+| CONFIGURATIONTYPE | CONFIGURATIONTYPE | string |  | CONFIGURATIONTYPE |
+| CONFIGURATIONSUPPLIERCODE | CONFIGURATIONSUPPLIERCODE | string |  | CONFIGURATIONSUPPLIERCODE |
+| CONFIGURATIONSUPPLIERABBR | CONFIGURATIONSUPPLIERABBR | string |  | CONFIGURATIONSUPPLIERABBR |
+| CONFIGURATIONSUPPLIER | CONFIGURATIONSUPPLIER | string |  | CONFIGURATIONSUPPLIER |
+| CONFIGURATION | CONFIGURATION | string |  | CONFIGURATION |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: SUPPLIERIFCHINESE
+Display Key: SUPPLIERIFCHINESE
+Incremental Key: 
+

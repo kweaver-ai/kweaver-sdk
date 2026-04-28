@@ -1,0 +1,35 @@
+---
+type: object_type
+id: d7o315na2s1cgk4nds0g
+name: ht_v1_industry_node
+tags: []
+---
+
+## ObjectType: ht_v1_industry_node
+
+### Data Source
+
+| Type | ID | Name |
+|------|----|------|
+| data_view | b1f1e81656ba53bcdec3c7d179fb13d2 |  |
+
+### Data Properties
+
+| Name | Display Name | Type | Description | Mapped Field |
+|------|--------------|------|-------------|--------------|
+| sector | sector | string |  | sector |
+| parent_node_id | parent_node_id | string |  | parent_node_id |
+| node_id | node_id | string |  | node_id |
+| name | name | string |  | name |
+| level | level | string |  | level |
+| full_path | full_path | string |  | full_path |
+
+### Logic Properties
+
+
+### Keys
+
+Primary Keys: sector
+Display Key: name
+Incremental Key: 
+

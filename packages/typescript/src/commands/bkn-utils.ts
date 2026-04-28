@@ -94,20 +94,103 @@ export function parseOntologyQueryFlags(args: string[]): {
 
 export const DISPLAY_HINTS = ["name", "title", "label", "display_name", "description"];
 
-/** Detect primary key: first column (left-to-right) with all unique values in the sample. */
+export interface PkCandidate { name: string; cardinality: number; }
+
+export interface PkDetectionResult {
+  /** Detected PK column name, or null when detection is not confident. */
+  pk: string | null;
+  /** All columns sorted by cardinality desc. Empty when no sample. */
+  candidates: PkCandidate[];
+  /** 0 when no sample data was provided. */
+  sampleSize: number;
+}
+
+export const PK_NAME_HINTS = ["id", "_id", "pk"];
+
+/**
+ * Detect primary key from a row sample. Returns null pk when no column has
+ * unique values across the sample — caller must fail-fast and prompt for --pk-map.
+ * Among columns that ARE fully unique, prefers PK-like names (id, *_id, pk).
+ */
 export function detectPrimaryKey(
   table: { name: string; columns: Array<{ name: string; type: string }> },
   rows?: Array<Record<string, string | null>>,
-): string {
-  if (rows && rows.length > 0) {
-    for (const col of table.columns) {
-      const values = rows.map((r) => r[col.name]);
-      const unique = new Set(values);
-      if (unique.size === rows.length) return col.name;
+): PkDetectionResult {
+  if (!rows || rows.length === 0) {
+    return { pk: null, candidates: [], sampleSize: 0 };
+  }
+
+  const candidates: PkCandidate[] = table.columns
+    .map((col) => {
+      const unique = new Set(rows.map((r) => r[col.name]));
+      return { name: col.name, cardinality: unique.size };
+    })
+    .sort((a, b) => b.cardinality - a.cardinality);
+
+  const fullCardinality = candidates.filter((c) => c.cardinality === rows.length);
+  if (fullCardinality.length === 0) {
+    return { pk: null, candidates, sampleSize: rows.length };
+  }
+
+  const named = fullCardinality.find((c) => {
+    const lower = c.name.toLowerCase();
+    return PK_NAME_HINTS.some((h) => lower === h || lower.endsWith(`_${h}`));
+  });
+
+  return {
+    pk: named?.name ?? fullCardinality[0]!.name,
+    candidates,
+    sampleSize: rows.length,
+  };
+}
+
+/** Format a user-facing error message when PK auto-detection fails. */
+export function formatPkDetectionError(tableName: string, result: PkDetectionResult): string {
+  const lines = [`Cannot auto-detect primary key for table '${tableName}'.`];
+
+  if (result.sampleSize === 0) {
+    lines.push(
+      `  No sample data available — chain with 'kweaver ds import-csv' or use --pk-map.`
+    );
+  } else {
+    lines.push(`  No column has unique values in the ${result.sampleSize}-row sample.`);
+    lines.push(`  Top candidates by cardinality:`);
+    const top = result.candidates.slice(0, 5);
+    const maxNameLen = Math.max(...top.map((c) => c.name.length));
+    for (const c of top) {
+      lines.push(`    ${c.name.padEnd(maxNameLen)}  ${c.cardinality} unique`);
     }
   }
-  // Fallback: first column
-  return table.columns[0]?.name ?? "id";
+
+  lines.push(``);
+  lines.push(`  Re-run with --pk-map to specify explicitly:`);
+  lines.push(`    --pk-map ${tableName}:<column>`);
+  return lines.join("\n");
+}
+
+/**
+ * Parse --pk-map string into a Record<table, field>.
+ * Format: "<table>:<field>[,<table>:<field>...]". Throws on invalid input.
+ */
+export function parsePkMap(input: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const pair of input.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const idx = pair.indexOf(":");
+    if (idx <= 0 || idx >= pair.length - 1) {
+      throw new Error(
+        `Invalid --pk-map entry '${pair}'. Expected '<table>:<field>[,<table>:<field>...]'`
+      );
+    }
+    const table = pair.slice(0, idx).trim();
+    const field = pair.slice(idx + 1).trim();
+    if (!table || !field) {
+      throw new Error(
+        `Invalid --pk-map entry '${pair}'. Expected '<table>:<field>[,<table>:<field>...]'`
+      );
+    }
+    result[table] = field;
+  }
+  return result;
 }
 
 export function detectDisplayKey(

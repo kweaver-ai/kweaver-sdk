@@ -42,6 +42,8 @@ import {
   pollWithBackoff,
   detectPrimaryKey,
   detectDisplayKey,
+  formatPkDetectionError,
+  parsePkMap,
   confirmYes,
 } from "./bkn-utils.js";
 
@@ -573,6 +575,8 @@ Create a knowledge network from a datasource (dataviews + object types + optiona
 Options:
   --name <s>       Knowledge network name (required)
   --tables <a,b>   Comma-separated table names (default: all)
+  --pk-map <s>     Explicit primary keys: <table>:<field>[,<table>:<field>...]
+                   Required when auto-detection fails (no unique column in sample)
   --build (default)  Build after creation
   --no-build       Skip build after creation
   --timeout <n>    Build timeout in seconds (default: 300)
@@ -584,6 +588,7 @@ export function parseKnCreateFromDsArgs(args: string[]): {
   dsId: string;
   name: string;
   tables: string[];
+  pkMap: Record<string, string>;
   build: boolean;
   timeout: number;
   businessDomain: string;
@@ -593,6 +598,7 @@ export function parseKnCreateFromDsArgs(args: string[]): {
   let dsId = "";
   let name = "";
   let tablesStr = "";
+  let pkMapStr = "";
   let build = true;
   let timeout = 300;
   let businessDomain = "";
@@ -608,6 +614,10 @@ export function parseKnCreateFromDsArgs(args: string[]): {
     }
     if (arg === "--tables" && args[i + 1]) {
       tablesStr = args[++i];
+      continue;
+    }
+    if (arg === "--pk-map" && args[i + 1]) {
+      pkMapStr = args[++i];
       continue;
     }
     if (arg === "--build") {
@@ -644,8 +654,9 @@ export function parseKnCreateFromDsArgs(args: string[]): {
   if (!dsId || !name) {
     throw new Error("Usage: kweaver bkn create-from-ds <ds-id> --name X [options]");
   }
+  const pkMap = pkMapStr ? parsePkMap(pkMapStr) : {};
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { dsId, name, tables, build, timeout, businessDomain, pretty, noRollback };
+  return { dsId, name, tables, pkMap, build, timeout, businessDomain, pretty, noRollback };
 }
 
 /** Sanitize a table name into a BKN-safe ID (alphanumeric + underscore). */
@@ -742,6 +753,38 @@ export async function runKnCreateFromDsCommand(
       "Object type names derived from table names",
     );
 
+    // Pre-flight: resolve PK for every table BEFORE any side effect.
+    // Auto-detection silently picking the wrong column was the cause of
+    // issue #97 (KN built with ~5 indexed docs out of 2036 source rows).
+    // Resolve order: --pk-map override → cardinality-based detection → fail-fast.
+    const tablePks: Record<string, string> = {};
+    const unknownPkMapTables = Object.keys(options.pkMap).filter(
+      (name) => !targetTables.some((t) => t.name === name),
+    );
+    if (unknownPkMapTables.length > 0) {
+      throw new Error(
+        `--pk-map references unknown table(s): ${unknownPkMapTables.join(", ")}`
+      );
+    }
+    for (const t of targetTables) {
+      const override = options.pkMap[t.name];
+      if (override) {
+        if (!t.columns.some((c) => c.name === override)) {
+          throw new Error(
+            `--pk-map specifies '${override}' for table '${t.name}', but no such column. ` +
+              `Columns: ${t.columns.map((c) => c.name).join(", ")}`
+          );
+        }
+        tablePks[t.name] = override;
+        continue;
+      }
+      const result = detectPrimaryKey(t, sampleRows?.[t.name]);
+      if (!result.pk) {
+        throw new Error(formatPkDetectionError(t.name, result));
+      }
+      tablePks[t.name] = result.pk;
+    }
+
     // Phase 1: Create DataViews for each table. findDataView is idempotent;
     // not tracked for rollback so a retry can reuse what's already there.
     console.error(`Creating data views for ${targetTables.length} table(s) ...`);
@@ -791,7 +834,7 @@ export async function runKnCreateFromDsCommand(
       // (object_type_service.go:213-355) — all-or-nothing.
       console.error(`Creating ${targetTables.length} object type(s) ...`);
       const entries = targetTables.map((t) => {
-        const pk = detectPrimaryKey(t, sampleRows?.[t.name]);
+        const pk = tablePks[t.name]!;
         const dk = detectDisplayKey(t, pk);
         return {
           branch: "main",
@@ -904,7 +947,7 @@ Options:
   --tables <a,b>       Tables to include in KN (default: all imported)
   --build (default)    Build after creation
   --no-build           Skip build
-  --recreate           Use "insert" mode on first batch (only effective for new tables)
+  --pk-map <s>         Explicit primary keys: <table>:<field>[,<table>:<field>...]
   --timeout <n>        Build timeout in seconds (default: 300)
   --no-rollback        Keep partially-created KN on failure (debug; default: rollback)
   -bd, --biz-domain    Business domain (default: bd_public)`;
@@ -916,8 +959,8 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
   tablePrefix: string;
   batchSize: number;
   tables: string[];
+  pkMap: Record<string, string>;
   build: boolean;
-  recreate: boolean;
   timeout: number;
   businessDomain: string;
   noRollback: boolean;
@@ -928,8 +971,8 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
   let tablePrefix = "";
   let batchSize = 500;
   let tablesStr = "";
+  let pkMapStr = "";
   let build = true;
-  let recreate = false;
   let timeout = 300;
   let businessDomain = "";
   let noRollback = false;
@@ -966,8 +1009,8 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
       build = false;
       continue;
     }
-    if (arg === "--recreate") {
-      recreate = true;
+    if (arg === "--pk-map" && args[i + 1]) {
+      pkMapStr = args[++i];
       continue;
     }
     if (arg === "--no-rollback") {
@@ -992,8 +1035,9 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
   if (!dsId || !files || !name) {
     throw new Error("Usage: kweaver bkn create-from-csv <ds-id> --files <glob> --name X [options]");
   }
+  const pkMap = pkMapStr ? parsePkMap(pkMapStr) : {};
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { dsId, files, name, tablePrefix, batchSize, tables, build, recreate, timeout, businessDomain, noRollback };
+  return { dsId, files, name, tablePrefix, batchSize, tables, pkMap, build, timeout, businessDomain, noRollback };
 }
 
 export async function runKnCreateFromCsvCommand(args: string[]): Promise<number> {
@@ -1034,7 +1078,6 @@ export async function runKnCreateFromCsvCommand(args: string[]): Promise<number>
     "--table-prefix", options.tablePrefix,
     "--batch-size", String(options.batchSize),
     "-bd", options.businessDomain,
-    ...(options.recreate ? ["--recreate"] : []),
   ];
   const importResult = await runDsImportCsv(importArgs);
   if (importResult.code !== 0) {
@@ -1071,6 +1114,7 @@ export async function runKnCreateFromCsvCommand(args: string[]): Promise<number>
     console.error("No tables available for KN creation — aborting");
     return 1;
   }
+  const pkMapEntries = Object.entries(options.pkMap);
   const knArgs = [
     options.dsId,
     "--name", options.name,
@@ -1078,6 +1122,9 @@ export async function runKnCreateFromCsvCommand(args: string[]): Promise<number>
     options.build ? "--build" : "--no-build",
     "--timeout", String(options.timeout),
     "-bd", options.businessDomain,
+    ...(pkMapEntries.length > 0
+      ? ["--pk-map", pkMapEntries.map(([t, f]) => `${t}:${f}`).join(",")]
+      : []),
     ...(options.noRollback ? ["--no-rollback"] : []),
   ];
   return runKnCreateFromDsCommand(knArgs, importResult.sampleRows);

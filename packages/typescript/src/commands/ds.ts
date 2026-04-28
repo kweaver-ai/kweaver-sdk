@@ -487,7 +487,6 @@ Options:
   --files <s>          CSV file paths (comma-separated or glob pattern, required)
   --table-prefix <s>   Table name prefix (default: none)
   --batch-size <n>     Rows per batch (default: 500, range: 1-10000)
-  --recreate           First batch uses overwrite (drop/recreate table) then append; use when schema changed
   -bd, --biz-domain    Business domain (default: bd_public)`;
 
 export function parseImportCsvArgs(args: string[]): {
@@ -496,24 +495,18 @@ export function parseImportCsvArgs(args: string[]): {
   tablePrefix: string;
   batchSize: number;
   businessDomain: string;
-  recreate: boolean;
 } {
   let datasourceId = "";
   let files = "";
   let tablePrefix = "";
   let batchSize = 500;
   let businessDomain = "";
-  let recreate = false;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === "--help" || arg === "-h") throw new Error("help");
     if (arg === "--files" && args[i + 1]) {
       files = args[++i];
-      continue;
-    }
-    if (arg === "--recreate") {
-      recreate = true;
       continue;
     }
     if (arg === "--table-prefix" && args[i + 1]) {
@@ -538,7 +531,7 @@ export function parseImportCsvArgs(args: string[]): {
   }
 
   if (!businessDomain) businessDomain = resolveBusinessDomain();
-  return { datasourceId, files, tablePrefix, batchSize, businessDomain, recreate };
+  return { datasourceId, files, tablePrefix, batchSize, businessDomain };
 }
 
 export async function resolveFiles(pattern: string): Promise<string[]> {
@@ -670,7 +663,6 @@ export async function runDsImportCsv(args: string[]): Promise<ImportCsvResult> {
         tableExist,
         data: batch,
         fieldMappings,
-        recreate: options.recreate,
       });
 
       const t0 = Date.now();

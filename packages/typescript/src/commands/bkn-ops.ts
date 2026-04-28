@@ -17,7 +17,7 @@ import {
   buildKnowledgeNetwork,
   getBuildStatus,
 } from "../api/knowledge-networks.js";
-import { listTablesWithColumns, scanMetadata, getDatasource } from "../api/datasources.js";
+import { listTablesWithColumns, scanDatasourceMetadata } from "../api/datasources.js";
 import { createDataView, findDataView } from "../api/dataviews.js";
 import { resolveFiles } from "./ds.js";
 import { buildTableName } from "./import-csv.js";
@@ -719,6 +719,7 @@ export async function runKnCreateFromDsCommand(
       columns: Array<{ name: string; type: string }>;
     }> = [];
     let targetTables: typeof allTables = [];
+    let scanAttempted = false;
 
     for (let attempt = 1; attempt <= maxTableListAttempts; attempt += 1) {
       const tablesBody = await listTablesWithColumns({ ...base, id: options.dsId });
@@ -733,10 +734,26 @@ export async function runKnCreateFromDsCommand(
 
       if (targetTables.length > 0) break;
       if (attempt < maxTableListAttempts) {
-        console.error(
-          `No tables available (attempt ${attempt}/${maxTableListAttempts}); retrying in ${tableRetryDelayMs / 1000}s...`,
-        );
-        await new Promise((r) => setTimeout(r, tableRetryDelayMs));
+        // First miss: the catalog often hasn't picked up tables created
+        // out-of-band (e.g. ds import-csv from an older SDK that didn't
+        // self-scan). Trigger a scan once before falling back to plain
+        // sleep-retries.
+        if (!scanAttempted) {
+          scanAttempted = true;
+          console.error(
+            `No tables available (attempt ${attempt}/${maxTableListAttempts}); scanning datasource metadata before retry...`,
+          );
+          try {
+            await scanDatasourceMetadata({ ...base, id: options.dsId });
+          } catch (err) {
+            console.error(`Scan warning (continuing): ${formatHttpError(err)}`);
+          }
+        } else {
+          console.error(
+            `No tables available (attempt ${attempt}/${maxTableListAttempts}); retrying in ${tableRetryDelayMs / 1000}s...`,
+          );
+          await new Promise((r) => setTimeout(r, tableRetryDelayMs));
+        }
       }
     }
 
@@ -1085,27 +1102,9 @@ export async function runKnCreateFromCsvCommand(args: string[]): Promise<number>
     return importResult.code;
   }
 
-  // Phase 1.5: Scan datasource metadata so platform discovers newly imported tables
-  console.error("Scanning datasource metadata ...");
-  try {
-    const token = await ensureValidToken();
-    const dsBody = await getDatasource({
-      baseUrl: token.baseUrl,
-      accessToken: token.accessToken,
-      id: options.dsId,
-      businessDomain: options.businessDomain,
-    });
-    const dsParsed = JSON.parse(dsBody) as { type?: string };
-    await scanMetadata({
-      baseUrl: token.baseUrl,
-      accessToken: token.accessToken,
-      id: options.dsId,
-      dsType: dsParsed.type ?? "mysql",
-      businessDomain: options.businessDomain,
-    });
-  } catch (err) {
-    console.error(`Scan warning (continuing): ${String(err)}`);
-  }
+  // (Phase 1.5 metadata scan removed — runDsImportCsv now self-scans on
+  // success, and runKnCreateFromDsCommand's table-discovery retry triggers
+  // a scan if the catalog still lags. Two layers of fallback are enough.)
 
   // Phase 2: Create KN from datasource
   console.error("Phase 2: Creating knowledge network ...");

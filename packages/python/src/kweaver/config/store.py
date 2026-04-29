@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -23,9 +24,7 @@ def _default_kweaver_root() -> Path:
     return Path.home() / ".kweaver"
 
 
-import re as _re
-
-_PROFILE_NAME_RE = _re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _get_profile_name() -> str | None:

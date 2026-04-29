@@ -193,7 +193,7 @@ kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id
 kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
 kweaver context-loader config set/use/list/show                       (deprecated; <kn-id> may be omitted to fall back to saved config)
 kweaver toolbox create/list/publish/unpublish/delete
-kweaver tool upload/list/enable/disable
+kweaver tool upload/list/enable/disable/execute/debug (execute and debug accept --path for OpenAPI path params)
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-F key=value]
 ```
 
@@ -242,6 +242,11 @@ kweaver tool upload --toolbox <BOX_ID> ./openapi.json
 # 3. Publish the toolbox and enable the tool
 kweaver toolbox publish <BOX_ID>
 kweaver tool enable --toolbox <BOX_ID> <TOOL_ID>
+
+# Invoke / debug: envelope supports `--header`, `--query`, `--body`, and **`--path`**
+# for OpenAPI `{param}` placeholders (required for paths like `/data-views/{id}`).
+kweaver tool debug --toolbox <BOX_ID> <TOOL_ID> \
+  --path '{"id":"<DATA_VIEW_UUID>"}' [--body '<json>']
 ```
 
 **No-auth platforms:** If OAuth is not enabled, use `kweaver auth <url> --no-auth` (or run a normal `auth login`; a **404** on `POST /oauth2/clients` switches to no-auth automatically). Credentials are still saved under `~/.kweaver/` and work with `auth use` / `auth list`. Optional: `KWEAVER_NO_AUTH=1` with `KWEAVER_BASE_URL` when no token env is set. SDK: `new KWeaverClient({ baseUrl, auth: false })` or `kweaver.configure({ baseUrl, auth: false })`.

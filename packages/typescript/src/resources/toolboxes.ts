@@ -17,6 +17,8 @@ export interface InvokeToolArgs {
    *  send no headers. */
   header?: Record<string, unknown>;
   query?: Record<string, unknown>;
+  /** Path parameters for OpenAPI `{name}` placeholders (e.g. `{ id: "<uuid>" }`). */
+  path?: Record<string, unknown>;
   body?: unknown;
   /** Per-call timeout in seconds (backend default applies when omitted). */
   timeout?: number;

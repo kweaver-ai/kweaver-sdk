@@ -13,8 +13,10 @@ Subcommands:
   enable --toolbox <box-id> <tool-id>...       Enable one or more tools
   disable --toolbox <box-id> <tool-id>...      Disable one or more tools
   execute --toolbox <box-id> <tool-id> [--body '<json>'|--body-file <path>]
+                                              [--header|--query|--path '<json>']
                                               Invoke a published+enabled tool
   debug   --toolbox <box-id> <tool-id> [--body '<json>'|--body-file <path>]
+                                              [--header|--query|--path '<json>']
                                               Invoke a tool (works on draft/disabled too)
 
 Options for execute/debug:
@@ -22,6 +24,9 @@ Options for execute/debug:
                           (Authorization is auto-injected from current session
                           when --header omits it; pass {} to send none)
   --query  '<json>'       Query params map forwarded to the downstream tool
+  --path   '<json>'       Path parameter map for OpenAPI path placeholders (e.g. {id})
+                          (JSON object: quote id and UUID, e.g. key id for get_dataview_detail /
+                          query_dataview_sql)
   --timeout <seconds>     Per-call timeout (backend default applies when omitted)
 
 Common options:
@@ -198,6 +203,7 @@ export interface ToolInvokeOptions {
   toolId: string;
   header?: Record<string, unknown>;
   query?: Record<string, unknown>;
+  path?: Record<string, unknown>;
   body?: unknown;
   bodyFile?: string;
   timeout?: number;
@@ -222,6 +228,7 @@ export function parseToolInvokeArgs(args: string[]): ToolInvokeOptions {
   let pretty = true;
   let header: Record<string, unknown> | undefined;
   let query: Record<string, unknown> | undefined;
+  let path: Record<string, unknown> | undefined;
   let body: unknown;
   let bodyProvided = false;
   let bodyFile: string | undefined;
@@ -232,6 +239,7 @@ export function parseToolInvokeArgs(args: string[]): ToolInvokeOptions {
     if (a === "--toolbox" && args[i + 1]) { boxId = args[++i]; continue; }
     if (a === "--header" && args[i + 1]) { header = parseJsonOption("--header", args[++i]); continue; }
     if (a === "--query" && args[i + 1]) { query = parseJsonOption("--query", args[++i]); continue; }
+    if (a === "--path" && args[i + 1]) { path = parseJsonOption("--path", args[++i]); continue; }
     if (a === "--body" && args[i + 1]) {
       const raw = args[++i];
       try { body = JSON.parse(raw); }
@@ -261,6 +269,7 @@ export function parseToolInvokeArgs(args: string[]): ToolInvokeOptions {
     toolId,
     header,
     query,
+    path,
     body: bodyProvided ? body : undefined,
     bodyFile,
     timeout,
@@ -305,6 +314,7 @@ async function runToolInvoke(args: string[], action: "execute" | "debug"): Promi
     toolId: opts.toolId,
     header,
     query: opts.query,
+    path: opts.path,
     body,
     timeout: opts.timeout,
   });

@@ -93,6 +93,7 @@ def test_execute_posts_envelope_to_proxy_endpoint():
             "timeout": 42,
             "header": {"Authorization": "Bearer override"},
             "query": {"dry": "true"},
+            "path": {},
             "body": {"task_id": "x"},
         }
     finally:
@@ -131,6 +132,7 @@ def test_execute_auto_injects_authorization_header_from_session_token():
         assert envelope["header"] == {"Authorization": "tok-py"}  # type: ignore[index]
         assert envelope["body"] == {"k": 1}  # type: ignore[index]
         assert envelope["query"] == {}  # type: ignore[index]
+        assert envelope["path"] == {}  # type: ignore[index]
         assert "timeout" not in envelope  # type: ignore[operator]
     finally:
         client.close()
@@ -147,6 +149,25 @@ def test_execute_forward_auth_false_omits_authorization():
     try:
         client.toolboxes.execute("b1", "t1", body={}, forward_auth=False)
         assert captured["body"]["header"] == {}  # type: ignore[index]
+        assert captured["body"]["path"] == {}  # type: ignore[index]
+    finally:
+        client.close()
+
+
+def test_execute_and_debug_forward_path_parameter_into_envelope():
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={})
+
+    client = _client(handler)
+    try:
+        dv_id = "7028f2fa-0f7c-4249-b6f4-b08f87588d16"
+        client.toolboxes.execute("bg", "get_dataview_detail", path={"id": dv_id})
+        assert captured["body"]["path"] == {"id": dv_id}  # type: ignore[index]
+        client.toolboxes.debug("bq", "query_dataview_sql", path={"id": dv_id}, body={"limit": 3})
+        assert captured["body"]["path"] == {"id": dv_id}  # type: ignore[index]
     finally:
         client.close()
 
@@ -245,5 +266,6 @@ def test_execute_caller_provided_authorization_is_preserved():
         client.toolboxes.execute("b1", "t1", header={"authorization": "Bearer override"})
         # Case-insensitive: caller's lowercase key wins, no auto-injection above it.
         assert captured["body"]["header"] == {"authorization": "Bearer override"}  # type: ignore[index]
+        assert captured["body"]["path"] == {}  # type: ignore[index]
     finally:
         client.close()

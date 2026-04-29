@@ -3,7 +3,8 @@
 Mirrors ``packages/typescript/src/api/toolboxes.ts``. The execute/debug
 endpoints expect an *envelope* JSON body — flat payloads cause the forwarder
 to drop downstream Authorization headers and the underlying tool answers with
-401 "token expired".
+401 "token expired". The envelope may include ``path`` for OpenAPI ``{param}``
+substitution.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ def _build_envelope(
     body: Any,
     header: dict[str, Any] | None,
     query: dict[str, Any] | None,
+    path: dict[str, Any] | None,
     timeout: float | None,
 ) -> dict[str, Any]:
     envelope: dict[str, Any] = {}
@@ -41,6 +43,7 @@ def _build_envelope(
         envelope["timeout"] = timeout
     envelope["header"] = header or {}
     envelope["query"] = query or {}
+    envelope["path"] = path or {}
     envelope["body"] = body if body is not None else {}
     return envelope
 
@@ -185,6 +188,7 @@ class ToolboxesResource:
         body: Any = None,
         header: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
+        path: dict[str, Any] | None = None,
         timeout: float | None = None,
         forward_auth: bool = True,
     ) -> Any:
@@ -200,6 +204,7 @@ class ToolboxesResource:
             body=body,
             header=header,
             query=query,
+            path=path,
             timeout=timeout,
             forward_auth=forward_auth,
         )
@@ -212,6 +217,7 @@ class ToolboxesResource:
         body: Any = None,
         header: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
+        path: dict[str, Any] | None = None,
         timeout: float | None = None,
         forward_auth: bool = True,
     ) -> Any:
@@ -221,6 +227,7 @@ class ToolboxesResource:
             body=body,
             header=header,
             query=query,
+            path=path,
             timeout=timeout,
             forward_auth=forward_auth,
         )
@@ -229,11 +236,12 @@ class ToolboxesResource:
 
     def _invoke(
         self,
-        path: str,
+        route: str,
         *,
         body: Any,
         header: dict[str, Any] | None,
         query: dict[str, Any] | None,
+        path: dict[str, Any] | None,
         timeout: float | None,
         forward_auth: bool,
     ) -> Any:
@@ -243,5 +251,11 @@ class ToolboxesResource:
             bearer = auth_headers.get("Authorization") or auth_headers.get("authorization")
             if bearer:
                 merged_header["Authorization"] = bearer
-        envelope = _build_envelope(body=body, header=merged_header, query=query, timeout=timeout)
-        return _unwrap_data(self._http.post(path, json=envelope, timeout=timeout))
+        envelope = _build_envelope(
+            body=body,
+            header=merged_header,
+            query=query,
+            path=path,
+            timeout=timeout,
+        )
+        return _unwrap_data(self._http.post(route, json=envelope, timeout=timeout))

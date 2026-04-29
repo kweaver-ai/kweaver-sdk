@@ -117,7 +117,7 @@ Usage:
   kweaver tool enable|disable --toolbox <box-id> <tool-id>... [-bd value]
   kweaver tool execute|debug --toolbox <box-id> <tool-id>
                              [--body '<json>'|--body-file <path>]
-                             [--header '<json>'] [--query '<json>'] [--timeout <s>]
+                             [--header '<json>'] [--query '<json>'] [--path '<json>'] [--timeout <s>]
 
   kweaver vega health|stats|inspect
   kweaver vega catalog list|get|health|test-connection|discover|resources [options]

@@ -21,7 +21,7 @@ import { buildHeaders } from "./headers.js";
 //   POST   /tool-box/{box}/tool/{tool}/debug       debug tool (envelope JSON)
 //
 // Envelope shape required by /proxy and /debug:
-//   { "timeout": <s>, "header": {...}, "query": {...}, "body": {...} }
+//   { "timeout": <s>, "header": {...}, "query": {...}, "body": {...}, "path": {...} }
 // Flat-shape requests cause the forwarder to drop downstream Authorization
 // headers, which manifests as 401 "token expired" from the underlying tool.
 
@@ -222,6 +222,8 @@ export interface InvokeToolOptions extends BaseOpts {
   header?: Record<string, unknown>;
   /** Optional query params to forward. */
   query?: Record<string, unknown>;
+  /** Path parameter map for OpenAPI `{param}` placeholders (e.g. `{ id: "<uuid>" }`). */
+  path?: Record<string, unknown>;
   /** JSON body forwarded to the downstream tool. */
   body?: unknown;
   /** Per-call timeout in seconds; backend default applies when omitted. */
@@ -233,6 +235,7 @@ function buildEnvelope(opts: InvokeToolOptions): string {
   if (opts.timeout !== undefined) envelope.timeout = opts.timeout;
   envelope.header = opts.header ?? {};
   envelope.query = opts.query ?? {};
+  envelope.path = opts.path ?? {};
   envelope.body = opts.body ?? {};
   return JSON.stringify(envelope);
 }

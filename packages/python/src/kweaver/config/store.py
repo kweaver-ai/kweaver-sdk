@@ -23,6 +23,25 @@ def _default_kweaver_root() -> Path:
     return Path.home() / ".kweaver"
 
 
+import re as _re
+
+_PROFILE_NAME_RE = _re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _get_profile_name() -> str | None:
+    raw = os.environ.get("KWEAVER_PROFILE")
+    if not raw:
+        return None
+    trimmed = raw.strip()
+    if not trimmed:
+        return None
+    if not _PROFILE_NAME_RE.match(trimmed):
+        raise ValueError(
+            f"KWEAVER_PROFILE='{raw}' is invalid. Use 1-64 chars from [A-Za-z0-9_-]."
+        )
+    return trimmed
+
+
 def iso_z(dt: "datetime | None" = None) -> str:
     """Return UTC timestamp matching JS ``new Date().toISOString()``: ``YYYY-MM-DDTHH:MM:SS.sssZ``.
 
@@ -113,6 +132,9 @@ class PlatformStore:
         self._migrate_all_to_user_scoped()
 
     def _state_path(self) -> Path:
+        profile = _get_profile_name()
+        if profile:
+            return self._root / "profiles" / profile / "state.json"
         return self._root / "state.json"
 
     def _platform_dir(self, url: str) -> Path:

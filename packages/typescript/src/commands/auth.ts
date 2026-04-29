@@ -25,6 +25,22 @@ import {
   setCurrentPlatform,
   setPlatformAlias,
 } from "../config/store.js";
+import { readFile } from "node:fs/promises";
+import { decodeJwtPayload } from "../config/jwt.js";
+import { eacpModifyPassword } from "../auth/eacp-modify-password.js";
+import {
+  buildCopyCommand,
+  fetchEacpUserInfo,
+  formatHttpError,
+  InitialPasswordChangeRequiredError,
+  normalizeBaseUrl,
+  oauth2Login,
+  oauth2PasswordSigninLogin,
+  promptForUsername,
+  promptForPassword,
+  refreshTokenLogin,
+  resolveActivePlatform,
+} from "../auth/oauth.js";
 
 function consumeGlobalFlag(args: string[]): { args: string[]; isGlobal: boolean } {
   const idx = args.indexOf("--global");
@@ -47,22 +63,6 @@ function requireProfileOrGlobal(command: string, isGlobal: boolean): string | nu
     `  - Intentionally global (CI / single-user setup): re-run with \`--global\`.`
   );
 }
-import { readFile } from "node:fs/promises";
-import { decodeJwtPayload } from "../config/jwt.js";
-import { eacpModifyPassword } from "../auth/eacp-modify-password.js";
-import {
-  buildCopyCommand,
-  fetchEacpUserInfo,
-  formatHttpError,
-  InitialPasswordChangeRequiredError,
-  normalizeBaseUrl,
-  oauth2Login,
-  oauth2PasswordSigninLogin,
-  promptForUsername,
-  promptForPassword,
-  refreshTokenLogin,
-  resolveActivePlatform,
-} from "../auth/oauth.js";
 
 export async function runAuthCommand(args: string[]): Promise<number> {
   const target = args[0];
@@ -610,15 +610,15 @@ You can specify either the userId (sub claim) or the username (preferred_usernam
     console.error(refusal);
     return 1;
   }
-  args = switchArgs;
+  const cleanedArgs = switchArgs;
 
-  const userArg = readOption(args, "--user");
+  const userArg = readOption(cleanedArgs, "--user");
   if (!userArg) {
     console.error("Usage: kweaver auth switch [--global] [platform-url|alias] --user <userId|username>");
     return 1;
   }
 
-  const filteredArgs = args.filter((a) => a !== "--user" && a !== userArg);
+  const filteredArgs = cleanedArgs.filter((a) => a !== "--user" && a !== userArg);
   const platform = resolvePlatformArg(filteredArgs);
   if (!platform) {
     console.error("No active platform. Run `kweaver auth login <platform-url>` first.");

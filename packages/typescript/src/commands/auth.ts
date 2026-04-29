@@ -9,6 +9,7 @@ import {
   getConfigDir,
   getCurrentPlatform,
   getPlatformAlias,
+  getProfileName,
   hasPlatform,
   listPlatforms,
   listUserProfiles,
@@ -24,6 +25,28 @@ import {
   setCurrentPlatform,
   setPlatformAlias,
 } from "../config/store.js";
+
+function consumeGlobalFlag(args: string[]): { args: string[]; isGlobal: boolean } {
+  const idx = args.indexOf("--global");
+  if (idx === -1) return { args, isGlobal: false };
+  return { args: [...args.slice(0, idx), ...args.slice(idx + 1)], isGlobal: true };
+}
+
+function requireProfileOrGlobal(command: string, isGlobal: boolean): string | null {
+  if (isGlobal) return null;
+  try {
+    if (getProfileName()) return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  return (
+    `kweaver auth ${command} mutates the active account globally and would affect every shell using ~/.kweaver.\n` +
+    `Pick one:\n` +
+    `  - Transient: prepend \`--user <id|name>\` (or \`KWEAVER_USER=<id>\`) to the command you actually want to run; no persistent switch.\n` +
+    `  - Persistent (this shell only): \`export KWEAVER_PROFILE=<name>\`, then re-run.\n` +
+    `  - Intentionally global (CI / single-user setup): re-run with \`--global\`.`
+  );
+}
 import { readFile } from "node:fs/promises";
 import { decodeJwtPayload } from "../config/jwt.js";
 import { eacpModifyPassword } from "../auth/eacp-modify-password.js";
@@ -424,11 +447,17 @@ Login options:
   }
 
   if (target === "use") {
-    const resolvedTarget = args[1] ? resolvePlatformIdentifier(args[1]) : "";
+    const { args: useArgs, isGlobal } = consumeGlobalFlag(args);
+    const refusal = requireProfileOrGlobal("use", isGlobal);
+    if (refusal !== null) {
+      console.error(refusal);
+      return 1;
+    }
+    const resolvedTarget = useArgs[1] ? resolvePlatformIdentifier(useArgs[1]) : "";
     const useTarget =
       resolvedTarget && /^https?:\/\//.test(resolvedTarget) ? normalizeBaseUrl(resolvedTarget) : resolvedTarget;
     if (!useTarget) {
-      console.error("Usage: kweaver auth use <platform-url|alias>");
+      console.error("Usage: kweaver auth use [--global] <platform-url|alias>");
       return 1;
     }
     if (!hasPlatform(useTarget)) {
@@ -568,16 +597,24 @@ You can use either userId or username with --user in switch/logout/delete.`);
 
 function runAuthSwitchCommand(args: string[]): number {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth switch [platform-url|alias] --user <userId|username>
+    console.log(`kweaver auth switch [--global] [platform-url|alias] --user <userId|username>
 
 Switch the active user for a platform.
 You can specify either the userId (sub claim) or the username (preferred_username from id_token).`);
     return 0;
   }
 
+  const { args: switchArgs, isGlobal } = consumeGlobalFlag(args);
+  const refusal = requireProfileOrGlobal("switch", isGlobal);
+  if (refusal !== null) {
+    console.error(refusal);
+    return 1;
+  }
+  args = switchArgs;
+
   const userArg = readOption(args, "--user");
   if (!userArg) {
-    console.error("Usage: kweaver auth switch [platform-url|alias] --user <userId|username>");
+    console.error("Usage: kweaver auth switch [--global] [platform-url|alias] --user <userId|username>");
     return 1;
   }
 

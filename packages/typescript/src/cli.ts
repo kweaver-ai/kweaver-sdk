@@ -140,7 +140,19 @@ Usage:
 Global options:
   --base-url <url>  Override platform base URL for this command (env: KWEAVER_BASE_URL)
   --token <value>   Override access token for this command (env: KWEAVER_TOKEN; disables write-to-disk commands)
-  --user <id|name>  Use a specific user's credentials for this command (env: KWEAVER_USER)
+  --user <id|name>  Use a specific user's credentials for this command, transient (env: KWEAVER_USER)
+
+Multi-shell account isolation:
+  KWEAVER_PROFILE=<name>     Scope state.json (active platform / active user) to a named
+                             profile. Tokens under platforms/ are still shared, so each
+                             profile reuses logins. Required for \`auth switch\` and
+                             \`auth use\` (use --global to override). Name must match
+                             [A-Za-z0-9_-]{1,64}.
+  KWEAVERC_CONFIG_DIR=<dir>  Override the entire config root (~/.kweaver by default).
+                             Use this for hard isolation (separate token store per shell).
+
+For agents / multi-terminal scripts: prefer \`--user <id>\` (transient, no persistence)
+over \`auth switch\` (persistent, requires KWEAVER_PROFILE).
   --pretty / --compact
                     Toggle pretty-printed JSON output. Supported by every
                     command that prints a JSON payload (default: pretty).

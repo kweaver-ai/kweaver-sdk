@@ -12,10 +12,10 @@ kweaver tool list    --toolbox <box-id> [-bd value] [--pretty|--compact]
 kweaver tool enable  --toolbox <box-id> <tool-id>... [-bd value]
 kweaver tool disable --toolbox <box-id> <tool-id>... [-bd value]
 kweaver tool execute --toolbox <box-id> <tool-id> [--body '<json>'|--body-file <path>]
-                     [--header '<json>'] [--query '<json>'] [--timeout <s>]
+                     [--header '<json>'] [--query '<json>'] [--path '<json>'] [--timeout <s>]
                      [-bd value] [--pretty|--compact]
 kweaver tool debug   --toolbox <box-id> <tool-id> [--body '<json>'|--body-file <path>]
-                     [--header '<json>'] [--query '<json>'] [--timeout <s>]
+                     [--header '<json>'] [--query '<json>'] [--path '<json>'] [--timeout <s>]
                      [-bd value] [--pretty|--compact]
 ```
 
@@ -71,13 +71,15 @@ kweaver tool disable --toolbox 1234567890123456789 tool-c
   "timeout": 60,
   "header": { "Authorization": "Bearer ..." },
   "query":  { "key": "value" },
+  "path":   { "id": "<uuid-or-path-param>" },
   "body":   { "...": "..." }
 }
 ```
 
-- 若直接发"扁平 body"（不裹 `header/body/query`），转发器会因 `Headers == nil` 把下游 `Authorization` 丢掉，下游服务回 `401 token expired`。
+- 若直接发"扁平 body"（不裹 `header/body/query/path`），转发器会因 `Headers == nil` 把下游 `Authorization` 丢掉，下游服务回 `401 token expired`。
 - CLI 默认会把当前会话的 `Bearer <token>` 作为 `Authorization` 注入 `header`；如果需要匿名调用，传 `--header '{}'` 显式覆盖。
 - `--body` 与 `--body-file` 互斥；都不传则 `body` 为 `{}`。
+- **`--path`**：OpenAPI 路径占位符（如 `/data-views/{id}`）的取值映射；不传则为 `{}`。Data View 类工具（如 `get_dataview_detail`、`query_dataview_sql`）必须传入 **`--path '{"id":"<数据视图-id>"}'`**，否则下游 URL 会保留字面 `{id}`。
 - `--timeout` 单位为秒；不传走后端默认。
 
 ```bash
@@ -85,6 +87,18 @@ kweaver tool disable --toolbox 1234567890123456789 tool-c
 kweaver tool execute \
   --toolbox 1234567890123456789 tool-create-task \
   --body '{"task_id":"t-1","task_name":"demo"}'
+
+# Debug — Data View（路径参数 id；`<tool-id>` 用 `tool list` 返回的 UUID，下列 operationId 仅示意）
+kweaver tool debug \
+  --toolbox <box-get> <tool-id> \
+  --path '{"id":"7028f2fa-0f7c-4249-b6f4-b08f87588d16"}' \
+  -bd bd_public
+
+kweaver tool debug \
+  --toolbox <box-query> <tool-id> \
+  --path '{"id":"7028f2fa-0f7c-4249-b6f4-b08f87588d16"}' \
+  --body '{"limit":3,"offset":0,"need_total":false,"sql":"SELECT 1"}' \
+  --header '{"content-type":"application/json","x-http-method-override":"GET"}'
 
 # Debug (草稿/disabled 也能跑)
 kweaver tool debug \

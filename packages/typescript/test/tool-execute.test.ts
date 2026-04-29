@@ -38,6 +38,7 @@ test("executeTool POSTs envelope JSON to /tool-box/{box}/proxy/{tool}", async ()
       timeout: 42,
       header: { Authorization: "Bearer abc" },
       query: { dry: "true" },
+      path: {},
       body: { task_id: "x" },
     });
   } finally { restore(); }
@@ -55,7 +56,7 @@ test("debugTool POSTs envelope JSON to /tool-box/{box}/tool/{tool}/debug", async
   } finally { restore(); }
 });
 
-test("envelope defaults: omitted timeout absent, header/query/body coerced to {}", async () => {
+test("envelope defaults: omitted timeout absent, header/query/path/body coerced to {}", async () => {
   let captured: any = null;
   const restore = mockFetch(async (_url, init) => {
     captured = JSON.parse(init?.body as string);
@@ -63,8 +64,36 @@ test("envelope defaults: omitted timeout absent, header/query/body coerced to {}
   });
   try {
     await executeTool({ baseUrl: BASE, accessToken: TOKEN, boxId: "b1", toolId: "t1" });
-    assert.deepEqual(captured, { header: {}, query: {}, body: {} });
+    assert.deepEqual(captured, { header: {}, query: {}, path: {}, body: {} });
     assert.ok(!("timeout" in captured));
+  } finally { restore(); }
+});
+
+test("executeTool and debugTool forward path in envelope (data view tools)", async () => {
+  const bodies: string[] = [];
+  const restore = mockFetch(async (_url, init) => {
+    bodies.push(init?.body as string);
+    return new Response("{}", { status: 200 });
+  });
+  try {
+    const id = "7028f2fa-0f7c-4249-b6f4-b08f87588d16";
+    await executeTool({
+      baseUrl: BASE,
+      accessToken: TOKEN,
+      boxId: "bg",
+      toolId: "get_dataview_detail",
+      path: { id },
+    });
+    await debugTool({
+      baseUrl: BASE,
+      accessToken: TOKEN,
+      boxId: "bq",
+      toolId: "query_dataview_sql",
+      path: { id },
+      body: { limit: 3, offset: 0 },
+    });
+    assert.deepEqual(JSON.parse(bodies[0]).path, { id });
+    assert.deepEqual(JSON.parse(bodies[1]).path, { id });
   } finally { restore(); }
 });
 
@@ -75,12 +104,13 @@ test("parseToolInvokeArgs requires --toolbox and a tool id", () => {
   assert.throws(() => parseToolInvokeArgs(["--toolbox", "b1"]), /tool-id/i);
 });
 
-test("parseToolInvokeArgs parses headers/query/body/timeout", () => {
+test("parseToolInvokeArgs parses headers/query/path/body/timeout", () => {
   const opts = parseToolInvokeArgs([
     "--toolbox", "b1", "t1",
     "--body", '{"k":1}',
     "--header", '{"X-Foo":"bar"}',
     "--query", '{"q":"v"}',
+    "--path", '{"id":"7028f2fa-0f7c-4249-b6f4-b08f87588d16"}',
     "--timeout", "30",
   ]);
   assert.equal(opts.boxId, "b1");
@@ -88,6 +118,7 @@ test("parseToolInvokeArgs parses headers/query/body/timeout", () => {
   assert.deepEqual(opts.body, { k: 1 });
   assert.deepEqual(opts.header, { "X-Foo": "bar" });
   assert.deepEqual(opts.query, { q: "v" });
+  assert.deepEqual(opts.path, { id: "7028f2fa-0f7c-4249-b6f4-b08f87588d16" });
   assert.equal(opts.timeout, 30);
 });
 

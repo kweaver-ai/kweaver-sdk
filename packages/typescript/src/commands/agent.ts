@@ -9,7 +9,6 @@ import {
 import {
   copyAgent,
   copyAgentToTemplate,
-  copyAgentToTemplateAndPublish,
   exportAgents as exportAgentsHttp,
   importAgents as importAgentsHttp,
 } from "../api/agents-inout.js";
@@ -672,7 +671,6 @@ export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
 async function runAgentCopyCommand(args: string[]): Promise<number> {
   let agentId = "";
   let asTemplate = false;
-  let publishTpl = false;
   let businessDomain = "";
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -684,30 +682,22 @@ async function runAgentCopyCommand(args: string[]): Promise<number> {
       asTemplate = true;
       continue;
     }
-    if (a === "--publish") {
-      publishTpl = true;
-      continue;
-    }
     if (!a.startsWith("-")) {
       agentId = a;
       continue;
     }
   }
   if (!agentId) {
-    console.error("Usage: kweaver agent copy <agent_id> [--as-template] [--publish] [-bd value]");
-    return 1;
-  }
-  if (publishTpl && !asTemplate) {
-    console.error("--publish requires --as-template");
+    console.error("Usage: kweaver agent copy <agent_id> [--as-template] [-bd value]");
     return 1;
   }
   const token = await ensureValidToken();
   const bd = businessDomain || resolveBusinessDomain();
   const base = { baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain: bd };
-  let raw: string;
-  if (publishTpl) raw = await copyAgentToTemplateAndPublish({ ...base, agentId });
-  else if (asTemplate) raw = await copyAgentToTemplate({ ...base, agentId });
-  else raw = await copyAgent({ ...base, agentId });
+  // To publish a freshly-copied template, use `agent-tpl publish <tpl_id>` after copy.
+  const raw = asTemplate
+    ? await copyAgentToTemplate({ ...base, agentId })
+    : await copyAgent({ ...base, agentId });
   console.log(JSON.stringify(JSON.parse(raw), null, 2));
   return 0;
 }
@@ -797,7 +787,24 @@ async function runAgentImportCommand(args: string[]): Promise<number> {
     filePath,
     importType: mode,
   });
-  console.log(formatCallOutput(JSON.parse(raw), pretty));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    console.error("Import response was not valid JSON:");
+    console.error(raw.trim().slice(0, 800));
+    return 1;
+  }
+  console.log(formatCallOutput(parsed, pretty));
+  // Backend often returns HTTP 200 with is_success:false (e.g. config_invalid); treat as CLI failure.
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "is_success" in parsed &&
+    (parsed as { is_success?: boolean }).is_success === false
+  ) {
+    return 1;
+  }
   return 0;
 }
 
@@ -822,7 +829,7 @@ Subcommands:
   delete <agent_id> [-y]             Delete an agent
   publish <agent_id>                 Publish an agent
   unpublish <agent_id>               Unpublish an agent
-  copy <agent_id> [--as-template] [--publish] Copy agent (or copy to template)
+  copy <agent_id> [--as-template] Copy agent (or copy to draft template)
   export <agent_id> [<agent_id> ...] [-o <file>|-] Bulk-export agents (JSON)
   import <file> [--mode create|upsert] Import agents from export file
   chat <agent_id>                    Start interactive chat with an agent

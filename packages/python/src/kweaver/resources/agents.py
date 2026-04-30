@@ -11,7 +11,6 @@ Endpoints (agent-factory v3):
   - Unpublish:      PUT  /api/agent-factory/v3/agent/{id}/unpublish
   - Copy:           POST /api/agent-factory/v3/agent/{id}/copy
   - Copy to draft template: POST .../copy2tpl
-  - Copy to template + publish: POST .../copy2tpl-and-publish
   - Bulk export:    POST /api/agent-factory/v3/agent-inout/export
   - Bulk import:    POST /api/agent-factory/v3/agent-inout/import (multipart)
 """
@@ -348,15 +347,6 @@ class AgentsResource:
             _reraise_factory_v3(path, exc)
         return data if isinstance(data, dict) else {}
 
-    def copy_to_template_and_publish(self, agent_id: str) -> dict[str, Any]:
-        """Copy agent as template and publish (POST ``…/copy2tpl-and-publish``)."""
-        path = f"/api/agent-factory/v3/agent/{agent_id}/copy2tpl-and-publish"
-        try:
-            data = self._http.post(path)
-        except KWeaverError as exc:
-            _reraise_factory_v3(path, exc)
-        return data if isinstance(data, dict) else {}
-
     def export(self, agent_ids: list[str]) -> tuple[str, bytes]:
         """Export agents JSON; returns ``(filename, content_bytes)`` from bulk export endpoint."""
         path = "/api/agent-factory/v3/agent-inout/export"
@@ -387,7 +377,8 @@ class AgentsResource:
         """
         pth = Path(file_path)
         ep = "/api/agent-factory/v3/agent-inout/import"
-        files = {"file": (pth.name, pth.read_bytes(), "application/octet-stream")}
+        mime = "application/json" if str(pth).lower().endswith(".json") else "application/octet-stream"
+        files = {"file": (pth.name, pth.read_bytes(), mime)}
         status, content = self._http.post_multipart(
             ep,
             files=files,

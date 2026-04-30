@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   copyAgent,
   copyAgentToTemplate,
-  copyAgentToTemplateAndPublish,
 } from "../src/api/agents-inout.js";
 import { EndpointUnavailableError } from "../src/utils/http.js";
 
@@ -45,20 +44,6 @@ test("copyAgentToTemplate POSTs /agent/{id}/copy2tpl", async () => {
   try {
     await copyAgentToTemplate({ baseUrl: BASE, accessToken: TOKEN, agentId: "x/y" });
     assert.equal(url, `${BASE}${FACTORY}/agent/x%2Fy/copy2tpl`);
-  } finally {
-    restore();
-  }
-});
-
-test("copyAgentToTemplateAndPublish POSTs copy2tpl-and-publish", async () => {
-  let url = "";
-  const restore = mockFetch(async (u) => {
-    url = String(u);
-    return new Response("{}", { status: 200 });
-  });
-  try {
-    await copyAgentToTemplateAndPublish({ baseUrl: BASE, accessToken: TOKEN, agentId: "b2" });
-    assert.equal(url, `${BASE}${FACTORY}/agent/b2/copy2tpl-and-publish`);
   } finally {
     restore();
   }

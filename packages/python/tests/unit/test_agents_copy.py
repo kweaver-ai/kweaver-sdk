@@ -28,15 +28,6 @@ def test_copy_to_template_posts_copy2tpl():
     assert client.agents.copy_to_template("z")["tpl_id"] == "t"
 
 
-def test_copy_to_template_and_publish_posts_suffix():
-    def handler(req: httpx.Request) -> httpx.Response:
-        assert "/copy2tpl-and-publish" in str(req.url)
-        return httpx.Response(200, json={"ok": True})
-
-    client = make_client(handler)
-    assert client.agents.copy_to_template_and_publish("z")["ok"] is True
-
-
 def test_copy_maps_404_to_endpoint_unavailable():
     def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(404, json={"message": "missing"})

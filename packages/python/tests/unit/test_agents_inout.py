@@ -57,6 +57,7 @@ def test_import_posts_multipart_file_and_import_type(tmp_path: Path, capture: Re
     raw = capture.requests[-1].content.decode("utf-8", errors="replace")
     assert "import_type" in raw
     assert "upsert" in raw
+    assert "Content-Type: application/json" in raw
 
 
 def test_import_defaults_import_type_create(tmp_path: Path, capture: RequestCapture):

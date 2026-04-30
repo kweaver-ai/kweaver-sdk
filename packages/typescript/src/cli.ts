@@ -56,7 +56,7 @@ Usage:
   kweaver agent delete <agent_id> [-bd value]
   kweaver agent publish <agent_id> [-bd value]
   kweaver agent unpublish <agent_id> [-bd value]
-  kweaver agent copy <agent_id> [--as-template] [--publish] [-bd value]
+  kweaver agent copy <agent_id> [--as-template] [-bd value]
   kweaver agent export <agent_id> [<agent_id> ...] [-o <file>|-] [-bd value]
   kweaver agent import <file> [--mode create|upsert] [--pretty|--compact] [-bd value]
 

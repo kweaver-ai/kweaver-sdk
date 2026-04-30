@@ -11,7 +11,6 @@ import {
 import {
   copyAgent,
   copyAgentToTemplate,
-  copyAgentToTemplateAndPublish,
   exportAgents as exportAgentsHttp,
   importAgents as importAgentsHttp,
   type AgentImportMode,
@@ -189,12 +188,6 @@ export class AgentsResource {
   /** Copy agent as a draft template (POST …/copy2tpl). */
   async copyToTemplate(agentId: string): Promise<unknown> {
     const raw = await copyAgentToTemplate({ ...this.ctx.base(), agentId });
-    return JSON.parse(raw) as unknown;
-  }
-
-  /** Copy agent as template and publish to square (POST …/copy2tpl-and-publish). */
-  async copyToTemplateAndPublish(agentId: string): Promise<unknown> {
-    const raw = await copyAgentToTemplateAndPublish({ ...this.ctx.base(), agentId });
     return JSON.parse(raw) as unknown;
   }
 

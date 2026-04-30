@@ -39,8 +39,7 @@ kweaver agent delete <agent_id> [-y]
 kweaver agent copy <agent_id> [-bd <business_domain>]
 # 复制为模板（草稿）
 kweaver agent copy <agent_id> --as-template [-bd <business_domain>]
-# 复制为模板并发布到广场
-kweaver agent copy <agent_id> --as-template --publish [-bd <business_domain>]
+# 复制后若需发布到广场，使用 `agent-tpl publish <tpl_id>`（见下方 agent-tpl 段）
 # 批量导出为 JSON（可多 id）
 kweaver agent export <agent_id> [<agent_id> ...] [-o <file>|-] [-bd <business_domain>]
 # 从导出文件导入

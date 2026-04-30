@@ -85,6 +85,7 @@ test("importAgents POSTs multipart file + import_type", async () => {
     assert.equal(form.get("import_type"), "upsert");
     const part = form.get("file");
     assert.ok(part instanceof Blob);
+    assert.equal((part as Blob).type, "application/json");
     assert.equal(await (part as Blob).text(), '{"agents":[]}');
   } finally {
     restore();

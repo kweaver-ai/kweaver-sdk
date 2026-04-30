@@ -69,20 +69,6 @@ export async function copyAgentToTemplate(opts: CopyAgentOptions): Promise<strin
   return body;
 }
 
-export async function copyAgentToTemplateAndPublish(opts: CopyAgentOptions): Promise<string> {
-  const pathSeg = `/agent/${encodeURIComponent(opts.agentId)}/copy2tpl-and-publish`;
-  const url = factoryUrl(opts.baseUrl, pathSeg);
-  const response = await fetchWithRetry(url, {
-    method: "POST",
-    headers: buildHeaders(opts.accessToken, opts.businessDomain ?? "bd_public"),
-  });
-  const body = await response.text();
-  if (!response.ok) {
-    rethrowIfEndpointUnavailable(`${FACTORY_V3}${pathSeg}`, new HttpError(response.status, response.statusText, body));
-  }
-  return body;
-}
-
 export interface ExportAgentsOptions extends BaseOpts {
   agentIds: string[];
 }
@@ -120,8 +106,11 @@ export async function importAgents(opts: ImportAgentsOptions): Promise<string> {
   const pathSeg = `/agent-inout/import`;
   const url = factoryUrl(opts.baseUrl, pathSeg);
   const buf = await readFile(opts.filePath);
+  const filename = basename(opts.filePath);
   const form = new FormData();
-  form.append("file", new Blob([buf]), basename(opts.filePath));
+  // Some backends reject imports unless the multipart part declares JSON.
+  const fileType = filename.toLowerCase().endsWith(".json") ? "application/json" : "application/octet-stream";
+  form.append("file", new Blob([buf], { type: fileType }), filename);
   form.append("import_type", opts.importType ?? "create");
 
   const response = await fetchWithRetry(url, {

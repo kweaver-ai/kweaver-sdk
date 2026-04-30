@@ -143,7 +143,6 @@ export type {
 export {
   copyAgent,
   copyAgentToTemplate,
-  copyAgentToTemplateAndPublish,
   exportAgents,
   importAgents,
   parseAttachmentFilename,

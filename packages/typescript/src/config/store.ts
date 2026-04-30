@@ -104,6 +104,21 @@ export interface PlatformSummary {
   displayName?: string;
 }
 
+const PROFILE_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+export function getProfileName(): string | null {
+  const raw = process.env.KWEAVER_PROFILE;
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!PROFILE_NAME_RE.test(trimmed)) {
+    throw new Error(
+      `KWEAVER_PROFILE='${raw}' is invalid. Use 1-64 chars from [A-Za-z0-9_-].`,
+    );
+  }
+  return trimmed;
+}
+
 function getConfigDirPath(): string {
   return process.env.KWEAVERC_CONFIG_DIR || join(homedir(), ".kweaver");
 }
@@ -113,6 +128,10 @@ function getPlatformsDirPath(): string {
 }
 
 function getStateFilePath(): string {
+  const profile = getProfileName();
+  if (profile) {
+    return join(getConfigDirPath(), "profiles", profile, "state.json");
+  }
   return join(getConfigDirPath(), "state.json");
 }
 

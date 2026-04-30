@@ -71,6 +71,41 @@ kweaver bkn list
 KWEAVER_USER=alice python my_script.py
 ```
 
+### 多终端 / Agent 场景的账号切换规则
+
+`kweaver auth switch` 与 `kweaver auth use` 会改写 `~/.kweaver/state.json`，**默认是全局副作用**：另一个 terminal 或并发运行的 agent 都会立刻看到当前账号变了。为了防止 agent 把别人的会话改坏，从 vX.Y.Z 起，这两个命令在 `KWEAVER_PROFILE` 未设时**直接拒绝执行**。
+
+#### Agent 默认规则（最重要，先读这条）
+
+**用户说"用账号 X 做 Y"、"以 X 身份跑 Y"、"切到 X 然后…" → 一律是 transient 场景，直接 `kweaver --user X <cmd>` 就完事。** 不要 export 任何东西，不要碰 `auth switch`，不要试图"先切再跑"。
+
+只有当用户**明确**说"我希望这个 shell 以后都默认用 X"、"持久绑定到 X"、"不想每次都加 --user" 时，才走持久切换流程。这种场景一年用不到几次。
+
+❌ **反模式**（agent 最容易踩，永远不要这么做）：
+```bash
+# 用户："用 alice 看一下 bkn 列表"
+export KWEAVER_PROFILE=tmp        # 多余
+kweaver auth switch prod --user alice   # 多余、且无 PROFILE 时会被拒绝
+kweaver bkn list                  # 改坏了 state.json，污染了别的 shell
+```
+
+✅ **正确做法**：
+```bash
+kweaver --user alice bkn list     # 一行搞定，零副作用
+```
+
+#### 三种场景速查表
+
+| 场景 | 该用什么 | 为什么 |
+|---|---|---|
+| **Agent 跑一条/几条命令需要换账号**（默认） | `kweaver --user <id\|name> <cmd>` 或 `KWEAVER_USER=<id> <cmd>` | 完全 transient，不写 `state.json`，对其他 terminal 零影响 |
+| 用户**明确**要让某个 shell 长期挂在某个账号上 | `export KWEAVER_PROFILE=<name>`，然后 `kweaver auth switch ... --user <id>` | profile 把 `state.json` 路由到 `~/.kweaver/profiles/<name>/`，与其他 shell 完全隔离；`platforms/` 下的 token 仍共享，不用重登 |
+| CI / 单用户脚本明确要全局切换 | `kweaver auth switch --global ... --user <id>` | 显式 opt-in 旧的全局行为；不推荐日常使用 |
+
+**profile 名规范**：`[A-Za-z0-9_-]{1,64}`。建议命名风格：`agent-<task-id>`、`shellA`、`acct-prod`。
+
+**已登过的账号在新 profile 里能直接用吗？** 能。token 文件在 `~/.kweaver/platforms/<encoded-url>/users/<userId>/token.json`，跨 profile 共享。新 profile 第一次跑 `auth switch` 把指针指过去就行。
+
 ### 工作流示例
 
 ```bash
@@ -84,10 +119,11 @@ kweaver auth list
 #   ├── bob (bob-uuid) *
 #   └── alice (alice-uuid)
 
-# 用用户名切换（永久）
+# 持久切换（必须先 export KWEAVER_PROFILE，否则会被拒绝）
+export KWEAVER_PROFILE=shellA
 kweaver auth switch prod --user alice
 
-# 或单次使用其他用户的凭证
+# 单次使用其他用户的凭证（transient，推荐用于 agent / 一次性脚本）
 kweaver --user bob bkn list
 
 # 登出特定用户

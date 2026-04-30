@@ -99,3 +99,22 @@ test("auth switch --global succeeds without KWEAVER_PROFILE", async () => {
   assert.equal(existsSync(join(dir, "state.json")), true);
   assert.equal(existsSync(join(dir, "profiles")), false);
 });
+
+test("auth switch reads --user from KWEAVER_USER env when consumed by top-level CLI", async () => {
+  // The top-level CLI in src/cli.ts strips global `--user X` from argv
+  // and stuffs it into KWEAVER_USER before dispatching to subcommands. So
+  // by the time `auth switch` runs, the flag may already be gone — the
+  // env var is the canonical source.
+  const dir = createDir();
+  const url = "https://x.example.com";
+  seedPlatform(dir, url, "user-1");
+  const mod = await freshAuthCmd(dir, "shellA");
+  process.env.KWEAVER_USER = "user-1";
+  try {
+    const code = await mod.runAuthCommand(["switch", url]);
+    assert.equal(code, 0);
+    assert.equal(existsSync(join(dir, "profiles", "shellA", "state.json")), true);
+  } finally {
+    delete process.env.KWEAVER_USER;
+  }
+});

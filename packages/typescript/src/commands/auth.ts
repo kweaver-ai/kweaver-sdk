@@ -612,7 +612,7 @@ You can specify either the userId (sub claim) or the username (preferred_usernam
   }
   const cleanedArgs = switchArgs;
 
-  const userArg = readOption(cleanedArgs, "--user");
+  const userArg = readOption(cleanedArgs, "--user") ?? process.env.KWEAVER_USER;
   if (!userArg) {
     console.error("Usage: kweaver auth switch [--global] [platform-url|alias] --user <userId|username>");
     return 1;

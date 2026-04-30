@@ -257,6 +257,7 @@ kweaver config show / list-bd / set-bd <value>   # 业务域；show/list-bd 可�
 kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
+kweaver dataflow templates/create-dataset/create-bkn/create/list/run/runs/logs
 kweaver dataview|dv list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn build [--wait] [--timeout 300]

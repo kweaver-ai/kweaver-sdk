@@ -63,6 +63,10 @@ Usage:
   kweaver ds connect <db_type> <host> <port> <database> --account X --password Y [--schema S] [--name N]
                      [--reuse-existing|--force-new]
 
+  kweaver dataflow templates [--json]
+  kweaver dataflow create-dataset --template <name> --set "key=value" [--json] [-bd value]
+  kweaver dataflow create-bkn --template <name> --set "key=value" [--json] [-bd value]
+  kweaver dataflow create (--template <name> --set "key=value" | <json>) [-bd value]
   kweaver dataflow list [-bd value]
   kweaver dataflow run <dagId> (--file <path> | --url <remote-url> --name <filename>) [-bd value]
   kweaver dataflow runs <dagId> [--since <date-like>] [-bd value]

@@ -30,6 +30,41 @@ kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <s
 kweaver agent delete <agent_id> [-y]
 ```
 
+## 复制 / 导出 / 导入（agent-factory v3）
+
+以下命令依赖 **agent-factory** 后端对应路由；旧版本可能返回 **404/405**。SDK/CLI 会将此类响应映射为 `EndpointUnavailableError`（见 TypeScript）或 `EndpointUnavailableError`（Python），提示可能需要升级后端。`agent copy` 在后端不可用时可退回：`agent get` + `agent create`。
+
+```bash
+# 私人空间一键复制 Agent
+kweaver agent copy <agent_id> [-bd <business_domain>]
+# 复制为模板（草稿）
+kweaver agent copy <agent_id> --as-template [-bd <business_domain>]
+# 复制为模板并发布到广场
+kweaver agent copy <agent_id> --as-template --publish [-bd <business_domain>]
+# 批量导出为 JSON（可多 id）
+kweaver agent export <agent_id> [<agent_id> ...] [-o <file>|-] [-bd <business_domain>]
+# 从导出文件导入
+kweaver agent import <file> [--mode create|upsert] [-bd <business_domain>] [--pretty|--compact]
+```
+
+**说明**：此为 **agent-inout** 批量能力，与 agent-operator 的 toolbox/mcp `impex` 无关。
+
+### Agent 模板 CRUD（`agent-tpl`）
+
+私人空间模板（非「广场模板列表」）管理：`kweaver agent-tpl --help`。模板常见来源：对已存在 Agent 执行 `agent copy --as-template`（后端不提供单独的「新建空模板」路由时由复制生成）。
+
+```bash
+kweaver agent-tpl get <template_id>
+kweaver agent-tpl get-by-key <key>
+kweaver agent-tpl update <template_id> --body '<json>'
+kweaver agent-tpl delete <template_id>
+kweaver agent-tpl copy <template_id>
+kweaver agent-tpl publish <template_id> [--body '<json>']
+kweaver agent-tpl unpublish <template_id>
+kweaver agent-tpl publish-info get <template_id>
+kweaver agent-tpl publish-info put <template_id> --body '<json>'
+```
+
 ## 发布管理
 
 ```bash

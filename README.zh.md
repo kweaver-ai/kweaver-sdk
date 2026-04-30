@@ -269,7 +269,8 @@ kweaver bkn action-type list/query/inputs/execute
 kweaver bkn subgraph / search
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
-kweaver agent list/get/get-by-key/create/update/delete/chat/sessions/history/publish/unpublish
+kweaver agent list/get/get-by-key/create/update/delete/chat/sessions/history/publish/unpublish/copy/export/import
+kweaver agent-tpl …（TypeScript CLI：私人空间 agent-tpl CRUD / 发布）
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader tools|resources|templates|prompts <kn-id>

@@ -9,6 +9,14 @@ import {
   unpublishAgent,
 } from "../api/agent-list.js";
 import {
+  copyAgent,
+  copyAgentToTemplate,
+  copyAgentToTemplateAndPublish,
+  exportAgents as exportAgentsHttp,
+  importAgents as importAgentsHttp,
+  type AgentImportMode,
+} from "../api/agents-inout.js";
+import {
   fetchAgentInfo,
   sendChatRequest,
   sendChatRequestStream,
@@ -168,6 +176,47 @@ export class AgentsResource {
 
   async unpublish(agentId: string): Promise<void> {
     await unpublishAgent({ ...this.ctx.base(), agentId });
+  }
+
+  // ── Copy / bulk export-import (agent-factory v3, not operator impex) ─────
+
+  /** Duplicate agent in personal space (POST …/agent/{id}/copy). */
+  async copy(agentId: string): Promise<unknown> {
+    const raw = await copyAgent({ ...this.ctx.base(), agentId });
+    return JSON.parse(raw) as unknown;
+  }
+
+  /** Copy agent as a draft template (POST …/copy2tpl). */
+  async copyToTemplate(agentId: string): Promise<unknown> {
+    const raw = await copyAgentToTemplate({ ...this.ctx.base(), agentId });
+    return JSON.parse(raw) as unknown;
+  }
+
+  /** Copy agent as template and publish to square (POST …/copy2tpl-and-publish). */
+  async copyToTemplateAndPublish(agentId: string): Promise<unknown> {
+    const raw = await copyAgentToTemplateAndPublish({ ...this.ctx.base(), agentId });
+    return JSON.parse(raw) as unknown;
+  }
+
+  /** Batch-export agents from personal space (POST …/agent-inout/export). */
+  async exportAgents(agentIds: string[]): Promise<{ filename: string; bytes: Uint8Array }> {
+    return exportAgentsHttp({ ...this.ctx.base(), agentIds });
+  }
+
+  /** Same as {@link AgentsResource.exportAgents} — bulk export JSON (plan/SDK alias). */
+  async exportConfig(agentIds: string[]): Promise<{ filename: string; bytes: Uint8Array }> {
+    return this.exportAgents(agentIds);
+  }
+
+  /** Import agents from an export JSON file (multipart …/agent-inout/import). */
+  async importAgents(filePath: string, opts: { importType?: AgentImportMode } = {}): Promise<unknown> {
+    const raw = await importAgentsHttp({ ...this.ctx.base(), filePath, importType: opts.importType });
+    return JSON.parse(raw) as unknown;
+  }
+
+  /** Same as {@link AgentsResource.importAgents} — multipart import (plan/SDK alias). */
+  async importConfig(filePath: string, opts: { importType?: AgentImportMode } = {}): Promise<unknown> {
+    return this.importAgents(filePath, opts);
   }
 
   // ── Agent info (resolve key/version) ─────────────────────────────────────

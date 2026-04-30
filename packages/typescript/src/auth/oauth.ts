@@ -16,7 +16,7 @@ import {
   saveTokenConfig,
   setCurrentPlatform,
 } from "../config/store.js";
-import { HttpError, NetworkRequestError, fetchWithRetry } from "../utils/http.js";
+import { EndpointUnavailableError, HttpError, NetworkRequestError, fetchWithRetry } from "../utils/http.js";
 
 /** Thrown when `POST /oauth2/signin` returns HTTP 401 with EACP code `401001017` (initial password must be changed). */
 export class InitialPasswordChangeRequiredError extends Error {
@@ -2110,6 +2110,21 @@ function isTlsVerificationDisabledForProcess(): boolean {
 export function formatHttpError(error: unknown): string {
   if (error instanceof InitialPasswordChangeRequiredError) {
     return `${error.serverMessage} (code ${error.code})`;
+  }
+  if (error instanceof EndpointUnavailableError) {
+    const isAgentInout = error.endpointPath.includes("agent-inout");
+    const fallback =
+      isAgentInout ?
+        "Bulk export/import has no CLI workaround beyond upgrading agent-factory."
+      : "Fallback for copy-like flows: use `kweaver agent get <id>` and `kweaver agent create --config …` when possible.";
+    return [
+      `Endpoint not available (HTTP ${error.status}): ${error.endpoint}`,
+      error.hint,
+      "",
+      fallback,
+      "",
+      error.body.trim().slice(0, 800),
+    ].join("\n");
   }
   if (error instanceof HttpError) {
     const oauthMessage = formatOAuthErrorBody(error.body);

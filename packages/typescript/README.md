@@ -185,7 +185,8 @@ kweaver bkn action-type list/query/execute
 kweaver bkn subgraph / search
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
-kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
+kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish/copy/export/import
+kweaver agent-tpl get/get-by-key/update/delete/copy/publish/unpublish/publish-info
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader tools|resources|templates|prompts <kn-id>

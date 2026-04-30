@@ -63,6 +63,22 @@ class NetworkError(KWeaverError):
     """Network unreachable (distinct from builtin ConnectionError)."""
 
 
+class EndpointUnavailableError(KWeaverError):
+    """404/405 on newer agent-factory routes — deployment may not expose this endpoint yet."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        endpoint_path: str,
+        status_code: int | None = None,
+        error_code: str | None = None,
+        trace_id: str | None = None,
+    ) -> None:
+        super().__init__(message, status_code=status_code, error_code=error_code, trace_id=trace_id)
+        self.endpoint_path = endpoint_path
+
+
 class DryRunIntercepted(KWeaverError):
     """Raised when a write request is intercepted by dry-run mode."""
 

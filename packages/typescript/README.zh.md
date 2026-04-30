@@ -173,7 +173,8 @@ kweaver bkn action-type list/query/execute
 kweaver bkn subgraph
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
-kweaver agent list/get/chat/sessions/history
+kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish/copy/export/import
+kweaver agent-tpl …（私人空间模板 CRUD / 发布）
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader tools|resources|templates|prompts <kn-id>

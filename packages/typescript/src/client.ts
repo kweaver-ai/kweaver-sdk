@@ -7,6 +7,7 @@ import {
 import { buildHeaders } from "./api/headers.js";
 import { ensureValidToken } from "./auth/oauth.js";
 import { AgentsResource } from "./resources/agents.js";
+import { AgentTemplatesResource } from "./resources/agent-templates.js";
 import { ConversationsResource } from "./resources/conversations.js";
 import { ContextLoaderResource } from "./resources/context-loader.js";
 import { DataflowsResource } from "./resources/dataflows.js";
@@ -109,6 +110,9 @@ export class KWeaverClient implements ClientContext {
   /** Agent listing and chat (single-shot and streaming). */
   readonly agents: AgentsResource;
 
+  /** Personal-space agent templates (agent-tpl CRUD + publish). */
+  readonly agentTemplates: AgentTemplatesResource;
+
   /** BKN engine: instance queries, subgraph, action execute/poll, action logs. */
   readonly bkn: BknResource;
 
@@ -165,6 +169,7 @@ export class KWeaverClient implements ClientContext {
       this._businessDomain = opts.businessDomain ?? envDomain ?? "bd_public";
       this.knowledgeNetworks = new KnowledgeNetworksResource(this);
       this.agents = new AgentsResource(this);
+      this.agentTemplates = new AgentTemplatesResource(this);
       this.bkn = new BknResource(this);
       this.conversations = new ConversationsResource(this);
       this.dataflows = new DataflowsResource(this);
@@ -226,6 +231,7 @@ export class KWeaverClient implements ClientContext {
 
     this.knowledgeNetworks = new KnowledgeNetworksResource(this);
     this.agents = new AgentsResource(this);
+    this.agentTemplates = new AgentTemplatesResource(this);
     this.bkn = new BknResource(this);
     this.conversations = new ConversationsResource(this);
     this.dataflows = new DataflowsResource(this);

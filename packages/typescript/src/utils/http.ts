@@ -12,6 +12,38 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * Raised when the platform responds with 404/405 for newer agent-factory endpoints,
+ * indicating the deployment may not expose that route yet.
+ */
+export class EndpointUnavailableError extends HttpError {
+  /** Relative HTTP path (e.g. `/api/agent-factory/v3/agent/…/copy`). */
+  readonly endpointPath: string;
+  /** Same path — alias for callers expecting an ``endpoint`` field. */
+  readonly endpoint: string;
+  /** Human-readable explanation (upgrade backend). */
+  readonly hint: string;
+
+  constructor(status: number, statusText: string, body: string, endpointPath: string) {
+    super(status, statusText, body);
+    this.name = "EndpointUnavailableError";
+    this.endpointPath = endpointPath;
+    this.endpoint = endpointPath;
+    this.hint =
+      `Endpoint ${endpointPath} is not available on this server. ` +
+      `It may require a newer agent-factory version.`;
+    Object.setPrototypeOf(this, EndpointUnavailableError.prototype);
+  }
+}
+
+/** Map 404/405 HttpErrors to EndpointUnavailableError for clearer SDK/CLI messaging. */
+export function rethrowIfEndpointUnavailable(endpointPath: string, error: unknown): never {
+  if (error instanceof HttpError && (error.status === 404 || error.status === 405)) {
+    throw new EndpointUnavailableError(error.status, error.statusText, error.body, endpointPath);
+  }
+  throw error;
+}
+
 export class NetworkRequestError extends Error {
   readonly method: string;
   readonly url: string;

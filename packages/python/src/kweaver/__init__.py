@@ -20,6 +20,7 @@ from kweaver._errors import (
     AuthenticationError,
     AuthorizationError,
     ConflictError,
+    EndpointUnavailableError,
     NetworkError,
     NotFoundError,
     ServerError,
@@ -27,6 +28,7 @@ from kweaver._errors import (
 )
 from kweaver.types import (
     Agent,
+    AgentImportResult,
     BuildJob,
     KnowledgeNetwork,
     Message,
@@ -49,10 +51,19 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "ConflictError",
+    "EndpointUnavailableError",
     "NetworkError",
     "NotFoundError",
     "ServerError",
     "ValidationError",
+    # Types
+    "Agent",
+    "AgentImportResult",
+    "BuildJob",
+    "KnowledgeNetwork",
+    "Message",
+    "MessageChunk",
+    "SemanticSearchResult",
     # Module-level API
     "configure",
     "login",

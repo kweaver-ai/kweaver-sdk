@@ -9,16 +9,60 @@ Endpoints (agent-factory v3):
   - Delete:         DELETE /api/agent-factory/v3/agent/{id}
   - Publish:        POST /api/agent-factory/v3/agent/{id}/publish
   - Unpublish:      PUT  /api/agent-factory/v3/agent/{id}/unpublish
+  - Copy:           POST /api/agent-factory/v3/agent/{id}/copy
+  - Copy to draft template: POST .../copy2tpl
+  - Copy to template + publish: POST .../copy2tpl-and-publish
+  - Bulk export:    POST /api/agent-factory/v3/agent-inout/export
+  - Bulk import:    POST /api/agent-factory/v3/agent-inout/import (multipart)
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import json
+import re
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
+from kweaver._errors import EndpointUnavailableError, KWeaverError, raise_for_status_parts
 from kweaver.types import Agent, AgentTemplate, AgentCategory
 
 if TYPE_CHECKING:
     from kweaver._http import HttpClient
+
+
+def _reraise_factory_v3(endpoint: str, exc: BaseException) -> None:
+    if isinstance(exc, KWeaverError) and exc.status_code in (404, 405):
+        raise EndpointUnavailableError(
+            f"Endpoint {endpoint} is not available on this server. "
+            "It may require a newer agent-factory version.",
+            status_code=exc.status_code,
+            endpoint_path=endpoint,
+            trace_id=getattr(exc, "trace_id", None),
+            error_code=getattr(exc, "error_code", None),
+        ) from exc
+    raise exc
+
+
+def _parse_attachment_filename(header: str | None) -> str | None:
+    """Parse filename from Content-Disposition (attachment)."""
+    if not header:
+        return None
+    from urllib.parse import unquote
+
+    m = re.search(r"filename\*=(?:UTF-8''|)([^;\s]+)", header, re.I)
+    if m:
+        raw = m.group(1).strip('"')
+        try:
+            return unquote(raw)
+        except Exception:
+            return raw
+    m2 = re.search(r'filename="([^"]+)"', header, re.I)
+    if m2:
+        return m2.group(1)
+    m3 = re.search(r"filename=([^;\s]+)", header, re.I)
+    if m3:
+        return m3.group(1).strip('"')
+    return None
 
 
 class AgentsResource:
@@ -283,6 +327,90 @@ class AgentsResource:
     def unpublish(self, id: str) -> None:
         """Unpublish an agent (remove from published list)."""
         self._http.put(f"/api/agent-factory/v3/agent/{id}/unpublish")
+
+    # ── Copy / bulk export-import (agent-factory v3, not operator impex) ─────
+
+    def copy(self, agent_id: str) -> dict[str, Any]:
+        """Duplicate agent in personal space (POST ``…/agent/{id}/copy``)."""
+        path = f"/api/agent-factory/v3/agent/{agent_id}/copy"
+        try:
+            data = self._http.post(path)
+        except KWeaverError as exc:
+            _reraise_factory_v3(path, exc)
+        return data if isinstance(data, dict) else {}
+
+    def copy_to_template(self, agent_id: str) -> dict[str, Any]:
+        """Copy agent as draft template (POST ``…/copy2tpl``)."""
+        path = f"/api/agent-factory/v3/agent/{agent_id}/copy2tpl"
+        try:
+            data = self._http.post(path)
+        except KWeaverError as exc:
+            _reraise_factory_v3(path, exc)
+        return data if isinstance(data, dict) else {}
+
+    def copy_to_template_and_publish(self, agent_id: str) -> dict[str, Any]:
+        """Copy agent as template and publish (POST ``…/copy2tpl-and-publish``)."""
+        path = f"/api/agent-factory/v3/agent/{agent_id}/copy2tpl-and-publish"
+        try:
+            data = self._http.post(path)
+        except KWeaverError as exc:
+            _reraise_factory_v3(path, exc)
+        return data if isinstance(data, dict) else {}
+
+    def export(self, agent_ids: list[str]) -> tuple[str, bytes]:
+        """Export agents JSON; returns ``(filename, content_bytes)`` from bulk export endpoint."""
+        path = "/api/agent-factory/v3/agent-inout/export"
+        status, headers, body = self._http.post_raw(path, json={"agent_ids": agent_ids})
+        if status in (404, 405):
+            raise EndpointUnavailableError(
+                f"Endpoint {path} is not available on this server. "
+                "It may require a newer agent-factory version.",
+                status_code=status,
+                endpoint_path=path,
+            )
+        if status >= 400:
+            raise_for_status_parts(status, body)
+        cd = headers.get("content-disposition")
+        filename = _parse_attachment_filename(cd) or "agents_export.json"
+        return filename, body
+
+    def import_(
+        self,
+        file_path: str | Path,
+        *,
+        import_type: Literal["create", "upsert"] = "create",
+    ) -> dict[str, Any]:
+        """Import agents from an export JSON file (multipart ``file`` + ``import_type``).
+
+        Returns:
+            Parsed JSON dict; common keys may include those in :class:`~kweaver.types.AgentImportResult`.
+        """
+        pth = Path(file_path)
+        ep = "/api/agent-factory/v3/agent-inout/import"
+        files = {"file": (pth.name, pth.read_bytes(), "application/octet-stream")}
+        status, content = self._http.post_multipart(
+            ep,
+            files=files,
+            data={"import_type": import_type},
+        )
+        if status in (404, 405):
+            raise EndpointUnavailableError(
+                f"Endpoint {ep} is not available on this server. "
+                "It may require a newer agent-factory version.",
+                status_code=status,
+                endpoint_path=ep,
+            )
+        if status >= 400:
+            raise_for_status_parts(status, content)
+        if not content:
+            return {}
+        try:
+            parsed = json.loads(content)
+        except Exception:
+            return {"raw": content.decode("utf-8", errors="replace")}
+        return parsed if isinstance(parsed, dict) else {"result": parsed}
+
+    import_agents = import_
 
 
 def _parse_template(d: Any) -> AgentTemplate:

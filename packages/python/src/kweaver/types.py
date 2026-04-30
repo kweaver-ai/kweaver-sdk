@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Callable
+from typing import Any, Callable, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -365,6 +365,15 @@ class AgentCategory(BaseModel):
     id: str
     name: str
     description: str = ""
+
+
+class AgentImportResult(TypedDict, total=False):
+    """Structured subset of agent-inout ``POST …/import`` JSON (backend shapes vary)."""
+
+    existing: list[Any]
+    created: list[Any]
+    updated: list[Any]
+    conflicts: list[Any]
 
 
 class Conversation(BaseModel):

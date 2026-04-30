@@ -795,7 +795,7 @@ async function runAgentImportCommand(args: string[]): Promise<number> {
     console.error(raw.trim().slice(0, 800));
     return 1;
   }
-  console.log(formatCallOutput(parsed, pretty));
+  console.log(formatCallOutput(raw, pretty));
   // Backend often returns HTTP 200 with is_success:false (e.g. config_invalid); treat as CLI failure.
   if (
     typeof parsed === "object" &&

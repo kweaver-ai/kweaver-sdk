@@ -13,7 +13,8 @@ description: >-
   "触发 dataflow"、"查看 dataflow 运行历史"、"Skill"、"技能包"、"注册 Skill"、"安装 Skill"、"读取 SKILL.md"、
   "toolbox"、"工具箱"、"上传工具"、"注册工具"、"OpenAPI 工具"、"启用工具"、"发布 toolbox"、
   "数据源"、"数据视图"、"原子视图"、"Catalog"、"Vega"、
-  "健康检查"、"巡检"、"trace"、"证据链"、"数据流追踪"、"数据来源"、"数据怎么得到的"等意图时自动使用。
+  "健康检查"、"巡检"、"trace"、"证据链"、"数据流追踪"、"数据来源"、"数据怎么得到的"、
+  "BKN 指标"、"指标管理"、"指标查询"、"指标试算"、"metric dry-run" 等意图时自动使用。
 allowed-tools: Bash(kweaver *), Bash(npx kweaver *)
 argument-hint: [自然语言指令]
 ---
@@ -68,7 +69,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 | `auth` | 认证管理（支持多账号） | `auth login <url> [--alias name]`（简写：`auth <url> [--alias …]`）；可选 `--no-browser`、`-u/-p` HTTP `/oauth2/signin`；**初始密码**（401001017）下 TTY 可交互改密，脚本用 `--new-password`；`auth change-password [<url>] [-u …]`（EACP 改密；URL 与 `-u` 都可省略，分别回退到当前平台与当前激活账号；无需 token）；`auth list` / `auth users` / `auth switch`；全局 `--user` / `KWEAVER_USER`；**无当前平台时** `auth status` / `whoami` 可用 env 兜底（见 `references/auth.md`） | `references/auth.md` |
 | `token` | 打印当前 access token（自动刷新） | `token` | — |
 | `config` | **平台业务域（优先于多数 bkn/agent/ds 操作）** | `config show`, `config list-bd`, `config set-bd <uuid>` | `references/config.md` |
-| `bkn` | BKN 知识网络管理、Schema、查询、Action | `bkn validate`/`push` 默认检测 `.bkn` 编码并规范为 UTF-8，可用 `--no-detect-encoding` 或 `--source-encoding gb18030`；另有 `pull`、`object-type`、`search`、`create-from-ds`/`create-from-csv` 等，见 `references/bkn.md` | `references/bkn.md` |
+| `bkn` | BKN 知识网络管理、Schema、查询、Action、**指标** | `bkn validate`/`push` 默认检测 `.bkn` 编码并规范为 UTF-8，可用 `--no-detect-encoding` 或 `--source-encoding gb18030`；`bkn metric` 管理/查询 BKN 指标与指标数据/试算（见 `references/metric.md`）；另有 `pull`、`object-type`、`search`、`create-from-ds`/`create-from-csv` 等，见 `references/bkn.md` | `references/bkn.md`, `references/metric.md` |
 | `agent` | Agent CRUD、发布、对话、Trace、模板、分类 | `agent list`, `agent get <id>`, `agent create …`, `agent publish <id> …`, `agent chat <id> -m "..."`，以及 **`agent copy` / `export` / `import`**（需较新 agent-factory）、`agent category-list`, `agent template-list`, `agent template-get <tpl_id>`、`agent sessions`、`agent history`、`agent trace` | `references/agent.md` |
 | `agent-tpl` | 私人空间 Agent 模板 CRUD + 发布（agent-factory `agent-tpl`） | `agent-tpl get|get-by-key|update|delete|copy|publish|unpublish|publish-info …`（`kweaver agent-tpl --help`） | `references/agent.md` |
 | `ds` | 数据源管理 | `ds list`, `ds get <id>`, `ds import-csv <ds_id> --files <glob> [--recreate]` | `references/ds.md` |

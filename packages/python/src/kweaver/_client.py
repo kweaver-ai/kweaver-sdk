@@ -24,6 +24,8 @@ from kweaver.resources.object_types import ObjectTypesResource
 from kweaver.resources.action_types import ActionTypesResource
 from kweaver.resources.query import QueryResource
 from kweaver.resources.jobs import JobsResource
+from kweaver.resources.bkn_metrics import BknMetricsResource
+from kweaver.resources.metric_query import MetricQueryResource
 from kweaver.resources.relation_types import RelationTypesResource
 from kweaver.resources.skills import SkillsResource
 from kweaver.resources.toolboxes import ToolboxesResource
@@ -35,6 +37,9 @@ class KWeaverClient:
 
     Provides access to all SDK resource modules via attribute-style access.
     Thread-safe and stateless (does not hold business data).
+
+    BKN **metrics**: ``metrics`` (definitions on bkn-backend), ``metric_query``
+    (data query and dry-run on ontology-query). These are not Vega ``metric_models``.
     """
 
     def __init__(
@@ -112,6 +117,8 @@ class KWeaverClient:
         self.conversations = ConversationsResource(self._http)
         self.action_types = ActionTypesResource(self._http)
         self.jobs = JobsResource(self._http)
+        self.metrics = BknMetricsResource(self._http)
+        self.metric_query = MetricQueryResource(self._http)
         self.concept_groups = ConceptGroupsResource(self._http)
         self.skills = SkillsResource(self._http)
         self.toolboxes = ToolboxesResource(self._http)

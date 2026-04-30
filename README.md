@@ -1,5 +1,9 @@
 # KWeaver SDK
 
+[![Skill](https://img.shields.io/badge/docs-kweaver--core%20skill-5C6BC0)](https://github.com/kweaver-ai/kweaver-sdk/blob/main/skills/kweaver-core/SKILL.md)
+[![CI](https://github.com/kweaver-ai/kweaver-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/kweaver-ai/kweaver-sdk/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kweaver-ai/kweaver-sdk/blob/main/LICENSE)
+
 > Part of the [KWeaver](https://github.com/kweaver-ai/KWeaver) ecosystem — an open-source platform for building, managing, and querying knowledge networks.
 
 Give AI agents (Claude Code, GPT, custom agents, etc.) access to KWeaver knowledge networks and Decision Agents via the `kweaver` CLI. Also provides Python and TypeScript SDKs for programmatic integration.
@@ -257,6 +261,7 @@ kweaver config show / list-bd / set-bd <value>   # business domain; show/list-bd
 kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
+kweaver dataflow templates/create-dataset/create-bkn/create/list/run/runs/logs
 kweaver dataview|dv list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn build [--wait] [--timeout 300]
@@ -264,6 +269,7 @@ kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
 kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]
 kweaver bkn validate/push/pull
 kweaver bkn object-type list/get/create/update/delete/query/properties
+kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run
 kweaver bkn relation-type list/get/create/update/delete
 kweaver bkn action-type list/query/inputs/execute
 kweaver bkn subgraph / search
@@ -345,9 +351,6 @@ npx skills add https://github.com/kweaver-ai/kweaver-sdk --skill create-bkn
 npx skills add https://github.com/kweaver-ai/kweaver-sdk \
   --skill kweaver-core --skill create-bkn
 ```
-
-[![kweaver-core on skills.sh](https://img.shields.io/badge/skills.sh-kweaver--core-6366f1?style=flat-square)](https://skills.sh/kweaver-ai/kweaver-sdk)
-[![create-bkn on skills.sh](https://img.shields.io/badge/skills.sh-create--bkn-6366f1?style=flat-square)](https://skills.sh/kweaver-ai/kweaver-sdk)
 
 Before using **kweaver-core**, authenticate with your KWeaver instance:
 

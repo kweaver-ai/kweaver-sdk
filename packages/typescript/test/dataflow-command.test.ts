@@ -460,3 +460,110 @@ test("dataflow logs paginates with limit=100 until all results are fetched", asy
     globalThis.fetch = originalFetch;
   }
 });
+
+test("dataflow templates lists all templates", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+
+  const result = await runCommand(["templates"]);
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /Dataset Templates:/);
+  assert.match(result.stdout, /document/);
+  assert.match(result.stdout, /document-content/);
+  assert.match(result.stdout, /document-element/);
+  assert.match(result.stdout, /BKN Templates:/);
+  assert.match(result.stdout, /Dataflow Templates:/);
+  assert.match(result.stdout, /unstructured/);
+});
+
+test("dataflow templates --json outputs JSON", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+
+  const result = await runCommand(["templates", "--json"]);
+  assert.equal(result.code, 0);
+  const parsed = JSON.parse(result.stdout);
+  assert.ok(Array.isArray(parsed.dataset));
+  assert.ok(Array.isArray(parsed.bkn));
+  assert.ok(Array.isArray(parsed.dataflow));
+});
+
+test("dataflow create-dataset creates a dataset from template", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ id: "ds-001", name: "my-dataset" }), { status: 200 });
+
+  try {
+    const result = await runCommand([
+      "create-dataset",
+      "--template", "document",
+      "--set", "name=my-dataset",
+    ]);
+    assert.equal(result.code, 0);
+    assert.match(result.stdout, /ds-001/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("dataflow create-dataset validates required arguments", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+
+  const result = await runCommand(["create-dataset", "--template", "document"]);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /Missing required argument/);
+});
+
+test("dataflow create-bkn creates a BKN from template", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ id: "bkn-001", name: "my-bkn" }), { status: 200 });
+
+  try {
+    const result = await runCommand([
+      "create-bkn",
+      "--template", "document",
+      "--set", "name=my-bkn",
+      "--set", "embedding_model_id=model-123",
+      "--set", "content_dataset_id=ds-001",
+      "--set", "document_dataset_id=ds-002",
+      "--set", "element_dataset_id=ds-003",
+    ]);
+    assert.equal(result.code, 0);
+    assert.match(result.stdout, /bkn-001/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("dataflow create --template creates a dataflow from template", async () => {
+  const configDir = createConfigDir();
+  await setupToken(configDir);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ id: "dag-001" }), { status: 200 });
+
+  try {
+    const result = await runCommand([
+      "create",
+      "--template", "unstructured",
+      "--set", "title=my-flow",
+      "--set", "content_dataset_id=ds-001",
+      "--set", "document_dataset_id=ds-002",
+      "--set", "element_dataset_id=ds-003",
+    ]);
+    assert.equal(result.code, 0);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.id, "dag-001");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

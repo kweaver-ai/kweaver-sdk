@@ -15,18 +15,23 @@ import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { parseJsonObject, parseSearchAfterArray, confirmYes } from "./bkn-utils.js";
 
+function parseCommaSeparatedIds(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 const METRIC_HELP = `kweaver bkn metric <action> [args] [--pretty] [-bd <domain>]
 
 Management (bkn-backend):
   list <kn-id> [--limit <n>] [--branch <b>] [--name-pattern <p>] [--sort update_time|name] [--direction asc|desc] [--offset <n>] [--tag <t>] [--group-id <id>]
-  get <kn-id> <metric-id> [--branch <b>]
-  get-batch <kn-id> <metric-ids>   (comma-separated)
+  get <kn-id> <metric-id(s)> [--branch <b>]   (comma-separated for multiple)
   create <kn-id> '<json>'  [--branch] [--strict-mode true|false]
   search <kn-id> '<json>'  [--branch] [--strict-mode] [--limit <n>] [--search-after '<json>']
   validate <kn-id> '<json>'  [--branch] [--strict-mode] [--import-mode normal|ignore|overwrite]
   update <kn-id> <metric-id> '<json>'  [--branch] [--strict-mode]
-  delete <kn-id> <metric-id> [-y]
-  delete-batch <kn-id> <metric-ids>  [-y]
+  delete <kn-id> <metric-id(s)> [-y]   (comma-separated for multiple)
 
 Query (ontology-query):
   query <kn-id> <metric-id> ['<json-body>']  [--branch] [--fill-null]
@@ -234,24 +239,20 @@ export async function runKnMetricCommand(args: string[]): Promise<number> {
 
     if (action === "get") {
       const o = parseCommonKnFlags(rest, false);
-      const [knId, metricId] = o.filtered;
-      if (!knId || !metricId) {
-        console.error("Usage: kweaver bkn metric get <kn-id> <metric-id> [options]");
+      const [knId, metricIdArg] = o.filtered;
+      if (!knId || !metricIdArg) {
+        console.error("Usage: kweaver bkn metric get <kn-id> <metric-id(s)> [options]");
         return 1;
       }
-      const out = await getMetric({ ...b, knId, businessDomain: o.businessDomain, metricId, branch: o.branch });
-      console.log(formatCallOutput(out, o.pretty));
-      return 0;
-    }
-
-    if (action === "get-batch") {
-      const o = parseCommonKnFlags(rest, false);
-      const [knId, metricIds] = o.filtered;
-      if (!knId || !metricIds) {
-        console.error("Usage: kweaver bkn metric get-batch <kn-id> <comma-separated-ids>");
+      const ids = parseCommaSeparatedIds(metricIdArg);
+      if (ids.length === 0) {
+        console.error("metric-id(s): need at least one id");
         return 1;
       }
-      const out = await getMetrics({ ...b, knId, businessDomain: o.businessDomain, metricIds, branch: o.branch });
+      const out =
+        ids.length === 1
+          ? await getMetric({ ...b, knId, businessDomain: o.businessDomain, metricId: ids[0], branch: o.branch })
+          : await getMetrics({ ...b, knId, businessDomain: o.businessDomain, metricIds: ids.join(","), branch: o.branch });
       console.log(formatCallOutput(out, o.pretty));
       return 0;
     }
@@ -360,38 +361,28 @@ export async function runKnMetricCommand(args: string[]): Promise<number> {
 
     if (action === "delete") {
       const o = parseCommonKnFlags(rest, true);
-      const [knId, metricId] = o.filtered;
-      if (!knId || !metricId) {
-        console.error("Usage: kweaver bkn metric delete <kn-id> <metric-id> [-y]");
+      const [knId, metricIdArg] = o.filtered;
+      if (!knId || !metricIdArg) {
+        console.error("Usage: kweaver bkn metric delete <kn-id> <metric-id(s)> [-y]");
+        return 1;
+      }
+      const ids = parseCommaSeparatedIds(metricIdArg);
+      if (ids.length === 0) {
+        console.error("metric-id(s): need at least one id");
         return 1;
       }
       if (!o.yes) {
-        const ok = await confirmYes(`Delete metric ${metricId}?`);
+        const label = ids.length === 1 ? ids[0] : ids.join(",");
+        const ok = await confirmYes(`Delete metric(s) ${label}?`);
         if (!ok) {
           console.log("Cancelled.");
           return 0;
         }
       }
-      const out = await deleteMetric({ ...b, knId, businessDomain: o.businessDomain, metricId, branch: o.branch });
-      console.log(formatCallOutput(out, o.pretty));
-      return 0;
-    }
-
-    if (action === "delete-batch") {
-      const o = parseCommonKnFlags(rest, true);
-      const [knId, metricIds] = o.filtered;
-      if (!knId || !metricIds) {
-        console.error("Usage: kweaver bkn metric delete-batch <kn-id> <comma-separated-ids> [-y]");
-        return 1;
-      }
-      if (!o.yes) {
-        const ok = await confirmYes(`Delete metrics ${metricIds}?`);
-        if (!ok) {
-          console.log("Cancelled.");
-          return 0;
-        }
-      }
-      const out = await deleteMetrics({ ...b, knId, businessDomain: o.businessDomain, metricIds, branch: o.branch });
+      const out =
+        ids.length === 1
+          ? await deleteMetric({ ...b, knId, businessDomain: o.businessDomain, metricId: ids[0], branch: o.branch })
+          : await deleteMetrics({ ...b, knId, businessDomain: o.businessDomain, metricIds: ids.join(","), branch: o.branch });
       console.log(formatCallOutput(out, o.pretty));
       return 0;
     }

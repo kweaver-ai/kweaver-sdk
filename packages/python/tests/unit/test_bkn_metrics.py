@@ -40,11 +40,21 @@ def test_search_uses_method_override_get(capture: RequestCapture) -> None:
     client.metrics.search("kn1", {"limit": 20})
 
 
-def test_delete_many_sends_delete(capture: RequestCapture) -> None:
+def test_delete_comma_separated_sends_batch_path(capture: RequestCapture) -> None:
     def handler(req: httpx.Request) -> httpx.Response:
         assert req.method == "DELETE"
         assert "metrics/a,b" in str(req.url)
         return httpx.Response(204)
 
     client = make_client(handler, capture)
-    assert client.metrics.delete_many("kn1", "a,b") is None
+    assert client.metrics.delete("kn1", "a,b") is None
+
+
+def test_get_comma_separated_sends_batch_path(capture: RequestCapture) -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.method == "GET"
+        assert "metrics/x,y" in str(req.url)
+        return httpx.Response(200, json={"entries": []})
+
+    client = make_client(handler, capture)
+    client.metrics.get("kn1", " x, y ")

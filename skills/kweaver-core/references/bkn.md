@@ -48,7 +48,7 @@ kweaver bkn object-type properties <kn_id> <ot_id> '<json>' # 查询实例属性
 
 ## BKN metrics
 
-BKN 原生指标（**非** Vega 指标模型）：`kweaver bkn metric list|get|get-batch|create|search|validate|update|delete|delete-batch|query|dry-run …`。细节与 TypeScript / Python 对照见 [`metric.md`](metric.md)。
+BKN 原生指标（**非** Vega 指标模型）：`kweaver bkn metric list|get|create|search|validate|update|delete|query|dry-run …`（`get` / `delete` 支持逗号分隔多个 metric id）。细节见 [`metric.md`](metric.md)。
 
 ### object-type update 说明（数据属性：增 / 改 / 删）
 

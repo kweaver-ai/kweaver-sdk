@@ -168,7 +168,7 @@ kweaver dataflow list/run/runs/logs
 kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
-kweaver bkn metric list/get/get-batch/create/search/validate/update/delete/delete-batch/query/dry-run
+kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run
 kweaver bkn relation-type list/get/create/update/delete
 kweaver bkn action-type list/query/execute
 kweaver bkn subgraph

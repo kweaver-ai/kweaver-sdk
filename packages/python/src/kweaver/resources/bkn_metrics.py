@@ -11,6 +11,14 @@ if TYPE_CHECKING:
 _BASE = "/api/bkn-backend/v1/knowledge-networks"
 
 
+def _metrics_path_segment(metric_ids: str) -> str:
+    """Normalize one or comma-separated metric ids for ``/metrics/{segment}`` paths."""
+    parts = [p.strip() for p in metric_ids.split(",") if p.strip()]
+    if not parts:
+        raise ValueError("metric_ids must contain at least one id")
+    return ",".join(parts)
+
+
 class BknMetricsResource:
     """CRUD and search for BKN metric definitions on bkn-backend."""
 
@@ -119,8 +127,10 @@ class BknMetricsResource:
         )
 
     def get(self, kn_id: str, metric_id: str, *, branch: str | None = None) -> Any:
+        """GET ``/metrics/{metric_id}``. Pass comma-separated ids for batch read (same path segment)."""
+        segment = _metrics_path_segment(metric_id)
         params = {"branch": branch} if branch is not None else None
-        return self._http.get(f"{_BASE}/{kn_id}/metrics/{metric_id}", params=params)
+        return self._http.get(f"{_BASE}/{kn_id}/metrics/{segment}", params=params)
 
     def update(
         self,
@@ -145,32 +155,13 @@ class BknMetricsResource:
         )
 
     def delete(self, kn_id: str, metric_id: str, *, branch: str | None = None) -> Any:
+        """DELETE ``/metrics/{metric_id}``. Pass comma-separated ids for batch delete."""
+        segment = _metrics_path_segment(metric_id)
         params: dict[str, Any] = {}
         if branch is not None:
             params["branch"] = branch
         return self._http.request(
             "DELETE",
-            f"{_BASE}/{kn_id}/metrics/{metric_id}",
-            params=params if params else None,
-        )
-
-    def get_many(self, kn_id: str, metric_ids: str, *, branch: str | None = None) -> Any:
-        """GET ``/metrics/{metric_ids}`` — ``metric_ids`` is a comma-separated segment."""
-        params: dict[str, Any] = {}
-        if branch is not None:
-            params["branch"] = branch
-        return self._http.get(
-            f"{_BASE}/{kn_id}/metrics/{metric_ids}",
-            params=params if params else None,
-        )
-
-    def delete_many(self, kn_id: str, metric_ids: str, *, branch: str | None = None) -> Any:
-        """DELETE ``/metrics/{metric_ids}`` — comma-separated IDs in one path segment."""
-        params: dict[str, Any] = {}
-        if branch is not None:
-            params["branch"] = branch
-        return self._http.request(
-            "DELETE",
-            f"{_BASE}/{kn_id}/metrics/{metric_ids}",
+            f"{_BASE}/{kn_id}/metrics/{segment}",
             params=params if params else None,
         )

@@ -574,7 +574,7 @@ Subcommands:
   job list|get|tasks|delete <kn-id> ...
   relation-type-paths <kn-id> '<json>'   Query relation type paths between OTs
   resources                              List available resources
-  metric list|get|get-batch|create|search|validate|update|delete|delete-batch|query|dry-run <kn-id> ...   BKN metrics (definitions + data)
+  metric list|get|create|search|validate|update|delete|query|dry-run <kn-id> ...   BKN metrics (definitions + data)
 
 Use 'kweaver bkn <subcommand> --help' for subcommand options.`;
 

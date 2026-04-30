@@ -180,7 +180,7 @@ kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
 kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]
 kweaver bkn validate/push/pull
 kweaver bkn object-type list/get/create/update/delete/query/properties
-kweaver bkn metric list/get/get-batch/create/search/validate/update/delete/delete-batch/query/dry-run
+kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run
 kweaver bkn relation-type list/get/create/update/delete
 kweaver bkn action-type list/query/execute
 kweaver bkn subgraph / search

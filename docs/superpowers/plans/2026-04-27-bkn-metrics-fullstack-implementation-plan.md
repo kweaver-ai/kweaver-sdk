@@ -194,7 +194,7 @@ export async function metricDryRun(options: MetricDryRunOptions): Promise<string
 - Modify: `packages/typescript/src/commands/bkn.ts`
 
 - [ ] **Step 1:** Implement `runKnMetricCommand(args: string[])`:
-  - Parse `--help` → print English help listing all subcommands from the design spec (`list`, `get`, `get-batch`, `create`, `search`, `validate`, `update`, `delete`, `delete-batch`, `query`, `dry-run`).
+  - Parse `--help` → print English help listing subcommands (`list`, `get`, `create`, `search`, `validate`, `update`, `delete`, `query`, `dry-run`). `get` / `delete` accept comma-separated metric ids (batch path).
   - Reuse `ensureValidToken`, `formatCallOutput`, `parseOntologyQueryFlags` / `resolveBusinessDomain` where applicable (see `bkn-schema.ts` + `bkn-utils.ts`).
   - `list`: default `--limit` to **30** when not passed (AGENTS.md).
   - `query` / `dry-run`: call `metricQueryData` / `metricDryRun`; support `--branch`, `--fill-null`, `--pretty`, `-bd`.

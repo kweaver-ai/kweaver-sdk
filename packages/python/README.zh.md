@@ -128,7 +128,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 |------|---------|------|
 | 知识网络 | `client.knowledge_networks` | `list`, `get`, `create`, `update`, `delete`, `build`, `export`, `inspect` |
 | 对象类 | `client.object_types` | `list`, `get`, `create`, `update`, `delete` |
-| BKN 指标（定义，bkn-backend） | `client.metrics` | `list`, `create`, `search`, `validate`, `get`, `update`, `delete`, `get_many`, `delete_many` |
+| BKN 指标（定义，bkn-backend） | `client.metrics` | `list`, `create`, `search`, `validate`, `get`, `update`, `delete` |
 | BKN 指标数据 / 试算（ontology-query） | `client.metric_query` | `data`, `dry_run` |
 | 关系类 | `client.relation_types` | `list`, `get`, `create`, `update`, `delete` |
 | Action 类 | `client.action_types` | `list`, `execute`, `cancel` |

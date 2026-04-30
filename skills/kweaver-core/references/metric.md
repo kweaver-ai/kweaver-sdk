@@ -10,6 +10,9 @@ BKN **native metrics** (`MetricDefinition`) are **not** Vega catalog metrics.
 ```bash
 kweaver bkn metric --help
 kweaver bkn metric list <kn-id> [--limit 30] ...
+kweaver bkn metric get <kn-id> <metric-id>              # one id
+kweaver bkn metric get <kn-id> id1,id2,id3              # comma-separated
+kweaver bkn metric delete <kn-id> id1,id2 -y
 kweaver bkn metric query <kn-id> <metric-id> '<json>' [--branch <b>] [--fill-null]
 kweaver bkn metric dry-run <kn-id> '<json>' [--branch <b>] [--fill-null]
 ```

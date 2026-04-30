@@ -173,7 +173,7 @@ Add functions (names finalizable; export if public) mirroring the table above, e
 
 ## Python API (summary)
 
-- **`BknMetricsResource`**: methods 1:1 with the bkn-backend table in **TypeScript API** (list, create, search, validate, get, update, delete, batch operations). Set headers for override POST/GET on the collection `POST` as required by `bkn-metrics.yaml`.
+- **`BknMetricsResource`**: methods 1:1 with the bkn-backend table in **TypeScript API** (list, create, search, validate, get, update, delete). `get` / `delete` accept a comma-separated id list for the batch path segment. Set headers for override POST/GET on the collection `POST` as required by `bkn-metrics.yaml`.
 - **`MetricQueryResource`**: `metric_data` / `dry_run` (names finalizable) — POST with `kn_id`, `metric_id` (data path), `branch`, `fill_null`, and JSON body.
 - **Parity**: behavior and paths align with **TypeScript** modules in the same PR; avoid duplicate HTTP logic beyond what is idiomatic in each language.
 
@@ -186,16 +186,14 @@ Add functions (names finalizable; export if public) mirroring the table above, e
 | Subcommand | Args (conceptual) | Notes |
 |------------|-------------------|--------|
 | `list` | `<kn-id>` | Flags: filter/sort/pagination/`branch`/`--limit` (default **30**), `-bd`, `--pretty` |
-| `get` | `<kn-id> <metric-id>` | optional `--branch` |
-| `get-batch` | `<kn-id> <id1> [<id2> ...]` or comma-separated | match TS API for batch path |
+| `get` | `<kn-id> <metric-id>` or comma-separated ids | optional `--branch`; multiple ids use the batch GET path |
 | `create` | `<kn-id> '<json>'` or file pattern if project already has `@file` | `ReqMetrics` / `entries` |
 | `search` | `<kn-id> '<json>'` | concept search; `--search-after`, `--limit` for body assist (same style as `object-type query` helpers if reused) |
 | `validate` | `<kn-id> '<json>'` | `import_mode`, `strict_mode` flags |
 | `update` | `<kn-id> <metric-id> '<json>'` | `UpdateMetricRequest` |
-| `delete` | `<kn-id> <metric-id> [-y]` | |
-| `delete-batch` | `<kn-id> <ids...> [-y]` | |
+| `delete` | `<kn-id> <metric-id>` or comma-separated ids `[-y]` | multiple ids use the batch DELETE path |
 
-**Naming**: if `get-batch` / `delete-batch` are too verbose, use **`get-many`** / **`delete-many`** with documented synonyms in help (pick one in implementation and keep spec aligned).
+**Naming**: single `get` / `delete` subcommands only; no separate `get-batch` / `delete-batch`.
 
 ### Query (ontology-query)
 

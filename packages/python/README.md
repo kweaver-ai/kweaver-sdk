@@ -128,7 +128,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 |----------|--------|---------|
 | Knowledge Networks | `client.knowledge_networks` | `list`, `get`, `create`, `update`, `delete`, `build`, `export`, `inspect` |
 | Object Types | `client.object_types` | `list`, `get`, `create`, `update`, `delete` |
-| BKN metrics (definitions) | `client.metrics` | `list`, `create`, `search`, `validate`, `get`, `update`, `delete`, `get_many`, `delete_many` |
+| BKN metrics (definitions) | `client.metrics` | `list`, `create`, `search`, `validate`, `get`, `update`, `delete` |
 | BKN metric data / dry-run | `client.metric_query` | `data`, `dry_run` |
 | Relation Types | `client.relation_types` | `list`, `get`, `create`, `update`, `delete` |
 | Action Types | `client.action_types` | `list`, `execute`, `cancel` |

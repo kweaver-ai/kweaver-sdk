@@ -134,6 +134,41 @@ export {
   unpublishAgent,
 } from "./api/agent-list.js";
 
+export type {
+  CopyAgentOptions,
+  ExportAgentsOptions,
+  ImportAgentsOptions,
+  AgentImportMode,
+} from "./api/agents-inout.js";
+export {
+  copyAgent,
+  copyAgentToTemplate,
+  exportAgents,
+  importAgents,
+  parseAttachmentFilename,
+} from "./api/agents-inout.js";
+
+export type {
+  GetAgentTemplateOptions,
+  GetAgentTemplateByKeyOptions,
+  UpdateAgentTemplateOptions,
+  DeleteAgentTemplateOptions,
+  CopyAgentTemplateOptions,
+  PublishAgentTemplateOptions,
+  UnpublishAgentTemplateOptions,
+  UpdateAgentTemplatePublishInfoOptions,
+} from "./api/agent-tpl.js";
+export {
+  getAgentTemplate,
+  getAgentTemplateByKey,
+  updateAgentTemplate,
+  deleteAgentTemplate,
+  copyAgentTemplate,
+  publishAgentTemplate,
+  unpublishAgentTemplate,
+  getAgentTemplatePublishInfo,
+  updateAgentTemplatePublishInfo,
+} from "./api/agent-tpl.js";
 // ── Conversations ─────────────────────────────────────────────────────────────
 export type { ListConversationsOptions, ListMessagesOptions } from "./api/conversations.js";
 export { listConversations, listMessages } from "./api/conversations.js";
@@ -181,6 +216,7 @@ export type { KWeaverClientOptions, ClientContext } from "./client.js";
 export { KWeaverClient } from "./client.js";
 export { KnowledgeNetworksResource } from "./resources/knowledge-networks.js";
 export { AgentsResource } from "./resources/agents.js";
+export { AgentTemplatesResource } from "./resources/agent-templates.js";
 export type {
   AgentConfig,
   AgentInput,
@@ -287,7 +323,13 @@ export {
 } from "./api/toolboxes.js";
 
 // ── HTTP utilities ────────────────────────────────────────────────────────────
-export { HttpError, NetworkRequestError, fetchTextOrThrow } from "./utils/http.js";
+export {
+  HttpError,
+  NetworkRequestError,
+  EndpointUnavailableError,
+  rethrowIfEndpointUnavailable,
+  fetchTextOrThrow,
+} from "./utils/http.js";
 
 // ── Config / credential store (read-only helpers) ─────────────────────────────
 export type {

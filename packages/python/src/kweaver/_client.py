@@ -11,6 +11,7 @@ from kweaver._http import HttpClient
 from kweaver._middleware import Middleware
 from kweaver._middleware.debug import DebugMiddleware
 from kweaver._middleware.dry_run import DryRunMiddleware
+from kweaver.resources.agent_templates import AgentTemplatesResource
 from kweaver.resources.agents import AgentsResource
 from kweaver.resources.concept_groups import ConceptGroupsResource
 from kweaver.resources.conversations import ConversationsResource
@@ -112,6 +113,7 @@ class KWeaverClient:
         self.relation_types = RelationTypesResource(self._http)
         self.query = QueryResource(self._http, tls_insecure=self._tls_insecure)
         self.agents = AgentsResource(self._http)
+        self.agent_templates = AgentTemplatesResource(self._http)
         self.conversations = ConversationsResource(self._http)
         self.action_types = ActionTypesResource(self._http)
         self.jobs = JobsResource(self._http)

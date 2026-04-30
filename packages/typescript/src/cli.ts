@@ -1,6 +1,7 @@
 import { NO_AUTH_TOKEN } from "./config/no-auth.js";
 import { applyTlsEnvFromSavedTokens } from "./config/tls-env.js";
 import { runAgentCommand } from "./commands/agent.js";
+import { runAgentTplCommand } from "./commands/agent-tpl.js";
 import { runAuthCommand } from "./commands/auth.js";
 import { runKnCommand } from "./commands/bkn.js";
 import { runCallCommand } from "./commands/call.js";
@@ -55,6 +56,19 @@ Usage:
   kweaver agent delete <agent_id> [-bd value]
   kweaver agent publish <agent_id> [-bd value]
   kweaver agent unpublish <agent_id> [-bd value]
+  kweaver agent copy <agent_id> [--as-template] [-bd value]
+  kweaver agent export <agent_id> [<agent_id> ...] [-o <file>|-] [-bd value]
+  kweaver agent import <file> [--mode create|upsert] [--pretty|--compact] [-bd value]
+
+  kweaver agent-tpl get <template_id> [-bd value]
+  kweaver agent-tpl get-by-key <key> [-bd value]
+  kweaver agent-tpl update <id> --body-file <path> [-bd value]
+  kweaver agent-tpl delete <id> [-y] [-bd value]
+  kweaver agent-tpl copy <id> [-bd value]
+  kweaver agent-tpl publish <id> [--body-file <path>] [-bd value]
+  kweaver agent-tpl unpublish <id> [-bd value]
+  kweaver agent-tpl publish-info get <id> [-bd value]
+  kweaver agent-tpl publish-info put <id> --categories '<json-array>' [-bd value]
 
   kweaver ds list [--keyword X] [--type T] [-bd value]
   kweaver ds get <id>
@@ -166,7 +180,8 @@ Commands:
   auth           Login, list, inspect, and switch saved platform auth profiles
   token          Print the current access token, refreshing it first if needed
   call (curl)    Call an API with curl-style flags and auto-injected token headers
-  agent          Agent CRUD, chat, sessions, history, publish/unpublish
+  agent          Agent CRUD, chat, copy/export/import, publish/unpublish
+  agent-tpl      Personal-space agent templates (CRUD, publish, publish-info)
   ds             Manage datasources (list, get, delete, tables, connect)
   dataflow       Dataflow document workflows (list, run, runs, logs)
   dataview|dv    List, find, get, query (SQL), delete data views (atomic / custom)
@@ -274,6 +289,10 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "agent") {
     return runAgentCommand(rest);
+  }
+
+  if (command === "agent-tpl") {
+    return runAgentTplCommand(rest);
   }
 
   if (command === "explore") {

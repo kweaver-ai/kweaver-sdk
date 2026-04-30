@@ -121,6 +121,44 @@ def test_post_multipart_returns_status_and_bytes():
     assert body == b'{"kn_id":"x"}'
 
 
+def test_post_multipart_accepts_form_fields():
+    captured = {}
+
+    def handler(req):
+        captured["content_type"] = req.headers.get("content-type", "")
+        return httpx.Response(200, content=b"{}")
+
+    client = _make_client(handler)
+    status, body = client.post_multipart(
+        "/api/agent-factory/v3/agent-inout/import",
+        files={"file": ("e.json", b"{}", "application/octet-stream")},
+        data={"import_type": "create"},
+    )
+    assert status == 200
+    assert body == b"{}"
+    assert "multipart/form-data" in captured["content_type"]
+
+
+def test_post_raw_returns_status_headers_bytes():
+    def handler(req):
+        assert req.method == "POST"
+        assert req.url.path.endswith("/export")
+        return httpx.Response(
+            200,
+            content=b'{"x":1}',
+            headers={"Content-Disposition": 'attachment; filename="out.json"'},
+        )
+
+    client = _make_client(handler)
+    status, headers, body = client.post_raw(
+        "/api/agent-factory/v3/agent-inout/export",
+        json={"agent_ids": ["a"]},
+    )
+    assert status == 200
+    assert body == b'{"x":1}'
+    assert headers.get("content-disposition") is not None
+
+
 def test_get_bytes_returns_status_and_body():
     def handler(req):
         return httpx.Response(200, content=b"\x00\x01")

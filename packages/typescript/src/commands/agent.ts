@@ -6,6 +6,12 @@ import {
   createAgent, updateAgent, deleteAgent,
   publishAgent, unpublishAgent, listPersonalAgents, listPublishedAgentTemplates, getPublishedAgentTemplate, listAgentCategories,
 } from "../api/agent-list.js";
+import {
+  copyAgent,
+  copyAgentToTemplate,
+  exportAgents as exportAgentsHttp,
+  importAgents as importAgentsHttp,
+} from "../api/agents-inout.js";
 import { listConversations, listMessages, getTracesByConversation } from "../api/conversations.js";
 import { fetchAgentInfo } from "../api/agent-chat.js";
 import { formatCallOutput } from "./call.js";
@@ -662,6 +668,146 @@ export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
   return { agentId, conversationId, pretty };
 }
 
+async function runAgentCopyCommand(args: string[]): Promise<number> {
+  let agentId = "";
+  let asTemplate = false;
+  let businessDomain = "";
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (a === "--as-template") {
+      asTemplate = true;
+      continue;
+    }
+    if (!a.startsWith("-")) {
+      agentId = a;
+      continue;
+    }
+  }
+  if (!agentId) {
+    console.error("Usage: kweaver agent copy <agent_id> [--as-template] [-bd value]");
+    return 1;
+  }
+  const token = await ensureValidToken();
+  const bd = businessDomain || resolveBusinessDomain();
+  const base = { baseUrl: token.baseUrl, accessToken: token.accessToken, businessDomain: bd };
+  // To publish a freshly-copied template, use `agent-tpl publish <tpl_id>` after copy.
+  const raw = asTemplate
+    ? await copyAgentToTemplate({ ...base, agentId })
+    : await copyAgent({ ...base, agentId });
+  console.log(JSON.stringify(JSON.parse(raw), null, 2));
+  return 0;
+}
+
+async function runAgentExportCommand(args: string[]): Promise<number> {
+  const ids: string[] = [];
+  let out = "";
+  let businessDomain = "";
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if ((a === "-o" || a === "--output") && args[i + 1]) {
+      out = args[++i];
+      continue;
+    }
+    if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (!a.startsWith("-")) ids.push(a);
+  }
+  if (ids.length === 0) {
+    console.error("Usage: kweaver agent export <agent_id> [<agent_id> ...] [-o <file>|-] [-bd value]");
+    return 1;
+  }
+  const token = await ensureValidToken();
+  const bd = businessDomain || resolveBusinessDomain();
+  const { filename, bytes } = await exportAgentsHttp({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    businessDomain: bd,
+    agentIds: ids,
+  });
+  const target = out === "-" ? "-" : out || filename;
+  if (target === "-") {
+    process.stdout.write(Buffer.from(bytes));
+    if (bytes.length === 0 || bytes[bytes.length - 1] !== 0x0a) process.stdout.write("\n");
+    return 0;
+  }
+  await fs.writeFile(target, Buffer.from(bytes));
+  console.error(`Wrote ${bytes.byteLength} bytes to ${target}`);
+  return 0;
+}
+
+async function runAgentImportCommand(args: string[]): Promise<number> {
+  let filePath = "";
+  let mode: "create" | "upsert" = "create";
+  let pretty = true;
+  let businessDomain = "";
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if ((a === "--mode") && args[i + 1]) {
+      const v = args[++i];
+      if (v === "create" || v === "upsert") mode = v;
+      else {
+        console.error("--mode must be create or upsert");
+        return 1;
+      }
+      continue;
+    }
+    if ((a === "-bd" || a === "--biz-domain") && args[i + 1]) {
+      businessDomain = args[++i];
+      continue;
+    }
+    if (a === "--pretty") {
+      pretty = true;
+      continue;
+    }
+    if (a === "--compact") {
+      pretty = false;
+      continue;
+    }
+    if (!a.startsWith("-")) {
+      filePath = a;
+      continue;
+    }
+  }
+  if (!filePath) {
+    console.error("Usage: kweaver agent import <file> [--mode create|upsert] [--pretty|--compact] [-bd value]");
+    return 1;
+  }
+  const token = await ensureValidToken();
+  const bd = businessDomain || resolveBusinessDomain();
+  const raw = await importAgentsHttp({
+    baseUrl: token.baseUrl,
+    accessToken: token.accessToken,
+    businessDomain: bd,
+    filePath,
+    importType: mode,
+  });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    console.error("Import response was not valid JSON:");
+    console.error(raw.trim().slice(0, 800));
+    return 1;
+  }
+  console.log(formatCallOutput(raw, pretty));
+  // Backend often returns HTTP 200 with is_success:false (e.g. config_invalid); treat as CLI failure.
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "is_success" in parsed &&
+    (parsed as { is_success?: boolean }).is_success === false
+  ) {
+    return 1;
+  }
+  return 0;
+}
+
 export async function runAgentCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
@@ -683,6 +829,9 @@ Subcommands:
   delete <agent_id> [-y]             Delete an agent
   publish <agent_id>                 Publish an agent
   unpublish <agent_id>               Unpublish an agent
+  copy <agent_id> [--as-template] Copy agent (or copy to draft template)
+  export <agent_id> [<agent_id> ...] [-o <file>|-] Bulk-export agents (JSON)
+  import <file> [--mode create|upsert] Import agents from export file
   chat <agent_id>                    Start interactive chat with an agent
   chat <agent_id> -m "message"       Send a single message (non-interactive)
   skill <verb> ...                   Manage skills attached to an agent (add/remove/list)
@@ -709,6 +858,9 @@ Subcommands:
     if (subcommand === "delete") return runAgentDeleteCommand(rest);
     if (subcommand === "publish") return runAgentPublishCommand(rest);
     if (subcommand === "unpublish") return runAgentUnpublishCommand(rest);
+    if (subcommand === "copy") return runAgentCopyCommand(rest);
+    if (subcommand === "export") return runAgentExportCommand(rest);
+    if (subcommand === "import") return runAgentImportCommand(rest);
     if (subcommand === "skill") return runAgentSkillCommand(rest);
     return -1;
   };

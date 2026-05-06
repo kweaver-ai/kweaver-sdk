@@ -40,10 +40,10 @@ import { resolveBusinessDomain } from "../config/store.js";
 import { runDsImportCsv } from "./ds.js";
 import {
   pollWithBackoff,
-  detectPrimaryKey,
   detectDisplayKey,
   formatPkDetectionError,
   parsePkMap,
+  resolvePrimaryKey,
   confirmYes,
 } from "./bkn-utils.js";
 
@@ -716,7 +716,8 @@ export async function runKnCreateFromDsCommand(
     const tableRetryDelayMs = 4000;
     let allTables: Array<{
       name: string;
-      columns: Array<{ name: string; type: string }>;
+      columns: Array<{ name: string; type: string; isPrimaryKey?: boolean }>;
+      primaryKeys?: string[];
     }> = [];
     let targetTables: typeof allTables = [];
     let scanAttempted = false;
@@ -725,7 +726,8 @@ export async function runKnCreateFromDsCommand(
       const tablesBody = await listTablesWithColumns({ ...base, id: options.dsId });
       allTables = JSON.parse(tablesBody) as Array<{
         name: string;
-        columns: Array<{ name: string; type: string }>;
+        columns: Array<{ name: string; type: string; isPrimaryKey?: boolean }>;
+        primaryKeys?: string[];
       }>;
 
       targetTables = options.tables.length > 0
@@ -785,21 +787,31 @@ export async function runKnCreateFromDsCommand(
     }
     for (const t of targetTables) {
       const override = options.pkMap[t.name];
-      if (override) {
-        if (!t.columns.some((c) => c.name === override)) {
-          throw new Error(
-            `--pk-map specifies '${override}' for table '${t.name}', but no such column. ` +
-              `Columns: ${t.columns.map((c) => c.name).join(", ")}`
-          );
-        }
-        tablePks[t.name] = override;
+      if (override && !t.columns.some((c) => c.name === override)) {
+        throw new Error(
+          `--pk-map specifies '${override}' for table '${t.name}', but no such column. ` +
+            `Columns: ${t.columns.map((c) => c.name).join(", ")}`
+        );
+      }
+      const resolution = resolvePrimaryKey(t, sampleRows?.[t.name], override);
+      if (resolution.pk) {
+        tablePks[t.name] = resolution.pk;
         continue;
       }
-      const result = detectPrimaryKey(t, sampleRows?.[t.name]);
-      if (!result.pk) {
-        throw new Error(formatPkDetectionError(t.name, result));
+      if (resolution.source === "ambiguous") {
+        const cols = (resolution.ambiguous ?? []).join(", ");
+        throw new Error(
+          `Table '${t.name}' has a composite PRIMARY KEY (${cols}). ` +
+            `BKN object types take a single primary key — pick one with --pk-map ${t.name}:<column>.`
+        );
       }
-      tablePks[t.name] = result.pk;
+      throw new Error(
+        formatPkDetectionError(t.name, {
+          pk: null,
+          candidates: resolution.candidates ?? [],
+          sampleSize: resolution.sampleSize ?? 0,
+        }),
+      );
     }
 
     // Phase 1: Create DataViews for each table. findDataView is idempotent;

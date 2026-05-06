@@ -301,7 +301,11 @@ export async function listTablesWithColumns(options: ListTablesWithColumnsOption
   }
 
   const base = rest.baseUrl.replace(/\/+$/, "");
-  const tables: Array<{ name: string; columns: Array<{ name: string; type: string; comment?: string }> }> = [];
+  const tables: Array<{
+    name: string;
+    columns: Array<{ name: string; type: string; comment?: string; isPrimaryKey?: boolean }>;
+    primaryKeys?: string[];
+  }> = [];
 
   for (const t of items) {
     const tableId = String(t.id ?? "");
@@ -320,16 +324,55 @@ export async function listTablesWithColumns(options: ListTablesWithColumnsOption
       columnsRaw = Array.isArray(colData) ? colData : (colData.entries ?? colData.data ?? []);
     }
 
-    const columns = columnsRaw.map((c) => ({
-      name: String(c.name ?? c.field_name ?? ""),
-      type: String(c.type ?? c.field_type ?? "varchar"),
-      comment: typeof c.comment === "string" ? c.comment : undefined,
-    }));
+    const tablePkArray = extractPrimaryKeys(t);
 
-    tables.push({ name: tableName, columns });
+    const columns = columnsRaw.map((c) => {
+      const name = String(c.name ?? c.field_name ?? "");
+      const flagged = isColumnPrimaryKey(c) || tablePkArray.includes(name);
+      return {
+        name,
+        type: String(c.type ?? c.field_type ?? "varchar"),
+        comment: typeof c.comment === "string" ? c.comment : undefined,
+        ...(flagged ? { isPrimaryKey: true } : {}),
+      };
+    });
+
+    // Reconcile: if backend gave per-column flags but no table-level array,
+    // synthesize one so downstream callers have a single PK source of truth.
+    const synthesizedPks = tablePkArray.length > 0
+      ? tablePkArray
+      : columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
+
+    tables.push({
+      name: tableName,
+      columns,
+      ...(synthesizedPks.length > 0 ? { primaryKeys: synthesizedPks } : {}),
+    });
   }
 
   return JSON.stringify(tables);
+}
+
+// Two PK metadata shapes are recognized — both confirmed conventions:
+//   - per-column `is_primary_key: true` (data-connection metadata standard)
+//   - per-column `column_key === "PRI"` (MySQL INFORMATION_SCHEMA pass-through)
+//   - table-level `primary_keys: string[]` (composite-PK carrier)
+// Other plausible spellings (camelCase, singular keys, SQLite `pk` integer) are
+// intentionally NOT recognized here — adding them speculatively risks false
+// matches and creates code paths the test suite can't pin down. Extend only when
+// a real backend response demonstrates the need.
+function isColumnPrimaryKey(col: Record<string, unknown>): boolean {
+  if (col.is_primary_key === true) return true;
+  if (typeof col.column_key === "string" && col.column_key.toUpperCase() === "PRI") return true;
+  return false;
+}
+
+function extractPrimaryKeys(table: Record<string, unknown>): string[] {
+  const arr = table.primary_keys;
+  if (Array.isArray(arr)) {
+    return arr.filter((x): x is string => typeof x === "string");
+  }
+  return [];
 }
 
 export interface ScanMetadataOptions {

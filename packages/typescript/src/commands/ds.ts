@@ -465,13 +465,20 @@ async function printDsConnectOutput(
   const tablesBody = await listTablesWithColumns({ ...base, id: dsId });
   const tables = JSON.parse(tablesBody) as Array<{
     name: string;
-    columns: Array<{ name: string; type: string; comment?: string }>;
+    columns: Array<{ name: string; type: string; comment?: string; isPrimaryKey?: boolean }>;
+    primaryKeys?: string[];
   }>;
   const output = {
     datasource_id: dsId,
     tables: tables.map((t) => ({
       name: t.name,
-      columns: t.columns.map((c) => ({ name: c.name, type: c.type, comment: c.comment })),
+      ...(t.primaryKeys && t.primaryKeys.length > 0 ? { primary_keys: t.primaryKeys } : {}),
+      columns: t.columns.map((c) => ({
+        name: c.name,
+        type: c.type,
+        comment: c.comment,
+        ...(c.isPrimaryKey ? { is_primary_key: true } : {}),
+      })),
     })),
   };
   console.log(JSON.stringify(output, null, 2));

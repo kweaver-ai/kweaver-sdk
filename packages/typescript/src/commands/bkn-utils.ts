@@ -144,6 +144,71 @@ export function detectPrimaryKey(
   };
 }
 
+export interface PkResolution {
+  /** Resolved PK column name, or null when caller must fail-fast. */
+  pk: string | null;
+  /** Origin of the resolution — used by callers for messaging and warnings. */
+  source: "override" | "schema" | "sample" | "ambiguous";
+  /** For 'sample' source: cardinality candidates from `detectPrimaryKey`. */
+  candidates?: PkCandidate[];
+  /** For 'sample' source: rows seen, propagated for error formatting. */
+  sampleSize?: number;
+  /** For 'ambiguous' source: schema-declared composite PK columns. */
+  ambiguous?: string[];
+}
+
+/**
+ * Resolve a single PK for a BKN object type, in priority order:
+ *   1. caller-provided override (e.g. --pk-map)
+ *   2. schema-declared single PK from datasource metadata
+ *   3. sample-based detection (CSV / schemaless sources)
+ * Composite SQL PKs intentionally surface as `source: "ambiguous"` — BKN
+ * object types take a single PK, so the caller must pick via --pk-map.
+ */
+export function resolvePrimaryKey(
+  table: {
+    name: string;
+    columns: Array<{ name: string; type: string; isPrimaryKey?: boolean }>;
+    primaryKeys?: string[];
+  },
+  sampleRows?: Array<Record<string, string | null>>,
+  override?: string | null,
+): PkResolution {
+  if (override) {
+    return { pk: override, source: "override" };
+  }
+
+  const schemaPks = collectSchemaPks(table);
+  if (schemaPks.length === 1) {
+    return { pk: schemaPks[0]!, source: "schema" };
+  }
+  if (schemaPks.length > 1) {
+    return { pk: null, source: "ambiguous", ambiguous: schemaPks };
+  }
+
+  const sample = detectPrimaryKey(table, sampleRows);
+  return {
+    pk: sample.pk,
+    source: "sample",
+    candidates: sample.candidates,
+    sampleSize: sample.sampleSize,
+  };
+}
+
+function collectSchemaPks(table: {
+  columns: Array<{ name: string; isPrimaryKey?: boolean }>;
+  primaryKeys?: string[];
+}): string[] {
+  // Filter against the actual column list — schema metadata can drift (stale
+  // catalog, post-rename) and an unusable PK should fall through cleanly to
+  // sample/fail rather than poison downstream object-type creation.
+  const colNames = new Set(table.columns.map((c) => c.name));
+  if (Array.isArray(table.primaryKeys) && table.primaryKeys.length > 0) {
+    return table.primaryKeys.filter((n) => colNames.has(n));
+  }
+  return table.columns.filter((c) => c.isPrimaryKey === true).map((c) => c.name);
+}
+
 /** Format a user-facing error message when PK auto-detection fails. */
 export function formatPkDetectionError(tableName: string, result: PkDetectionResult): string {
   const lines = [`Cannot auto-detect primary key for table '${tableName}'.`];

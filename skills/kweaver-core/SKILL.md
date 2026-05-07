@@ -7,6 +7,7 @@ description: >-
   操作 Skill 管理模块 — 注册 Skill、市场查找、渐进式读取、下载与安装。
   操作 Toolbox / Tool — 创建工具箱、上传 OpenAPI 工具、发布与启停。
   操作 Vega 可观测平台 — 查询 Catalog/资源/连接器类型、健康巡检。
+  操作模型工厂 — 大模型/小模型 CRUD（mf-model-manager）、OpenAI 兼容对话与小模型调用（mf-model-api）、adapter 注册。
   当用户提到"知识网络"、"知识图谱"、"查询对象类"、
   "执行 Action"、"有哪些 Agent"、"创建 Agent"、"跟 Agent 对话"、"列出所有 Agent 模板"、"列出我创建的Agent"、
   "列出私人空间的Agent"、"dataflow"、"数据流"、"流程编排"、"流程运行记录"、"流程日志"、
@@ -14,7 +15,7 @@ description: >-
   "toolbox"、"工具箱"、"上传工具"、"注册工具"、"OpenAPI 工具"、"启用工具"、"发布 toolbox"、
   "数据源"、"数据视图"、"原子视图"、"Catalog"、"Vega"、
   "健康检查"、"巡检"、"trace"、"证据链"、"数据流追踪"、"数据来源"、"数据怎么得到的"、
-  "BKN 指标"、"指标管理"、"指标查询"、"指标试算"、"metric dry-run" 等意图时自动使用。
+  "BKN 指标"、"指标管理"、"指标查询"、"指标试算"、"metric dry-run"、"模型工厂"、"小模型"、"embedding"、"rerank"、"mf-model"、"model chat" 等意图时自动使用。
 allowed-tools: Bash(kweaver *), Bash(npx kweaver *)
 argument-hint: [自然语言指令]
 ---
@@ -74,6 +75,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 | `ds` | 数据源管理 | `ds list`, `ds get <id>`, `ds import-csv <ds_id> --files <glob> [--recreate]` | `references/ds.md` |
 | `dataview` | 数据视图（mdl-data-model / vega-backend） | `dataview list`、`find --name`、`get`、`query`、`delete`；BKN 绑定也可用 `vega resource` ID（type=resource） | `references/dataview.md` |
 | `dataflow` | Dataflow 文档流程 | `dataflow list`, `dataflow run <dagId> --file <path>`, `dataflow run <dagId> --url <remote-url> --name <filename>`, `dataflow runs <dagId> [--since <date-like>]`, `dataflow logs <dagId> <instanceId> [--detail]` | `references/dataflow.md` |
+| `model` | 模型工厂（mf-model-manager + mf-model-api） | `model llm`、`model small`、`model llm chat`、`model small embeddings` / `model small rerank`；大模型 **`model_type`**：`llm` / `rlm` / `vu`（见 `references/model.md`）；离线模版：`model llm --template` / `model small --template` | `references/model.md` |
 | `skill` | Skill 注册、市场查找、渐进式读取、下载与安装 | `skill list`、`market`、`register --zip-file`、`content`、`read-file`、`install` | `references/skill.md` |
 | `toolbox` | 平台工具箱（toolbox）管理 | `toolbox create --name <n> --service-url <url>`、`toolbox list`、`toolbox publish/unpublish <id>`、`toolbox delete <id> [-y]` | `references/toolbox.md` |
 | `tool` | 工具箱内 tool 注册与启停（OpenAPI）；`execute`/`debug` 支持 `--path` 注入 `{param}` | `tool upload --toolbox <id> <openapi-spec>`、`tool list --toolbox <id>`、`tool enable/disable --toolbox <id> <tool-id>...`、`tool debug --toolbox <id> <tool-id> --path '{"id":"..."}'` | `references/tool.md` |
@@ -90,6 +92,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 | CLI 排障速查 | 权限、pull、build、import、dataview SQL 等 | [references/troubleshooting.md](references/troubleshooting.md) |
 | 列/查数据视图 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 对视图跑 SQL | [references/dataview.md](references/dataview.md) |
 | 管理 Dataflow 文档流程 | `list` 看 DAG；`run` 触发本地文件或远程 URL；`runs --since` 看自然日运行记录；`logs --detail` 查步骤载荷 | [references/dataflow.md](references/dataflow.md) |
+| 模型工厂 / 小模型 adapter | TS CLI：`model llm|small …`、`model llm chat`、`model small embeddings` / `model small rerank`；Python SDK：`client.models`（CRUD/test + `invocation.chat` / `embedding` / `rerank`）；`--adapter-code-file` 注册 Python `main` 适配器 | [references/model.md](references/model.md) |
 | Trace 数据分析 | `agent trace <cid> --view tree\|perf\|evidence\|reasoning\|all`：SDK 已内置四视图（调用拓扑 / 性能拆解 / 工具命中证据链 / LLM 推理过程），不再需要手工拼。`--full` 关掉每条消息的截断；`--json` 拿原始 spans。 | `references/agent.md` |
 | 管理 Skill | `list` / `market` 查找 Skill；`content` / `read-file` 渐进式读取；`install` 下载并解压本地使用 | [references/skill.md](references/skill.md) |
 | 注册外部工具 | `toolbox create` 建箱 → `tool upload` 上传 OpenAPI → `tool list` 拿 `tool_id` → `tool enable` 启用 → `toolbox publish` 切到 published | [references/toolbox.md](references/toolbox.md) · [references/tool.md](references/tool.md) |

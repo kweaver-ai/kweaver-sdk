@@ -25,6 +25,7 @@ from kweaver.resources.query import QueryResource
 from kweaver.resources.jobs import JobsResource
 from kweaver.resources.bkn_metrics import BknMetricsResource
 from kweaver.resources.metric_query import MetricQueryResource
+from kweaver.resources.models import ModelsResource
 from kweaver.resources.relation_types import RelationTypesResource
 from kweaver.resources.skills import SkillsResource
 from kweaver.resources.toolboxes import ToolboxesResource
@@ -57,6 +58,8 @@ class KWeaverClient:
         dry_run: bool = False,
         vega_url: str | None = None,
         tls_insecure: bool = False,
+        mf_model_manager_base_url: str | None = None,
+        mf_model_api_base_url: str | None = None,
     ) -> None:
         if auth is None:
             if token is None:
@@ -97,6 +100,8 @@ class KWeaverClient:
         # Store for lazy vega namespace creation
         self._vega_url = vega_url
         self._vega: VegaNamespace | None = None
+        self._mf_model_manager_base_url = mf_model_manager_base_url
+        self._mf_model_api_base_url = mf_model_api_base_url
         self._auth_provider = auth
         self._middlewares = middlewares
         self._transport = transport
@@ -120,6 +125,11 @@ class KWeaverClient:
         self.concept_groups = ConceptGroupsResource(self._http)
         self.skills = SkillsResource(self._http)
         self.toolboxes = ToolboxesResource(self._http)
+        self.models = ModelsResource(
+            self._http,
+            manager_base_url=mf_model_manager_base_url,
+            api_base_url=mf_model_api_base_url,
+        )
 
     @property
     def vega(self) -> VegaNamespace:

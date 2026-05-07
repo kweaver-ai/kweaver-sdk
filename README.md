@@ -235,6 +235,15 @@ ots  = client.object_types.list("bkn-id")
 msg = client.conversations.send_message("", "Hello", agent_id="agent-id")
 print(msg.content)
 
+# Model factory (mf-model-manager + mf-model-api)
+llms = client.models.llm.list()
+chat_out = client.models.invocation.chat(
+    model_id="llm-model-id",
+    messages=[{"role": "user", "content": "Hello"}],
+    stream=False,
+)
+print(chat_out["text"])
+
 # BKN engine — instance queries and action execution
 instances = client.query.instances("bkn-id", "ot-id", limit=20)
 result    = client.action_types.execute("bkn-id", "at-id", params={})
@@ -262,6 +271,8 @@ kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
 kweaver dataflow templates/create-dataset/create-bkn/create/list/run/runs/logs
+kweaver model llm list/get/add/edit/delete/test/chat/--template
+kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
 kweaver dataview|dv list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn build [--wait] [--timeout 300]

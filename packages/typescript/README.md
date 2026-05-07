@@ -174,6 +174,8 @@ kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
 kweaver dataflow list/run/runs/logs
+kweaver model llm list/get/add/edit/delete/test/chat/--template
+kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
 kweaver dataview list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
@@ -211,6 +213,30 @@ kweaver dataflow logs <dagId> <instanceId> --detail
 ```
 
 `kweaver dataflow runs --since` filters one local natural day. If the value cannot be parsed by `new Date(...)`, the CLI falls back to the most recent 20 runs. `kweaver dataflow logs` defaults to summary output; add `--detail` to print indented `input` and `output` payloads.
+
+### Model factory CLI examples
+
+`model` talks to **mf-model-manager** (`/api/mf-model-manager/v1`) for CRUD and **mf-model-api** (`/api/mf-model-api/v1`) for OpenAI-compatible **`chat`**, **`small embeddings`**, and **`small rerank`**. Override origins with `--mf-base-url` / `--mf-api-base-url` or `KWEAVER_MF_MODEL_MANAGER_URL` / `KWEAVER_MF_MODEL_API_URL`. `model llm --template` / `model small --template` prints one offline **`basic`** JSON stub per branch (no API calls). **LLM** `model_type` on the platform is one of **`llm`** (text), **`rlm`** (reasoning), or **`vu`** (vision / multimodal); filter with `kweaver model llm list --type …`. See [`skills/kweaver-core/references/model.md`](../../skills/kweaver-core/references/model.md#llm-model-types).
+
+```bash
+kweaver model llm list --limit 30
+kweaver model llm list --type rlm
+kweaver model llm get <model_id>
+kweaver model llm add --body-file ./llm.json --upstream-url https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions --api-model qwen-plus --api-key-file ~/.dashscope_key
+kweaver model llm chat <model_id> -m "Hello" --no-stream
+kweaver model llm --template > ./llm.json
+kweaver model small list
+kweaver model small add --name my-emb --type embedding --batch-size 8 --max-tokens 512 --embedding-dim 1536 \
+  --model-config-file ./cfg.json
+kweaver model small add --name my-emb --type embedding --batch-size 8 --max-tokens 8192 --embedding-dim 1024 \
+  --upstream-url https://dashscope-intl.aliyuncs.com/compatible-mode/v1/embeddings --api-model text-embedding-v4 --api-key-file ~/.dashscope_key
+kweaver model small test <model_id>
+kweaver model small embeddings <model_id> -i "hello" -i "world"
+kweaver model small rerank <model_id> -q "query" -d "doc a" -d "doc b"
+kweaver model small --template > ./embedding-model-config.json
+```
+
+Full flags: `kweaver model --help` and [`skills/kweaver-core/references/model.md`](../../skills/kweaver-core/references/model.md).
 
 ### Vega `sql` CLI examples
 
@@ -257,6 +283,8 @@ kweaver tool debug --toolbox <BOX_ID> <TOOL_ID> \
 | Variable | Description |
 |---|---|
 | `KWEAVER_BASE_URL` | KWeaver instance URL |
+| `KWEAVER_MF_MODEL_MANAGER_URL` | Optional override for mf-model-manager API (defaults from `KWEAVER_BASE_URL` + `/api/mf-model-manager/v1`) |
+| `KWEAVER_MF_MODEL_API_URL` | Optional override for mf-model-api (defaults from `KWEAVER_BASE_URL` + `/api/mf-model-api/v1`) |
 | `KWEAVER_BUSINESS_DOMAIN` | Business domain identifier |
 | `KWEAVER_TOKEN` | Access token |
 | `KWEAVER_TOKEN_SOURCE` | Internal sentinel set by the CLI when `--token` is passed; do not set manually |

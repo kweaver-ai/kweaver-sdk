@@ -1,0 +1,13 @@
+{
+  "__template_note": "Shape aligned with mf-model-manager POST /llm/add: nested model_config (required). model_series must be one of: tome, qwen, openai, internlm, deepseek, qianxun, claude, chatglm, llama, others, baidu, baidu_tianchen. model_type: llm | rlm | vu. Optional: model_parameters (int>0), quota (bool). openai series: api_key required by backend validation. baidu/baidu_tianchen need extra keys inside model_config per vendor.",
+  "model_name": "example-llm",
+  "model_series": "others",
+  "model_type": "llm",
+  "max_model_len": 8192,
+  "model_config": {
+    "api_url": "https://example.com/v1/chat/completions",
+    "api_model": "example-deployment",
+    "api_key": ""
+  },
+  "quota": false
+}

@@ -235,6 +235,15 @@ ots  = client.object_types.list("bkn-id")
 msg = client.conversations.send_message("", "你好", agent_id="agent-id")
 print(msg.content)
 
+# 模型工厂（mf-model-manager + mf-model-api）
+llms = client.models.llm.list()
+chat_out = client.models.invocation.chat(
+    model_id="llm-model-id",
+    messages=[{"role": "user", "content": "你好"}],
+    stream=False,
+)
+print(chat_out["text"])
+
 # BKN 引擎：实例查询、Action 执行
 instances = client.query.instances("bkn-id", "ot-id", limit=20)
 result    = client.action_types.execute("bkn-id", "at-id", params={})
@@ -262,6 +271,8 @@ kweaver token
 kweaver ds list/get/delete/tables/connect
 kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
 kweaver dataflow templates/create-dataset/create-bkn/create/list/run/runs/logs
+kweaver model llm list/get/add/edit/delete/test/chat/--template
+kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
 kweaver dataview|dv list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn build [--wait] [--timeout 300]
@@ -295,7 +306,7 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 | `kweaver query kn-search <kn_id> <query>`（REST） | `kweaver context-loader kn-search <query>`（HTTP 兼容，使用已配置 KN），或 `kweaver context-loader search-schema <query>`（MCP `search_schema`） |
 | `kweaver action query` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
 
-**仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver dataview`（别名 `dv`）、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。
+**仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver model`、`kweaver dataview`（别名 `dv`）、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。
 
 ## 项目结构（Monorepo）
 

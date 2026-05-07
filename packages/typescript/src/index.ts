@@ -197,6 +197,12 @@ export { ContextLoaderResource } from "./resources/context-loader.js";
 export { SkillsResource } from "./resources/skills.js";
 export { ToolboxesResource } from "./resources/toolboxes.js";
 export type { InvokeToolArgs } from "./resources/toolboxes.js";
+export {
+  ModelsResource,
+  LlmModelsSubresource,
+  SmallModelsSubresource,
+  ModelInvocationSubresource,
+} from "./resources/models.js";
 
 // ── Skills (agent-operator-integration) ──────────────────────────────────────
 export type {
@@ -258,6 +264,56 @@ export {
   queryDataView,
 } from "./api/dataviews.js";
 export { DataViewsResource } from "./resources/dataviews.js";
+
+// ── Model factory (mf-model-manager + mf-model-api) ─────────────────────────
+export type {
+  MfManagerBaseOptions,
+  ListLlmModelsOptions,
+  GetLlmModelOptions,
+  AddLlmModelOptions,
+  EditLlmModelOptions,
+  DeleteLlmModelsOptions,
+  TestLlmModelOptions,
+  ListSmallModelsOptions,
+  GetSmallModelOptions,
+  AddSmallModelOptions,
+  EditSmallModelOptions,
+  DeleteSmallModelsOptions,
+  TestSmallModelOptions,
+} from "./api/models.js";
+export {
+  MF_MODEL_MANAGER_PATH_PREFIX,
+  assertSmallModelConfigAdapterExclusive,
+  assertSmallModelEditBody,
+  listLlmModels,
+  getLlmModel,
+  addLlmModel,
+  editLlmModel,
+  deleteLlmModels,
+  testLlmModel,
+  listSmallModels,
+  getSmallModel,
+  addSmallModel,
+  editSmallModel,
+  deleteSmallModels,
+  testSmallModel,
+} from "./api/models.js";
+export type {
+  MfApiBaseOptions,
+  ChatMessage,
+  ModelChatCompletionsOptions,
+  ModelChatResult,
+  ModelEmbeddingOptions,
+  ModelRerankOptions,
+} from "./api/model-invocation.js";
+export {
+  MF_MODEL_API_PATH_PREFIX,
+  consumeOpenAiSseText,
+  modelChatCompletions,
+  modelEmbedding,
+  modelEmbeddings,
+  modelRerank,
+} from "./api/model-invocation.js";
 
 // ── Business domains (platform API) ───────────────────────────────────────────
 export type { BusinessDomain, ListBusinessDomainsOptions } from "./api/business-domains.js";

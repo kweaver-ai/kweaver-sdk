@@ -1,0 +1,12 @@
+{
+  "model_name": "dashscope-qwen-plus-intl",
+  "model_series": "qwen",
+  "model_type": "llm",
+  "max_model_len": 32768,
+  "model_config": {
+    "api_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "api_model": "qwen-plus",
+    "api_key": ""
+  },
+  "quota": false
+}

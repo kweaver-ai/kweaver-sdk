@@ -10,6 +10,7 @@ import { runDataflowCommand } from "./commands/dataflow.js";
 import { runDsCommand } from "./commands/ds.js";
 import { runExploreCommand } from "./commands/explore.js";
 import { runDataviewCommand } from "./commands/dataview.js";
+import { runModelCommand } from "./commands/model.js";
 import { runSkillCommand } from "./commands/skill.js";
 import { runTokenCommand } from "./commands/token.js";
 import { runToolboxCommand } from "./commands/toolbox.js";
@@ -71,6 +72,10 @@ Usage:
   kweaver dataflow run <dagId> (--file <path> | --url <remote-url> --name <filename>) [-bd value]
   kweaver dataflow runs <dagId> [--since <date-like>] [-bd value]
   kweaver dataflow logs <dagId> <instanceId> [--detail] [-bd value]
+
+  kweaver model llm   list|get|add|edit|delete|test|chat|--template ...   (mf-model-manager + mf-model-api)
+  kweaver model small list|get|add|edit|delete|test|embeddings|rerank|--template ...
+  kweaver model --help
 
   kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value]
   kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value]
@@ -169,6 +174,7 @@ Commands:
   agent          Agent CRUD, chat, sessions, history, publish/unpublish
   ds             Manage datasources (list, get, delete, tables, connect)
   dataflow       Dataflow document workflows (list, run, runs, logs)
+  model          Model factory: LLM/small-model CRUD (manager) and llm chat (OpenAI-compatible API)
   dataview|dv    List, find, get, query (SQL), delete data views (atomic / custom)
   bkn            Knowledge network (CRUD, build, validate, export, stats, push/pull,
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
@@ -262,6 +268,10 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "dataflow") {
     return runDataflowCommand(rest);
+  }
+
+  if (command === "model") {
+    return runModelCommand(rest);
   }
 
   if (command === "dataview" || command === "dv") {

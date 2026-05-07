@@ -141,6 +141,9 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Dataflow v2 | `client.dataflow_v2` | `list_dataflows`, `run_dataflow_with_file`, `run_dataflow_with_remote_url`, `list_dataflow_runs`, `get_dataflow_logs_page` |
 | 数据视图（mdl-data-model） | `client.dataviews` | `create`, `list`, `get`, `delete`, `find_by_table`, `query`（mdl-uniquery SQL） |
 | Skill | `client.skills` | `list`, `market`, `get`, `register_content`, `register_zip`, `update_status`, `content`, `read_file`, `download`, `install` |
+| 模型工厂（mf-model-manager / mf-model-api） | `client.models` | `llm` / `small`: `list`, `get`, `add`, `edit`, `delete`, `test`；`invocation`: `chat`, `embedding`, `embeddings`, `rerank` |
+
+大模型列表 `client.models.llm.list(model_type=...)` 会将 **`model_type`** 传给 mf-model-manager，取值仅 **`llm`**（文本）、**`rlm`**（推理）、**`vu`**（视觉/多模态）。
 
 Context Loader MCP 可直接使用 `ContextLoaderResource`：
 
@@ -182,6 +185,8 @@ KWeaverClient(
     base_url="https://...",          # KWeaver 平台 URL
     auth=ConfigAuth(),               # 或 TokenAuth("...") 或 HttpSigninAuth(url, username=..., password=...)
     vega_url="http://vega:13014",    # 可选：Vega 数据平台 URL
+    mf_model_manager_base_url=None,  # 可选：mf-model-manager 的 origin（未设则用环境变量或平台 base_url）
+    mf_model_api_base_url=None,      # 可选：mf-model-api 的 origin（未设则用环境变量或平台 base_url）
     debug=False,                     # 打印请求/响应诊断
     dry_run=False,                   # 拦截写操作
     tls_insecure=False,              # 跳过 TLS 校验（仅开发/自签名；生产请用受信任证书）
@@ -192,6 +197,8 @@ KWeaverClient(
 |---------|------|
 | `KWEAVER_BASE_URL` | 平台 URL |
 | `KWEAVER_TOKEN` | Bearer Token |
+| `KWEAVER_MF_MODEL_MANAGER_URL` | 可选：mf-model-manager 的根地址（仍追加路径 `/api/mf-model-manager/v1`） |
+| `KWEAVER_MF_MODEL_API_URL` | 可选：mf-model-api 的根地址（仍追加路径 `/api/mf-model-api/v1`） |
 | `KWEAVER_VEGA_URL` | Vega 后端 URL |
 | `KWEAVER_DEBUG` | 启用 debug 模式（`true`） |
 | `KWEAVER_FORMAT` | CLI 输出格式（`md`/`json`/`yaml`） |

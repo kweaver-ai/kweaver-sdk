@@ -17,6 +17,7 @@ import { BknResource } from "./resources/bkn.js";
 import { SkillsResource } from "./resources/skills.js";
 import { ToolboxesResource } from "./resources/toolboxes.js";
 import { VegaResource } from "./resources/vega.js";
+import { ModelsResource } from "./resources/models.js";
 
 // ── ClientContext ─────────────────────────────────────────────────────────────
 
@@ -133,6 +134,9 @@ export class KWeaverClient implements ClientContext {
   /** Toolbox / tool management plus execute & debug invocation. */
   readonly toolboxes: ToolboxesResource;
 
+  /** Model factory (mf-model-manager CRUD + mf-model-api chat / embedding / rerank). */
+  readonly models: ModelsResource;
+
   constructor(opts: KWeaverClientOptions = {}) {
     const envDomain = process.env.KWEAVER_BUSINESS_DOMAIN;
 
@@ -173,6 +177,7 @@ export class KWeaverClient implements ClientContext {
       this.vega = new VegaResource(this);
       this.skills = new SkillsResource(this);
       this.toolboxes = new ToolboxesResource(this);
+      this.models = new ModelsResource(this);
       return;
     }
 
@@ -234,6 +239,7 @@ export class KWeaverClient implements ClientContext {
     this.vega = new VegaResource(this);
     this.skills = new SkillsResource(this);
     this.toolboxes = new ToolboxesResource(this);
+    this.models = new ModelsResource(this);
   }
 
   /**

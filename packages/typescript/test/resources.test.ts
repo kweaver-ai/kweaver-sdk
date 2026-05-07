@@ -28,12 +28,16 @@ function mockFetch(response: unknown, statusCode = 200) {
 
 // ── client exposes new resources ────────────────────────────────────────────
 
-test("KWeaverClient exposes datasources, dataviews, dataflows, vega resources", () => {
+test("KWeaverClient exposes datasources, dataviews, dataflows, vega, models resources", () => {
   const client = makeClient();
   assert.ok(client.datasources, "datasources resource exists");
   assert.ok(client.dataviews, "dataviews resource exists");
   assert.ok(client.dataflows, "dataflows resource exists");
   assert.ok(client.vega, "vega resource exists");
+  assert.ok(client.models, "models resource exists");
+  assert.ok(client.models.llm, "models.llm exists");
+  assert.ok(client.models.small, "models.small exists");
+  assert.ok(client.models.invocation, "models.invocation exists");
 });
 
 // ── DataSourcesResource ─────────────────────────────────────────────────────

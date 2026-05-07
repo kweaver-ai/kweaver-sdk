@@ -1,0 +1,6 @@
+{
+  "__template_note": "Fragment for small-model model_config only (POST /small-model/add). Backend requires api_url + api_model inside model_config. Root fields model_name, model_type (embedding|reranker), batch_size, and for embedding also max_tokens + embedding_dim are supplied via CLI flags or separate JSON root — not repeated here.",
+  "api_url": "https://example.com/v1/embeddings",
+  "api_model": "example-embedding-model",
+  "api_key": ""
+}

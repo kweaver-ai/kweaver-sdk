@@ -20,7 +20,7 @@ test-cover:
 
 # M4: lint — TypeScript type check (static, no external deps)
 lint:
-	npx tsc --noEmit -p tsconfig.json
+	node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
 
 # M3: ci — lint + test-cover
 ci: lint test-cover

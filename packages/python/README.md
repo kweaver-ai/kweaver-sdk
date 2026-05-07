@@ -141,6 +141,9 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Dataflow v2 | `client.dataflow_v2` | `list_dataflows`, `run_dataflow_with_file`, `run_dataflow_with_remote_url`, `list_dataflow_runs`, `get_dataflow_logs_page` |
 | Data Views | `client.dataviews` | `create`, `list`, `get`, `delete`, `find_by_table`, `query` (SQL via mdl-uniquery) |
 | Skills | `client.skills` | `list`, `market`, `get`, `register_content`, `register_zip`, `update_status`, `content`, `read_file`, `download`, `install` |
+| Models (mf-model-manager / mf-model-api) | `client.models` | `llm` / `small`: `list`, `get`, `add`, `edit`, `delete`, `test`; `invocation`: `chat`, `embedding`, `embeddings`, `rerank` |
+
+LLM `client.models.llm.list(model_type=...)` forwards **`model_type`** to mf-model-manager; allowed values are **`llm`**, **`rlm`** (reasoning), and **`vu`** (vision / multimodal).
 
 For Context Loader MCP access, use `ContextLoaderResource` directly:
 
@@ -182,6 +185,8 @@ KWeaverClient(
     base_url="https://...",          # KWeaver platform URL
     auth=ConfigAuth(),               # or TokenAuth("...") or HttpSigninAuth(url, username=..., password=...)
     vega_url="http://vega:13014",    # optional: Vega data platform URL
+    mf_model_manager_base_url=None,  # optional: origin for mf-model-manager (else env or platform base_url)
+    mf_model_api_base_url=None,      # optional: origin for mf-model-api (else env or platform base_url)
     debug=False,                     # print request/response diagnostics
     dry_run=False,                   # intercept write operations
     tls_insecure=False,              # skip TLS verification (dev/self-signed; prefer trusted certs in prod)
@@ -192,6 +197,8 @@ KWeaverClient(
 |---|---|
 | `KWEAVER_BASE_URL` | Platform URL |
 | `KWEAVER_TOKEN` | Bearer token |
+| `KWEAVER_MF_MODEL_MANAGER_URL` | Optional origin for mf-model-manager (path `/api/mf-model-manager/v1` is still appended) |
+| `KWEAVER_MF_MODEL_API_URL` | Optional origin for mf-model-api (path `/api/mf-model-api/v1` is still appended) |
 | `KWEAVER_VEGA_URL` | Vega backend URL |
 | `KWEAVER_DEBUG` | Enable debug mode (`true`) |
 | `KWEAVER_FORMAT` | Output format (`md`/`json`/`yaml`) |

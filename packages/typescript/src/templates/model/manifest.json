@@ -1,0 +1,16 @@
+{
+  "llm": [
+    {
+      "id": "basic",
+      "file": "llm-basic.json",
+      "summary": "Minimal POST /llm/add body — model_config nested + model_series / max_model_len / model_type"
+    }
+  ],
+  "small": [
+    {
+      "id": "basic",
+      "file": "small-basic.json",
+      "summary": "Minimal model_config stub for embedding/reranker registration — extend or merge with CLI flags"
+    }
+  ]
+}

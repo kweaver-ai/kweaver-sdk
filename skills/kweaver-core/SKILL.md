@@ -70,7 +70,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 | `token` | 打印当前 access token（自动刷新） | `token` | — |
 | `config` | **平台业务域（优先于多数 bkn/agent/ds 操作）** | `config show`, `config list-bd`, `config set-bd <uuid>` | `references/config.md` |
 | `bkn` | BKN 知识网络管理、Schema、查询、Action、**指标** | `bkn validate`/`push` 默认检测 `.bkn` 编码；`bkn metric` 管理/查询 BKN 指标与指标数据/试算，见 `references/metric.md`；其余见 `references/bkn.md` | `references/bkn.md`, `references/metric.md` |
-| `agent` | Agent CRUD、发布、对话、Trace、模板、分类 | `agent list`, `agent get <id>`, `agent create --name <n> --profile <p> --config <json>`, `agent publish <id> --category-id <cid>`, `agent chat <id> -m "..."`、`agent category-list`, `agent template-list`, `agent template-get <tpl_id>`、`agent sessions <agent_id>`、`agent history <conversation_id>`、`agent trace <conversation_id>` | `references/agent.md` |
+| `agent` | Agent CRUD、发布、对话、Trace、模板、分类 | `agent list`, `agent get <id>`, `agent create --name <n> --profile <p> --config <json>`, `agent publish <id> --category-id <cid>`, `agent chat <id> -m "..."`、`agent category-list`, `agent template-list`, `agent template-get <tpl_id>`、`agent sessions <agent_id>`、`agent history <conversation_id>`、`agent trace <conversation_id> [--view tree\|perf\|evidence\|reasoning\|all] [--full] [--json]` | `references/agent.md` |
 | `ds` | 数据源管理 | `ds list`, `ds get <id>`, `ds import-csv <ds_id> --files <glob> [--recreate]` | `references/ds.md` |
 | `dataview` | 数据视图（mdl-data-model / vega-backend） | `dataview list`、`find --name`、`get`、`query`、`delete`；BKN 绑定也可用 `vega resource` ID（type=resource） | `references/dataview.md` |
 | `dataflow` | Dataflow 文档流程 | `dataflow list`, `dataflow run <dagId> --file <path>`, `dataflow run <dagId> --url <remote-url> --name <filename>`, `dataflow runs <dagId> [--since <date-like>]`, `dataflow logs <dagId> <instanceId> [--detail]` | `references/dataflow.md` |
@@ -90,7 +90,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 | CLI 排障速查 | 权限、pull、build、import、dataview SQL 等 | [references/troubleshooting.md](references/troubleshooting.md) |
 | 列/查数据视图 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 对视图跑 SQL | [references/dataview.md](references/dataview.md) |
 | 管理 Dataflow 文档流程 | `list` 看 DAG；`run` 触发本地文件或远程 URL；`runs --since` 看自然日运行记录；`logs --detail` 查步骤载荷 | [references/dataflow.md](references/dataflow.md) |
-| Trace 数据分析 | `agent trace <conversation_id>` 获取 trace 数据，构建证据链 | — |
+| Trace 数据分析 | `agent trace <cid> --view tree\|perf\|evidence\|reasoning\|all`：SDK 已内置四视图（调用拓扑 / 性能拆解 / 工具命中证据链 / LLM 推理过程），不再需要手工拼。`--full` 关掉每条消息的截断；`--json` 拿原始 spans。 | `references/agent.md` |
 | 管理 Skill | `list` / `market` 查找 Skill；`content` / `read-file` 渐进式读取；`install` 下载并解压本地使用 | [references/skill.md](references/skill.md) |
 | 注册外部工具 | `toolbox create` 建箱 → `tool upload` 上传 OpenAPI → `tool list` 拿 `tool_id` → `tool enable` 启用 → `toolbox publish` 切到 published | [references/toolbox.md](references/toolbox.md) · [references/tool.md](references/tool.md) |
 

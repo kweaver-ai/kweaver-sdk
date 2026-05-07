@@ -58,20 +58,27 @@ kweaver agent chat <agent_id> -m '<message>' [--conversation-id <id>] [--stream/
 kweaver agent chat <agent_id>                    # 交互式模式
 kweaver agent sessions <agent_id> [--limit <n>]
 kweaver agent history <agent_id> <conversation_id>
-kweaver agent trace <conversation_id> [--pretty|--compact]
+kweaver agent trace <conversation_id> [--view tree|perf|evidence|reasoning|all] [--full] [--json]
 ```
 
 ## Trace 数据
 
 ```bash
-kweaver agent trace <conversation_id>
+kweaver agent trace <conversation_id> --view <view>
 ```
 
-获取指定会话的 trace 数据，用于追踪数据流、调试问题、构建证据链。
+底层走 trace-ai 的 `_search` 双跳查询（先按 conversation_id 聚合 traceId，再按 traceId 拉全量 spans），能恢复 by-conversation 端点漏掉的 pipeline span（HTTP 入口、内部 RPC、prompt 装配）。
 
 选项：
-- `--pretty`：格式化 JSON 输出（默认）
-- `--compact`：紧凑 JSON 输出
+- `--view tree`（默认）：按父子关系展开调用拓扑 + 每跨服务标注（agent-factory / agent-executor）
+- `--view perf`：按类别（LLM / tool:* / db / prompt-build / pipeline）汇总累计耗时与次数
+- `--view evidence`：列出每次工具调用的入参 + 命中条数 + `_score` + 命中名称（自动剥 trace-ai 的 `{answer:"..."}` 包裹）
+- `--view reasoning`：从 chat span 的 `events` 还原完整 LLM 多轮推理（system / user / assistant / tool_call / tool result / final answer）
+- `--view all`：上面四视图合并输出
+- `--full`：仅对 reasoning 视图生效，关掉每条消息默认 400 字截断
+- `--json`：跳过渲染，直出 `TracesByConversationResult`（含 `spans / traceIds / truncated`）
+
+兼容老用法：`agent trace <agent_id> <conversation_id>` 仍可用，agent_id 被忽略（trace-ai 只按 conversation_id 索引）。
 
 ## 说明
 
@@ -200,58 +207,29 @@ kweaver agent history <agent_id> <conv_id>
 ```
 ## Trace 数据分析
 
-当用户需要追踪数据流、调试问题、理解结果如何从 trace 数据中得出时，使用 `kweaver agent trace` 命令获取 trace 数据并构建证据链。
+`kweaver agent trace <cid> --view <view>` 直接用 SDK 内置的四视图，**不要再手工拼证据链** —— 视图已经把工具入参 / 命中数据 / LLM 多轮推理还原好了。
 
-### 使用场景
-
-- 用户想了解某个结果是如何得出的
-- 用户需要追踪数据在系统中的流转
-- 用户想通过 trace 数据调试问题
-- 用户询问"证据链"或"因果关系"
+| 用户意图 | 选哪个 view |
+|---|---|
+| "为什么慢 / 哪个 tool 卡了" | `perf` |
+| "调用了哪些服务、谁调谁" | `tree` |
+| "数据是怎么查到的、命中了什么" | `evidence` |
+| "agent 当时怎么想的、为什么这么决策" | `reasoning`（完整推理需配 `--full`） |
+| "都看一眼" | `all` |
 
 ### 操作步骤
 
-1. **获取 Conversation ID**：从用户处获取或通过 `kweaver agent sessions <agent_id>` 查询
+1. **拿 conversation_id**：用户给 / 从 `agent sessions <agent_id>` 选
+2. **跑视图**：`kweaver agent trace <cid> --view <pick-one>`
+3. **判读输出，回答用户问题**：
+   - 工具失败标 `Err`、入参与命中行已在 `evidence` 视图里
+   - LLM 自我纠错（重试、换格式）会在 `reasoning` 的 assistant 消息里直接看到原话
+   - tool result 默认剥过 trace-ai 的 `{answer:"..."}` 外壳
 
-2. **获取 Trace 数据**：
-   ```bash
-   kweaver agent trace <conversation_id>
-   ```
-   
-   选项：
-   - `--pretty`：格式化输出（默认）
-   - `--compact`：紧凑输出
+### 已知埋点缺口（看到这些不要慌）
 
-3. **解析并分析 Trace 数据**：
-   - 解析 JSON 响应
-   - 识别关键 spans 及其关系
-   - 查找与用户问题匹配的事件
-   - 构建操作时间线
-
-4. **构建证据链**：
-   ```
-   [步骤 1] → [步骤 2] → [步骤 3] → [结果]
-      ↓           ↓           ↓
-   [输入]     [处理]      [输出]
-   ```
-
-5. **呈现分析结果**：
-   - 清晰的步骤说明
-   - 每步的关键数据点
-   - 步骤间的因果关系
-   - 回答用户问题的结论
-
-### 示例
-
-**用户问题**："为什么订单失败了？"
-
-**证据链**：
-```
-[HTTP 请求] → [校验] → [支付检查] → [失败]
-      ↓           ↓           ↓          ↓
-   订单数据    校验通过     余额不足    订单被拒绝
-   已接收      但有警告     已检测到
-```
+- 部分 `execute_tool` span 在 tree 里挂在根（orphan）：agent-executor 的 task scheduler 没传 OTel context，**这是后端埋点问题，不是 SDK bug**
+- `tool.result` 写到 attributes 时是 Python repr（单引号）而非合法 JSON：reasoning 视图已做 forgiving 解析；如果某条仍显示原文 `{'answer': ...}` 就是这种情况
 
 **解释**：
 1. 14:30:00 收到订单请求

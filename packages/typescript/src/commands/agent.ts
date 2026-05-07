@@ -1,6 +1,7 @@
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { runAgentChatCommand } from "./agent-chat.js";
 import { runAgentSkillCommand } from "./agent-members.js";
+import { AGENT_MODE_HELP, type AgentMode, applyAgentModeToConfig, parseAgentMode } from "./agent/mode.js";
 import {
   listAgents, getAgent, getAgentByKey,
   createAgent, updateAgent, deleteAgent,
@@ -718,7 +719,7 @@ Subcommands:
   get-by-key <key>                   Get agent by key
   create --name <n> --profile <p>    Create a new agent
        [--key <key>] [--product-key <pk>] [--system-prompt <sp>]
-       [--llm-id <id>] [--llm-max-tokens <n>]
+       [--llm-id <id>] [--llm-max-tokens <n>] [--mode <mode>]
   update <agent_id> [options]        Update an existing agent
   delete <agent_id> [-y]             Delete an agent
   publish <agent_id>                 Publish an agent
@@ -809,7 +810,8 @@ Options:
   --profile <text>          Agent description (max 500)
   --system-prompt <text>    System prompt
   --knowledge-network-id <id>  Business knowledge network ID to configure
-  --config-path <path>      Path to config file (read from file instead of API)`);
+  --config-path <path>      Path to config file (read from file instead of API)
+${AGENT_MODE_HELP}`);
       return 0;
     }
   }
@@ -1333,6 +1335,7 @@ async function runAgentCreateCommand(args: string[]): Promise<number> {
   let llmMaxTokens = 4096;
   let businessDomain = "";
   let configStr = "";
+  let explicitMode: AgentMode | undefined;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -1351,6 +1354,7 @@ Optional:
   --system-prompt <text>   System prompt
   --llm-id <id>            LLM model ID (required for public API)
   --llm-max-tokens <n>     LLM max tokens (default: 4096)
+${AGENT_MODE_HELP}
   --config <json|path>     Full config object as JSON string or file path (overrides individual config options)
   -bd, --biz-domain <val>  Business domain (default: bd_public)`);
       return 0;
@@ -1362,6 +1366,16 @@ Optional:
     if (arg === "--system-prompt") { systemPrompt = args[++i] ?? ""; continue; }
     if (arg === "--llm-id") { llmId = args[++i] ?? ""; continue; }
     if (arg === "--llm-max-tokens") { llmMaxTokens = parseInt(args[++i] ?? "4096", 10); continue; }
+    if (arg === "--mode") {
+      const value = args[++i] ?? "";
+      try {
+        explicitMode = parseAgentMode(value);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        return 1;
+      }
+      continue;
+    }
     if (arg === "--config") { configStr = args[++i] ?? ""; continue; }
     if (arg === "-bd" || arg === "--biz-domain") { businessDomain = args[++i] ?? "bd_public"; continue; }
   }
@@ -1395,6 +1409,13 @@ Optional:
       output: { default_format: "markdown" },
       system_prompt: systemPrompt,
     };
+  }
+
+  try {
+    applyAgentModeToConfig(config, explicitMode);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
   }
 
   const payload: Record<string, unknown> = {
@@ -1434,36 +1455,72 @@ Optional:
 
 async function runAgentUpdateCommand(args: string[]): Promise<number> {
   const agentId = args[0];
+  if (agentId === "--help" || agentId === "-h") {
+    console.log(`kweaver agent update <agent_id> [options]
+
+Update an existing agent.
+
+Options:
+  --name <text>                Agent name
+  --profile <text>             Agent description
+  --system-prompt <text>       System prompt
+  --knowledge-network-id <id>  Knowledge network ID
+  --config-path <path>         Read full config object from file
+${AGENT_MODE_HELP}`);
+    return 0;
+  }
   if (!agentId || agentId.startsWith("-")) {
-    console.error("Usage: kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <sp>] [--knowledge-network-id <id> [--config-path <path>]]");
+    console.error("Usage: kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <sp>] [--mode <mode>] [--knowledge-network-id <id> [--config-path <path>]]");
     return 1;
   }
 
   let knowledgeNetworkId: string | null = null;
   let configPath: string | null = null;
+  let explicitMode: AgentMode | undefined;
 
-  try {
-    const token = await ensureValidToken();
-
-    let current: Record<string, unknown>;
-    let configFromFile: Record<string, unknown> | null = null;
-
-    // 如果指定了 --config-path，从文件读取配置
-    if (args.includes("--config-path")) {
-      const configPathIndex = args.indexOf("--config-path");
-      configPath = args[configPathIndex + 1] ?? "";
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--mode") {
+      const value = args[++i] ?? "";
+      try {
+        explicitMode = parseAgentMode(value);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        return 1;
+      }
+      continue;
+    }
+    if (arg === "--config-path") {
+      configPath = args[++i] ?? "";
       if (!configPath || configPath.startsWith("-")) {
         console.error("Missing value for --config-path flag");
         return 1;
       }
+      continue;
+    }
+  }
+
+  try {
+    let current: Record<string, unknown>;
+    let configFromFile: Record<string, unknown> | null = null;
+
+    // 如果指定了 --config-path，从文件读取配置
+    if (configPath) {
       try {
         const fileContent = await fs.readFile(configPath, "utf-8");
         configFromFile = JSON.parse(fileContent) as Record<string, unknown>;
+        if (!explicitMode) {
+          applyAgentModeToConfig(configFromFile);
+        }
       } catch (error) {
-        console.error(`Failed to read config from ${configPath}: ${error}`);
+        console.error(error instanceof Error && error.message.startsWith("config.mode")
+          ? error.message
+          : `Failed to read config from ${configPath}: ${error}`);
         return 1;
       }
     }
+
+    const token = await ensureValidToken();
 
     // 从API获取当前 agent 配置
     const currentRaw = await getAgent({
@@ -1482,6 +1539,8 @@ async function runAgentUpdateCommand(args: string[]): Promise<number> {
       const arg = args[i];
       if (arg === "--name") { current.name = args[++i] ?? current.name; continue; }
       if (arg === "--profile") { current.profile = args[++i] ?? current.profile; continue; }
+      if (arg === "--mode") { i += 1; continue; }
+      if (arg === "--config-path") { i += 1; continue; }
       if (arg === "--system-prompt") {
         const config = (current.config ?? {}) as Record<string, unknown>;
         config.system_prompt = args[++i] ?? "";
@@ -1513,6 +1572,15 @@ async function runAgentUpdateCommand(args: string[]): Promise<number> {
       config.data_source = dataSource;
       current.config = config;
     }
+
+    const config = (current.config ?? {}) as Record<string, unknown>;
+    try {
+      applyAgentModeToConfig(config, explicitMode);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      return 1;
+    }
+    current.config = config;
 
     const body = await updateAgent({
       baseUrl: token.baseUrl,

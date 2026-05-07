@@ -23,10 +23,10 @@ kweaver agent template-get <template_id> [--save-config <path>] [--verbose]
 kweaver agent category-list [--verbose]
 
 # 创建 Agent
-kweaver agent create --name <name> --profile <profile> --llm-id <model_id> [--key <key>] [--product-key DIP|AnyShare|ChatBI] [--system-prompt <sp>] [--llm-max-tokens 4096] [--config <json|path>]
+kweaver agent create --name <name> --profile <profile> --llm-id <model_id> [--key <key>] [--product-key DIP|AnyShare|ChatBI] [--system-prompt <sp>] [--llm-max-tokens 4096] [--mode default|dolphin|react] [--config <json|path>]
 
 # 更新/删除
-kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <sp>] [--knowledge-network-id <id> [--config-path <path>]]
+kweaver agent update <agent_id> [--name <n>] [--profile <p>] [--system-prompt <sp>] [--mode default|dolphin|react] [--knowledge-network-id <id> [--config-path <path>]]
 kweaver agent delete <agent_id> [-y]
 ```
 
@@ -85,9 +85,25 @@ kweaver agent trace <conversation_id> --view <view>
 - `create` 需要 `--llm-id`，可通过模型工厂 API 查询可用 LLM：`GET /api/mf-model-manager/v1/llm/list?page=1&size=100`
 - `get` 的 `--save-config` 自动添加时间戳防止文件被覆盖，输出文件路径格式：`<basename>-<timestamp>.<ext>`
 - `update` 的 `--config-path` 从指定路径读取配置文件（由 `get --save-config` 生成），`--knowledge-network-id` 配置业务知识网络
+- `create` / `update` 支持 `--mode default|dolphin|react`，用于设置 `config.mode`；未传且配置中缺少 mode 时默认为 `default`
 - `create` 的 `--config` 支持两种方式：
   - **文件路径**：`--config /path/to/config.json`（推荐，避免长度限制）
   - **JSON 字符串**：`--config '{"input":...,"llms":...}'`
+- `react_config` 仅允许用于 `mode=react`，通过 `--config` 或 `--config-path` 传入：
+  ```json
+  {
+    "mode": "react",
+    "react_config": {
+      "disable_history_in_a_conversation": false,
+      "disable_llm_cache": false
+    }
+  }
+  ```
+  字段说明：
+  | 字段 | 类型 | 默认示例 | 说明 |
+  | --- | --- | --- | --- |
+  | `disable_history_in_a_conversation` | boolean | `false` | 是否禁用单次会话历史。为 `true` 时，同一会话中的每个问题都会独立处理，不依赖该会话前面的历史消息。 |
+  | `disable_llm_cache` | boolean | `false` | 是否禁用 LLM 缓存。仅当 agent-executor 服务侧启用了 LLM 缓存能力时生效；如果服务侧没有开启缓存，此配置无实际效果。 |
 - `template-get` 的 `--save-config` 自动添加时间戳防止文件被覆盖
 - `update` 采用 read-modify-write 模式：先 GET 当前配置，修改字段后 PUT 回去
 - `list` 只返回已发布的 agent；`get` 可以获取未发布的（需要是 owner）

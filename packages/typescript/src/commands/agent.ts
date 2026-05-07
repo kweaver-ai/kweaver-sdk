@@ -622,44 +622,84 @@ export function parseAgentHistoryArgs(args: string[]): AgentHistoryOptions {
 }
 
 export interface AgentTraceOptions {
-  agentId: string;
+  /** Optional. Retained as positional arg for backward compatibility; trace-ai keys by conversation_id only. */
+  agentId?: string;
   conversationId: string;
+  view: "tree" | "perf" | "evidence" | "reasoning" | "all";
+  /** When true, emit raw JSON of the TracesByConversationResult instead of a rendered view. */
+  json: boolean;
+  /** Disable per-message truncation in the reasoning view. */
+  full: boolean;
   pretty: boolean;
 }
 
-export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
-  const agentId = args[0];
-  if (!agentId || agentId.startsWith("-")) {
-    throw new Error("Missing agent_id");
-  }
-  const conversationId = args[1];
-  if (!conversationId || conversationId.startsWith("-")) {
-    throw new Error("Missing conversation_id");
-  }
+const TRACE_VIEWS = new Set(["tree", "perf", "evidence", "reasoning", "all"]);
 
+export function parseAgentTraceArgs(args: string[]): AgentTraceOptions {
+  const positional: string[] = [];
+  let view: AgentTraceOptions["view"] = "tree";
+  let json = false;
+  let full = false;
   let pretty = true;
 
-  for (let i = 2; i < args.length; i += 1) {
+  for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
-
     if (arg === "--help" || arg === "-h") {
       throw new Error("help");
     }
-
+    if (arg === "--view") {
+      const next = args[i + 1];
+      if (!next || !TRACE_VIEWS.has(next)) {
+        throw new Error(`--view requires one of: tree, perf, evidence, reasoning, all`);
+      }
+      view = next as AgentTraceOptions["view"];
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--view=")) {
+      const value = arg.slice("--view=".length);
+      if (!TRACE_VIEWS.has(value)) {
+        throw new Error(`--view requires one of: tree, perf, evidence, reasoning, all`);
+      }
+      view = value as AgentTraceOptions["view"];
+      continue;
+    }
+    if (arg === "--json") {
+      json = true;
+      continue;
+    }
+    if (arg === "--full") {
+      full = true;
+      continue;
+    }
     if (arg === "--pretty") {
       pretty = true;
       continue;
     }
-
     if (arg === "--compact") {
       pretty = false;
       continue;
     }
-
-    throw new Error(`Unsupported agent trace argument: ${arg}`);
+    if (arg.startsWith("-")) {
+      throw new Error(`Unsupported agent trace argument: ${arg}`);
+    }
+    positional.push(arg);
   }
 
-  return { agentId, conversationId, pretty };
+  // Backward-compat: legacy form is `trace <agent_id> <conversation_id>`.
+  // New form: `trace <conversation_id>`. We disambiguate by argument count.
+  let agentId: string | undefined;
+  let conversationId: string;
+  if (positional.length === 0) {
+    throw new Error("Missing conversation_id");
+  } else if (positional.length === 1) {
+    conversationId = positional[0];
+  } else {
+    agentId = positional[0];
+    conversationId = positional[1];
+  }
+
+  return { agentId, conversationId, view, json, full, pretty };
 }
 
 export async function runAgentCommand(args: string[]): Promise<number> {
@@ -688,7 +728,8 @@ Subcommands:
   skill <verb> ...                   Manage skills attached to an agent (add/remove/list)
   sessions <agent_id>                List all conversations for an agent
   history <agent_id> <conversation_id> Show message history for a conversation
-  trace <agent_id> <conversation_id>  Get trace data for a conversation`);
+  trace <conversation_id> [--view tree|perf|evidence|reasoning|all] [--json]
+                                       Get trace data for a conversation`);
     return Promise.resolve(0);
   }
 
@@ -887,13 +928,16 @@ Options:
 
   if (subcommand === "trace") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent trace <agent_id> <conversation_id> [options]
+      console.log(`kweaver agent trace <conversation_id> [options]
+       kweaver agent trace <agent_id> <conversation_id> [options]   (legacy)
 
 Get trace data for a conversation.
 
 Options:
-  --pretty                  Pretty-print JSON output (default)
-  --compact                 Compact JSON output`);
+  --view tree|perf|evidence|reasoning|all   Render style (default: tree)
+  --json                          Emit raw TracesByConversationResult JSON
+  --pretty                        Pretty-print JSON output (default)
+  --compact                       Compact JSON output`);
       return 0;
     }
   }
@@ -1215,13 +1259,18 @@ async function runAgentTraceCommand(args: string[]): Promise<number> {
     options = parseAgentTraceArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent trace <agent_id> <conversation_id> [options]
+      console.log(`kweaver agent trace <conversation_id> [options]
+       kweaver agent trace <agent_id> <conversation_id> [options]   (legacy)
 
-Get trace data for a conversation.
+Get trace data for a conversation. Spans are fetched from trace-ai via a 2-jump
+lookup that recovers pipeline spans (HTTP entry, internal RPCs, prompt-build)
+which the simpler /by-conversation endpoint omits.
 
 Options:
-  --pretty                  Pretty-print JSON output (default)
-  --compact                 Compact JSON output`);
+  --view tree|perf|evidence|reasoning|all   Render style (default: tree)
+  --json                          Emit raw TracesByConversationResult JSON
+  --pretty                        Pretty-print JSON output (default)
+  --compact                       Compact JSON output`);
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1230,13 +1279,18 @@ Options:
 
   try {
     const token = await ensureValidToken();
-    const body = await getTracesByConversation({
+    const result = await getTracesByConversation({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
       agentId: options.agentId,
       conversationId: options.conversationId,
     });
-    console.log(formatCallOutput(body, options.pretty));
+    if (options.json) {
+      console.log(formatCallOutput(JSON.stringify(result), options.pretty));
+    } else {
+      const { formatTraceResult } = await import("../utils/trace-views.js");
+      console.log(formatTraceResult(result, options.view, { full: options.full }));
+    }
     return 0;
   } catch (error) {
     console.error(formatHttpError(error));

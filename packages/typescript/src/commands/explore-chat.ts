@@ -187,7 +187,7 @@ export function registerChatRoutes(
         return;
       }
       const t = await getToken();
-      const raw = await getTracesByConversation({
+      const result = await getTracesByConversation({
         baseUrl: t.baseUrl,
         accessToken: t.accessToken,
         agentId,
@@ -195,7 +195,7 @@ export function registerChatRoutes(
         businessDomain,
       });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(raw);
+      res.end(JSON.stringify(result));
     } catch (error) {
       handleApiError(res, error);
     }

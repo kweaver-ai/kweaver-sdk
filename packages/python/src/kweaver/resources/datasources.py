@@ -154,7 +154,7 @@ class DataSourcesResource:
         ``id`` is a vega catalog id, not a legacy data-connection datasource UUID.
         """
 
-        def _list_summaries() -> list[dict[str, Any]]:
+        def _list_summaries_raw() -> list[dict[str, Any]]:
             params: dict[str, Any] = {"category": "table"}
             if limit is not None:
                 params["limit"] = limit
@@ -164,20 +164,20 @@ class DataSourcesResource:
                 f"/api/vega-backend/v1/catalogs/{id}/resources",
                 params=params,
             )
-            items = (
+            return (
                 data
                 if isinstance(data, list)
                 else (data.get("entries") or data.get("data") or [])
             )
-            if keyword:
-                k = keyword.lower()
-                items = [it for it in items if k in str(it.get("name", "")).lower()]
-            return items
 
-        summaries = _list_summaries()
+        summaries = _list_summaries_raw()
         if not summaries and auto_scan:
             self.scan_metadata(id)
-            summaries = _list_summaries()
+            summaries = _list_summaries_raw()
+
+        if keyword:
+            k = keyword.lower()
+            summaries = [it for it in summaries if k in str(it.get("name", "")).lower()]
 
         tables: list[Table] = []
         for s in summaries:
@@ -186,8 +186,10 @@ class DataSourcesResource:
                 continue
             try:
                 detail_raw = self._http.get(f"/api/vega-backend/v1/resources/{rid}")
-            except Exception as exc:  # noqa: BLE001 — re-raise with id context
-                raise type(exc)(f"vega resource {rid} fetch failed: {exc}") from exc
+            except Exception as exc:
+                raise RuntimeError(
+                    f"vega resource {rid} fetch failed: {exc}"
+                ) from exc
 
             detail = detail_raw
             if isinstance(detail_raw, dict):

@@ -176,13 +176,14 @@ def test_list_tables_keyword_filters_before_detail_fetch(capture: RequestCapture
         if "/vega-backend/v1/resources/" in url:
             rid = url.split("/resources/")[1].split("?")[0]
             detail_calls.append(rid)
+            name_for = {"r1": "skills", "r2": "orders", "r3": "skill_logs"}
             return httpx.Response(
                 200,
                 json={
                     "entries": [
                         {
                             "id": rid,
-                            "name": rid,
+                            "name": name_for[rid],
                             "source_metadata": {"columns": []},
                         }
                     ]
@@ -193,10 +194,59 @@ def test_list_tables_keyword_filters_before_detail_fetch(capture: RequestCapture
     client = make_client(handler, capture)
     tables = client.datasources.list_tables("cat-1", keyword="skill", auto_scan=False)
     # Only "skills" and "skill_logs" match — orders filtered out before detail fetch
-    assert sorted(t.name for t in tables) == ["r1", "r3"]
+    assert sorted(t.name for t in tables) == ["skill_logs", "skills"]
     assert sorted(detail_calls) == ["r1", "r3"], (
         f"detail fetch should skip non-matching summaries; got {detail_calls}"
     )
+
+
+def test_list_tables_keyword_no_match_does_not_trigger_scan(capture: RequestCapture):
+    discover_called = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        url = str(req.url)
+        if "/vega-backend/v1/catalogs/cat-1/resources" in url and req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {"id": "r1", "catalog_id": "cat-1", "name": "users", "category": "table"},
+                    ],
+                    "total_count": 1,
+                },
+            )
+        if "/vega-backend/v1/catalogs/cat-1/discover" in url and req.method == "POST":
+            discover_called["n"] += 1
+            return httpx.Response(200, json={"task_id": "t1"})
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    client = make_client(handler, capture)
+    tables = client.datasources.list_tables("cat-1", keyword="zzz_no_match", auto_scan=True)
+    assert tables == []
+    assert discover_called["n"] == 0, "scan should NOT trigger when keyword filters out all results"
+
+
+def test_list_tables_per_resource_failure_includes_rid(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        url = str(req.url)
+        if "/vega-backend/v1/catalogs/cat-1/resources" in url and req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {"id": "r_bad", "catalog_id": "cat-1", "name": "boom", "category": "table"},
+                    ],
+                    "total_count": 1,
+                },
+            )
+        if "/vega-backend/v1/resources/r_bad" in url:
+            return httpx.Response(500, text="boom")
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    client = make_client(handler, capture)
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError, match=r"r_bad"):
+        client.datasources.list_tables("cat-1", auto_scan=False)
 
 
 def test_list_datasources():

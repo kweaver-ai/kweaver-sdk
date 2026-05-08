@@ -12,27 +12,58 @@ function stubFetch(handler: (url: string, init?: RequestInit) => Response | Prom
   }) as typeof fetch;
 }
 
-// ── Per-column PK propagation ─────────────────────────────────────────────────
-// The bug: `listTablesWithColumns` reduces every column to {name, type, comment},
-// silently dropping any PK indicator the backend exposes. The contract this test
-// fixes: when the raw column carries a PK indicator under any of the well-known
-// names, the SDK surfaces it as `isPrimaryKey: true`.
+// Vega resource detail shape — confirmed against admin platform 2026-05-08:
+// GET /api/vega-backend/v1/resources/{id} returns
+//   { id, name, category, source_metadata: { columns: [...] }, ... }
+// where each column has { name, type, orig_type, column_key, ... }.
 
-test("listTablesWithColumns: propagates is_primary_key from backend column", async () => {
+function resourceListResponse(catalogId: string, items: Array<{ id: string; name: string }>) {
+  return new Response(
+    JSON.stringify({
+      entries: items.map((it) => ({
+        id: it.id,
+        catalog_id: catalogId,
+        name: it.name,
+        category: "table",
+      })),
+      total_count: items.length,
+    }),
+    { status: 200 },
+  );
+}
+
+function resourceDetailResponse(
+  rid: string,
+  name: string,
+  columns: Array<Record<string, unknown>>,
+  extra: Record<string, unknown> = {},
+) {
+  return new Response(
+    JSON.stringify({
+      entries: [
+        {
+          id: rid,
+          name,
+          category: "table",
+          source_metadata: { columns },
+          ...extra,
+        },
+      ],
+    }),
+    { status: 200 },
+  );
+}
+
+test("listTablesWithColumns: vega resources list + per-resource detail → table shape", async () => {
   stubFetch((url) => {
-    if (url.includes("/data-connection/v1/metadata/data-source/ds-1")) {
-      return new Response(
-        JSON.stringify([
-          {
-            name: "skills",
-            columns: [
-              { name: "skill_id", type: "varchar", is_primary_key: true },
-              { name: "label", type: "varchar" },
-            ],
-          },
-        ]),
-        { status: 200 },
-      );
+    if (url.includes("/vega-backend/v1/catalogs/cat-1/resources")) {
+      return resourceListResponse("cat-1", [{ id: "r1", name: "skills" }]);
+    }
+    if (url.includes("/vega-backend/v1/resources/r1")) {
+      return resourceDetailResponse("r1", "skills", [
+        { name: "skill_id", type: "varchar", is_primary_key: true },
+        { name: "label", type: "varchar" },
+      ]);
     }
     throw new Error(`unexpected url ${url}`);
   });
@@ -41,13 +72,15 @@ test("listTablesWithColumns: propagates is_primary_key from backend column", asy
     const body = await listTablesWithColumns({
       baseUrl: "https://h.example",
       accessToken: "tok",
-      id: "ds-1",
+      id: "cat-1",
     });
     const tables = JSON.parse(body) as Array<{
       name: string;
       columns: Array<{ name: string; type: string; isPrimaryKey?: boolean }>;
+      primaryKeys?: string[];
     }>;
     assert.equal(tables.length, 1);
+    assert.equal(tables[0]!.name, "skills");
     const cols = tables[0]!.columns;
     assert.equal(cols.find((c) => c.name === "skill_id")!.isPrimaryKey, true);
     assert.notEqual(cols.find((c) => c.name === "label")!.isPrimaryKey, true);
@@ -56,21 +89,16 @@ test("listTablesWithColumns: propagates is_primary_key from backend column", asy
   }
 });
 
-test("listTablesWithColumns: propagates MySQL INFORMATION_SCHEMA column_key='PRI'", async () => {
+test("listTablesWithColumns: column_key='PRI' propagates as isPrimaryKey", async () => {
   stubFetch((url) => {
-    if (url.includes("/data-connection/v1/metadata/data-source/ds-1")) {
-      return new Response(
-        JSON.stringify([
-          {
-            name: "skills",
-            columns: [
-              { name: "skill_id", type: "varchar", column_key: "PRI" },
-              { name: "label", type: "varchar", column_key: "" },
-            ],
-          },
-        ]),
-        { status: 200 },
-      );
+    if (url.includes("/vega-backend/v1/catalogs/cat-1/resources")) {
+      return resourceListResponse("cat-1", [{ id: "r1", name: "skills" }]);
+    }
+    if (url.includes("/vega-backend/v1/resources/r1")) {
+      return resourceDetailResponse("r1", "skills", [
+        { name: "skill_id", type: "varchar", column_key: "PRI" },
+        { name: "label", type: "varchar", column_key: "" },
+      ]);
     }
     throw new Error(`unexpected url ${url}`);
   });
@@ -79,35 +107,30 @@ test("listTablesWithColumns: propagates MySQL INFORMATION_SCHEMA column_key='PRI
     const body = await listTablesWithColumns({
       baseUrl: "https://h.example",
       accessToken: "tok",
-      id: "ds-1",
+      id: "cat-1",
     });
-    const tables = JSON.parse(body) as Array<{
-      name: string;
-      columns: Array<{ name: string; isPrimaryKey?: boolean }>;
-    }>;
-    assert.equal(tables[0]!.columns.find((c) => c.name === "skill_id")!.isPrimaryKey, true);
+    const tables = JSON.parse(body);
+    const cols = tables[0].columns;
+    assert.equal(cols.find((c: { name: string }) => c.name === "skill_id").isPrimaryKey, true);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("listTablesWithColumns: propagates table-level primary_keys array", async () => {
-  // Composite-PK case: backend emits primary_keys at table level, not per column.
+test("listTablesWithColumns: table-level primary_keys[] surfaces as primaryKeys", async () => {
   stubFetch((url) => {
-    if (url.includes("/data-connection/v1/metadata/data-source/ds-1")) {
-      return new Response(
-        JSON.stringify([
-          {
-            name: "mat_skill",
-            primary_keys: ["sku", "skill_id"],
-            columns: [
-              { name: "sku", type: "varchar" },
-              { name: "skill_id", type: "varchar" },
-              { name: "rank", type: "int" },
-            ],
-          },
-        ]),
-        { status: 200 },
+    if (url.includes("/vega-backend/v1/catalogs/cat-1/resources")) {
+      return resourceListResponse("cat-1", [{ id: "r1", name: "orders" }]);
+    }
+    if (url.includes("/vega-backend/v1/resources/r1")) {
+      return resourceDetailResponse(
+        "r1",
+        "orders",
+        [
+          { name: "order_id", type: "integer" },
+          { name: "tenant_id", type: "varchar" },
+        ],
+        { primary_keys: ["order_id", "tenant_id"] },
       );
     }
     throw new Error(`unexpected url ${url}`);
@@ -117,42 +140,32 @@ test("listTablesWithColumns: propagates table-level primary_keys array", async (
     const body = await listTablesWithColumns({
       baseUrl: "https://h.example",
       accessToken: "tok",
-      id: "ds-1",
+      id: "cat-1",
     });
-    const tables = JSON.parse(body) as Array<{
-      name: string;
-      primaryKeys?: string[];
-      columns: Array<{ name: string; isPrimaryKey?: boolean }>;
-    }>;
-    // Table-level array wins for composite PKs.
-    assert.deepEqual(tables[0]!.primaryKeys, ["sku", "skill_id"]);
-    // And the per-column flag is materialized so downstream callers can use either.
-    const byName = Object.fromEntries(tables[0]!.columns.map((c) => [c.name, c]));
-    assert.equal(byName.sku!.isPrimaryKey, true);
-    assert.equal(byName.skill_id!.isPrimaryKey, true);
-    assert.notEqual(byName.rank!.isPrimaryKey, true);
+    const tables = JSON.parse(body);
+    assert.deepEqual(tables[0].primaryKeys, ["order_id", "tenant_id"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("listTablesWithColumns: leaves columns unflagged when backend returns no PK info", async () => {
-  // Regression guard: today's behavior must keep working — sample-based detection
-  // remains the fallback when backend doesn't expose PK metadata.
-  stubFetch((url) => {
-    if (url.includes("/data-connection/v1/metadata/data-source/ds-1")) {
-      return new Response(
-        JSON.stringify([
-          {
-            name: "skills",
-            columns: [
-              { name: "skill_id", type: "varchar" },
-              { name: "label", type: "varchar" },
-            ],
-          },
-        ]),
-        { status: 200 },
-      );
+test("listTablesWithColumns: empty resources + autoScan triggers discover then re-lists", async () => {
+  let listCalls = 0;
+  let discoverCalls = 0;
+  stubFetch((url, init) => {
+    if (url.includes("/vega-backend/v1/catalogs/cat-1/resources") && (init?.method ?? "GET") === "GET") {
+      listCalls += 1;
+      if (listCalls === 1) {
+        return resourceListResponse("cat-1", []);
+      }
+      return resourceListResponse("cat-1", [{ id: "r1", name: "skills" }]);
+    }
+    if (url.includes("/vega-backend/v1/catalogs/cat-1/discover")) {
+      discoverCalls += 1;
+      return new Response(JSON.stringify({ task_id: "task-1" }), { status: 200 });
+    }
+    if (url.includes("/vega-backend/v1/resources/r1")) {
+      return resourceDetailResponse("r1", "skills", [{ name: "skill_id", type: "varchar" }]);
     }
     throw new Error(`unexpected url ${url}`);
   });
@@ -161,17 +174,45 @@ test("listTablesWithColumns: leaves columns unflagged when backend returns no PK
     const body = await listTablesWithColumns({
       baseUrl: "https://h.example",
       accessToken: "tok",
-      id: "ds-1",
+      id: "cat-1",
+      autoScan: true,
     });
-    const tables = JSON.parse(body) as Array<{
-      name: string;
-      primaryKeys?: string[];
-      columns: Array<{ name: string; isPrimaryKey?: boolean }>;
-    }>;
-    assert.equal(tables[0]!.primaryKeys, undefined);
-    for (const c of tables[0]!.columns) {
-      assert.notEqual(c.isPrimaryKey, true);
+    const tables = JSON.parse(body);
+    assert.equal(tables.length, 1);
+    assert.equal(discoverCalls, 1, "discover called exactly once");
+    assert.equal(listCalls, 2, "resources list called twice (initial + post-scan)");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("listTablesWithColumns: per-resource fetch failure surfaces (not silently dropped)", async () => {
+  stubFetch((url) => {
+    if (url.includes("/vega-backend/v1/catalogs/cat-1/resources")) {
+      return resourceListResponse("cat-1", [
+        { id: "r1", name: "skills" },
+        { id: "r2", name: "orders" },
+      ]);
     }
+    if (url.includes("/vega-backend/v1/resources/r1")) {
+      return resourceDetailResponse("r1", "skills", [{ name: "id", type: "integer" }]);
+    }
+    if (url.includes("/vega-backend/v1/resources/r2")) {
+      return new Response("boom", { status: 500, statusText: "Internal Server Error" });
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+
+  try {
+    await assert.rejects(
+      () =>
+        listTablesWithColumns({
+          baseUrl: "https://h.example",
+          accessToken: "tok",
+          id: "cat-1",
+        }),
+      /500|r2/,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

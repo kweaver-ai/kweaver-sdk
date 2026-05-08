@@ -1,7 +1,7 @@
 import { HttpError } from "../utils/http.js";
 import { encryptPassword } from "../utils/crypto.js";
 import { buildHeaders } from "./headers.js";
-import { discoverVegaCatalog } from "./vega.js";
+import { discoverVegaCatalog, getVegaResource, listVegaCatalogResources } from "./vega.js";
 
 const HTTPS_PROTOCOLS = new Set(["maxcompute", "anyshare7", "opensearch"]);
 
@@ -273,79 +273,142 @@ export async function listTables(options: ListTablesOptions): Promise<string> {
   return body;
 }
 
-export interface ListTablesWithColumnsOptions extends ListTablesOptions {
+export interface ListTablesWithColumnsOptions {
+  baseUrl: string;
+  accessToken: string;
+  /** A vega catalog id, not a legacy data-connection datasource UUID. */
+  id: string;
+  keyword?: string;
+  limit?: number;
+  offset?: number;
+  businessDomain?: string;
   autoScan?: boolean;
 }
 
-/** List tables with column details. Optionally triggers metadata scan if no tables found. */
-export async function listTablesWithColumns(options: ListTablesWithColumnsOptions): Promise<string> {
-  const { id, autoScan = true, ...rest } = options;
-  let body = await listTables({ ...rest, id });
+interface VegaResourceListEntry {
+  id: string;
+  name: string;
+  category?: string;
+}
 
-  const parsed = JSON.parse(body) as
-    | Array<Record<string, unknown>>
-    | { entries?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
-  let items = Array.isArray(parsed) ? parsed : (parsed.entries ?? parsed.data ?? []);
+interface VegaResourceDetail {
+  id: string;
+  name: string;
+  source_metadata?: { columns?: Array<Record<string, unknown>> };
+  primary_keys?: string[];
+  [key: string]: unknown;
+}
 
-  if (items.length === 0 && autoScan) {
-    await scanMetadata({
-      baseUrl: rest.baseUrl,
-      accessToken: rest.accessToken,
+/**
+ * List tables with column details from a vega catalog.
+ *
+ * Two-stage fetch:
+ *   1. GET /api/vega-backend/v1/catalogs/{id}/resources?category=table — list summaries
+ *   2. For each resource: GET /api/vega-backend/v1/resources/{rid} — pull source_metadata.columns
+ *
+ * If the catalog has no resources and `autoScan=true`, triggers a discover and
+ * retries the list once. The optional `keyword` filters summaries client-side
+ * before the per-resource detail fetches — useful to keep N+1 down to k+1.
+ *
+ * `id` is a vega catalog id.
+ */
+export async function listTablesWithColumns(
+  options: ListTablesWithColumnsOptions,
+): Promise<string> {
+  const {
+    baseUrl,
+    accessToken,
+    id,
+    keyword,
+    limit,
+    offset,
+    businessDomain = "bd_public",
+    autoScan = true,
+  } = options;
+
+  async function listResourceSummaries(): Promise<VegaResourceListEntry[]> {
+    const body = await listVegaCatalogResources({
+      baseUrl,
+      accessToken,
       id,
-      businessDomain: rest.businessDomain,
+      category: "table",
+      limit,
+      offset,
+      businessDomain,
     });
-    body = await listTables({ ...rest, id });
-    const parsed2 = JSON.parse(body) as
-      | Array<Record<string, unknown>>
-      | { entries?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
-    items = Array.isArray(parsed2) ? parsed2 : (parsed2.entries ?? parsed2.data ?? []);
+    const parsed = JSON.parse(body) as
+      | Array<VegaResourceListEntry>
+      | { entries?: VegaResourceListEntry[]; data?: VegaResourceListEntry[] };
+    let items = Array.isArray(parsed) ? parsed : (parsed.entries ?? parsed.data ?? []);
+    if (keyword) {
+      const k = keyword.toLowerCase();
+      items = items.filter((it) => it.name.toLowerCase().includes(k));
+    }
+    return items;
   }
 
-  const base = rest.baseUrl.replace(/\/+$/, "");
+  let summaries = await listResourceSummaries();
+  if (summaries.length === 0 && autoScan) {
+    await scanMetadata({ baseUrl, accessToken, id, businessDomain });
+    summaries = await listResourceSummaries();
+  }
+
+  const details = await Promise.all(
+    summaries.map(async (s) => {
+      const body = await getVegaResource({
+        baseUrl,
+        accessToken,
+        id: s.id,
+        businessDomain,
+      });
+      const parsed = JSON.parse(body) as
+        | VegaResourceDetail
+        | { entries?: VegaResourceDetail[]; data?: VegaResourceDetail[] };
+      if (Array.isArray((parsed as { entries?: unknown }).entries)) {
+        const arr = (parsed as { entries: VegaResourceDetail[] }).entries;
+        if (arr.length === 0) {
+          throw new Error(`vega resource ${s.id} returned empty entries`);
+        }
+        return arr[0]!;
+      }
+      if (Array.isArray((parsed as { data?: unknown }).data)) {
+        const arr = (parsed as { data: VegaResourceDetail[] }).data;
+        if (arr.length === 0) {
+          throw new Error(`vega resource ${s.id} returned empty data`);
+        }
+        return arr[0]!;
+      }
+      return parsed as VegaResourceDetail;
+    }),
+  );
+
   const tables: Array<{
     name: string;
     columns: Array<{ name: string; type: string; comment?: string; isPrimaryKey?: boolean }>;
     primaryKeys?: string[];
   }> = [];
 
-  for (const t of items) {
-    const tableId = String(t.id ?? "");
-    const tableName = String(t.name ?? "");
-    let columnsRaw = (t.columns ?? t.fields ?? []) as Array<Record<string, unknown>>;
-
-    if (columnsRaw.length === 0 && tableId) {
-      const tableUrl = `${base}/api/data-connection/v1/metadata/table/${encodeURIComponent(tableId)}?limit=-1`;
-      const colResponse = await fetch(tableUrl, {
-        method: "GET",
-        headers: buildHeaders(rest.accessToken, rest.businessDomain ?? "bd_public"),
-      });
-      const colData = (await colResponse.json()) as
-        | Array<Record<string, unknown>>
-        | { entries?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
-      columnsRaw = Array.isArray(colData) ? colData : (colData.entries ?? colData.data ?? []);
-    }
-
-    const tablePkArray = extractPrimaryKeys(t);
-
+  for (const d of details) {
+    const columnsRaw = (d.source_metadata?.columns ?? []) as Array<Record<string, unknown>>;
+    const tablePkArray = extractPrimaryKeys(d as unknown as Record<string, unknown>);
     const columns = columnsRaw.map((c) => {
       const name = String(c.name ?? c.field_name ?? "");
       const flagged = isColumnPrimaryKey(c) || tablePkArray.includes(name);
       return {
         name,
         type: String(c.type ?? c.field_type ?? "varchar"),
-        comment: typeof c.comment === "string" ? c.comment : undefined,
+        comment: typeof c.description === "string"
+          ? c.description
+          : (typeof c.comment === "string" ? c.comment : undefined),
         ...(flagged ? { isPrimaryKey: true } : {}),
       };
     });
-
-    // Reconcile: if backend gave per-column flags but no table-level array,
-    // synthesize one so downstream callers have a single PK source of truth.
     const synthesizedPks = tablePkArray.length > 0
       ? tablePkArray
       : columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
 
     tables.push({
-      name: tableName,
+      name: d.name,
       columns,
       ...(synthesizedPks.length > 0 ? { primaryKeys: synthesizedPks } : {}),
     });

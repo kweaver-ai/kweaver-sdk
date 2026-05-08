@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { scanDatasourceMetadata, scanMetadata } from "../src/api/datasources.js";
+import { scanDatasourceMetadata, scanMetadata } from "../src/api/vega.js";
 
 const originalFetch = globalThis.fetch;
 

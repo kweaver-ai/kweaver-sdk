@@ -9,10 +9,8 @@ import {
   listDatasources,
   getDatasource,
   deleteDatasource,
-  listTables,
-  listTablesWithColumns,
-  scanMetadata,
 } from "../api/datasources.js";
+import { listTablesWithColumns, scanMetadata } from "../api/vega.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { assertVegaCatalogId } from "./bkn-utils.js";

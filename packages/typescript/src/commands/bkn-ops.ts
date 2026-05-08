@@ -17,7 +17,7 @@ import {
   buildKnowledgeNetwork,
   getBuildStatus,
 } from "../api/knowledge-networks.js";
-import { listTablesWithColumns, scanDatasourceMetadata } from "../api/datasources.js";
+import { listTablesWithColumns, scanDatasourceMetadata } from "../api/vega.js";
 import { createDataView, findDataView } from "../api/dataviews.js";
 import { resolveFiles } from "./ds.js";
 import { buildTableName } from "./import-csv.js";

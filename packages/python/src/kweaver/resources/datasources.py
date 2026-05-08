@@ -1,8 +1,12 @@
-"""SDK resource: data sources (data-connection service)."""
+"""SDK resource: data sources (data-connection service).
+
+scan_metadata / list_tables have been moved to
+``kweaver.resources.vega.catalogs.VegaCatalogsResource``; the methods here
+are thin delegation stubs kept for backward compatibility.
+"""
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 from kweaver._crypto import encrypt_password
@@ -114,21 +118,22 @@ class DataSourcesResource:
     def scan_metadata(self, id: str, *, ds_type: str = "mysql") -> str:
         """Trigger a metadata scan for a vega catalog and wait for completion.
 
-        ``id`` is a vega catalog id (e.g. ``d7nicrcjto2s73d9g67g``), not a
-        legacy data-connection datasource UUID. ``ds_type`` is retained for
-        signature compatibility but ignored — vega catalogs carry their own
-        ``connector_type``.
+        .. deprecated::
+            Use ``client.vega.catalogs.scan_metadata(id)`` directly. This
+            method delegates to the vega catalogs resource for backward
+            compatibility.
 
-        Returns the discover endpoint's response body as a JSON string.
+        ``id`` is a vega catalog id. ``ds_type`` is ignored (retained for
+        signature compatibility).
+
+        Returns the discover response as a JSON string.
         """
-        del ds_type  # retained for backward compat, intentionally unused
-        result = self._http.post(
-            f"/api/vega-backend/v1/catalogs/{id}/discover",
-            params={"wait": "true"},
-        )
-        if isinstance(result, str):
-            return result
-        return json.dumps(result)
+        import json as _json
+        del ds_type
+        from kweaver.resources.vega.catalogs import VegaCatalogsResource
+        vega_cats = VegaCatalogsResource(self._http)
+        result = vega_cats.scan_metadata(id)
+        return _json.dumps(result) if isinstance(result, dict) else str(result)
 
     def list_tables(
         self,
@@ -141,78 +146,22 @@ class DataSourcesResource:
     ) -> list[Table]:
         """List tables with columns from a vega catalog.
 
-        Two-stage fetch:
-          1. ``GET /api/vega-backend/v1/catalogs/{id}/resources?category=table``
-          2. For each resource: ``GET /api/vega-backend/v1/resources/{rid}``,
-             extracting ``source_metadata.columns``.
+        .. deprecated::
+            Use ``client.vega.catalogs.list_tables(id, ...)`` directly.
 
-        If the catalog has no table resources and ``auto_scan=True``, triggers
-        a discover and retries the list once. The optional ``keyword`` filters
-        summaries client-side before the per-resource detail fetches, narrowing
-        N+1 to k+1.
-
-        ``id`` is a vega catalog id, not a legacy data-connection datasource UUID.
+        ``id`` is a vega catalog id, not a legacy data-connection datasource
+        UUID.
         """
+        from kweaver.resources.vega.catalogs import VegaCatalogsResource
+        vega_cats = VegaCatalogsResource(self._http)
+        return vega_cats.list_tables(
+            id,
+            keyword=keyword,
+            limit=limit,
+            offset=offset,
+            auto_scan=auto_scan,
+        )
 
-        def _list_summaries_raw() -> list[dict[str, Any]]:
-            params: dict[str, Any] = {"category": "table"}
-            if limit is not None:
-                params["limit"] = limit
-            if offset is not None:
-                params["offset"] = offset
-            data = self._http.get(
-                f"/api/vega-backend/v1/catalogs/{id}/resources",
-                params=params,
-            )
-            return (
-                data
-                if isinstance(data, list)
-                else (data.get("entries") or data.get("data") or [])
-            )
-
-        summaries = _list_summaries_raw()
-        if not summaries and auto_scan:
-            self.scan_metadata(id)
-            summaries = _list_summaries_raw()
-
-        if keyword:
-            k = keyword.lower()
-            summaries = [it for it in summaries if k in str(it.get("name", "")).lower()]
-
-        tables: list[Table] = []
-        for s in summaries:
-            rid = s.get("id", "")
-            if not rid:
-                continue
-            try:
-                detail_raw = self._http.get(f"/api/vega-backend/v1/resources/{rid}")
-            except Exception as exc:
-                raise RuntimeError(
-                    f"vega resource {rid} fetch failed: {exc}"
-                ) from exc
-
-            detail = detail_raw
-            if isinstance(detail_raw, dict):
-                entries = detail_raw.get("entries") or detail_raw.get("data")
-                if isinstance(entries, list) and entries:
-                    detail = entries[0]
-            if not isinstance(detail, dict):
-                continue
-            columns_raw = (detail.get("source_metadata") or {}).get("columns") or []
-            tables.append(
-                Table(
-                    name=detail.get("name", s.get("name", "")),
-                    columns=[
-                        Column(
-                            name=c.get("name", c.get("field_name", "")),
-                            type=c.get("type", c.get("field_type", "varchar")),
-                            comment=c.get("description") or c.get("comment"),
-                        )
-                        for c in columns_raw
-                    ],
-                )
-            )
-        return tables
 
 
 def _parse_datasource(d: Any) -> DataSource:

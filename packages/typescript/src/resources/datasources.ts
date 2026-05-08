@@ -5,9 +5,8 @@ import {
   getDatasource,
   deleteDatasource,
   listTables,
-  listTablesWithColumns,
-  scanMetadata,
 } from "../api/datasources.js";
+import { listTablesWithColumns, scanMetadata } from "../api/vega.js";
 import type { ClientContext } from "../client.js";
 
 export class DataSourcesResource {

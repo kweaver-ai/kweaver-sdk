@@ -91,3 +91,36 @@ def test_delete_datasource(capture: RequestCapture):
     client = make_client(handler, capture)
     client.datasources.delete("ds_01")
     assert "ds_01" in capture.last_url()
+
+
+def test_scan_metadata_calls_vega_discover(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "POST" and "/vega-backend/v1/catalogs/cat-1/discover" in str(req.url):
+            return httpx.Response(200, json={"task_id": "vega-task-1"})
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    client = make_client(handler, capture)
+    result = client.datasources.scan_metadata("cat-1")
+    assert "vega-task-1" in result, f"discover response should contain task_id; got {result!r}"
+    last_url = capture.last_url()
+    assert "wait=true" in last_url, f"expected wait=true in {last_url}"
+    all_urls = [str(r.url) for r in capture.requests]
+    for u in all_urls:
+        assert "/data-connection/" not in u, f"unexpected data-connection call: {u}"
+
+
+def test_scan_metadata_does_not_lookup_legacy_ds_type(capture: RequestCapture):
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "POST" and "/vega-backend/v1/catalogs/cat-1/discover" in str(req.url):
+            return httpx.Response(200, json={"task_id": "t1"})
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    client = make_client(handler, capture)
+    client.datasources.scan_metadata("cat-1")
+
+    methods_and_paths = [(r.method, str(r.url)) for r in capture.requests]
+    # No GET on /datasource/{id} (the old ds_type lookup)
+    for method, url in methods_and_paths:
+        assert not (
+            method == "GET" and "/datasource/cat-1" in url
+        ), f"unexpected legacy ds_type lookup: {method} {url}"

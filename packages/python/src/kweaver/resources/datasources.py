@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import time
+import json
 from typing import TYPE_CHECKING, Any
 
 from kweaver._crypto import encrypt_password
@@ -112,31 +112,23 @@ class DataSourcesResource:
         self._http.delete(f"/api/data-connection/v1/datasource/{id}")
 
     def scan_metadata(self, id: str, *, ds_type: str = "mysql") -> str:
-        """Trigger a metadata scan for a datasource and wait for completion.
+        """Trigger a metadata scan for a vega catalog and wait for completion.
 
-        Returns the scan task ID.
+        ``id`` is a vega catalog id (e.g. ``d7nicrcjto2s73d9g67g``), not a
+        legacy data-connection datasource UUID. ``ds_type`` is retained for
+        signature compatibility but ignored — vega catalogs carry their own
+        ``connector_type``.
+
+        Returns the discover endpoint's response body as a JSON string.
         """
-        ds = self.get(id)
-        scan_name = f"sdk_scan_{id[:8]}"
+        del ds_type  # retained for backward compat, intentionally unused
         result = self._http.post(
-            "/api/data-connection/v1/metadata/scan",
-            json={
-                "scan_name": scan_name,
-                "type": 0,
-                "ds_info": {"ds_id": id, "ds_type": ds_type or ds.type or "mysql"},
-                "use_default_template": True,
-                "use_multi_threads": True,
-                "status": "open",
-            },
+            f"/api/vega-backend/v1/catalogs/{id}/discover",
+            params={"wait": "true"},
         )
-        task_id = result.get("id", "")
-        # Poll until scan completes with exponential backoff
-        for attempt in range(30):
-            time.sleep(min(2 * (1.5 ** attempt), 15))
-            status = self._http.get(f"/api/data-connection/v1/metadata/scan/{task_id}")
-            if status.get("status") in ("success", "fail"):
-                break
-        return task_id
+        if isinstance(result, str):
+            return result
+        return json.dumps(result)
 
     def list_tables(
         self,

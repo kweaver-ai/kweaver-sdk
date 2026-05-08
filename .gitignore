@@ -21,3 +21,4 @@ node_modules/
 .DS_Store
 .ralph/
 coverage/
+docs/reference/python-api-html/

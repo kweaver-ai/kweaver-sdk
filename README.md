@@ -333,6 +333,12 @@ kweaver-sdk/
 └── README.zh.md                 # 中文
 ```
 
+## Guides
+
+- [Python SDK developer guide](docs/guides/python-sdk-guide.md) — install `kweaver-sdk`, auth, `KWeaverClient`, and common API calls from Python.
+- [AI application integration](docs/guides/ai-app-integration.md) — MCP, CLI, and integration scenarios (Chinese).
+- [Documentation index](docs/README.md) — navigate `docs/`.
+
 ## Development & Testing
 
 ```bash

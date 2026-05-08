@@ -93,6 +93,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 | 列/查数据视图 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 对视图跑 SQL | [references/dataview.md](references/dataview.md) |
 | 管理 Dataflow 文档流程 | `list` 看 DAG；`run` 触发本地文件或远程 URL；`runs --since` 看自然日运行记录；`logs --detail` 查步骤载荷 | [references/dataflow.md](references/dataflow.md) |
 | 模型工厂 / 小模型 adapter | TS CLI：`model llm|small …`、`model llm chat`、`model small embeddings` / `model small rerank`；Python SDK：`client.models`（CRUD/test + `invocation.chat` / `embedding` / `rerank`）；`--adapter-code-file` 注册 Python `main` 适配器 | [references/model.md](references/model.md) |
+| Python SDK（应用代码） | 使用 PyPI `kweaver-sdk`：`KWeaverClient`、认证、分页与排障；与 CLI/MCP 接入指南互补 | [docs/guides/python-sdk-guide.md](../../docs/guides/python-sdk-guide.md) · [中文版](../../docs/guides/python-sdk-guide.zh.md) |
 | Trace 数据分析 | `agent trace <cid> --view tree\|perf\|evidence\|reasoning\|all`：SDK 已内置四视图（调用拓扑 / 性能拆解 / 工具命中证据链 / LLM 推理过程），不再需要手工拼。`--full` 关掉每条消息的截断；`--json` 拿原始 spans。 | `references/agent.md` |
 | 管理 Skill | `list` / `market` 查找 Skill；`content` / `read-file` 渐进式读取；`install` 下载并解压本地使用 | [references/skill.md](references/skill.md) |
 | 注册外部工具 | `toolbox create` 建箱 → `tool upload` 上传 OpenAPI → `tool list` 拿 `tool_id` → `tool enable` 启用 → `toolbox publish` 切到 published | [references/toolbox.md](references/toolbox.md) · [references/tool.md](references/tool.md) |

@@ -1,4 +1,4 @@
-.PHONY: test test-cover lint ci test-python test-typescript lint-python lint-typescript test-equiv
+.PHONY: test test-cover lint ci test-python test-typescript lint-python lint-typescript test-equiv docs-python
 
 # Unified monorepo: Python + TypeScript in one project.
 # Test equivalence: both suites must pass; same scenarios covered on both sides.
@@ -37,6 +37,10 @@ lint-python:
 
 lint-typescript:
 	$(MAKE) -C packages/typescript lint
+
+# Generate Python SDK API HTML (pdoc; requires docs extra in packages/python)
+docs-python:
+	$(MAKE) -C packages/python docs-python
 
 # CI: lint + test-cover (both packages)
 ci: lint test-cover

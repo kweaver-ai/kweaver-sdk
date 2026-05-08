@@ -262,6 +262,7 @@ kweaver agent chat <agent-id> --stream
 
 ## 更多资源
 
+- [Python SDK 开发者指南](./python-sdk-guide.zh.md)（[`English`](./python-sdk-guide.md)）— **在代码中使用 `kweaver-sdk`**（安装、`KWeaverClient`、认证、典型 API）；与本文 MCP/CLI 接入互补。
 - [SDK 代码示例](../../examples/sdk/) — 6 个渐进式 TypeScript 示例
 - [Context Loader 命令参考](../../skills/kweaver-core/references/context-loader.md) — MCP 协议完整命令
 - [BKN 命令参考](../../skills/kweaver-core/references/bkn.md) — 图谱查询完整参数

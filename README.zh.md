@@ -388,6 +388,12 @@ cd packages/python
 # Context Loader MCP 请使用 TypeScript CLI，或在 Python SDK 中直接使用 ContextLoaderResource。
 ```
 
+## 文档指南
+
+- [Python SDK 开发者指南](docs/guides/python-sdk-guide.zh.md)（[English](docs/guides/python-sdk-guide.md)）— 在代码中使用 `kweaver-sdk`。
+- [AI 应用开发者接入指南](docs/guides/ai-app-integration.md) — MCP、CLI、接入场景。
+- [文档索引](docs/README.md) — `docs/` 导航。
+
 ## 开发与测试
 
 ```bash

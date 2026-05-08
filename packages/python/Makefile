@@ -1,4 +1,4 @@
-.PHONY: test test-cover test-e2e lint ci
+.PHONY: test test-cover test-e2e lint ci docs-python
 
 # UT: unit tests only, full mock, no external deps, < 60s
 # Use `python -m pytest` to guarantee the venv interpreter is used,
@@ -25,3 +25,7 @@ lint:
 
 # ci: lint + test-cover
 ci: lint test-cover
+
+# docs-python: HTML API reference from docstrings (output gitignored at repo root)
+docs-python:
+	PYTHONPATH=src uv run --extra docs python -m pdoc --docformat google kweaver -o ../../docs/reference/python-api-html

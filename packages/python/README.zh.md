@@ -14,6 +14,21 @@ pip install kweaver-sdk
 
 需要 **Python >= 3.10**。
 
+## 开发者指南
+
+使用说明（安装、认证、`KWeaverClient`、分页与排障）：
+
+- [中文](../../docs/guides/python-sdk-guide.zh.md)
+- [English](../../docs/guides/python-sdk-guide.md)
+
+从源码 docstring 生成 API HTML（在仓库根执行）：
+
+```bash
+make -C packages/python docs-python
+```
+
+在浏览器打开 `docs/reference/python-api-html/index.html`。
+
 ## 快速上手
 
 ### 搜索与对话（最简路径）

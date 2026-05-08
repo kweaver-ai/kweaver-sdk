@@ -53,23 +53,150 @@ def test_test_connectivity(capture: RequestCapture):
     assert "/datasource/test" in capture.last_url()
 
 
-def test_list_tables(capture: RequestCapture):
+def test_list_tables_via_vega_resources(capture: RequestCapture):
     def handler(req: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={
-            "data": [
-                {"name": "products", "columns": [
-                    {"name": "id", "type": "integer"},
-                    {"name": "name", "type": "varchar"},
-                ]},
-                {"name": "orders", "columns": []},
-            ]
-        })
+        url = str(req.url)
+        if "/vega-backend/v1/catalogs/cat-1/resources" in url and req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {"id": "r1", "catalog_id": "cat-1", "name": "skills", "category": "table"},
+                        {"id": "r2", "catalog_id": "cat-1", "name": "orders", "category": "table"},
+                    ],
+                    "total_count": 2,
+                },
+            )
+        if "/vega-backend/v1/resources/r1" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {
+                            "id": "r1",
+                            "name": "skills",
+                            "category": "table",
+                            "source_metadata": {
+                                "columns": [
+                                    {"name": "skill_id", "type": "varchar"},
+                                    {"name": "label", "type": "varchar"},
+                                ]
+                            },
+                        }
+                    ]
+                },
+            )
+        if "/vega-backend/v1/resources/r2" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {
+                            "id": "r2",
+                            "name": "orders",
+                            "category": "table",
+                            "source_metadata": {"columns": []},
+                        }
+                    ]
+                },
+            )
+        raise AssertionError(f"unexpected {req.method} {req.url}")
 
     client = make_client(handler, capture)
-    tables = client.datasources.list_tables("ds_01")
-    assert len(tables) == 2
-    assert tables[0].name == "products"
-    assert tables[0].columns[0].name == "id"
+    tables = client.datasources.list_tables("cat-1", auto_scan=False)
+    names = sorted(t.name for t in tables)
+    assert names == ["orders", "skills"]
+    skills = next(t for t in tables if t.name == "skills")
+    assert [c.name for c in skills.columns] == ["skill_id", "label"]
+    for url in [str(r.url) for r in capture.requests]:
+        assert "/data-connection/" not in url, f"leak: {url}"
+
+
+def test_list_tables_empty_with_auto_scan_triggers_discover(capture: RequestCapture):
+    list_calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        url = str(req.url)
+        if "/vega-backend/v1/catalogs/cat-1/resources" in url and req.method == "GET":
+            list_calls["n"] += 1
+            if list_calls["n"] == 1:
+                return httpx.Response(200, json={"entries": [], "total_count": 0})
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {"id": "r1", "catalog_id": "cat-1", "name": "skills", "category": "table"}
+                    ],
+                    "total_count": 1,
+                },
+            )
+        if "/vega-backend/v1/catalogs/cat-1/discover" in url and req.method == "POST":
+            return httpx.Response(200, json={"task_id": "t1"})
+        if "/vega-backend/v1/resources/r1" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {
+                            "id": "r1",
+                            "name": "skills",
+                            "source_metadata": {
+                                "columns": [{"name": "id", "type": "integer"}]
+                            },
+                        }
+                    ]
+                },
+            )
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    client = make_client(handler, capture)
+    tables = client.datasources.list_tables("cat-1", auto_scan=True)
+    assert len(tables) == 1
+    assert tables[0].name == "skills"
+    assert list_calls["n"] == 2
+
+
+def test_list_tables_keyword_filters_before_detail_fetch(capture: RequestCapture):
+    detail_calls: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        url = str(req.url)
+        if "/vega-backend/v1/catalogs/cat-1/resources" in url and req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {"id": "r1", "catalog_id": "cat-1", "name": "skills", "category": "table"},
+                        {"id": "r2", "catalog_id": "cat-1", "name": "orders", "category": "table"},
+                        {"id": "r3", "catalog_id": "cat-1", "name": "skill_logs", "category": "table"},
+                    ],
+                    "total_count": 3,
+                },
+            )
+        if "/vega-backend/v1/resources/" in url:
+            rid = url.split("/resources/")[1].split("?")[0]
+            detail_calls.append(rid)
+            return httpx.Response(
+                200,
+                json={
+                    "entries": [
+                        {
+                            "id": rid,
+                            "name": rid,
+                            "source_metadata": {"columns": []},
+                        }
+                    ]
+                },
+            )
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    client = make_client(handler, capture)
+    tables = client.datasources.list_tables("cat-1", keyword="skill", auto_scan=False)
+    # Only "skills" and "skill_logs" match — orders filtered out before detail fetch
+    assert sorted(t.name for t in tables) == ["r1", "r3"]
+    assert sorted(detail_calls) == ["r1", "r3"], (
+        f"detail fetch should skip non-matching summaries; got {detail_calls}"
+    )
 
 
 def test_list_datasources():

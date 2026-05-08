@@ -139,51 +139,72 @@ class DataSourcesResource:
         offset: int | None = None,
         auto_scan: bool = True,
     ) -> list[Table]:
-        params: dict[str, Any] = {"limit": -1}
-        if keyword:
-            params["keyword"] = keyword
-        if limit is not None:
-            params["limit"] = limit
-        if offset is not None:
-            params["offset"] = offset
-        data = self._http.get(
-            f"/api/data-connection/v1/metadata/data-source/{id}",
-            params=params,
-        )
-        items = data if isinstance(data, list) else (data.get("entries") or data.get("data") or [])
+        """List tables with columns from a vega catalog.
 
-        # Auto-trigger metadata scan if no tables found
-        if not items and auto_scan:
-            self.scan_metadata(id)
+        Two-stage fetch:
+          1. ``GET /api/vega-backend/v1/catalogs/{id}/resources?category=table``
+          2. For each resource: ``GET /api/vega-backend/v1/resources/{rid}``,
+             extracting ``source_metadata.columns``.
+
+        If the catalog has no table resources and ``auto_scan=True``, triggers
+        a discover and retries the list once. The optional ``keyword`` filters
+        summaries client-side before the per-resource detail fetches, narrowing
+        N+1 to k+1.
+
+        ``id`` is a vega catalog id, not a legacy data-connection datasource UUID.
+        """
+
+        def _list_summaries() -> list[dict[str, Any]]:
+            params: dict[str, Any] = {"category": "table"}
+            if limit is not None:
+                params["limit"] = limit
+            if offset is not None:
+                params["offset"] = offset
             data = self._http.get(
-                f"/api/data-connection/v1/metadata/data-source/{id}",
+                f"/api/vega-backend/v1/catalogs/{id}/resources",
                 params=params,
             )
-            items = data if isinstance(data, list) else (data.get("entries") or data.get("data") or [])
+            items = (
+                data
+                if isinstance(data, list)
+                else (data.get("entries") or data.get("data") or [])
+            )
+            if keyword:
+                k = keyword.lower()
+                items = [it for it in items if k in str(it.get("name", "")).lower()]
+            return items
+
+        summaries = _list_summaries()
+        if not summaries and auto_scan:
+            self.scan_metadata(id)
+            summaries = _list_summaries()
 
         tables: list[Table] = []
-        for t in items:
-            table_id = t.get("id", "")
-            table_name = t.get("name", "")
-            # Fetch column details if not inline
-            columns_raw = t.get("columns", t.get("fields", []))
-            if not columns_raw and table_id:
-                col_data = self._http.get(
-                    f"/api/data-connection/v1/metadata/table/{table_id}",
-                    params={"limit": -1},
-                )
-                columns_raw = (
-                    col_data if isinstance(col_data, list)
-                    else (col_data.get("entries") or col_data.get("data") or [])
-                )
+        for s in summaries:
+            rid = s.get("id", "")
+            if not rid:
+                continue
+            try:
+                detail_raw = self._http.get(f"/api/vega-backend/v1/resources/{rid}")
+            except Exception as exc:  # noqa: BLE001 — re-raise with id context
+                raise type(exc)(f"vega resource {rid} fetch failed: {exc}") from exc
+
+            detail = detail_raw
+            if isinstance(detail_raw, dict):
+                entries = detail_raw.get("entries") or detail_raw.get("data")
+                if isinstance(entries, list) and entries:
+                    detail = entries[0]
+            if not isinstance(detail, dict):
+                continue
+            columns_raw = (detail.get("source_metadata") or {}).get("columns") or []
             tables.append(
                 Table(
-                    name=table_name,
+                    name=detail.get("name", s.get("name", "")),
                     columns=[
                         Column(
                             name=c.get("name", c.get("field_name", "")),
                             type=c.get("type", c.get("field_type", "varchar")),
-                            comment=c.get("comment"),
+                            comment=c.get("description") or c.get("comment"),
                         )
                         for c in columns_raw
                     ],

@@ -277,3 +277,14 @@ test("parseKnCreateFromCsvArgs: rejects legacy datasource UUID", () => {
     /vega catalog id/i,
   );
 });
+
+test("parseKnCreateFromCsvArgs: accepts short vega catalog id", () => {
+  const opts = parseKnCreateFromCsvArgs([
+    "d7nicrcjto2s73d9g67g",
+    "--files",
+    "/tmp/a.csv",
+    "--name",
+    "kn1",
+  ]);
+  assert.equal(opts.dsId, "d7nicrcjto2s73d9g67g");
+});

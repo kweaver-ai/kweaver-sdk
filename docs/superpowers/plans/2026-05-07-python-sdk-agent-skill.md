@@ -4,19 +4,19 @@
 
 ## Goal
 
-1. **Agent Skill** [`skills/kweaver-python-sdk`](../../../skills/kweaver-python-sdk): help agents maintain [`packages/python`](../../../packages/python) in this monorepo (tests, resource modules, `AGENTS` conventions).
+1. ~~**Agent Skill** `skills/kweaver-python-sdk`~~ **Removed.** Maintainer-facing Cursor/agent skill under `skills/kweaver-python-sdk` was abandoned and deleted. For repo conventions use [`AGENTS.md`](../../../AGENTS.md); for PyPI usage see guides below.
 2. **Developer guides** [`docs/guides/python-sdk-guide.md`](../../../docs/guides/python-sdk-guide.md) / [`python-sdk-guide.zh.md`](../../../docs/guides/python-sdk-guide.zh.md): for consumers of PyPI `kweaver-sdk` — install, auth, `KWeaverClient`, typical calls, env vars, troubleshooting; complements [`docs/guides/ai-app-integration.md`](../../../docs/guides/ai-app-integration.md).
 3. **Optional API HTML**: generated from docstrings via **pdoc** — [`packages/python/pyproject.toml`](../../../packages/python/pyproject.toml) optional `docs` extra, [`packages/python/Makefile`](../../../packages/python/Makefile) target `docs-python`; output [`docs/reference/python-api-html/`](../../../docs/reference/python-api-html/) is gitignored.
 
 ## Architecture
 
-- Skill = layered Markdown + `references/` (maintainer-facing).
+- ~~Dedicated Python SDK Cursor skill~~ (removed).
 - Guides = handwritten narrative + copy-paste examples; API symbol index via generated HTML.
 - Docstrings remain English; list/query **limit** defaults match TS — see repo [`AGENTS.md`](../../../AGENTS.md).
 
 ## Tech stack
 
-Skill frontmatter ([agentskills.io/specification](https://agentskills.io/specification)), Markdown guides, [pdoc](https://pdoc.dev/), `uv` / Makefile, `pytest`; parity with [`packages/typescript`](../../../packages/typescript) where applicable.
+Markdown guides, [pdoc](https://pdoc.dev/), `uv` / Makefile, `pytest`; parity with [`packages/typescript`](../../../packages/typescript) where applicable.
 
 ---
 
@@ -34,28 +34,18 @@ Skill frontmatter ([agentskills.io/specification](https://agentskills.io/specifi
 
 ### Task 2: Pressure scenarios (documented)
 
-Agents without this skill often:
+Agents editing **`packages/python`** without repo conventions often:
 
 - Change Python SDK code without running `make -C packages/python test` or root `make test`.
 - Diverge **default limits** from TypeScript SDK / [`AGENTS.md`](../../../AGENTS.md).
 - Add **Chinese** comments or log messages (repo rule: English only).
 - Run `pytest` from the wrong directory instead of Makefile targets.
 
-**Skill mitigation:** `SKILL.md` → **Common Mistakes** addresses these.
+**Mitigation:** follow [`AGENTS.md`](../../../AGENTS.md) and Python guide workflows (`make -C packages/python test`, limits parity).
 
-### Task 3: `skills/kweaver-python-sdk/SKILL.md`
+### Task 3–4: `skills/kweaver-python-sdk/` (**cancelled**)
 
-- [x] YAML frontmatter: `name: kweaver-python-sdk`, `description` starts with **Use when…** (maintain Python SDK / pytest / TS parity — not end-user pip usage).
-- [x] Sections: Overview, When to Use, Quick Reference (table), Workflow, References, Common Mistakes.
-
-Verify: read frontmatter; skim Workflow matches Makefile targets.
-
-### Task 4: `skills/kweaver-python-sdk/references/`
-
-- [x] [`layout-and-resources.md`](../../../skills/kweaver-python-sdk/references/layout-and-resources.md): `resources/*.py`, `_client.py` registration, checklist for new resources.
-- [x] [`testing-and-make.md`](../../../skills/kweaver-python-sdk/references/testing-and-make.md): UT all mock, `tests/unit/` vs `tests/e2e/`, `make test` / `make ci` contracts.
-
-Verify: links resolve relative from skill folder.
+Skill directory deleted from the repo. Use **`AGENTS.md`** + [`docs/guides/python-sdk-guide.md`](../../../docs/guides/python-sdk-guide.md) + [`packages/python`](../../../packages/python) sources instead.
 
 ### Task 5: Guides (Phase Doc-A)
 

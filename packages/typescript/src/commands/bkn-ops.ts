@@ -45,21 +45,8 @@ import {
   parsePkMap,
   resolvePrimaryKey,
   confirmYes,
+  assertVegaCatalogId,
 } from "./bkn-utils.js";
-
-// ── Vega catalog id guard ────────────────────────────────────────────────────
-
-const UUID_V4_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function assertVegaCatalogId(id: string): void {
-  if (UUID_V4_RE.test(id)) {
-    throw new Error(
-      `bkn create-from-ds expects a vega catalog id, got UUID '${id}'. ` +
-      `This looks like a legacy data-connection datasource UUID. ` +
-      `Run \`kweaver vega catalog list --keyword <name>\` to find the corresponding catalog id.`,
-    );
-  }
-}
 
 // ── BKN object name validation ──────────────────────────────────────────────
 // Mirrors bkn-backend OBJECT_NAME_MAX_LENGTH (interfaces/common.go:28) and

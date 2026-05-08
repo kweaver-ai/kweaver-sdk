@@ -14,6 +14,7 @@ import {
   detectPrimaryKey,
   formatPkDetectionError,
   parsePkMap,
+  assertVegaCatalogId,
 } from "../src/commands/bkn-utils.js";
 
 let savedConfigDir: string | undefined;
@@ -287,4 +288,17 @@ test("parseKnCreateFromCsvArgs: accepts short vega catalog id", () => {
     "kn1",
   ]);
   assert.equal(opts.dsId, "d7nicrcjto2s73d9g67g");
+});
+
+// ── assertVegaCatalogId (shared utility, now also used by ds tables) ──────────
+
+test("assertVegaCatalogId: rejects UUID v4 with helpful hint", () => {
+  assert.throws(
+    () => assertVegaCatalogId("dfaf719c-4c41-4661-9ec9-25c263ff8c46"),
+    /vega catalog list/,
+  );
+});
+
+test("assertVegaCatalogId: accepts short slug", () => {
+  assert.doesNotThrow(() => assertVegaCatalogId("d7nicrcjto2s73d9g67g"));
 });

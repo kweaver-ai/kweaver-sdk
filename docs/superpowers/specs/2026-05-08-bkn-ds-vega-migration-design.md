@@ -32,7 +32,7 @@
 ### 保持不变（继续走 data-connection）
 
 - `testDatasource` / `createDatasource` / `listDatasources` / `getDatasource` / `deleteDatasource` / `listTables`
-- `kweaver ds list/get/tables/connect/delete` 全部 CLI 子命令
+- `kweaver ds list/get/connect/delete` CLI 子命令
 - `packages/typescript/src/utils/crypto.ts`、`packages/python/src/kweaver/_crypto.py`
 - `_client.py` / `client.ts` 的 `DataSources*` 资源对外签名
 
@@ -62,7 +62,7 @@
 - 实现：`discoverVegaCatalog(id, wait=true)` —— 异步轮询逻辑收敛到 vega 同步等待
 - 入参 `dsType` 字段不再使用（vega catalog 自带 `connector_type`），但为减少签名变动保留并忽略
 
-### 调用方契约：`bkn create-from-ds`
+### 调用方契约：`bkn create-from-ds` 与 `ds tables`
 
 - 入参语义：`--ds-id` / 位置参数 现期望 **vega catalog id**
 - 帮助文案更新：明确说明传 vega catalog id（用 `kweaver vega catalog list --keyword <name>` 查得）
@@ -70,6 +70,8 @@
 
   > 检测到 legacy datasource UUID。`bkn create-from-ds` 现在使用 vega catalog id —— 请运行 `kweaver vega catalog list --keyword <name>` 找到对应 id 后再传入。
 - 此校验仅用于把误用引导到正路上，不做"自动反查 / fallback 到 data-connection"（避免 data-connection 不可用时的链路撕裂）
+
+`kweaver ds tables <vega-catalog-id>` 也走 vega catalogs（与 `bkn create-from-ds` 共享 `listTablesWithColumns` 实现）。`kweaver ds list/get` 仍读 data-connection，所以日常浏览旧数据源的入口仍在，但浏览到的 datasource UUID 不能直接传给 `ds tables` —— 用 `kweaver vega catalog list --keyword <name>` 反查 vega 端 id。
 
 ### 错误处理
 
@@ -131,7 +133,7 @@ kweaver bkn create-from-ds --catalog-id d7nicrcjto2s73d9g67g <其他参数>
 
 ## 风险与已知 trade-off
 
-- `kweaver ds tables <legacy-uuid>` 仍走 data-connection，与 `bkn create-from-ds` 用 vega 形成命令面不一致 —— 已接受作为最小改动代价
+- `kweaver ds list` / `ds get` 走 data-connection（输出 UUID），`ds tables` / `bkn create-from-ds` 走 vega（要 catalog id）—— 命令面有 ID 风格的不一致，但更小的改动面下没有更好的折中。
 - N+1 `getVegaResource` 比原 list-tables 单次调用慢 —— 用并发缓解；表数量极大（>1000）时可能成为瓶颈，作为已知约束
 - data-connection 服务真下线时，`ds list/get/tables` 等仍会断 —— 留待届时整体迁移
 
@@ -141,4 +143,4 @@ kweaver bkn create-from-ds --catalog-id d7nicrcjto2s73d9g67g <其他参数>
 - [ ] E2E `bkn create-from-ds --catalog-id <vega-id>` 输出与旧实现 BKN 等价
 - [ ] CLI 帮助文案显示新入参语义
 - [ ] UUID 输入触发明确的引导错误
-- [ ] 没有改动 ds list/get/connect/tables/delete 任一子命令的行为
+- [ ] 没有改动 ds list/get/connect/delete 任一子命令的行为（ds tables 已纳入迁移范围）

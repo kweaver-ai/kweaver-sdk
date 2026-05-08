@@ -270,6 +270,28 @@ export function detectDisplayKey(
   return primaryKey;
 }
 
+// ── Vega catalog id guard ────────────────────────────────────────────────────
+
+const UUID_V4_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/**
+ * Reject legacy data-connection datasource UUIDs.
+ *
+ * Since the SDK migration to vega-backend (#114), commands that call
+ * `listTablesWithColumns` / `scanMetadata` expect a vega catalog id (a short
+ * slug like `d7nicrcjto2s73d9g67g`), not the UUID-shaped id stored in
+ * data-connection.
+ */
+export function assertVegaCatalogId(id: string): void {
+  if (UUID_V4_RE.test(id)) {
+    throw new Error(
+      `expected a vega catalog id, got UUID '${id}'. ` +
+      `This looks like a legacy data-connection datasource UUID. ` +
+      `Run \`kweaver vega catalog list --keyword <name>\` to find the corresponding catalog id.`,
+    );
+  }
+}
+
 // ── Interactive confirmation ─────────────────────────────────────────────────
 
 export function confirmYes(prompt: string): Promise<boolean> {

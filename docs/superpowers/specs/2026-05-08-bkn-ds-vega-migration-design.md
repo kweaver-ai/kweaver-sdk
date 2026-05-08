@@ -20,14 +20,17 @@
 
 ### 改动
 
+- `packages/typescript/src/api/vega.ts`
+  - 新增 `listTablesWithColumns` —— 基于 vega-backend catalogs 的实现
+  - 新增 `scanMetadata` —— `discoverVegaCatalog` 包装；`scanDatasourceMetadata` 同步迁入并保留为薄包装
 - `packages/typescript/src/api/datasources.ts`
-  - `listTablesWithColumns` —— 重写为基于 vega-backend catalogs 的实现
-  - `scanMetadata` —— 重写为 `discoverVegaCatalog` 包装（`scanDatasourceMetadata` 是其薄包装，自动随之改）
+  - 移除上述三个函数的旧实现；改为从 `./vega.js` re-export，保持调用方导入路径兼容
+- `packages/python/src/kweaver/resources/vega/catalogs.py`
+  - `VegaCatalogsResource` 新增 `scan_metadata` / `list_tables`，承载真实实现
 - `packages/python/src/kweaver/resources/datasources.py`
-  - 对应两个方法的 Python 等价改造
-- `packages/typescript/src/commands/bkn-ops.ts`
-  - 入参文案与帮助说明：`bkn create-from-ds` 现在期望 **vega catalog id**
-  - UUID 风格输入的前置校验与提示文案
+  - `DataSourcesResource.scan_metadata` / `list_tables` 改为对 `VegaCatalogsResource` 的薄委托，签名保持不变
+- `packages/typescript/src/commands/bkn-ops.ts` / `src/commands/ds.ts` / `src/resources/datasources.ts`
+  - 直接从 `../api/vega.js` 导入新位置；`bkn create-from-ds` 帮助文案与 UUID 前置校验保持本 spec 既定行为
 
 ### 保持不变（继续走 data-connection）
 
@@ -43,6 +46,10 @@
 - `_crypto` / `makeBinData` 删除 —— 仅在被迁移函数路径上变为死代码引用，本次不删除模块以避免影响其他调用方
 
 ## 设计
+
+### 模块归属
+
+迁移后这三个函数在物理上属于 vega 模块（`api/vega.ts`、`resources/vega/catalogs.py`），因为它们 100% 调用 vega-backend。`api/datasources.ts` / `resources/datasources.py` 仅保留向后兼容的 re-export 与委托层 —— 旧调用方（`commands/ds.ts`、`commands/bkn-ops.ts`、`resources/DataSourcesResource`、单测）可以选择继续从 `datasources` 导入或直接迁到 `vega`，本次实施已让现役调用方都改导自 vega 以避免后续误用。
 
 ### 函数级改造
 

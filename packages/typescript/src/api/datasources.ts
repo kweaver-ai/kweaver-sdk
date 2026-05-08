@@ -355,12 +355,18 @@ export async function listTablesWithColumns(
 
   const details = await Promise.all(
     summaries.map(async (s) => {
-      const body = await getVegaResource({
-        baseUrl,
-        accessToken,
-        id: s.id,
-        businessDomain,
-      });
+      let body: string;
+      try {
+        body = await getVegaResource({
+          baseUrl,
+          accessToken,
+          id: s.id,
+          businessDomain,
+        });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`vega resource ${s.id} fetch failed: ${reason}`);
+      }
       const parsed = JSON.parse(body) as
         | VegaResourceDetail
         | { entries?: VegaResourceDetail[]; data?: VegaResourceDetail[] };

@@ -211,7 +211,7 @@ test("listTablesWithColumns: per-resource fetch failure surfaces (not silently d
           accessToken: "tok",
           id: "cat-1",
         }),
-      /500|r2/,
+      /r2/,
     );
   } finally {
     globalThis.fetch = originalFetch;

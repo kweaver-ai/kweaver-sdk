@@ -47,6 +47,20 @@ import {
   confirmYes,
 } from "./bkn-utils.js";
 
+// ── Vega catalog id guard ────────────────────────────────────────────────────
+
+const UUID_V4_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function assertVegaCatalogId(id: string): void {
+  if (UUID_V4_RE.test(id)) {
+    throw new Error(
+      `bkn create-from-ds expects a vega catalog id, got UUID '${id}'. ` +
+      `This looks like a legacy data-connection datasource UUID. ` +
+      `Run \`kweaver vega catalog list --keyword <name>\` to find the corresponding catalog id.`,
+    );
+  }
+}
+
 // ── BKN object name validation ──────────────────────────────────────────────
 // Mirrors bkn-backend OBJECT_NAME_MAX_LENGTH (interfaces/common.go:28) and
 // validateObjectName (driveradapters/validate.go:85). 40 utf-8 codepoints,
@@ -568,9 +582,11 @@ export async function runKnPullCommand(args: string[]): Promise<number> {
 
 // ── Create from datasource ──────────────────────────────────────────────────
 
-const KN_CREATE_FROM_DS_HELP = `kweaver bkn create-from-ds <ds-id> --name X [options]
+const KN_CREATE_FROM_DS_HELP = `kweaver bkn create-from-ds <vega-catalog-id> --name X [options]
 
-Create a knowledge network from a datasource (dataviews + object types + optional build).
+Create a knowledge network from a vega catalog datasource (dataviews + object types + optional build).
+<vega-catalog-id> is a vega catalog id (use \`kweaver vega catalog list\` to find one;
+legacy data-connection datasource UUIDs are no longer accepted).
 
 Options:
   --name <s>       Knowledge network name (required)
@@ -654,6 +670,7 @@ export function parseKnCreateFromDsArgs(args: string[]): {
   if (!dsId || !name) {
     throw new Error("Usage: kweaver bkn create-from-ds <ds-id> --name X [options]");
   }
+  assertVegaCatalogId(dsId);
   const pkMap = pkMapStr ? parsePkMap(pkMapStr) : {};
   if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { dsId, name, tables, pkMap, build, timeout, businessDomain, pretty, noRollback };
@@ -964,9 +981,11 @@ export async function runKnCreateFromDsCommand(
 
 // ── Create from CSV ─────────────────────────────────────────────────────────
 
-const KN_CREATE_FROM_CSV_HELP = `kweaver bkn create-from-csv <ds-id> --files <glob> --name X [options]
+const KN_CREATE_FROM_CSV_HELP = `kweaver bkn create-from-csv <vega-catalog-id> --files <glob> --name X [options]
 
-Import CSV files into datasource, then create a knowledge network.
+Import CSV files into a vega catalog datasource, then create a knowledge network.
+<vega-catalog-id> is a vega catalog id (use \`kweaver vega catalog list\` to find one;
+legacy data-connection datasource UUIDs are no longer accepted).
 
 Options:
   --files <s>          CSV file paths (comma-separated or glob, required)
@@ -1064,6 +1083,7 @@ export function parseKnCreateFromCsvArgs(args: string[]): {
   if (!dsId || !files || !name) {
     throw new Error("Usage: kweaver bkn create-from-csv <ds-id> --files <glob> --name X [options]");
   }
+  assertVegaCatalogId(dsId);
   const pkMap = pkMapStr ? parsePkMap(pkMapStr) : {};
   if (!businessDomain) businessDomain = resolveBusinessDomain();
   return { dsId, files, name, tablePrefix, batchSize, tables, pkMap, build, timeout, businessDomain, noRollback };

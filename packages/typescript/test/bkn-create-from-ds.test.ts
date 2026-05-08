@@ -240,3 +240,40 @@ test("parseKnCreateFromCsvArgs: --pk-map populates pkMap", () => {
   ]);
   assert.deepEqual(opts.pkMap, { t1: "f1" });
 });
+
+test("parseKnCreateFromDsArgs: rejects legacy datasource UUID", () => {
+  const uuid = "dfaf719c-4c41-4661-9ec9-25c263ff8c46";
+  assert.throws(
+    () =>
+      parseKnCreateFromDsArgs([
+        uuid,
+        "--name",
+        "kn1",
+      ]),
+    /vega catalog id/i,
+  );
+});
+
+test("parseKnCreateFromDsArgs: accepts short vega catalog id", () => {
+  const opts = parseKnCreateFromDsArgs([
+    "d7nicrcjto2s73d9g67g",
+    "--name",
+    "kn1",
+  ]);
+  assert.equal(opts.dsId, "d7nicrcjto2s73d9g67g");
+});
+
+test("parseKnCreateFromCsvArgs: rejects legacy datasource UUID", () => {
+  const uuid = "dfaf719c-4c41-4661-9ec9-25c263ff8c46";
+  assert.throws(
+    () =>
+      parseKnCreateFromCsvArgs([
+        uuid,
+        "--name",
+        "kn1",
+        "--files",
+        "/tmp/a.csv",
+      ]),
+    /vega catalog id/i,
+  );
+});

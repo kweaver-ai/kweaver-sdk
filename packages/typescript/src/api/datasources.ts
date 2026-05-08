@@ -1,6 +1,7 @@
 import { HttpError } from "../utils/http.js";
 import { encryptPassword } from "../utils/crypto.js";
 import { buildHeaders } from "./headers.js";
+import { discoverVegaCatalog } from "./vega.js";
 
 const HTTPS_PROTOCOLS = new Set(["maxcompute", "anyshare7", "opensearch"]);
 
@@ -379,58 +380,25 @@ export interface ScanMetadataOptions {
   baseUrl: string;
   accessToken: string;
   id: string;
+  /** Retained for signature compatibility; ignored — vega catalog already knows its connector_type. */
   dsType?: string;
   businessDomain?: string;
 }
 
+/**
+ * Trigger a metadata scan for a vega catalog and wait for completion.
+ * `id` is a vega catalog id (e.g. `d7nicrcjto2s73d9g67g`), not a legacy
+ * data-connection datasource UUID.
+ */
 export async function scanMetadata(options: ScanMetadataOptions): Promise<string> {
-  const {
+  const { baseUrl, accessToken, id, businessDomain = "bd_public" } = options;
+  return discoverVegaCatalog({
     baseUrl,
     accessToken,
     id,
-    dsType = "mysql",
-    businessDomain = "bd_public",
-  } = options;
-
-  const base = baseUrl.replace(/\/+$/, "");
-  const scanUrl = `${base}/api/data-connection/v1/metadata/scan`;
-  const statusUrl = (taskId: string) => `${base}/api/data-connection/v1/metadata/scan/${taskId}`;
-
-  const scanBody = JSON.stringify({
-    scan_name: `sdk_scan_${id.slice(0, 8)}`,
-    type: 0,
-    ds_info: { ds_id: id, ds_type: dsType },
-    use_default_template: true,
-    use_multi_threads: true,
-    status: "open",
+    wait: true,
+    businessDomain,
   });
-
-  const scanResponse = await fetch(scanUrl, {
-    method: "POST",
-    headers: {
-      ...buildHeaders(accessToken, businessDomain),
-      "content-type": "application/json",
-    },
-    body: scanBody,
-  });
-
-  const scanResult = await scanResponse.json() as { id?: string };
-  const taskId = scanResult.id ?? "";
-
-  for (let i = 0; i < 30; i += 1) {
-    const delay = Math.min(2000 * Math.pow(1.5, i), 15000);
-    await new Promise((r) => setTimeout(r, delay));
-    const statusResponse = await fetch(statusUrl(taskId), {
-      method: "GET",
-      headers: buildHeaders(accessToken, businessDomain),
-    });
-    const statusData = (await statusResponse.json()) as { status?: string };
-    if (statusData.status === "success" || statusData.status === "fail") {
-      break;
-    }
-  }
-
-  return taskId;
 }
 
 export interface ScanDatasourceMetadataOptions {
@@ -440,13 +408,15 @@ export interface ScanDatasourceMetadataOptions {
   businessDomain?: string;
 }
 
-// Looks up a datasource's type then triggers a metadata scan, so callers
-// don't have to repeat the GET-then-scan dance whenever a flow needs the
-// platform catalog refreshed (after import-csv, before discovering tables).
+/**
+ * Trigger a metadata scan and wait for completion. `id` is a vega catalog id.
+ *
+ * Historically this looked up the legacy `ds_type` to build a data-connection
+ * scan body; vega catalogs already carry their own `connector_type`, so the
+ * lookup is gone.
+ */
 export async function scanDatasourceMetadata(
   options: ScanDatasourceMetadataOptions,
 ): Promise<string> {
-  const dsBody = await getDatasource(options);
-  const dsType = (JSON.parse(dsBody) as { type?: string }).type ?? "mysql";
-  return scanMetadata({ ...options, dsType });
+  return scanMetadata(options);
 }

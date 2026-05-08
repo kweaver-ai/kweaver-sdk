@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { scanDatasourceMetadata } from "../src/api/datasources.js";
+import { scanDatasourceMetadata, scanMetadata } from "../src/api/datasources.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -25,70 +25,84 @@ function stubFetch(handler: (call: CallRecord) => Response | Promise<Response>) 
   return calls;
 }
 
-test("scanDatasourceMetadata: fetches ds type then triggers scan and polls", async () => {
+test("scanMetadata: POSTs vega discover with wait=true", async () => {
   const calls = stubFetch((c) => {
-    if (c.method === "GET" && c.url.includes("/data-connection/v1/datasource/")) {
-      return new Response(JSON.stringify({ type: "postgres" }), { status: 200 });
-    }
-    if (c.method === "POST" && c.url.endsWith("/data-connection/v1/metadata/scan")) {
-      return new Response(JSON.stringify({ id: "task-xyz" }), { status: 200 });
-    }
-    if (c.method === "GET" && c.url.includes("/data-connection/v1/metadata/scan/")) {
-      return new Response(JSON.stringify({ status: "success" }), { status: 200 });
+    if (
+      c.method === "POST" &&
+      c.url.includes("/vega-backend/v1/catalogs/cat-1/discover")
+    ) {
+      return new Response(JSON.stringify({ task_id: "vega-task-9" }), { status: 200 });
     }
     throw new Error(`unexpected ${c.method} ${c.url}`);
   });
 
   try {
-    const taskId = await scanDatasourceMetadata({
+    const body = await scanMetadata({
       baseUrl: "https://h.example",
       accessToken: "tok",
-      id: "ds-1",
+      id: "cat-1",
       businessDomain: "bd_public",
     });
-
-    assert.equal(taskId, "task-xyz");
-
-    const lookup = calls.find((c) => c.method === "GET" && c.url.includes("/datasource/ds-1"));
-    assert.ok(lookup, "expected datasource lookup call");
-
-    const scanPost = calls.find((c) => c.method === "POST" && c.url.endsWith("/metadata/scan"));
-    assert.ok(scanPost, "expected scan POST call");
-    assert.ok(scanPost!.body, "scan body should be present");
-    const scanBody = JSON.parse(scanPost!.body!);
-    assert.equal(scanBody.ds_info.ds_id, "ds-1");
-    assert.equal(scanBody.ds_info.ds_type, "postgres", "ds_type should come from datasource lookup");
-
-    const status = calls.find((c) => c.method === "GET" && c.url.includes("/metadata/scan/task-xyz"));
-    assert.ok(status, "expected status poll call");
+    assert.ok(body.includes("vega-task-9"), "should return discover response body");
+    const discoverCall = calls.find((c) => c.url.includes("/discover"));
+    assert.ok(discoverCall, "must call vega discover");
+    const u = new URL(discoverCall!.url);
+    assert.equal(u.searchParams.get("wait"), "true", "wait must be true");
+    assert.equal(
+      calls.filter((c) => c.url.includes("/data-connection/")).length,
+      0,
+      "must not touch data-connection",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("scanDatasourceMetadata: defaults ds_type to mysql when datasource has no type", async () => {
-  stubFetch((c) => {
-    if (c.method === "GET" && c.url.includes("/data-connection/v1/datasource/")) {
-      return new Response(JSON.stringify({}), { status: 200 });
-    }
-    if (c.method === "POST" && c.url.endsWith("/data-connection/v1/metadata/scan")) {
-      const body = JSON.parse(c.body ?? "{}");
-      assert.equal(body.ds_info.ds_type, "mysql");
-      return new Response(JSON.stringify({ id: "task-default" }), { status: 200 });
-    }
-    if (c.method === "GET" && c.url.includes("/data-connection/v1/metadata/scan/")) {
-      return new Response(JSON.stringify({ status: "success" }), { status: 200 });
+test("scanDatasourceMetadata: delegates to vega discover (no GET-then-scan dance)", async () => {
+  const calls = stubFetch((c) => {
+    if (c.method === "POST" && c.url.includes("/vega-backend/v1/catalogs/cat-1/discover")) {
+      return new Response(JSON.stringify({ task_id: "vega-task-1" }), { status: 200 });
     }
     throw new Error(`unexpected ${c.method} ${c.url}`);
   });
 
   try {
-    const taskId = await scanDatasourceMetadata({
+    const body = await scanDatasourceMetadata({
       baseUrl: "https://h.example",
       accessToken: "tok",
-      id: "ds-2",
+      id: "cat-1",
+      businessDomain: "bd_public",
     });
-    assert.equal(taskId, "task-default");
+    assert.ok(body.includes("vega-task-1"));
+    assert.equal(
+      calls.filter((c) => c.url.includes("/data-connection/")).length,
+      0,
+      "must not touch data-connection",
+    );
+    assert.equal(
+      calls.filter((c) => c.method === "GET" && c.url.includes("/datasource/")).length,
+      0,
+      "must not look up legacy ds_type",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("scanMetadata: surfaces vega 404 with HttpError", async () => {
+  stubFetch(() => new Response("not found", { status: 404, statusText: "Not Found" }));
+
+  try {
+    await assert.rejects(
+      () =>
+        scanMetadata({
+          baseUrl: "https://h.example",
+          accessToken: "tok",
+          id: "missing",
+          businessDomain: "bd_public",
+        }),
+      /404/,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

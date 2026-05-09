@@ -1,33 +1,23 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "lang": "en",
+  "entryPointStrategy": "expand",
   "entryPoints": [
     "src/index.ts",
     "src/kweaver.ts",
     "src/client.ts",
-    "src/resources/agents.ts",
-    "src/resources/bkn.ts",
-    "src/resources/context-loader.ts",
-    "src/resources/conversations.ts",
-    "src/resources/dataflows.ts",
-    "src/resources/datasources.ts",
-    "src/resources/dataviews.ts",
-    "src/resources/knowledge-networks.ts",
-    "src/resources/models.ts",
-    "src/resources/skills.ts",
-    "src/resources/toolboxes.ts",
-    "src/resources/vega.ts",
-    "src/api/skills.ts",
-    "src/api/dataflow.ts",
-    "src/api/toolboxes.ts",
-    "src/auth/eacp-modify-password.ts"
+    "src/resources",
+    "src/api",
+    "src/auth"
   ],
   "tsconfig": "tsconfig.json",
-  "out": "../../docs/reference/typescript-api-html",
-  "readme": "README.md",
   "name": "@kweaver-ai/kweaver-sdk",
-  "gitRevision": "main",
-  "exclude": ["**/cli.ts", "**/commands/**", "**/*.test.ts"],
+  "exclude": [
+    "**/cli.ts",
+    "**/commands/**",
+    "**/*.test.ts",
+    "**/test/**",
+    "src/templates/**"
+  ],
   "excludeReferences": true,
   "skipErrorChecking": true
 }

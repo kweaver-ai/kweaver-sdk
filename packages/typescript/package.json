@@ -30,8 +30,8 @@
     "test": "node --import tsx --test test/*.test.ts",
     "test:e2e": "node --import tsx --test test/e2e/*.test.ts",
     "prepublishOnly": "npm run build",
-    "docs": "typedoc --options typedoc.json",
-    "docs:zh": "typedoc --options typedoc.json --lang zh --out ../../docs/reference/typescript-api-html-zh",
+    "docs": "node scripts/build-docs.mjs",
+    "docs:zh": "node scripts/build-docs.mjs --zh",
     "docs:all": "npm run docs && npm run docs:zh",
     "docs:serve": "npm run docs && serve ../../docs/reference/typescript-api-html -p 8766 -n",
     "docs:serve:zh": "npm run docs:zh && serve ../../docs/reference/typescript-api-html-zh -p 8767 -n"

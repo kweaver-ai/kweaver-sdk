@@ -36,7 +36,9 @@ npm run docs:zh          # Chinese UI chrome (--lang zh), separate output folder
 npm run docs:all         # both
 ```
 
-Output: `docs/reference/typescript-api-html/` (English UI), optionally `docs/reference/typescript-api-html-zh/` (Chinese UI strings). Ignored by git by default. TypeDoc does not provide an in-site language toggle; open each `index.html` or use `docs:serve` / `docs:serve:zh` on ports **8766** / **8767**. Source links use **`main`** as `gitRevision` so GitHub URLs stay valid when docs were generated from unpublished commits.
+Output: `docs/reference/typescript-api-html/` (English UI), optionally `docs/reference/typescript-api-html-zh/` (Chinese UI strings). Ignored by git by default. TypeDoc does not provide an in-site language toggle; open each `index.html` or use `docs:serve` / `docs:serve:zh` on ports **8766** / **8767**. The `gitRevision` for "Defined in" links comes from `TYPEDOC_GIT_REVISION` (or `GITHUB_SHA`), defaulting to **`main`**, so GitHub URLs stay valid when docs were generated from unpublished commits; in CI set `TYPEDOC_GIT_REVISION=$GITHUB_SHA` to pin links to the exact build.
+
+> **Important**: anything under `docs/reference/**` is regenerated from sources (Python docstrings, TypeScript TSDoc, and `packages/typescript/README*.md`). Do not edit files inside those folders — your changes will be overwritten on the next build.
 
 ## Other
 

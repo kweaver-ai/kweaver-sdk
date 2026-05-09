@@ -28,7 +28,13 @@ ci: lint test-cover
 
 # docs-python: HTML API reference from docstrings (output gitignored at repo root).
 # Pass every submodule so pdoc emits per-module HTML and type annotations link (not plain text).
+# Module list is generated first; if scripts/list_pdoc_modules.py fails or returns
+# nothing, the build aborts loudly instead of silently invoking pdoc with no args.
 docs-python:
+	@set -e; \
+	MODS="$$(PYTHONPATH=src uv run python scripts/list_pdoc_modules.py)"; \
+	if [ -z "$$MODS" ]; then \
+		echo "[docs-python] module list is empty; aborting" >&2; exit 1; \
+	fi; \
 	PYTHONPATH=src uv run --extra docs python -m pdoc --docformat google \
-		-o ../../docs/reference/python-api-html \
-		$$(PYTHONPATH=src uv run python scripts/list_pdoc_modules.py)
+		-o ../../docs/reference/python-api-html $$MODS

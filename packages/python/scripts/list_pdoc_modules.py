@@ -15,14 +15,23 @@ Usage (from ``packages/python``)::
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 
-def main() -> None:
+def main() -> int:
     pkg_root = Path(__file__).resolve().parent.parent / "src" / "kweaver"
     src_root = pkg_root.parent
+    if not pkg_root.is_dir():
+        print(
+            f"[list_pdoc_modules] package not found at {pkg_root}",
+            file=sys.stderr,
+        )
+        return 2
     modules: list[str] = []
     for path in sorted(pkg_root.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
         rel = path.relative_to(src_root)
         parts = list(rel.with_suffix("").parts)
         if parts and parts[-1] == "__init__":
@@ -30,8 +39,15 @@ def main() -> None:
         if not parts:
             continue
         modules.append(".".join(parts))
+    if not modules:
+        print(
+            "[list_pdoc_modules] no modules discovered under src/kweaver",
+            file=sys.stderr,
+        )
+        return 1
     print(" ".join(modules))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

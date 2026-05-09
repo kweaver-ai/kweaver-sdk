@@ -9,12 +9,11 @@ import {
   listDatasources,
   getDatasource,
   deleteDatasource,
-  listTables,
-  listTablesWithColumns,
-  scanMetadata,
 } from "../api/datasources.js";
+import { listTablesWithColumns, scanMetadata } from "../api/vega.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { assertVegaCatalogId } from "./bkn-utils.js";
 import {
   parseCsvFile,
   buildTableName,
@@ -218,9 +217,14 @@ async function runDsTablesCommand(args: string[]): Promise<number> {
     if (!arg.startsWith("-")) id = arg;
   }
   if (!id) {
-    console.error("Usage: kweaver ds tables <id> [--keyword X]");
+    console.error(
+      "Usage: kweaver ds tables <vega-catalog-id> [--keyword X]\n" +
+      "  <vega-catalog-id> is a vega catalog id (use `kweaver vega catalog list` to find one;\n" +
+      "  legacy data-connection datasource UUIDs are no longer accepted)."
+    );
     return 1;
   }
+  assertVegaCatalogId(id);
 
   const token = await ensureValidToken();
   const body = await listTablesWithColumns({

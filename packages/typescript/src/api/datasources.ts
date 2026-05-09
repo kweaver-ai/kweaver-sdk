@@ -272,181 +272,20 @@ export async function listTables(options: ListTablesOptions): Promise<string> {
   return body;
 }
 
-export interface ListTablesWithColumnsOptions extends ListTablesOptions {
-  autoScan?: boolean;
-}
+// ── Vega catalog re-exports (backward compatibility) ─────────────────────────
+//
+// listTablesWithColumns, scanMetadata, and scanDatasourceMetadata now live in
+// vega.ts (they talk exclusively to vega-backend, not data-connection).
+// Re-exported here so existing callers don't break — new code should import
+// from "../api/vega.js" directly.
+export {
+  listTablesWithColumns,
+  scanMetadata,
+  scanDatasourceMetadata,
+} from "./vega.js";
 
-/** List tables with column details. Optionally triggers metadata scan if no tables found. */
-export async function listTablesWithColumns(options: ListTablesWithColumnsOptions): Promise<string> {
-  const { id, autoScan = true, ...rest } = options;
-  let body = await listTables({ ...rest, id });
-
-  const parsed = JSON.parse(body) as
-    | Array<Record<string, unknown>>
-    | { entries?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
-  let items = Array.isArray(parsed) ? parsed : (parsed.entries ?? parsed.data ?? []);
-
-  if (items.length === 0 && autoScan) {
-    await scanMetadata({
-      baseUrl: rest.baseUrl,
-      accessToken: rest.accessToken,
-      id,
-      businessDomain: rest.businessDomain,
-    });
-    body = await listTables({ ...rest, id });
-    const parsed2 = JSON.parse(body) as
-      | Array<Record<string, unknown>>
-      | { entries?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
-    items = Array.isArray(parsed2) ? parsed2 : (parsed2.entries ?? parsed2.data ?? []);
-  }
-
-  const base = rest.baseUrl.replace(/\/+$/, "");
-  const tables: Array<{
-    name: string;
-    columns: Array<{ name: string; type: string; comment?: string; isPrimaryKey?: boolean }>;
-    primaryKeys?: string[];
-  }> = [];
-
-  for (const t of items) {
-    const tableId = String(t.id ?? "");
-    const tableName = String(t.name ?? "");
-    let columnsRaw = (t.columns ?? t.fields ?? []) as Array<Record<string, unknown>>;
-
-    if (columnsRaw.length === 0 && tableId) {
-      const tableUrl = `${base}/api/data-connection/v1/metadata/table/${encodeURIComponent(tableId)}?limit=-1`;
-      const colResponse = await fetch(tableUrl, {
-        method: "GET",
-        headers: buildHeaders(rest.accessToken, rest.businessDomain ?? "bd_public"),
-      });
-      const colData = (await colResponse.json()) as
-        | Array<Record<string, unknown>>
-        | { entries?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
-      columnsRaw = Array.isArray(colData) ? colData : (colData.entries ?? colData.data ?? []);
-    }
-
-    const tablePkArray = extractPrimaryKeys(t);
-
-    const columns = columnsRaw.map((c) => {
-      const name = String(c.name ?? c.field_name ?? "");
-      const flagged = isColumnPrimaryKey(c) || tablePkArray.includes(name);
-      return {
-        name,
-        type: String(c.type ?? c.field_type ?? "varchar"),
-        comment: typeof c.comment === "string" ? c.comment : undefined,
-        ...(flagged ? { isPrimaryKey: true } : {}),
-      };
-    });
-
-    // Reconcile: if backend gave per-column flags but no table-level array,
-    // synthesize one so downstream callers have a single PK source of truth.
-    const synthesizedPks = tablePkArray.length > 0
-      ? tablePkArray
-      : columns.filter((c) => c.isPrimaryKey).map((c) => c.name);
-
-    tables.push({
-      name: tableName,
-      columns,
-      ...(synthesizedPks.length > 0 ? { primaryKeys: synthesizedPks } : {}),
-    });
-  }
-
-  return JSON.stringify(tables);
-}
-
-// Two PK metadata shapes are recognized — both confirmed conventions:
-//   - per-column `is_primary_key: true` (data-connection metadata standard)
-//   - per-column `column_key === "PRI"` (MySQL INFORMATION_SCHEMA pass-through)
-//   - table-level `primary_keys: string[]` (composite-PK carrier)
-// Other plausible spellings (camelCase, singular keys, SQLite `pk` integer) are
-// intentionally NOT recognized here — adding them speculatively risks false
-// matches and creates code paths the test suite can't pin down. Extend only when
-// a real backend response demonstrates the need.
-function isColumnPrimaryKey(col: Record<string, unknown>): boolean {
-  if (col.is_primary_key === true) return true;
-  if (typeof col.column_key === "string" && col.column_key.toUpperCase() === "PRI") return true;
-  return false;
-}
-
-function extractPrimaryKeys(table: Record<string, unknown>): string[] {
-  const arr = table.primary_keys;
-  if (Array.isArray(arr)) {
-    return arr.filter((x): x is string => typeof x === "string");
-  }
-  return [];
-}
-
-export interface ScanMetadataOptions {
-  baseUrl: string;
-  accessToken: string;
-  id: string;
-  dsType?: string;
-  businessDomain?: string;
-}
-
-export async function scanMetadata(options: ScanMetadataOptions): Promise<string> {
-  const {
-    baseUrl,
-    accessToken,
-    id,
-    dsType = "mysql",
-    businessDomain = "bd_public",
-  } = options;
-
-  const base = baseUrl.replace(/\/+$/, "");
-  const scanUrl = `${base}/api/data-connection/v1/metadata/scan`;
-  const statusUrl = (taskId: string) => `${base}/api/data-connection/v1/metadata/scan/${taskId}`;
-
-  const scanBody = JSON.stringify({
-    scan_name: `sdk_scan_${id.slice(0, 8)}`,
-    type: 0,
-    ds_info: { ds_id: id, ds_type: dsType },
-    use_default_template: true,
-    use_multi_threads: true,
-    status: "open",
-  });
-
-  const scanResponse = await fetch(scanUrl, {
-    method: "POST",
-    headers: {
-      ...buildHeaders(accessToken, businessDomain),
-      "content-type": "application/json",
-    },
-    body: scanBody,
-  });
-
-  const scanResult = await scanResponse.json() as { id?: string };
-  const taskId = scanResult.id ?? "";
-
-  for (let i = 0; i < 30; i += 1) {
-    const delay = Math.min(2000 * Math.pow(1.5, i), 15000);
-    await new Promise((r) => setTimeout(r, delay));
-    const statusResponse = await fetch(statusUrl(taskId), {
-      method: "GET",
-      headers: buildHeaders(accessToken, businessDomain),
-    });
-    const statusData = (await statusResponse.json()) as { status?: string };
-    if (statusData.status === "success" || statusData.status === "fail") {
-      break;
-    }
-  }
-
-  return taskId;
-}
-
-export interface ScanDatasourceMetadataOptions {
-  baseUrl: string;
-  accessToken: string;
-  id: string;
-  businessDomain?: string;
-}
-
-// Looks up a datasource's type then triggers a metadata scan, so callers
-// don't have to repeat the GET-then-scan dance whenever a flow needs the
-// platform catalog refreshed (after import-csv, before discovering tables).
-export async function scanDatasourceMetadata(
-  options: ScanDatasourceMetadataOptions,
-): Promise<string> {
-  const dsBody = await getDatasource(options);
-  const dsType = (JSON.parse(dsBody) as { type?: string }).type ?? "mysql";
-  return scanMetadata({ ...options, dsType });
-}
+export type {
+  ListTablesWithColumnsOptions,
+  ScanMetadataOptions,
+  ScanDatasourceMetadataOptions,
+} from "./vega.js";

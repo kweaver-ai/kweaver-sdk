@@ -17,6 +17,8 @@ _PREFIX = "/api/ontology-manager/v1"
 
 
 class ObjectTypesResource:
+    """Object types for a KN: schema from dataviews, properties, index/rebuild hooks."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

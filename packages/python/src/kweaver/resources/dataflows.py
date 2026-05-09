@@ -29,6 +29,12 @@ class DataflowResult:
 
 
 class DataflowsResource:
+    """DAG-style dataflow automation on ``/api/automation/v1``.
+
+    Create workflows from ``DataflowStep`` definitions, run them, poll status,
+    and delete DAGs. Prefer ``DataflowV2Resource`` for document-centric flows.
+    """
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

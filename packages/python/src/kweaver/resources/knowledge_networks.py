@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
 
 class KnowledgeNetworksResource:
+    """Knowledge networks (ontology-manager + retrieval): CRUD, statistics, BKN build."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

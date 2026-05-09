@@ -14,6 +14,8 @@ _PREFIX = "/api/ontology-manager/v1"
 
 
 class RelationTypesResource:
+    """Relation types between object types (join mappings or mapping views)."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

@@ -13,7 +13,11 @@ if TYPE_CHECKING:
 
 
 class DataflowV2Resource:
-    """Thin SDK wrapper for document-style dataflow APIs."""
+    """Document-style dataflow APIs on ``/api/automation/v2`` (list, run with files).
+
+    Complements legacy ``DataflowsResource`` (v1 DAG JSON). Used for file-triggered
+    runs and v2 DAG listing.
+    """
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http

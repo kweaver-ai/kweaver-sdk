@@ -16,6 +16,24 @@ npm install @kweaver-ai/kweaver-sdk
 
 需要 **Node.js >= 22**。
 
+## API 参考（TypeDoc）
+
+由源码与 TSDoc 生成 HTML，产物在 `docs/reference/typescript-api-html/index.html`（已 gitignore）。`typedoc.json` 用 **`entryPointStrategy: "expand"`** 自动展开 **`src/resources`**、**`src/api`**、**`src/auth`** 整目录，新增模块无需改配置。英文构建用 `README.md`，中文构建用 `README.zh.md`。**「Defined in」** 链接的 `gitRevision` 取 `TYPEDOC_GIT_REVISION` → `GITHUB_SHA` → 回退 `"main"`；CI 中固定到当前 SHA：`TYPEDOC_GIT_REVISION=$GITHUB_SHA npm run docs`。
+
+TypeDoc **不会在同一个站点里提供中英文切换**。做法是生成两套目录：英文界面（默认）与中文界面（**`npm run docs:zh`**），主要翻译导航等界面文案；**API 说明仍以源码里的 TSDoc（英文）为准**。
+
+```bash
+cd packages/typescript
+npm install
+npm run docs             # 英文界面 → docs/reference/typescript-api-html/
+npm run docs:serve       # 生成并访问 http://127.0.0.1:8766
+npm run docs:zh          # 中文界面 + README.zh.md → docs/reference/typescript-api-html-zh/
+npm run docs:serve:zh    # 生成并访问 http://127.0.0.1:8767
+npm run docs:all         # 两套产物都生成
+```
+
+> `docs/reference/**` 下的所有文件均为生成产物。请编辑 `packages/typescript/README*.md` 与源码 TSDoc 注释；`media/` 下的拷贝在下次构建时会被覆盖。
+
 ## 快速上手
 
 ### 认证

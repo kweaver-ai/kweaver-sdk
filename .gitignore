@@ -20,4 +20,8 @@ node_modules/
 *.tgz
 .DS_Store
 .ralph/
+.cursor/
 coverage/
+docs/reference/python-api-html/
+docs/reference/typescript-api-html/
+docs/reference/typescript-api-html-zh/

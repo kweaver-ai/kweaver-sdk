@@ -29,7 +29,12 @@
     "lint": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",
     "test:e2e": "node --import tsx --test test/e2e/*.test.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "docs": "node scripts/build-docs.mjs",
+    "docs:zh": "node scripts/build-docs.mjs --zh",
+    "docs:all": "npm run docs && npm run docs:zh",
+    "docs:serve": "npm run docs && serve ../../docs/reference/typescript-api-html -p 8766 -n",
+    "docs:serve:zh": "npm run docs:zh && serve ../../docs/reference/typescript-api-html-zh -p 8767 -n"
   },
   "keywords": [
     "cli",
@@ -51,7 +56,9 @@
     "@types/node": "^24.6.0",
     "@types/react": "^19.2.14",
     "@types/yargs": "^17.0.35",
+    "serve": "^14.2.5",
     "tsx": "^4.20.5",
+    "typedoc": "^0.28.19",
     "typescript": "^5.9.3"
   },
   "dependencies": {

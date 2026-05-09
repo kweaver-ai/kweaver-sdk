@@ -1,0 +1,23 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPointStrategy": "expand",
+  "entryPoints": [
+    "src/index.ts",
+    "src/kweaver.ts",
+    "src/client.ts",
+    "src/resources",
+    "src/api",
+    "src/auth"
+  ],
+  "tsconfig": "tsconfig.json",
+  "name": "@kweaver-ai/kweaver-sdk",
+  "exclude": [
+    "**/cli.ts",
+    "**/commands/**",
+    "**/*.test.ts",
+    "**/test/**",
+    "src/templates/**"
+  ],
+  "excludeReferences": true,
+  "skipErrorChecking": true
+}

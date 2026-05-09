@@ -26,6 +26,8 @@ def _parse_cg(data: dict[str, Any]) -> ConceptGroup:
 
 
 class ConceptGroupsResource:
+    """Concept groups: bundle object types for a KN branch (ontology-manager)."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

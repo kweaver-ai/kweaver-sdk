@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 
 class ConversationsResource:
+    """Agent-app chat, streaming chunks, conversation/message listing — see module docstring."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

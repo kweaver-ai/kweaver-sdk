@@ -59,9 +59,11 @@ with KWeaverClient(auth=ConfigAuth()) as client:
 
 可选参数：`vega_url`、`mf_model_manager_base_url`、`mf_model_api_base_url`、`tls_insecure`（仅开发）等，详见英文指南与源码 docstring。
 
+构造函数字段与 TypeScript **`KWeaverClientOptions`** 对照、`login()` 参数分支、`knowledge_networks` / `query` / `agents` / `conversations` 常用方法默认值：**[Python client & login 扩展参考（英文）](../usage/reference/python-client-login-resources.md)**。
+
 ## 常用操作（摘要）
 
-- **知识网络**：`client.knowledge_networks.list` / `get` / `statistics`
+- **知识网络**：`client.knowledge_networks.list` / `get(..., include_statistics=True)`
 - **Agent**：`client.agents.list` / `get`
 - **模型工厂**：`client.models.llm.list`、`client.models.invocation.chat` 等（经理 / API 网关与平台一致时再覆写 base URL）
 - **Vega**：`client.vega.health`、`client.vega.catalogs.list`

@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 
 class DataViewsResource:
+    """MDL data views: atomic views, SQL views, fields, and publish/delete lifecycle."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

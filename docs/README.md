@@ -10,6 +10,12 @@ English-first usage notes live under `docs/` together with internal specs and pl
 | [guides/python-sdk-guide.zh.md](guides/python-sdk-guide.zh.md) | 中文版（与英文版对照）。 |
 | [guides/ai-app-integration.md](guides/ai-app-integration.md) | AI applications — MCP, CLI, integration scenarios. |
 
+## Usage reference (English)
+
+| Document | Audience |
+|----------|----------|
+| [usage/reference/python-client-login-resources.md](usage/reference/python-client-login-resources.md) | **`KWeaverClient`** constructor vs TS options, **`login()`** branches, **`knowledge_networks` / `query` / `agents` / `conversations`** method cheat sheet. |
+
 ## Generated Python API HTML
 
 From the repository root:
@@ -19,6 +25,18 @@ make -C packages/python docs-python
 ```
 
 Output: `docs/reference/python-api-html/` (ignored by git by default).
+
+## Generated TypeScript API HTML
+
+From `packages/typescript`:
+
+```bash
+npm run docs             # English UI (default)
+npm run docs:zh          # Chinese UI chrome (--lang zh), separate output folder
+npm run docs:all         # both
+```
+
+Output: `docs/reference/typescript-api-html/` (English UI), optionally `docs/reference/typescript-api-html-zh/` (Chinese UI strings). Ignored by git by default. TypeDoc does not provide an in-site language toggle; open each `index.html` or use `docs:serve` / `docs:serve:zh` on ports **8766** / **8767**. Source links use **`main`** as `gitRevision` so GitHub URLs stay valid when docs were generated from unpublished commits.
 
 ## Other
 

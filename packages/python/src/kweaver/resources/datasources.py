@@ -42,6 +42,8 @@ def _make_bin_data(
 
 
 class DataSourcesResource:
+    """Data-connection layer: register JDBC/HTTPS-style sources, list tables, probe."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

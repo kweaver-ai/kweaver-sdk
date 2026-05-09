@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 
 class QueryResource:
+    """Cross-service query façade: agent-retrieval (semantic / KN search) and ontology-query."""
+
     def __init__(self, http: HttpClient, *, tls_insecure: bool = False) -> None:
         self._http = http
         self._tls_insecure = tls_insecure

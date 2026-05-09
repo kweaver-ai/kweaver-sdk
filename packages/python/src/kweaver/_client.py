@@ -38,9 +38,52 @@ class KWeaverClient:
     Provides access to all SDK resource modules via attribute-style access.
     Thread-safe and stateless (does not hold business data).
 
+    Use ``client.<name>`` for the resources below (each maps to a typed helper class
+    under ``kweaver.resources``).
+
     BKN **metrics**: ``metrics`` (definitions on bkn-backend), ``metric_query``
     (data query and dry-run on ontology-query). These are not Vega ``metric_models``.
+
+    Attributes:
+        dataflows: Automation service DAG APIs (create/run/poll/delete).
+        dataflow_v2: Document-style dataflow (v2) workflows.
+        datasources: Data-connection data sources (CRUD, probe, tables).
+        dataviews: MDL data views / atomic views over datasources.
+        knowledge_networks: Knowledge networks (KN/BKN) lifecycle and build jobs.
+        object_types: Object type schema bound to dataviews (ontology-manager).
+        relation_types: Relation types between object types (ontology-manager).
+        query: Semantic search, KN search, object queries, subgraph APIs.
+        agents: Decision agents (agent-factory): list, CRUD, publish.
+        conversations: Agent chat, streaming, conversations (agent-app).
+        action_types: Action type list, execution, logs (ontology-query/manager).
+        jobs: KN-scoped async jobs and tasks (ontology-manager).
+        metrics: BKN metric definitions CRUD (bkn-backend); exposed as ``metrics``.
+        metric_query: Metric data queries and dry-run (ontology-query).
+        concept_groups: Concept groups for a KN (ontology-manager).
+        skills: Skill registry, market, install (ADP APIs).
+        toolboxes: Toolboxes and OpenAPI tools (agent-operator-integration).
+        vega: Vega observability namespace (lazy property): catalogs, models, health, tasks.
+        models: Hosted LLM/small-model registry and invocation helpers.
     """
+
+    dataflows: DataflowsResource
+    dataflow_v2: DataflowV2Resource
+    datasources: DataSourcesResource
+    dataviews: DataViewsResource
+    knowledge_networks: KnowledgeNetworksResource
+    object_types: ObjectTypesResource
+    relation_types: RelationTypesResource
+    query: QueryResource
+    agents: AgentsResource
+    conversations: ConversationsResource
+    action_types: ActionTypesResource
+    jobs: JobsResource
+    metrics: BknMetricsResource
+    metric_query: MetricQueryResource
+    concept_groups: ConceptGroupsResource
+    skills: SkillsResource
+    toolboxes: ToolboxesResource
+    models: ModelsResource
 
     def __init__(
         self,
@@ -108,23 +151,41 @@ class KWeaverClient:
         self._timeout = timeout
         self._log_requests = log_requests or debug
 
+        #: Automation service DAG APIs (create/run/poll/delete).
         self.dataflows = DataflowsResource(self._http)
+        #: Document-style dataflow (v2) workflows.
         self.dataflow_v2 = DataflowV2Resource(self._http)
+        #: Data-connection data sources (CRUD, probe, tables).
         self.datasources = DataSourcesResource(self._http)
+        #: MDL data views / atomic views over datasources.
         self.dataviews = DataViewsResource(self._http)
+        #: Knowledge networks (KN/BKN) lifecycle and build jobs.
         self.knowledge_networks = KnowledgeNetworksResource(self._http)
+        #: Object type schema bound to dataviews (ontology-manager).
         self.object_types = ObjectTypesResource(self._http)
+        #: Relation types between object types (ontology-manager).
         self.relation_types = RelationTypesResource(self._http)
+        #: Semantic search, KN search, object queries, subgraph APIs.
         self.query = QueryResource(self._http, tls_insecure=self._tls_insecure)
+        #: Decision agents (agent-factory): list, CRUD, publish.
         self.agents = AgentsResource(self._http)
+        #: Agent chat, streaming, conversations (agent-app).
         self.conversations = ConversationsResource(self._http)
+        #: Action type list, execution, logs (ontology-query/manager).
         self.action_types = ActionTypesResource(self._http)
+        #: KN-scoped async jobs and tasks (ontology-manager).
         self.jobs = JobsResource(self._http)
+        #: BKN metric definitions CRUD (bkn-backend); not Vega metric models.
         self.metrics = BknMetricsResource(self._http)
+        #: Metric data queries and dry-run on ontology-query.
         self.metric_query = MetricQueryResource(self._http)
+        #: Concept groups for a KN (ontology-manager).
         self.concept_groups = ConceptGroupsResource(self._http)
+        #: Skill registry, market, install (ADP APIs).
         self.skills = SkillsResource(self._http)
+        #: Toolboxes and OpenAPI tools (agent-operator-integration).
         self.toolboxes = ToolboxesResource(self._http)
+        #: Hosted LLM/small-model registry and invocation helpers.
         self.models = ModelsResource(
             self._http,
             manager_base_url=mf_model_manager_base_url,
@@ -133,10 +194,10 @@ class KWeaverClient:
 
     @property
     def vega(self) -> VegaNamespace:
-        """Lazily create and return a VegaNamespace instance.
+        """Vega observability namespace (lazy): catalogs, metric/event/trace models, query, tasks, health.
 
-        Falls back to base_url when vega_url is not explicitly configured,
-        which works when Vega API is behind the same gateway as KWeaver.
+        Created on first access. Uses ``vega_url`` when set; otherwise the main
+        ``base_url`` (same gateway as KWeaver).
         """
         if self._vega is None:
             vega_base = self._vega_url or str(self._http._client.base_url).rstrip("/")

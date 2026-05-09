@@ -20,7 +20,10 @@ def _metrics_path_segment(metric_ids: str) -> str:
 
 
 class BknMetricsResource:
-    """CRUD and search for BKN metric definitions on bkn-backend."""
+    """CRUD and search for BKN metric definitions on bkn-backend.
+
+    Exposed on ``KWeaverClient`` as ``metrics`` (not Vega metric models).
+    """
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http

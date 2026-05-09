@@ -16,6 +16,24 @@ npm install @kweaver-ai/kweaver-sdk
 
 Requires **Node.js >= 22**.
 
+## API reference (TypeDoc)
+
+Generate HTML from source + TSDoc, then open `docs/reference/typescript-api-html/index.html` (gitignored), or serve locally:
+
+HTML reference maps **`src/client.ts`**, **`src/resources/*`**, and supporting **`src/api/*`** / **`src/auth/*`** modules (`typedoc.json`) so type links resolve in TypeDoc output. **“Defined in”** GitHub links use revision **`main`** (see `gitRevision` in `typedoc.json`) so they stay valid after local commits that are not yet on GitHub; line numbers match **`main`** (approximate if your branch diverges).
+
+TypeDoc does **not** ship a single-site EN/ZH toggle. Use two outputs: English UI (`lang` default **`en`** in `typedoc.json`) and Chinese UI strings (`--lang zh`), which primarily localize navigation chrome (some strings may still fall back to English). API descriptions come from TSDoc and stay English unless you maintain duplicate comments elsewhere.
+
+```bash
+cd packages/typescript
+npm install
+npm run docs             # English UI → docs/reference/typescript-api-html/
+npm run docs:serve       # generate + serve http://127.0.0.1:8766
+npm run docs:zh          # Chinese UI → docs/reference/typescript-api-html-zh/
+npm run docs:serve:zh    # generate + serve http://127.0.0.1:8767
+npm run docs:all         # both folders
+```
+
 ## Quick Start
 
 ### Authenticate

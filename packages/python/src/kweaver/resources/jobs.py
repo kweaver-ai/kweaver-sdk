@@ -40,6 +40,8 @@ def _parse_task(data: dict[str, Any]) -> Task:
 
 
 class JobsResource:
+    """KN-scoped background jobs and tasks (ontology-manager ``.../jobs`` APIs)."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

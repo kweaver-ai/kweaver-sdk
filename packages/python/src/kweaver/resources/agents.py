@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 
 class AgentsResource:
+    """Agent factory CRUD, templates, publish — see module docstring for REST paths."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 

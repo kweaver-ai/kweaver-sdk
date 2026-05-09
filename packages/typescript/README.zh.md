@@ -16,6 +16,22 @@ npm install @kweaver-ai/kweaver-sdk
 
 需要 **Node.js >= 22**。
 
+## API 参考（TypeDoc）
+
+由源码与 TSDoc 生成 HTML，产物在 `docs/reference/typescript-api-html/index.html`（已 gitignore）。入口包含 **`src/client.ts`**、**`src/resources/*`**、**`src/api/*`**、**`src/auth/*`** 等（见 `typedoc.json`）。**`gitRevision`: `main`** 使「Defined in」里的 GitHub 链接指向 **`main`** 分支而非仅本地的 commit SHA，避免未推送时出现 GitHub **Ref is invalid / 404**；行号与远端 **`main`** 对齐，分支若不一致可能有偏差。
+
+TypeDoc **不会在同一个站点里提供中英文切换**。做法是生成两套目录：英文界面（`typedoc.json` 中 **`lang`: `en`**）与中文界面（**`npm run docs:zh`**，对应 **`--lang zh`**），主要翻译导航等界面文案（不完全翻译时会回退英文）；**API 说明仍以源码里的 TSDoc（英文）为准**。
+
+```bash
+cd packages/typescript
+npm install
+npm run docs             # 英文界面 → docs/reference/typescript-api-html/
+npm run docs:serve       # 生成并访问 http://127.0.0.1:8766
+npm run docs:zh          # 中文界面 → docs/reference/typescript-api-html-zh/
+npm run docs:serve:zh    # 生成并访问 http://127.0.0.1:8767
+npm run docs:all         # 两套产物都生成
+```
+
 ## 快速上手
 
 ### 认证

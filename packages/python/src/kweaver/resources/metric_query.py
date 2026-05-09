@@ -12,7 +12,7 @@ _OQ = "/api/ontology-query/v1/knowledge-networks"
 
 
 class MetricQueryResource:
-    """Query published metric data and dry-run (试算) without persisting definitions."""
+    """Query published metric data and metric dry-run via ontology-query (not Vega)."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http

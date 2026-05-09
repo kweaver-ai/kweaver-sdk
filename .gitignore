@@ -22,3 +22,5 @@ node_modules/
 .ralph/
 coverage/
 docs/reference/python-api-html/
+docs/reference/typescript-api-html/
+docs/reference/typescript-api-html-zh/

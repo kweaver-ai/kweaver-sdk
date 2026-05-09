@@ -12,6 +12,7 @@ Use this guide when you integrate **PyPI [`kweaver-sdk`](https://pypi.org/projec
 - [Pagination and limits](#pagination-and-limits)
 - [Errors and troubleshooting](#errors-and-troubleshooting)
 - [API reference (generated)](#api-reference-generated)
+- [Extended reference (constructor, login, core resources)](../usage/reference/python-client-login-resources.md)
 - [Related docs](#related-docs)
 
 ## Who this is for
@@ -93,14 +94,15 @@ Optional overrides on `KWeaverClient`:
 
 Close the client when done (`with` statement or `client.close()`).
 
+Parameter-by-parameter alignment with **TypeScript `KWeaverClientOptions`**, **`login()`** combinations, and **`list` / `get` / `create`** defaults for core resources: [Python client & login reference](../usage/reference/python-client-login-resources.md).
+
 ## Common operations
 
 ### Knowledge networks
 
 ```python
 kns = client.knowledge_networks.list(limit=30)
-kn = client.knowledge_networks.get(kns[0].id)
-stats = client.knowledge_networks.statistics(kn.id)
+kn = client.knowledge_networks.get(kns[0].id, include_statistics=True)
 ```
 
 ### Published agents

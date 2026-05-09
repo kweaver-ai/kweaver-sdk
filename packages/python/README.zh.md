@@ -29,6 +29,14 @@ make -C packages/python docs-python
 
 在浏览器打开 `docs/reference/python-api-html/index.html`。
 
+若只用 **`pdoc kweaver`** 启动文档，像 ``kweaver.resources.dataflow_v2.DataflowV2Resource`` 这类注解会变成纯文本、无法跳转 —— **pdoc 需要把各子模块都写在命令行里**。**`make docs-python`** 已通过 `scripts/list_pdoc_modules.py` 自动带上全部包内模块。
+
+与上面相同的模块列表起本地服务（在 `packages/python` 下执行）：
+
+```bash
+PYTHONPATH=src uv run --extra docs sh -c 'exec python -m pdoc -d google -h 127.0.0.1 -p 8765 $(PYTHONPATH=src uv run python scripts/list_pdoc_modules.py)'
+```
+
 ## 快速上手
 
 ### 搜索与对话（最简路径）

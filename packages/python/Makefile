@@ -26,6 +26,9 @@ lint:
 # ci: lint + test-cover
 ci: lint test-cover
 
-# docs-python: HTML API reference from docstrings (output gitignored at repo root)
+# docs-python: HTML API reference from docstrings (output gitignored at repo root).
+# Pass every submodule so pdoc emits per-module HTML and type annotations link (not plain text).
 docs-python:
-	PYTHONPATH=src uv run --extra docs python -m pdoc --docformat google kweaver -o ../../docs/reference/python-api-html
+	PYTHONPATH=src uv run --extra docs python -m pdoc --docformat google \
+		-o ../../docs/reference/python-api-html \
+		$$(PYTHONPATH=src uv run python scripts/list_pdoc_modules.py)

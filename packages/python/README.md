@@ -29,6 +29,14 @@ make -C packages/python docs-python
 
 Open `docs/reference/python-api-html/index.html`.
 
+If you run **pdoc** manually with only `kweaver`, fully-qualified types (for example `kweaver.resources.dataflow_v2.DataflowV2Resource`) appear as plain text and do not link — pdoc needs each submodule on the command line. **`make docs-python`** already passes every package module via `scripts/list_pdoc_modules.py`.
+
+Live server with the same module set (from `packages/python`):
+
+```bash
+PYTHONPATH=src uv run --extra docs sh -c 'exec python -m pdoc -d google -h 127.0.0.1 -p 8765 $(PYTHONPATH=src uv run python scripts/list_pdoc_modules.py)'
+```
+
 ## Quick Start
 
 ### Search & Chat (simplest path)

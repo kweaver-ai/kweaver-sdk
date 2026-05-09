@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 class VegaNamespace:
+    """Grouped Vega backend resources (models, catalogs, resources, connector types, tasks, query)."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
         self.metric_models = VegaMetricModelsResource(http)

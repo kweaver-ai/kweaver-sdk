@@ -394,6 +394,28 @@ cd packages/python
 - [AI 应用开发者接入指南](docs/guides/ai-app-integration.md) — MCP、CLI、接入场景。
 - [文档索引](docs/README.md) — `docs/` 导航。
 
+## API 参考（HTML）
+
+由源码生成，`docs/reference/` 下的产物已 gitignore。
+
+```bash
+# Python (pdoc) → docs/reference/python-api-html/index.html
+make -C packages/python docs-python
+
+# TypeScript (TypeDoc)
+cd packages/typescript
+npm install
+npm run docs            # 英文界面 → docs/reference/typescript-api-html/
+npm run docs:zh         # 中文界面 + README.zh.md → docs/reference/typescript-api-html-zh/
+npm run docs:serve      # 构建 + http://127.0.0.1:8766
+npm run docs:serve:zh   # 构建 + http://127.0.0.1:8767
+
+# CI 中把「Defined in」链接固定到当前构建的 SHA
+TYPEDOC_GIT_REVISION=$GITHUB_SHA npm run docs
+```
+
+详见 [`docs/README.md`](docs/README.md)；`docs/reference/` 内的文件均为生成产物，请勿手改。
+
 ## 开发与测试
 
 ```bash

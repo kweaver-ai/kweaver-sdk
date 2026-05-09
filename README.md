@@ -339,6 +339,28 @@ kweaver-sdk/
 - [AI application integration](docs/guides/ai-app-integration.md) — MCP, CLI, and integration scenarios (Chinese).
 - [Documentation index](docs/README.md) — navigate `docs/`.
 
+## API Reference (HTML)
+
+Generated from source — outputs under `docs/reference/` are gitignored.
+
+```bash
+# Python (pdoc) → docs/reference/python-api-html/index.html
+make -C packages/python docs-python
+
+# TypeScript (TypeDoc)
+cd packages/typescript
+npm install
+npm run docs            # English UI → docs/reference/typescript-api-html/
+npm run docs:zh         # Chinese UI + README.zh.md → docs/reference/typescript-api-html-zh/
+npm run docs:serve      # build + http://127.0.0.1:8766
+npm run docs:serve:zh   # build + http://127.0.0.1:8767
+
+# CI: pin "Defined in" links to the build SHA
+TYPEDOC_GIT_REVISION=$GITHUB_SHA npm run docs
+```
+
+See [`docs/README.md`](docs/README.md) for output paths and notes (do not hand-edit anything inside `docs/reference/`).
+
 ## Development & Testing
 
 ```bash

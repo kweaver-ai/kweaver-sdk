@@ -14,6 +14,7 @@ import {
   detectPrimaryKey,
   formatPkDetectionError,
   parsePkMap,
+  assertVegaCatalogId,
 } from "../src/commands/bkn-utils.js";
 
 let savedConfigDir: string | undefined;
@@ -239,4 +240,65 @@ test("parseKnCreateFromCsvArgs: --pk-map populates pkMap", () => {
     "--pk-map", "t1:f1",
   ]);
   assert.deepEqual(opts.pkMap, { t1: "f1" });
+});
+
+test("parseKnCreateFromDsArgs: rejects legacy datasource UUID", () => {
+  const uuid = "dfaf719c-4c41-4661-9ec9-25c263ff8c46";
+  assert.throws(
+    () =>
+      parseKnCreateFromDsArgs([
+        uuid,
+        "--name",
+        "kn1",
+      ]),
+    /vega catalog id/i,
+  );
+});
+
+test("parseKnCreateFromDsArgs: accepts short vega catalog id", () => {
+  const opts = parseKnCreateFromDsArgs([
+    "d7nicrcjto2s73d9g67g",
+    "--name",
+    "kn1",
+  ]);
+  assert.equal(opts.dsId, "d7nicrcjto2s73d9g67g");
+});
+
+test("parseKnCreateFromCsvArgs: rejects legacy datasource UUID", () => {
+  const uuid = "dfaf719c-4c41-4661-9ec9-25c263ff8c46";
+  assert.throws(
+    () =>
+      parseKnCreateFromCsvArgs([
+        uuid,
+        "--name",
+        "kn1",
+        "--files",
+        "/tmp/a.csv",
+      ]),
+    /vega catalog id/i,
+  );
+});
+
+test("parseKnCreateFromCsvArgs: accepts short vega catalog id", () => {
+  const opts = parseKnCreateFromCsvArgs([
+    "d7nicrcjto2s73d9g67g",
+    "--files",
+    "/tmp/a.csv",
+    "--name",
+    "kn1",
+  ]);
+  assert.equal(opts.dsId, "d7nicrcjto2s73d9g67g");
+});
+
+// ── assertVegaCatalogId (shared utility, now also used by ds tables) ──────────
+
+test("assertVegaCatalogId: rejects UUID v4 with helpful hint", () => {
+  assert.throws(
+    () => assertVegaCatalogId("dfaf719c-4c41-4661-9ec9-25c263ff8c46"),
+    /vega catalog list/,
+  );
+});
+
+test("assertVegaCatalogId: accepts short slug", () => {
+  assert.doesNotThrow(() => assertVegaCatalogId("d7nicrcjto2s73d9g67g"));
 });

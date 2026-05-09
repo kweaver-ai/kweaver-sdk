@@ -1,8 +1,12 @@
-"""SDK resource: data sources (data-connection service)."""
+"""SDK resource: data sources (data-connection service).
+
+scan_metadata / list_tables have been moved to
+``kweaver.resources.vega.catalogs.VegaCatalogsResource``; the methods here
+are thin delegation stubs kept for backward compatibility.
+"""
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING, Any
 
 from kweaver._crypto import encrypt_password
@@ -112,31 +116,24 @@ class DataSourcesResource:
         self._http.delete(f"/api/data-connection/v1/datasource/{id}")
 
     def scan_metadata(self, id: str, *, ds_type: str = "mysql") -> str:
-        """Trigger a metadata scan for a datasource and wait for completion.
+        """Trigger a metadata scan for a vega catalog and wait for completion.
 
-        Returns the scan task ID.
+        .. deprecated::
+            Use ``client.vega.catalogs.scan_metadata(id)`` directly. This
+            method delegates to the vega catalogs resource for backward
+            compatibility.
+
+        ``id`` is a vega catalog id. ``ds_type`` is ignored (retained for
+        signature compatibility).
+
+        Returns the discover response as a JSON string.
         """
-        ds = self.get(id)
-        scan_name = f"sdk_scan_{id[:8]}"
-        result = self._http.post(
-            "/api/data-connection/v1/metadata/scan",
-            json={
-                "scan_name": scan_name,
-                "type": 0,
-                "ds_info": {"ds_id": id, "ds_type": ds_type or ds.type or "mysql"},
-                "use_default_template": True,
-                "use_multi_threads": True,
-                "status": "open",
-            },
-        )
-        task_id = result.get("id", "")
-        # Poll until scan completes with exponential backoff
-        for attempt in range(30):
-            time.sleep(min(2 * (1.5 ** attempt), 15))
-            status = self._http.get(f"/api/data-connection/v1/metadata/scan/{task_id}")
-            if status.get("status") in ("success", "fail"):
-                break
-        return task_id
+        import json as _json
+        del ds_type
+        from kweaver.resources.vega.catalogs import VegaCatalogsResource
+        vega_cats = VegaCatalogsResource(self._http)
+        result = vega_cats.scan_metadata(id)
+        return _json.dumps(result) if isinstance(result, dict) else str(result)
 
     def list_tables(
         self,
@@ -147,57 +144,24 @@ class DataSourcesResource:
         offset: int | None = None,
         auto_scan: bool = True,
     ) -> list[Table]:
-        params: dict[str, Any] = {"limit": -1}
-        if keyword:
-            params["keyword"] = keyword
-        if limit is not None:
-            params["limit"] = limit
-        if offset is not None:
-            params["offset"] = offset
-        data = self._http.get(
-            f"/api/data-connection/v1/metadata/data-source/{id}",
-            params=params,
+        """List tables with columns from a vega catalog.
+
+        .. deprecated::
+            Use ``client.vega.catalogs.list_tables(id, ...)`` directly.
+
+        ``id`` is a vega catalog id, not a legacy data-connection datasource
+        UUID.
+        """
+        from kweaver.resources.vega.catalogs import VegaCatalogsResource
+        vega_cats = VegaCatalogsResource(self._http)
+        return vega_cats.list_tables(
+            id,
+            keyword=keyword,
+            limit=limit,
+            offset=offset,
+            auto_scan=auto_scan,
         )
-        items = data if isinstance(data, list) else (data.get("entries") or data.get("data") or [])
 
-        # Auto-trigger metadata scan if no tables found
-        if not items and auto_scan:
-            self.scan_metadata(id)
-            data = self._http.get(
-                f"/api/data-connection/v1/metadata/data-source/{id}",
-                params=params,
-            )
-            items = data if isinstance(data, list) else (data.get("entries") or data.get("data") or [])
-
-        tables: list[Table] = []
-        for t in items:
-            table_id = t.get("id", "")
-            table_name = t.get("name", "")
-            # Fetch column details if not inline
-            columns_raw = t.get("columns", t.get("fields", []))
-            if not columns_raw and table_id:
-                col_data = self._http.get(
-                    f"/api/data-connection/v1/metadata/table/{table_id}",
-                    params={"limit": -1},
-                )
-                columns_raw = (
-                    col_data if isinstance(col_data, list)
-                    else (col_data.get("entries") or col_data.get("data") or [])
-                )
-            tables.append(
-                Table(
-                    name=table_name,
-                    columns=[
-                        Column(
-                            name=c.get("name", c.get("field_name", "")),
-                            type=c.get("type", c.get("field_type", "varchar")),
-                            comment=c.get("comment"),
-                        )
-                        for c in columns_raw
-                    ],
-                )
-            )
-        return tables
 
 
 def _parse_datasource(d: Any) -> DataSource:

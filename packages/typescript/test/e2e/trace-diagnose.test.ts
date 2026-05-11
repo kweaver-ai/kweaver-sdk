@@ -59,7 +59,7 @@ for (const { ruleId, fixture } of RULE_FIXTURES) {
       const ruleHits = r.findings.filter((f) => f.ruleId === ruleId);
       assert.equal(ruleHits.length, 1, `expected 1 finding for ${ruleId}, got ${r.findings.length} total`);
       assert.equal(r.run.synthesizerMode, "template");
-      assert.equal(r.summary.headline.includes(ruleHits[0].symptom) || r.summary.headline === "No findings", true);
+      assert.ok(r.summary.headline.includes(ruleHits[0].symptom), `expected headline to include symptom '${ruleHits[0].symptom}', got: ${r.summary.headline}`);
     } finally {
       m.restore();
       await fs.rm(tmpOut, { force: true });

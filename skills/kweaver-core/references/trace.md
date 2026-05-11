@@ -15,7 +15,7 @@ kweaver trace diagnose rules validate <rule.yaml>
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--out <file>` | `./diagnosis/<trace_id>.yaml` | Write report to file (`mkdir -p` if needed) |
+| `--out <file>` | stdout | Write report to file (`mkdir -p` if needed); omit to write YAML to stdout |
 | `--rules <dir>` | `<cwd>/diagnosis-rules/` | Override the team rules directory |
 | `--no-builtin` | off | Disable the 5 builtin baseline rules (debug only) |
 | `--no-llm` | always on (PR-A) | Reserved; PR-B will allow disabling |

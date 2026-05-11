@@ -2,6 +2,7 @@ import yargs from "yargs";
 
 import { diagnose, TraceNotFoundError } from "../trace-core/diagnose/index.js";
 import { RuleLoadError } from "../trace-core/diagnose/rule-loader.js";
+import { RuleProbeError } from "../trace-core/diagnose/signal-probe.js";
 import { RuleSchema } from "../trace-core/diagnose/schemas.js";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
@@ -73,7 +74,7 @@ function printHelp(): void {
 
 Subcommands:
   trace diagnose <trace_id>                   Diagnose a single trace; emit YAML report
-    --out <file>                              Write report to file (default: ./diagnosis/<trace_id>.yaml)
+    --out <file>                              Write report to file (default: stdout)
     --rules <dir>                             Override <cwd>/diagnosis-rules/
     --no-builtin                              Disable the 5 builtin baseline rules
     --no-llm                                  PR-A: always on; PR-B will allow disabling
@@ -124,6 +125,10 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
       return 4;
     }
     if (e instanceof RuleLoadError) {
+      process.stderr.write(`error: ${e.message}\n`);
+      return 6;
+    }
+    if (e instanceof RuleProbeError) {
       process.stderr.write(`error: ${e.message}\n`);
       return 6;
     }

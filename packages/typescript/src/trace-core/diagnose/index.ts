@@ -24,6 +24,8 @@ export class TraceNotFoundError extends Error {
 }
 
 export async function diagnose(traceId: string, opts: DiagnoseOpts): Promise<Report> {
+  // PR-A: opts.noLlm, opts.agentProvider, opts.timeoutMs are reserved for PR-B's
+  // agent / rubric path; they are accepted by the interface but not consumed here.
   const cwdRulesDir = opts.rulesDir ?? path.join(process.cwd(), "diagnosis-rules");
 
   const rawSpans = await getTraceById({
@@ -62,11 +64,8 @@ export async function diagnose(traceId: string, opts: DiagnoseOpts): Promise<Rep
   const report: Report = { ...provisionalReport, summary };
 
   if (opts.out !== null) {
-    const outPath = opts.out === "default"
-      ? path.join(process.cwd(), "diagnosis", `${traceId}.yaml`)
-      : opts.out;
-    await fs.mkdir(path.dirname(outPath), { recursive: true });
-    await fs.writeFile(outPath, yaml.dump(reportToYamlObject(report)), "utf8");
+    await fs.mkdir(path.dirname(opts.out), { recursive: true });
+    await fs.writeFile(opts.out, yaml.dump(reportToYamlObject(report)), "utf8");
   } else {
     process.stdout.write(yaml.dump(reportToYamlObject(report)));
   }

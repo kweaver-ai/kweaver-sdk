@@ -1,14 +1,5 @@
 import type { Span, SpanKind, TraceTree } from "./types.js";
-
-interface RawSpan {
-  spanId: string;
-  parentSpanId: string | null | undefined;
-  name?: string;
-  startTimeUnixNano?: string;
-  endTimeUnixNano?: string;
-  status?: { code?: string };
-  attributes?: Record<string, unknown>;
-}
+import type { RawSpan } from "../../api/trace.js";
 
 const KIND_MAP: Record<string, SpanKind> = {
   model: "llm",

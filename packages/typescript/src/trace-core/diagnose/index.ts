@@ -6,15 +6,23 @@ import { fileURLToPath } from "node:url";
 import { getSpansByConversationId, type RawSpan } from "../../api/trace.js";
 import { assembleTraceTree } from "./trace-shaper.js";
 import { loadRules, RuleLoadError } from "./rule-loader.js";
-import { runRules, RuleProbeError } from "./signal-probe.js";
-import { templateSynthesize } from "./synthesizer-template.js";
-import { assembleReport, reportToYamlObject } from "./report-assembler.js";
+import { runRules, RuleProbeError, rubricRules } from "./signal-probe.js";
+import { agentSynthesize } from "./synthesizer-agent.js";
+import { evaluateRubricRules } from "./agent-binding.js";
+import { assembleReport, reportToYamlObject, symbolicHitsToFindings } from "./report-assembler.js";
 import type { DiagnoseOpts, Report } from "./types.js";
+import type { AgentRegistry } from "../agent/registry.js";
+import { defaultRegistry } from "../agent/registry.js";
+import {
+  defaultPromptRegistry,
+  PromptTemplateRegistry,
+} from "../agent/prompt-template.js";
 
 import "./builtin-rules/register.js";  // side effect: registers all builtin predicates
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUILTIN_DIR = path.join(__dirname, "builtin-rules");
+const SHARED_PROMPT_DIR = path.join(__dirname, "..", "agent", "prompts");
 
 export class TraceNotFoundError extends Error {
   constructor(conversationId: string) {
@@ -23,11 +31,44 @@ export class TraceNotFoundError extends Error {
   }
 }
 
-export async function diagnose(conversationId: string, opts: DiagnoseOpts): Promise<Report> {
-  // PR-A: opts.noLlm, opts.agentProvider, opts.timeoutMs are reserved for PR-B's
-  // agent / rubric path; they are accepted by the interface but not consumed here.
-  const cwdRulesDir = opts.rulesDir ?? path.join(process.cwd(), "diagnosis-rules");
+/**
+ * Allow callers (CLI, tests, future scan-mode) to inject a custom registry
+ * + prompt registry without globals. The CLI in `commands/trace.ts` calls
+ * `diagnose()` and registers the default ClaudeCodeSubprocessProvider into
+ * `defaultRegistry` ahead of time; tests pass their own registry containing
+ * a StubAgentProvider.
+ */
+export interface DiagnoseInternalOpts {
+  /** Override the AgentRegistry used for rubric rules + synthesizer. */
+  registry?: AgentRegistry;
+  /** Override the PromptTemplateRegistry. */
+  promptRegistry?: PromptTemplateRegistry;
+}
 
+let sharedPromptsLoaded = false;
+async function ensureBuiltinPromptsLoaded(reg: PromptTemplateRegistry): Promise<void> {
+  if (reg !== defaultPromptRegistry) {
+    // Caller-provided registry: load on every call so test-specific
+    // overrides see their content (cheap; ENOENT is no-op).
+    await reg.loadBuiltinDir(SHARED_PROMPT_DIR);
+    return;
+  }
+  if (sharedPromptsLoaded) return;
+  await reg.loadBuiltinDir(SHARED_PROMPT_DIR);
+  sharedPromptsLoaded = true;
+}
+
+export async function diagnose(
+  conversationId: string,
+  opts: DiagnoseOpts,
+  internal: DiagnoseInternalOpts = {},
+): Promise<Report> {
+  const cwdRulesDir = opts.rulesDir ?? path.join(process.cwd(), "diagnosis-rules");
+  const registry = internal.registry ?? defaultRegistry;
+  const promptRegistry = internal.promptRegistry ?? defaultPromptRegistry;
+  await ensureBuiltinPromptsLoaded(promptRegistry);
+
+  // ── 1. Fetch + shape spans ──────────────────────────────────────────────
   const fetched = await getSpansByConversationId({
     baseUrl: opts.baseUrl,
     token: opts.token,
@@ -37,8 +78,6 @@ export async function diagnose(conversationId: string, opts: DiagnoseOpts): Prom
   const rawSpans: RawSpan[] = fetched.spans;
   if (rawSpans.length === 0) throw new TraceNotFoundError(conversationId);
 
-  // A conversation may produce multiple OTel traces (one per turn). PR-A
-  // diagnose is single-trace: pick the first observed traceId; warn on extras.
   const observedTraceIds = fetched.traceIds.length > 0
     ? fetched.traceIds
     : [...new Set(rawSpans.map((s) => s.traceId).filter((t): t is string => Boolean(t)))];
@@ -54,6 +93,7 @@ export async function diagnose(conversationId: string, opts: DiagnoseOpts): Prom
 
   const tree = assembleTraceTree(primaryTraceId, spansForPrimary);
 
+  // ── 2. Load rules + run Stage-1 (symbolic) ──────────────────────────────
   const rules = await loadRules({
     builtinDir: BUILTIN_DIR,
     cwdRulesDir,
@@ -62,34 +102,74 @@ export async function diagnose(conversationId: string, opts: DiagnoseOpts): Prom
   });
 
   const hits = await runRules(rules, tree);
+  const symbolicFindings = symbolicHitsToFindings(rules, hits);
+
+  // ── 3. Stage-2 (rubric) — skip everything when --no-llm ─────────────────
+  const haveRubric = rubricRules(rules).length > 0;
+  let rubricFindings: typeof symbolicFindings = [];
+  let rulesSkipped: { ruleId: string; reason: string }[] = [];
+  if (haveRubric) {
+    const r = await evaluateRubricRules({
+      rules,
+      tree,
+      registry,
+      promptRegistry,
+      noLlm: opts.noLlm,
+      timeoutMs: opts.timeoutMs,
+    });
+    rubricFindings = r.findings;
+    rulesSkipped = r.skipped;
+  }
+
+  const allFindings = [...symbolicFindings, ...rubricFindings];
+
+  // ── 4. Stage-3 — agent synthesizer (template fallback) ──────────────────
+  const synthProvider = opts.noLlm
+    ? null
+    : registry.resolve({ preferred: opts.agentProvider ?? undefined });
+  const synth = await agentSynthesize({
+    findings: allFindings,
+    traceId: primaryTraceId,
+    agentId: extractAgentId(tree),
+    provider: synthProvider,
+    promptRegistry,
+    timeoutMs: opts.timeoutMs,
+  });
+
+  // ── 5. Assemble report ──────────────────────────────────────────────────
+  const haveSymbolic = rules.some((r) => r.predicateRef !== null);
+  const ranRubric = haveRubric && !opts.noLlm;
+  const mode: 'symbolic-only' | 'rubric-only' | 'hybrid' = haveSymbolic && ranRubric
+    ? "hybrid"
+    : ranRubric
+      ? "rubric-only"
+      : "symbolic-only";
 
   const version = await cliVersion();
-
-  // Build provisional findings list to feed the synthesizer.
-  const provisionalReport = assembleReport({
+  const report: Report = assembleReport({
     traceId: primaryTraceId,
     agentId: extractAgentId(tree),
     tenant: extractTenant(tree),
     cliVersion: version,
     rules,
     hits,
-    summary: { headline: "", primaryRootCause: null, fixPriority: [], crossFindingLinks: [] },
+    extraFindings: rubricFindings,
+    summary: synth.summary,
+    mode,
+    rulesSkipped,
+    synthesizerMode: synth.mode,
   });
 
-  const summary = templateSynthesize(provisionalReport.findings);
-  const report: Report = { ...provisionalReport, summary };
-
+  // ── 6. Emit ──────────────────────────────────────────────────────────────
   if (opts.out !== null) {
     await fs.mkdir(path.dirname(opts.out), { recursive: true });
     await fs.writeFile(opts.out, yaml.dump(reportToYamlObject(report)), "utf8");
   } else {
     process.stdout.write(yaml.dump(reportToYamlObject(report)));
   }
-
   if (report.findings.length === 0) {
     process.stderr.write("no findings\n");
   }
-
   return report;
 }
 

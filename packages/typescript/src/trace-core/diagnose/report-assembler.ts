@@ -13,21 +13,33 @@ export interface AssembleReportOpts {
   tenant: string | null;
   cliVersion: string;
   rules: Rule[];
-  hits: Map<string, Hit[]>;        // rule_id → hits
+  hits: Map<string, Hit[]>;        // rule_id → hits (symbolic only)
+  /** Additional pre-built findings (rubric judgments come from agent-binding). */
+  extraFindings?: Finding[];
   summary: Summary;
+  /** Run mode. Default `symbolic-only` for backward compat. */
+  mode?: 'symbolic-only' | 'rubric-only' | 'hybrid';
+  /** Rubric rules skipped due to --no-llm / unavailable provider / etc. */
+  rulesSkipped?: { ruleId: string; reason: string }[];
+  /** Stage-3 synthesizer that produced `summary`. */
+  synthesizerMode?: 'template' | 'agent';
 }
 
-export function assembleReport(opts: AssembleReportOpts): Report {
+/** Build symbolic-pillar findings from rule+hit pairs.
+ *  Exported so callers (e.g. tests, index.ts) can compose findings from
+ *  multiple sources before handing them to a custom summary path. */
+export function symbolicHitsToFindings(rules: Rule[], hits: Map<string, Hit[]>): Finding[] {
   const findings: Finding[] = [];
-  for (const rule of opts.rules) {
-    const ruleHits = opts.hits.get(rule.id) ?? [];
+  for (const rule of rules) {
+    if (rule.predicateRef === null) continue;
+    const ruleHits = hits.get(rule.id) ?? [];
     for (const hit of ruleHits) {
       findings.push({
         ruleId: rule.id,
         judgmentKind: "symbolic",
         severity: rule.severity,
         symptom: rule.symptom,
-        likelyCause: rule.symptom,    // PR-A: no LLM, so we mirror symptom; PR-B agent overrides this
+        likelyCause: rule.symptom,    // symbolic: no LLM, so mirror symptom; rubric agent overrides
         evidence: { spans: hit.evidenceSpans, excerpt: hit.excerpt },
         suggestedFix: {
           target: rule.suggestedFix.target,
@@ -36,7 +48,7 @@ export function assembleReport(opts: AssembleReportOpts): Report {
         confidence: "low",
         verifyWith: {
           suggestedEvalCase: {
-            queryId: null,            // PR-A: no query extraction yet (deferred per spec)
+            queryId: null,
             query: null,
             assertions: rule.verifyWith.assertionTemplates.map((t) => renderTemplate(t, hit.bindings)),
           },
@@ -44,16 +56,22 @@ export function assembleReport(opts: AssembleReportOpts): Report {
       });
     }
   }
+  return findings;
+}
+
+export function assembleReport(opts: AssembleReportOpts): Report {
+  const symbolicFindings = symbolicHitsToFindings(opts.rules, opts.hits);
+  const findings: Finding[] = [...symbolicFindings, ...(opts.extraFindings ?? [])];
   return {
     schemaVersion: "trace-diagnose-report/v1",
     trace: { traceId: opts.traceId, agentId: opts.agentId, tenant: opts.tenant },
     run: {
       diagnosedAt: new Date().toISOString(),
       cliVersion: opts.cliVersion,
-      mode: "symbolic-only",
+      mode: opts.mode ?? "symbolic-only",
       rulesApplied: opts.rules.map((r) => r.id),
-      rulesSkipped: [],
-      synthesizerMode: "template",
+      rulesSkipped: opts.rulesSkipped ?? [],
+      synthesizerMode: opts.synthesizerMode ?? "template",
     },
     summary: opts.summary,
     findings,

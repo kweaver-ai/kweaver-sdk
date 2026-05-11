@@ -38,6 +38,21 @@ export interface RuleTaxonomy {
     | 'silent_quality_degradation';
 }
 
+export interface RubricInputSpec {
+  kind: string;
+  source: string;                    // 'extract_from_root_attr:<path>' | 'filter_by_kind:[k1,k2]' | 'literal:<json>'
+}
+
+export interface RubricSpec {
+  judgeQuestion: string;
+  inputs: RubricInputSpec[];
+  /** Original JSON-Schema-ish blob (kept for YAML round-trips / debug). */
+  outputSchemaRaw: Record<string, unknown>;
+  /** Compiled zod schema (built once at load time via output-schema-converter). */
+  outputZodSchema: import("zod").ZodTypeAny;
+  agentBinding: { provider: string; promptTemplateRef: string };
+}
+
 export interface Rule {
   schemaVersion: 'diagnosis-rule/v1';
   id: string;
@@ -46,10 +61,14 @@ export interface Rule {
   taxonomy: RuleTaxonomy;
   suggestedFix: { target: string; changeTemplate: string };
   verifyWith: { assertionTemplates: string[] };
-  predicateRef: string;              // e.g. 'builtin:tool_loop_no_state_change' (PR-A: predicate only; rubric in PR-B)
+  /** Exactly one of `predicateRef` or `rubric` is non-null (XOR enforced at load). */
+  predicateRef: string | null;       // e.g. 'builtin:tool_loop_no_state_change'
+  rubric: RubricSpec | null;
   params: Record<string, unknown>;
   sourcePath: string;                // for conflict reporting
 }
+
+export type JudgmentKind = 'symbolic' | 'rubric';
 
 export interface Hit {
   evidenceSpans: string[];
@@ -59,16 +78,17 @@ export interface Hit {
 
 export type Predicate = (trace: TraceTree, params: Record<string, unknown>) => Hit[];
 
-// Report types (output schema 'trace-diagnose-report/v1' — PR-A subset).
+// Report types (output schema 'trace-diagnose-report/v1').
 export interface Finding {
   ruleId: string;
-  judgmentKind: 'symbolic';          // PR-A is symbolic-only; PR-B adds 'rubric'
+  judgmentKind: JudgmentKind;
   severity: 'low' | 'medium' | 'high';
   symptom: string;
-  likelyCause: string;               // PR-A: copied from rule.symptom (no LLM); PR-B: agent-supplied
+  likelyCause: string;               // symbolic: copied from rule.symptom; rubric: agent-supplied
   evidence: { spans: string[]; excerpt: string };
   suggestedFix: { target: string; change: string };
-  confidence: 'low';                 // symbolic always low
+  /** Symbolic always 'low' (no semantic basis); rubric carries agent confidence. */
+  confidence: 'low' | 'medium' | 'high';
   verifyWith: {
     suggestedEvalCase: {
       queryId: string | null;
@@ -100,10 +120,10 @@ export interface Report {
   run: {
     diagnosedAt: string;             // ISO8601
     cliVersion: string;
-    mode: 'symbolic-only';           // PR-A only ships this mode; PR-B adds 'rubric-only' | 'hybrid'
+    mode: 'symbolic-only' | 'rubric-only' | 'hybrid';
     rulesApplied: string[];
     rulesSkipped: { ruleId: string; reason: string }[];
-    synthesizerMode: 'template';     // PR-A only ships template; PR-B adds 'agent'
+    synthesizerMode: 'template' | 'agent';
   };
   summary: Summary;
   findings: Finding[];
@@ -114,7 +134,12 @@ export interface DiagnoseOpts {
   out: string | null;                // null = stdout
   rulesDir: string | null;           // override <cwd>/diagnosis-rules/
   noBuiltin: boolean;
-  noLlm: true;                       // PR-A: forced true (no LLM at all)
+  /** PR-B: when true, skip rubric rules (warn + record in rules_skipped) AND
+   *  fall the synthesizer back from agent → template. Default is now false
+   *  (both pillars on). */
+  noLlm: boolean;
+  /** Override default provider used by the agent synthesizer (rubric rules
+   *  pick their own provider via `agent_binding.provider`). null = registry default. */
   agentProvider: string | null;
   timeoutMs: number;
   baseUrl: string;

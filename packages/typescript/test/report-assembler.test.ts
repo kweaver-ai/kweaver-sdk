@@ -13,6 +13,7 @@ const ruleA: Rule = {
   suggestedFix: { target: "agent.prompt", changeTemplate: "stop after {{count}} retries" },
   verifyWith: { assertionTemplates: ["count({{tool}}) <= 2"] },
   predicateRef: "builtin:rule_a",
+  rubric: null,
   params: {},
   sourcePath: "mem:rule_a",
 };

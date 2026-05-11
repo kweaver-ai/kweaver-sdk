@@ -91,6 +91,36 @@ test("e2e: real fixture (status_quo de39cbe9) triggers zero findings", async () 
   }
 });
 
+test("e2e: real fixture (truncation: e5fe0274 from 192.168.40.62) fires llm_response_truncated_no_continue", async () => {
+  // Captured live from 192.168.40.62 (agent llm-max-tokens=50, asked for a long
+  // explanation → finish_reasons=['length'], no continuation span).
+  // Guards against regressions in OTel attribute handling: gen_ai.operation.name=chat
+  // (kind derivation) + gen_ai.response.finish_reasons array (rule predicate).
+  const data = await loadFixture(path.join(FIX, "real/e5fe0274-truncation.json"));
+  const m = mockFetchSequence([data]);
+  const tmpOut = path.join(os.tmpdir(), `diag-real-trunc-${Date.now()}.yaml`);
+  try {
+    const r = await diagnose("01KRBDAMHSA4NHH7G6K4CSSS31", {
+      out: tmpOut,
+      rulesDir: null,
+      noBuiltin: false,
+      noLlm: true,
+      agentProvider: null,
+      timeoutMs: 60000,
+      baseUrl: "https://mock.kweaver.test",
+      token: "tk",
+      businessDomain: "bd_public",
+    });
+    const truncated = r.findings.filter((f) => f.ruleId === "llm_response_truncated_no_continue");
+    assert.equal(truncated.length, 1, `expected 1 truncation finding, got ${r.findings.length} total: ${JSON.stringify(r.findings.map((f) => f.ruleId))}`);
+    assert.equal(truncated[0].severity, "medium");
+    assert.ok(truncated[0].evidence.spans.length > 0, "truncation finding should reference an LLM span");
+  } finally {
+    m.restore();
+    await fs.rm(tmpOut, { force: true });
+  }
+});
+
 test("e2e: report file is valid yaml conforming to schema", async () => {
   const yaml = await import("js-yaml");
   const { ReportSchema } = await import("../../src/trace-core/diagnose/schemas.js");

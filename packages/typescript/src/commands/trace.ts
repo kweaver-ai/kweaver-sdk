@@ -4,12 +4,13 @@ import { diagnose, TraceNotFoundError } from "../trace-core/diagnose/index.js";
 import { RuleLoadError } from "../trace-core/diagnose/rule-loader.js";
 import { RuleProbeError } from "../trace-core/diagnose/signal-probe.js";
 import { RuleSchema } from "../trace-core/diagnose/schemas.js";
+import { ensureValidToken } from "../auth/oauth.js";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 
 export interface ParsedTraceArgs {
   subcommand: "diagnose" | "rules-validate" | "help";
-  traceId?: string;
+  conversationId?: string;
   rulePath?: string;
   out: string | null;
   rulesDir: string | null;
@@ -45,7 +46,7 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
 
   return {
     subcommand: "diagnose",
-    traceId: String(parsed._[0] ?? ""),
+    conversationId: String(parsed._[0] ?? ""),
     out: parsed.out ?? null,
     rulesDir: parsed.rules ?? null,
     noBuiltin: !(parsed.builtin as boolean),
@@ -73,7 +74,9 @@ function printHelp(): void {
   process.stdout.write(`kweaver trace — trace diagnosis commands
 
 Subcommands:
-  trace diagnose <trace_id>                   Diagnose a single trace; emit YAML report
+  trace diagnose <conversation_id>            Diagnose the trace produced by a conversation; emit YAML report
+                                              (the id is the conversation_id returned by 'agent chat' /
+                                              'agent sessions'; spans are fetched from agent-observability)
     --out <file>                              Write report to file (default: stdout)
     --rules <dir>                             Override <cwd>/diagnosis-rules/
     --no-builtin                              Disable the 5 builtin baseline rules
@@ -95,19 +98,34 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
     return await runRulesValidate(args.rulePath ?? "");
   }
   // diagnose
-  if (!args.traceId) {
-    process.stderr.write("error: missing <trace_id>\n");
+  if (!args.conversationId) {
+    process.stderr.write("error: missing <conversation_id>\n");
     return 2;
   }
-  const baseUrl = args.baseUrl ?? process.env.KWEAVER_BASE_URL ?? "";
-  const token = args.token ?? process.env.KWEAVER_TOKEN ?? "";
-  const bd = args.businessDomain ?? "bd_public";
+  let baseUrl = args.baseUrl ?? process.env.KWEAVER_BASE_URL ?? "";
+  let token = args.token ?? process.env.KWEAVER_TOKEN ?? "";
+  const bd = args.businessDomain ?? process.env.KWEAVER_BUSINESS_DOMAIN ?? "bd_public";
+  // Fall back to the active platform from `~/.kweaver/` (same as agent trace),
+  // so users don't need to pass --base-url / --token explicitly. Tokens are
+  // auto-refreshed for OAuth platforms; "__NO_AUTH__" is returned for no-auth.
+  if (!baseUrl || !token) {
+    try {
+      const t = await ensureValidToken();
+      if (!baseUrl) baseUrl = t.baseUrl;
+      if (!token) token = t.accessToken;
+    } catch (e) {
+      process.stderr.write(
+        `error: missing --base-url / --token, and no active platform in ~/.kweaver/ — ${(e as Error).message}\n`,
+      );
+      return 5;
+    }
+  }
   if (!baseUrl || !token) {
     process.stderr.write("error: missing --base-url / --token (or KWEAVER_BASE_URL / KWEAVER_TOKEN env)\n");
     return 5;
   }
   try {
-    await diagnose(args.traceId, {
+    await diagnose(args.conversationId, {
       out: args.out,
       rulesDir: args.rulesDir,
       noBuiltin: args.noBuiltin,

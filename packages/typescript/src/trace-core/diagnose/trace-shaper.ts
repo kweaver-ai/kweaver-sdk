@@ -1,7 +1,16 @@
 import type { Span, SpanKind, TraceTree } from "./types.js";
 import type { RawSpan } from "../../api/trace.js";
 
+// Map from OTel GenAI `gen_ai.operation.name` (the cross-runtime standard) to
+// the diagnostic SpanKind buckets rules filter on. `agent.trace.type` is kept
+// as a fallback for runtimes/fixtures that pre-tag spans with our own taxonomy.
 const KIND_MAP: Record<string, SpanKind> = {
+  // OTel GenAI semconv operation names
+  chat: "llm",
+  text_completion: "llm",
+  embeddings: "retrieval",
+  execute_tool: "tool",
+  // pre-existing custom taxonomy (synthetic fixtures, optional runtime tag)
   model: "llm",
   llm: "llm",
   tool: "tool",
@@ -10,6 +19,8 @@ const KIND_MAP: Record<string, SpanKind> = {
 };
 
 function deriveKind(attrs: Record<string, unknown>): SpanKind {
+  const op = attrs["gen_ai.operation.name"];
+  if (typeof op === "string" && op in KIND_MAP) return KIND_MAP[op];
   const t = attrs["agent.trace.type"];
   if (typeof t === "string" && t in KIND_MAP) return KIND_MAP[t];
   return "unknown";

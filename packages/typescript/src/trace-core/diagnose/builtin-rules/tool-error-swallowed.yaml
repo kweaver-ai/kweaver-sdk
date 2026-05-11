@@ -1,0 +1,15 @@
+schema_version: diagnosis-rule/v1
+id: tool_error_swallowed
+severity: high
+symptom: tool_error_not_propagated_to_next_prompt
+taxonomy:
+  signals_axis: execution
+  ms_class: cascading_error
+suggested_fix:
+  target: decision_agent.prompt
+  change_template: "after tool '{{tool_name}}' errors, include error.message in the next LLM prompt or take a recovery branch"
+verify_with:
+  assertion_templates:
+    - "next_llm_prompt_after({{tool_name}}_error).contains(error.message)"
+predicate: builtin:tool_error_swallowed
+params: {}

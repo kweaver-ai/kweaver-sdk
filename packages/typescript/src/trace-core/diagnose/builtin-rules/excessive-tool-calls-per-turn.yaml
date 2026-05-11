@@ -1,0 +1,16 @@
+schema_version: diagnosis-rule/v1
+id: excessive_tool_calls_per_turn
+severity: medium
+symptom: excessive_tool_calls_per_user_turn
+taxonomy:
+  signals_axis: execution
+  ms_class: tool_misuse
+suggested_fix:
+  target: decision_agent.prompt
+  change_template: "constrain plan to at most {{max_calls}} tool calls per user turn; observed {{count}}"
+verify_with:
+  assertion_templates:
+    - "tool_call_count_per_turn <= {{max_calls}}"
+predicate: builtin:excessive_tool_calls_per_turn
+params:
+  max_tool_calls_per_turn: 10

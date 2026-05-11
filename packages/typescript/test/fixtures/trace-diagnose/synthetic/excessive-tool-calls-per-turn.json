@@ -1,0 +1,19 @@
+{
+  "hits": {
+    "hits": [
+      { "_source": { "spanId": "root", "parentSpanId": null, "name": "chat", "startTimeUnixNano": "1700000000000000000", "endTimeUnixNano": "1700000000200000000", "status": { "code": "OK" }, "attributes": { "agent.trace.type": "model", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t1", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000010000000", "endTimeUnixNano": "1700000000011000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t2", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000020000000", "endTimeUnixNano": "1700000000021000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t3", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000030000000", "endTimeUnixNano": "1700000000031000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t4", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000040000000", "endTimeUnixNano": "1700000000041000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t5", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000050000000", "endTimeUnixNano": "1700000000051000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t6", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000060000000", "endTimeUnixNano": "1700000000061000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t7", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000070000000", "endTimeUnixNano": "1700000000071000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t8", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000080000000", "endTimeUnixNano": "1700000000081000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t9", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000090000000", "endTimeUnixNano": "1700000000091000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t10", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000100000000", "endTimeUnixNano": "1700000000101000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t11", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000110000000", "endTimeUnixNano": "1700000000111000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } },
+      { "_source": { "spanId": "t12", "parentSpanId": "root", "name": "tool", "startTimeUnixNano": "1700000000120000000", "endTimeUnixNano": "1700000000121000000", "attributes": { "agent.trace.type": "tool", "gen_ai.conversation.id": "c1" } } }
+    ]
+  }
+}

@@ -21,8 +21,60 @@ const VerifyWithSchema = z.object({
   assertion_templates: z.array(z.string()).default([]),
 });
 
-// PR-A: only `predicate` branch (rubric XOR enforced in PR-B).
-// We still encode the XOR shape so PR-B can enable rubric without breaking parsers.
+/**
+ * Rubric input source descriptor. The supported source prefixes are
+ * resolved by `diagnose/agent-binding.ts` against the in-memory TraceTree:
+ *
+ *   - `extract_from_root_attr:<dot.path>`   → root span attribute by name
+ *   - `filter_by_kind:[kind1,kind2,...]`    → ordered span subset by kind
+ *   - `literal:<json>`                      → constant blob (debug / fixtures)
+ *
+ * Authors describe **which slice of the trace** the agent needs as context;
+ * the binding does the actual extraction so rule YAML stays declarative.
+ */
+const RubricInputSchema = z.object({
+  kind: z.string().min(1),
+  source: z.string().min(1),
+});
+
+/**
+ * Minimal JSON-Schema-ish shape we accept for rubric output_schema. We
+ * convert to a zod schema at load time (see `output-schema-converter.ts`);
+ * keeping this loose here lets authors paste literal JSON Schema without
+ * us re-implementing the whole spec — just the subset we need (object
+ * with required[] + properties{type,enum,items}).
+ */
+const RubricOutputSchemaSchema = z.object({
+  type: z.literal("object"),
+  required: z.array(z.string()).default([]),
+  properties: z.record(z.string(), z.record(z.string(), z.unknown())),
+});
+
+const AgentBindingSchema = z.object({
+  provider: z.string().min(1),
+  prompt_template_ref: z.string().regex(/^builtin:[a-zA-Z0-9_-]+$/),
+});
+
+const RubricSchema = z.object({
+  judge_question: z.string().min(1),
+  inputs: z.array(RubricInputSchema).default([]),
+  output_schema: RubricOutputSchemaSchema,
+  agent_binding: AgentBindingSchema,
+});
+
+export type RubricYaml = z.infer<typeof RubricSchema>;
+export type RubricInputYaml = z.infer<typeof RubricInputSchema>;
+
+/**
+ * The convergence contract between Stage-1 (symbolic) and Stage-2 (rubric):
+ * every rubric verdict MUST emit `first_violating_step_id` so cross-finding
+ * links can correlate rubric findings with the spans symbolic rules cite.
+ *
+ * Enforced as a YAML-load-time check rather than at runtime so authors
+ * see the violation in `trace diagnose rules validate <path>`.
+ */
+const FIRST_VIOLATING_STEP_ID = "first_violating_step_id";
+
 export const RuleSchema = z
   .object({
     schema_version: z.literal("diagnosis-rule/v1"),
@@ -33,19 +85,26 @@ export const RuleSchema = z
     suggested_fix: SuggestedFixSchema,
     verify_with: VerifyWithSchema,
     predicate: z.string().regex(/^builtin:[a-z][a-z0-9_]*$/).optional(),
-    rubric: z.unknown().optional(),  // PR-B will define a real schema
+    rubric: RubricSchema.optional(),
     params: z.record(z.string(), z.unknown()).default({}),
   })
   .refine(
     (r) => Boolean(r.predicate) !== Boolean(r.rubric),
     { message: "exactly one of `predicate` or `rubric` must be present" },
+  )
+  .refine(
+    (r) => !r.rubric || r.rubric.output_schema.required.includes(FIRST_VIOLATING_STEP_ID),
+    {
+      message: `rubric.output_schema.required must include '${FIRST_VIOLATING_STEP_ID}' (Stage-1↔Stage-2 convergence contract)`,
+      path: ["rubric", "output_schema", "required"],
+    },
   );
 
 export type RuleYaml = z.infer<typeof RuleSchema>;
 
 const FindingSchema = z.object({
   rule_id: z.string(),
-  judgment_kind: z.enum(["symbolic"]),  // PR-B will add "rubric"
+  judgment_kind: z.enum(["symbolic", "rubric"]),
   severity: z.enum(["low", "medium", "high"]),
   symptom: z.string(),
   likely_cause: z.string(),
@@ -57,7 +116,10 @@ const FindingSchema = z.object({
     target: z.string(),
     change: z.string(),
   }),
-  confidence: z.literal("low"),
+  // Symbolic findings always emit `low` (no semantic basis for higher).
+  // Rubric agent supplies its own confidence; rule-loader propagates the
+  // value the agent returned in the rubric output. Accept the union.
+  confidence: z.enum(["low", "medium", "high"]),
   verify_with: z.object({
     suggested_eval_case: z.object({
       query_id: z.string().nullable(),
@@ -112,3 +174,8 @@ export const ReportSchema = z.object({
 });
 
 export type ReportYaml = z.infer<typeof ReportSchema>;
+
+/** The Summary section in isolation — exported so the agent synthesizer
+ *  can validate its LLM output against the same shape the report uses. */
+export const SummaryOutputSchema = SummarySchema;
+export type SummaryOutput = z.infer<typeof SummaryOutputSchema>;

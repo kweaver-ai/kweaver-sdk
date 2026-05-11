@@ -1,0 +1,1933 @@
+{
+    "took": 2,
+    "timed_out": false,
+    "_shards": {
+        "total": 1,
+        "successful": 1,
+        "skipped": 0,
+        "failed": 0
+    },
+    "hits": {
+        "total": {
+            "value": 37,
+            "relation": "eq"
+        },
+        "max_score": null,
+        "hits": [
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "3WExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.agent.run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.agent.version": "latest",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "gen_ai.operation.name": "invoke_agent",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.158932311Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "invoke_agent",
+                    "parentSpanId": "08216f0ad921ccc9",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "1d944e1f03ce947d",
+                    "startTime": "2026-05-07T02:08:00.144736158Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680144
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "7mExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "http.client_ip": "<CLIENT_HOST>",
+                        "http.flavor": "1.1",
+                        "http.method": "POST",
+                        "http.route": "/api/agent-factory/v1/app/:app_key/chat/completion",
+                        "http.scheme": "http",
+                        "http.status_code": 200,
+                        "http.user_agent": "python-requests/2.32.3",
+                        "net.host.name": "agent-factory",
+                        "net.sock.peer.addr": "192.169.0.1",
+                        "net.sock.peer.port": 50080
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.372221026Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin",
+                        "schemaUrl": "",
+                        "version": "0.42.0"
+                    },
+                    "kind": "Server",
+                    "name": "/api/agent-factory/v1/app/:app_key/chat/completion",
+                    "parentSpanId": "",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "08216f0ad921ccc9",
+                    "startTime": "2026-05-07T02:08:00.144063325Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680144
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "1GExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/drivenadapter/dbaccess/conversationdbacc/create.go:13",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.14758481Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "conversationdbacc.(*ConversationRepo).Create",
+                    "parentSpanId": "29e5d286d65e99f1",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "b69375a174c1c356",
+                    "startTime": "2026-05-07T02:08:00.146436744Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680146
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "1WExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/domain/service/agentrunsvc/chat_msg.go:88",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.agent.run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.147604939Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "agentrunsvc.(*agentSvc).GetHistoryAndMsgIndex",
+                    "parentSpanId": "1d944e1f03ce947d",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "29e5d286d65e99f1",
+                    "startTime": "2026-05-07T02:08:00.146424991Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680146
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "1mExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/drivenadapter/dbaccess/conversationmsgdbacc/create.go:14",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.14867542Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "conversationmsgdbacc.(*ConversationMsgRepo).Create",
+                    "parentSpanId": "390a1a25d6ddd945",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "b9a23fbac3db9091",
+                    "startTime": "2026-05-07T02:08:00.147646561Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680147
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "2WExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/domain/service/agentrunsvc/chat_msg.go:188",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.agent.run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.152010463Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "agentrunsvc.(*agentSvc).UpsertUserAndAssistantMsg",
+                    "parentSpanId": "1d944e1f03ce947d",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "390a1a25d6ddd945",
+                    "startTime": "2026-05-07T02:08:00.147620595Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680147
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "12ExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/drivenadapter/dbaccess/conversationdbacc/update.go:13",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.150512278Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "conversationdbacc.(*ConversationRepo).Update",
+                    "parentSpanId": "390a1a25d6ddd945",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "76ded87f6ca56f11",
+                    "startTime": "2026-05-07T02:08:00.148728786Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680148
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "2GExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/drivenadapter/dbaccess/conversationmsgdbacc/create.go:14",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.15199235Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "conversationmsgdbacc.(*ConversationMsgRepo).Create",
+                    "parentSpanId": "390a1a25d6ddd945",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "7887c2151accc7fd",
+                    "startTime": "2026-05-07T02:08:00.15054702Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680150
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "2mExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/domain/service/agentrunsvc/ensure_sandbox_session.go:19",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        }
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.158645833Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "agentrunsvc.(*agentSvc).EnsureSandboxSession",
+                    "parentSpanId": "1d944e1f03ce947d",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "4679c73eb8d9831a",
+                    "startTime": "2026-05-07T02:08:00.152874518Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680152
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "22ExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/domain/service/agentrunsvc/chat_req.go:23",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.agent.run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.158708731Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "agentrunsvc.(*agentSvc).GenerateAgentCallReq",
+                    "parentSpanId": "1d944e1f03ce947d",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "a04bc193a9c6a02f",
+                    "startTime": "2026-05-07T02:08:00.158693148Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680158
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "3GExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_call_req": "&{AgentID:01KR0327YK66SBYB3PNV6J4FC3 AgentVersion:latest AgentConfig:{Config:{Input:0xc002335d10 SystemPrompt:\u4f60\u662f\u4e00\u4e2a\u6d4b\u8bd5\u52a9\u624b Dolphin: Mode:default IsDolphinMode:0 PreDolphin:[] PostDolphin:[] DataSource:<nil> Skill:0xc0029857a0 Llms:[0xc000754550] IsDataFlowSetEnabled:0 OpeningRemarkConfig:<nil> PresetQuestions:[] Output:0xc000b55860 BuiltInCanEditFields:<nil> MemoryCfg:<nil> RelatedQuestion:<nil> PlanMode:<nil> ReactConfig:<nil> ConversationHistoryConfig:0xc002335d70 Metadata:{ConfigTplVersion:v1 ConfigLastSetTimestamp:1778119679955494929}}} AgentInput:map[history:[] query:\u4f60\u597d\uff0c\u7528\u4e00\u53e5\u8bdd\u4ecb\u7ecd\u4f60\u81ea\u5df1] UserID:mocked_user_id VisitorType: AgentOptions:{Stream:false Debug:false Retry:false DynamicRetrieverFields:{Kg:[] Doc:[]} Step: ConversationID:01KR03284JNGR99KEN5RXV9TCW AgentRunID:01KR03284GQ7QH3539XGKRVTVF IsNeedProgress:false EnableDependencyCache:false ResumeInfo:<nil>} Token:mock token CallType:chat XAccountID:mocked_user_id XAccountType:user XBusinessDomainID:}",
+                        "code.filepath": "/build/src/drivenadapter/httpaccess/v2agentexecutoraccess/call.go:34",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.agent.run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.158850126Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "v2agentexecutoraccess.(*v2AgentExecutorHttpAcc).Call",
+                    "parentSpanId": "08216f0ad921ccc9",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "9e12ffd63c562dd8",
+                    "startTime": "2026-05-07T02:08:00.158730355Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680158
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "42ExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/domain/service/agentrunsvc/chat_process.go:50",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.agent.run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "stream.chunk_count": 34,
+                        "stream.total_duration_ms": 1213,
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.372154293Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "agentrunsvc.(*agentSvc).Process",
+                    "parentSpanId": "1d944e1f03ce947d",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "30dc6bc0abcc05a2",
+                    "startTime": "2026-05-07T02:08:00.159104016Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680159
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "tWExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "http.client_ip": "127.0.0.1",
+                        "http.method": "POST",
+                        "http.route": "/api/agent-executor/v2/agent/run",
+                        "http.status_code": 200,
+                        "http.url": "http://localhost:30778/api/agent-executor/v2/agent/run"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.20508754Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.http",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Server",
+                    "name": "POST /api/agent-executor/v2/agent/run",
+                    "parentSpanId": "9e12ffd63c562dd8",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "722d6063664a6490",
+                    "startTime": "2026-05-07T02:08:00.161073928Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680161
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "p2ExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "session_id": "01KR03284GQ7QH3539XGKRVTVF"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.163063381Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "process_options",
+                    "parentSpanId": "722d6063664a6490",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "7de7592e24a0dd39",
+                    "startTime": "2026-05-07T02:08:00.162922628Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680162
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "qGExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "user_id": "mocked_user_id",
+                        "visitor_type": "user"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.165447642Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "check_agent_permission",
+                    "parentSpanId": "722d6063664a6490",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "dadd0fe6290c4692",
+                    "startTime": "2026-05-07T02:08:00.163166244Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680163
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "qWExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.user.id": "mocked_user_id",
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.167067017Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "process_input",
+                    "parentSpanId": "71bfbbcd93fdf486",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "def6d2be94bae117",
+                    "startTime": "2026-05-07T02:08:00.166755148Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680166
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "vWExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.user.id": "mocked_user_id",
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "gen_ai.operation.name": "invoke_agent",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.368449325Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "invoke_agent",
+                    "parentSpanId": "8a2b2b3d6bcebd05",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "71bfbbcd93fdf486",
+                    "startTime": "2026-05-07T02:08:00.166440404Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680166
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "vmExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.user.id": "mocked_user_id",
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.369260954Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "result_output",
+                    "parentSpanId": "722d6063664a6490",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "8a2b2b3d6bcebd05",
+                    "startTime": "2026-05-07T02:08:00.166046238Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680166
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "qmExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.user.id": "mocked_user_id",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.167421236Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "process_tool_input",
+                    "parentSpanId": "71bfbbcd93fdf486",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "70139c73b995fc32",
+                    "startTime": "2026-05-07T02:08:00.16722071Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680167
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "vGExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.user.id": "mocked_user_id",
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.367213372Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "run_dolphin",
+                    "parentSpanId": "71bfbbcd93fdf486",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "b7e29a0f1b09303e",
+                    "startTime": "2026-05-07T02:08:00.167608162Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680167
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "q2ExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.user.id": "mocked_user_id",
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.168784654Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "build_llm_config",
+                    "parentSpanId": "b7e29a0f1b09303e",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "ee3f56c7b6c0e6a5",
+                    "startTime": "2026-05-07T02:08:00.168575879Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680168
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "smExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.170673859Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "build",
+                    "parentSpanId": "b7e29a0f1b09303e",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "680e6e198a7b3239",
+                    "startTime": "2026-05-07T02:08:00.168967118Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680168
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "rGExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.169341879Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "search_memory_prompt",
+                    "parentSpanId": "680e6e198a7b3239",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "c5e4986d9b7edee0",
+                    "startTime": "2026-05-07T02:08:00.169217812Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680169
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "rWExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.169596495Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "temp_file_prompt",
+                    "parentSpanId": "680e6e198a7b3239",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "2c3e1121501b6a18",
+                    "startTime": "2026-05-07T02:08:00.169471865Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680169
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "rmExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.169842872Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "get_doc_retrieval_prompt",
+                    "parentSpanId": "680e6e198a7b3239",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "192ba7224c5b431e",
+                    "startTime": "2026-05-07T02:08:00.169719939Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680169
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "r2ExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.170109868Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "get_graph_retrieval_prompt",
+                    "parentSpanId": "680e6e198a7b3239",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "f27f11e765e51367",
+                    "startTime": "2026-05-07T02:08:00.169988852Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680169
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "sGExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "session_id": "01KR03284GQ7QH3539XGKRVTVF"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.170347357Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "get_context_prompt",
+                    "parentSpanId": "680e6e198a7b3239",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "945dacfcd2e0cd9d",
+                    "startTime": "2026-05-07T02:08:00.170231311Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680170
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "sWExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "session_id": "01KR03284GQ7QH3539XGKRVTVF"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.170588399Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "get_related_questions_prompt",
+                    "parentSpanId": "680e6e198a7b3239",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "42f4c7f1f74772f1",
+                    "startTime": "2026-05-07T02:08:00.170474139Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680170
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "s2ExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.user.id": "mocked_user_id",
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false,
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.170992085Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "build_skills",
+                    "parentSpanId": "b7e29a0f1b09303e",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "34c6475965debde2",
+                    "startTime": "2026-05-07T02:08:00.170794188Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680170
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "tGExAJ4BwTzUtIbRI3qI",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "error": false
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.173568647Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "build_tools",
+                    "parentSpanId": "b7e29a0f1b09303e",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "ac32a8afacf782d4",
+                    "startTime": "2026-05-07T02:08:00.171118387Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680171
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "umExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.block.type": "chat",
+                        "agent.llm.latency_ms": 1003,
+                        "agent.reasoning.step": 1,
+                        "agent.user.id": "mocked_user_id",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "agent_core_v2_01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.conversation.id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.operation.name": "chat",
+                        "gen_ai.output.type": "text",
+                        "gen_ai.request.model": "deepseek-chat",
+                        "gen_ai.request.temperature": 1,
+                        "gen_ai.response.finish_reasons": [
+                            "stop"
+                        ],
+                        "gen_ai.usage.input_tokens": 1607,
+                        "gen_ai.usage.output_tokens": 25
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.249296409Z",
+                    "events": [
+                        {
+                            "attributes": {
+                                "gen_ai.input.messages": "[{\"role\": \"system\", \"content\": \"\\n## Goals\uff1a\\n- \u4f60\u9700\u8981\uff1a\u5148\u4ed4\u7ec6\u601d\u8003\u548c\u5206\u6790\u7528\u6237\u7684\u95ee\u9898\uff0c\u7136\u540e\u51b3\u5b9a\u7531\u81ea\u5df1\u56de\u7b54\u95ee\u9898\u8fd8\u662f\u4f7f\u7528\u5de5\u5177\u6765\u5904\u7406\u95ee\u9898\uff0c\u52a1\u5fc5\u5728\u8c03\u7528\u5de5\u5177\u524d\u4ed4\u7ec6\u601d\u8003\u3002tools\u4e2d\u7684\u5de5\u5177\u5c31\u662f\u4f60\u53ef\u4ee5\u4f7f\u7528\u7684\u5168\u90e8\u5de5\u5177\u3002\\n\\n## Available Tools:\\n- builtin_skill_load(skill_id): Load the entry information for a skill (Phase 1 \u2014 must be called first). Returns the full SKILL.md content, a list of available script paths, and a list of available reference file paths. Whenever you have a skill_id, always call this function first before deciding any follow-up actions.\\n- builtin_skill_read_file(skill_id, file_path): Read the full content of a specific file inside a skill package (Phase 2 \u2014 optional). Only call this after builtin_skill_load has returned a path list or SKILL.md has referenced a file path. Reads one file at a time; batch reads are not supported. Supported text formats: .md .txt .json .yaml .yml .py .sh .js .ts\\n- builtin_skill_execute_script(skill_id, entry_shell): Execute a script inside the skill's runtime environment (Phase 3 \u2014 optional). Must first call builtin_skill_load and read SKILL.md before deciding to call this. The entry_shell command is specified in SKILL.md (e.g. 'python scripts/analyze.py'). Use the exact entry_shell value from SKILL.md \u2014 do not construct the command yourself. Not every skill requires script execution; some only need SKILL.md or reference files. In online mode the script runs in the execution factory sandbox; in local testing mode it runs directly in the current environment.\\n- _date: Get current date\\n\\n## Built-in Skill Capabilities\\n\\nYou have access to three built-in tools for working with skills:\\n\\n### 1. builtin_skill_load(skill_id)\\n- **Purpose**: Load a skill package and get its documentation\\n- **When to use**: Always call this first when you have a skill_id\\n- **Returns**: The full SKILL.md content plus lists of available scripts and reference files\\n\\n### 2. builtin_skill_read_file(skill_id, file_path)\\n- **Purpose**: Read a specific file inside the skill package\\n- **When to use**: Optional. Only call after you have obtained a file path from builtin_skill_load or from SKILL.md\\n- **Note**: One file per call; cannot batch\\n\\n### 3. builtin_skill_execute_script(skill_id, script_path)\\n- **Purpose**: Execute a script from the skill package\\n- **When to use**: Optional. Only call after reading SKILL.md and deciding that script execution is needed\\n- **Note**: Not all skills require script execution\\n\\n### Usage Guidelines\\n1. If you have a skill_id, **always start with** `builtin_skill_load(skill_id)`\\n2. After reading SKILL.md, decide independently whether to call `read_file`, `execute_script`, both, or neither\\n3. Both `builtin_skill_read_file` and `builtin_skill_execute_script` are **optional steps**\\n\\n---\\n\\n\\n\\n### Tools Usage Guidelines\uff1a\\n- \u4ed4\u7ec6\u9605\u8bfb\u6bcf\u4e2a\u5de5\u5177\u7684\u63cf\u8ff0\u548c\u53c2\u6570\u8981\u6c42\\n- \u6839\u636e\u95ee\u9898\u7684\u5177\u4f53\u9700\u6c42\u9009\u62e9\u6700\u5408\u9002\u7684\u5de5\u5177\\n- \u5728\u8c03\u7528\u5de5\u5177\u524d\u786e\u4fdd\u53c2\u6570\u5b8c\u6574\u548c\u6b63\u786e\\n- \u5982\u679c\u4e0d\u786e\u5b9a\u5de5\u5177\u7528\u6cd5\uff0c\u53ef\u4ee5\u5148\u5c1d\u8bd5\u7b80\u5355\u7684\u8c03\u7528\u6765\u4e86\u89e3\\n\\n\\n\u4f60\u662f\u4e00\u4e2a\u6d4b\u8bd5\u52a9\u624b\\n\\n        \"}, {\"role\": \"user\", \"content\": \"\u5982\u679c\u6709\u53c2\u8003\u6587\u6863\uff0c\u7ed3\u5408\u53c2\u8003\u6587\u6863\u56de\u7b54\u7528\u6237\u7684\u95ee\u9898\u3002\u5982\u679c\u6ca1\u6709\u53c2\u8003\u6587\u6863\uff0c\u6839\u636e\u7528\u6237\u7684\u95ee\u9898\u56de\u7b54\u3002\\n\u7528\u6237\u7684\u95ee\u9898\u4e3a\uff1a\u4f60\u597d\uff0c\u7528\u4e00\u53e5\u8bdd\u4ecb\u7ecd\u4f60\u81ea\u5df1\"}]",
+                                "gen_ai.output.messages": "[{\"role\": \"assistant\", \"content\": \"\u4f60\u597d\uff01\u6211\u662f\u4f60\u7684\u6d4b\u8bd5\u52a9\u624b\uff0c\u53ef\u4ee5\u5e2e\u4f60\u52a0\u8f7d\u548c\u6267\u884c\u6280\u80fd\u3001\u8bfb\u53d6\u6587\u4ef6\u3001\u8c03\u7528\u5de5\u5177\u6765\u89e3\u7b54\u95ee\u9898\u6216\u5b8c\u6210\u4efb\u52a1\u3002\"}]"
+                            },
+                            "droppedAttributesCount": 0,
+                            "name": "gen_ai.client.inference.operation.details",
+                            "@timestamp": "2026-05-07T02:08:01.249272016Z"
+                        }
+                    ],
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "dolphin.core.observability.otel_listener",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Client",
+                    "name": "chat deepseek-chat",
+                    "parentSpanId": "b7e29a0f1b09303e",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "e03af4b4c9d1c930",
+                    "startTime": "2026-05-07T02:08:00.245161393Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680245
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "3mExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/domain/service/agentrunsvc/chat_post_process.go:46",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.agent.run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "stream.chunk_position": "first",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:00.251206796Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "agentrunsvc.(*agentSvc).AfterProcess",
+                    "parentSpanId": "30dc6bc0abcc05a2",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "60ee7554092c6d08",
+                    "startTime": "2026-05-07T02:08:00.250910088Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119680250
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "u2ExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "agent.user.id": "mocked_user_id",
+                        "agent_id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "agent_run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.367168744Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-executor.internal",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "start_memory_build_thread",
+                    "parentSpanId": "b7e29a0f1b09303e",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "service.name": "agent-executor",
+                        "service.version": "1.0.0",
+                        "telemetry.sdk.language": "python",
+                        "telemetry.sdk.name": "opentelemetry",
+                        "telemetry.sdk.version": "1.40.0"
+                    },
+                    "spanId": "614525f1bfdfec28",
+                    "startTime": "2026-05-07T02:08:01.366973725Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119681366
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "32ExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/drivenadapter/dbaccess/conversationmsgdbacc/update.go:14",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "msgID": "01KR03284P3KCMC2RDDQFA2Z6P"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.370835763Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "conversationmsgdbacc.(*ConversationMsgRepo).Update",
+                    "parentSpanId": "c6e719a1a4ce2ae6",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "21ce0692d4d140bb",
+                    "startTime": "2026-05-07T02:08:01.369929524Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119681369
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "4mExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/domain/service/agentrunsvc/chat_post_process.go:374",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.agent.id": "01KR0327YK66SBYB3PNV6J4FC3",
+                        "gen_ai.agent.run_id": "01KR03284GQ7QH3539XGKRVTVF",
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW",
+                        "user_id": "mocked_user_id"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.371987894Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "agentrunsvc.(*agentSvc).handleMessageAndTempArea",
+                    "parentSpanId": "30dc6bc0abcc05a2",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "c6e719a1a4ce2ae6",
+                    "startTime": "2026-05-07T02:08:01.369907809Z",
+                    "status": {
+                        "code": "Ok",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119681369
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "4GExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/drivenadapter/dbaccess/conversationdbacc/get_by_xx.go:13",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.371458625Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "conversationdbacc.(*ConversationRepo).GetByID",
+                    "parentSpanId": "c6e719a1a4ce2ae6",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "62223c30fcfb5144",
+                    "startTime": "2026-05-07T02:08:01.370874036Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119681370
+                ]
+            },
+            {
+                "_index": "ss4o_traces-default-namespace",
+                "_id": "4WExAJ4BwTzUtIbRK3pm",
+                "_score": null,
+                "_source": {
+                    "attributes": {
+                        "code.filepath": "/build/src/drivenadapter/dbaccess/conversationdbacc/update.go:13",
+                        "data_stream": {
+                            "dataset": "default",
+                            "namespace": "namespace",
+                            "type": "span"
+                        },
+                        "gen_ai.conversation.id": "01KR03284JNGR99KEN5RXV9TCW"
+                    },
+                    "droppedAttributesCount": 0,
+                    "droppedEventsCount": 0,
+                    "droppedLinksCount": 0,
+                    "endTime": "2026-05-07T02:08:01.371978308Z",
+                    "instrumentationScope": {
+                        "droppedAttributesCount": 0,
+                        "name": "agent-factory/otel",
+                        "schemaUrl": "",
+                        "version": ""
+                    },
+                    "kind": "Internal",
+                    "name": "conversationdbacc.(*ConversationRepo).Update",
+                    "parentSpanId": "c6e719a1a4ce2ae6",
+                    "resource": {
+                        "deployment.environment": "production",
+                        "host.name": "agent-factory-54db48c576-zgff4",
+                        "os.description": "Ubuntu 24.04.3 LTS (Noble Numbat) (Linux agent-factory-54db48c576-zgff4 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64)",
+                        "os.type": "linux",
+                        "service.name": "agent-factory",
+                        "service.version": "1.0.0"
+                    },
+                    "spanId": "f8601355a0b6a502",
+                    "startTime": "2026-05-07T02:08:01.371486108Z",
+                    "status": {
+                        "code": "Unset",
+                        "message": ""
+                    },
+                    "@timestamp": "0001-01-01T00:00:00Z",
+                    "traceId": "de39cbe95e46cb7f28d85db9cf3a4dc9",
+                    "traceState": ""
+                },
+                "sort": [
+                    1778119681371
+                ]
+            }
+        ]
+    }
+}

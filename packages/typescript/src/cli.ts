@@ -184,6 +184,7 @@ Commands:
   tool           Tools inside a toolbox (upload OpenAPI spec, list, enable/disable)
   vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)
   context-loader Context-loader MCP/HTTP (config, tools, resources, search-schema, tool-call, query-*, etc.)
+  trace          Diagnose a single trace with rule-based analysis
   help           Show this message`);
 }
 
@@ -316,6 +317,11 @@ export async function run(argv: string[]): Promise<number> {
 
   if (command === "context-loader" || command === "context") {
     return runContextLoaderCommand(rest);
+  }
+
+  if (command === "trace") {
+    const { runTraceCommand } = await import("./commands/trace.js");
+    return await runTraceCommand(rest);
   }
 
   console.error(`Unknown command: ${command}`);

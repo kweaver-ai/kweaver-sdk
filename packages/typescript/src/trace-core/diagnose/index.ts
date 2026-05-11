@@ -1,0 +1,122 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import yaml from "js-yaml";
+import { fileURLToPath } from "node:url";
+
+import { getSpansByConversationId, type RawSpan } from "../../api/trace.js";
+import { assembleTraceTree } from "./trace-shaper.js";
+import { loadRules, RuleLoadError } from "./rule-loader.js";
+import { runRules, RuleProbeError } from "./signal-probe.js";
+import { templateSynthesize } from "./synthesizer-template.js";
+import { assembleReport, reportToYamlObject } from "./report-assembler.js";
+import type { DiagnoseOpts, Report } from "./types.js";
+
+import "./builtin-rules/register.js";  // side effect: registers all builtin predicates
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BUILTIN_DIR = path.join(__dirname, "builtin-rules");
+
+export class TraceNotFoundError extends Error {
+  constructor(conversationId: string) {
+    super(`no spans found for conversation: ${conversationId}`);
+    this.name = "TraceNotFoundError";
+  }
+}
+
+export async function diagnose(conversationId: string, opts: DiagnoseOpts): Promise<Report> {
+  // PR-A: opts.noLlm, opts.agentProvider, opts.timeoutMs are reserved for PR-B's
+  // agent / rubric path; they are accepted by the interface but not consumed here.
+  const cwdRulesDir = opts.rulesDir ?? path.join(process.cwd(), "diagnosis-rules");
+
+  const fetched = await getSpansByConversationId({
+    baseUrl: opts.baseUrl,
+    token: opts.token,
+    businessDomain: opts.businessDomain,
+    conversationId,
+  });
+  const rawSpans: RawSpan[] = fetched.spans;
+  if (rawSpans.length === 0) throw new TraceNotFoundError(conversationId);
+
+  // A conversation may produce multiple OTel traces (one per turn). PR-A
+  // diagnose is single-trace: pick the first observed traceId; warn on extras.
+  const observedTraceIds = fetched.traceIds.length > 0
+    ? fetched.traceIds
+    : [...new Set(rawSpans.map((s) => s.traceId).filter((t): t is string => Boolean(t)))];
+  const primaryTraceId = observedTraceIds[0] ?? conversationId;
+  if (observedTraceIds.length > 1) {
+    process.stderr.write(
+      `warning: conversation ${conversationId} has ${observedTraceIds.length} traces; diagnosing the first (${primaryTraceId})\n`,
+    );
+  }
+  const spansForPrimary = observedTraceIds.length > 0
+    ? rawSpans.filter((s) => !s.traceId || s.traceId === primaryTraceId)
+    : rawSpans;
+
+  const tree = assembleTraceTree(primaryTraceId, spansForPrimary);
+
+  const rules = await loadRules({
+    builtinDir: BUILTIN_DIR,
+    cwdRulesDir,
+    extraRulesDir: null,
+    noBuiltin: opts.noBuiltin,
+  });
+
+  const hits = await runRules(rules, tree);
+
+  const version = await cliVersion();
+
+  // Build provisional findings list to feed the synthesizer.
+  const provisionalReport = assembleReport({
+    traceId: primaryTraceId,
+    agentId: extractAgentId(tree),
+    tenant: extractTenant(tree),
+    cliVersion: version,
+    rules,
+    hits,
+    summary: { headline: "", primaryRootCause: null, fixPriority: [], crossFindingLinks: [] },
+  });
+
+  const summary = templateSynthesize(provisionalReport.findings);
+  const report: Report = { ...provisionalReport, summary };
+
+  if (opts.out !== null) {
+    await fs.mkdir(path.dirname(opts.out), { recursive: true });
+    await fs.writeFile(opts.out, yaml.dump(reportToYamlObject(report)), "utf8");
+  } else {
+    process.stdout.write(yaml.dump(reportToYamlObject(report)));
+  }
+
+  if (report.findings.length === 0) {
+    process.stderr.write("no findings\n");
+  }
+
+  return report;
+}
+
+function extractAgentId(tree: ReturnType<typeof assembleTraceTree>): string | null {
+  for (const s of tree.spans) {
+    const v = s.attributes["gen_ai.agent.id"];
+    if (typeof v === "string") return v;
+  }
+  return null;
+}
+
+function extractTenant(tree: ReturnType<typeof assembleTraceTree>): string | null {
+  for (const s of tree.spans) {
+    const v = s.attributes["tenant"];
+    if (typeof v === "string") return v;
+  }
+  return null;
+}
+
+async function cliVersion(): Promise<string> {
+  try {
+    const pkgPath = path.join(__dirname, "..", "..", "..", "package.json");
+    const txt = await fs.readFile(pkgPath, "utf8");
+    return JSON.parse(txt).version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+export { TraceNotFoundError as DiagnoseTraceNotFound, RuleLoadError, RuleProbeError };

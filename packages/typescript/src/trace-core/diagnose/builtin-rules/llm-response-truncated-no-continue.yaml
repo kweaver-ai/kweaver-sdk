@@ -1,0 +1,15 @@
+schema_version: diagnosis-rule/v1
+id: llm_response_truncated_no_continue
+severity: medium
+symptom: llm_output_truncated_with_no_continuation
+taxonomy:
+  signals_axis: execution
+  ms_class: context_loss
+suggested_fix:
+  target: decision_agent.prompt
+  change_template: "after finish_reason=length, send a continuation request or split the task earlier"
+verify_with:
+  assertion_templates:
+    - "if(llm.finish_reason == 'length'): next_step in [continuation, split_task]"
+predicate: builtin:llm_response_truncated_no_continue
+params: {}

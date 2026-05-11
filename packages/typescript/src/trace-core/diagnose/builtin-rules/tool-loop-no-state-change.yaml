@@ -1,0 +1,16 @@
+schema_version: diagnosis-rule/v1
+id: tool_loop_no_state_change
+severity: high
+symptom: repeated_tool_call_without_state_change
+taxonomy:
+  signals_axis: execution
+  ms_class: retry_loop
+suggested_fix:
+  target: decision_agent.prompt
+  change_template: "add stop condition after {{loop_count}} equivalent failed retrievals of '{{tool_name}}'"
+verify_with:
+  assertion_templates:
+    - "tool_call_count({{tool_name}}) <= {{max_count}}"
+predicate: builtin:tool_loop_no_state_change
+params:
+  min_consecutive: 3

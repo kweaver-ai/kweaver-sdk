@@ -1,0 +1,15 @@
+schema_version: diagnosis-rule/v1
+id: r_one
+severity: medium
+symptom: test_symptom
+taxonomy:
+  signals_axis: execution
+  ms_class: retry_loop
+suggested_fix:
+  target: "decision_agent.prompt"
+  change_template: "fix {{thing}}"
+verify_with:
+  assertion_templates: ["assert(x)"]
+predicate: builtin:r_one
+params:
+  k: 1

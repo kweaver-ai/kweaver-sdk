@@ -1,0 +1,15 @@
+schema_version: diagnosis-rule/v1
+id: retrieval_empty_no_fallback
+severity: medium
+symptom: empty_retrieval_result_no_fallback_path
+taxonomy:
+  signals_axis: execution
+  ms_class: cascading_error
+suggested_fix:
+  target: decision_agent.prompt
+  change_template: "when retrieval returns 0 results, branch to query rewrite, alternate source, or explicit 'no answer' before generating"
+verify_with:
+  assertion_templates:
+    - "if(retrieval.result_count == 0): next_step in [retry, rewrite, alt_source, no_answer]"
+predicate: builtin:retrieval_empty_no_fallback
+params: {}

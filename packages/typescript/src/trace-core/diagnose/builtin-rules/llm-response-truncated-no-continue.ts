@@ -1,6 +1,14 @@
 import type { Hit, Predicate, Span, TraceTree } from "../types.js";
 
 function finishReason(s: Span): string {
+  // OTel GenAI 1.x emits an array (`finish_reasons`); older spans / fixtures
+  // use the singular string form. Accept both; first non-empty entry wins.
+  const arr = s.attributes["gen_ai.response.finish_reasons"];
+  if (Array.isArray(arr)) {
+    for (const r of arr) {
+      if (typeof r === "string" && r.length > 0) return r;
+    }
+  }
   const a = s.attributes["gen_ai.response.finish_reason"] ?? s.attributes["llm.finish_reason"];
   return typeof a === "string" ? a : "";
 }

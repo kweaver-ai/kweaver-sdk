@@ -1,15 +1,13 @@
 /**
- * Fetch trace spans for a conversation via agent-observability OpenSearch
- * (the same path `kweaver agent trace` uses), normalizing the response into
- * the minimal `RawSpan` shape that diagnose downstream rules consume.
- *
- * Two-hop strategy (mirrors api/conversations.ts:getTracesByConversation):
- *   1. aggregate `traceId.keyword` for spans tagged with `gen_ai.conversation.id`
- *   2. fetch all spans whose `traceId.keyword` matches those traceIds
- *
- * A conversation may yield multiple traces (one per turn); PR-A diagnose is
- * single-trace and callers pick which traceId to analyze.
+ * `RawSpan`-flavored view of conversation trace data, for diagnose rule
+ * predicates. The HTTP / two-hop / auth concerns live in `./agent-observability`;
+ * this module only normalizes the raw `_source` documents into the minimal
+ * span shape rules read.
  */
+
+import { fetchRawSpansByConversation } from "./agent-observability.js";
+
+export { TraceFetchError } from "./agent-observability.js";
 
 export interface GetSpansByConversationIdOpts {
   baseUrl: string;
@@ -41,55 +39,6 @@ export interface GetSpansByConversationIdResult {
   spans: RawSpan[];
   /** True if the agg saw `sum_other_doc_count > 0` (more traceIds than maxTraceIds). */
   truncated: boolean;
-}
-
-export class TraceFetchError extends Error {
-  constructor(message: string, public readonly status?: number, public readonly url?: string) {
-    super(message);
-    this.name = "TraceFetchError";
-  }
-}
-
-const TRACE_SEARCH_PATH = "/api/agent-observability/v1/traces/_search";
-
-function buildHeaders(token: string, businessDomain: string): Record<string, string> {
-  const h: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-Business-Domain": businessDomain,
-    accept: "application/json",
-  };
-  if (token && token !== "__NO_AUTH__") {
-    h["Authorization"] = `Bearer ${token}`;
-  }
-  return h;
-}
-
-async function postSearch(
-  baseUrl: string,
-  token: string,
-  businessDomain: string,
-  body: unknown,
-): Promise<Record<string, unknown>> {
-  const url = `${baseUrl.replace(/\/+$/, "")}${TRACE_SEARCH_PATH}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: buildHeaders(token, businessDomain),
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new TraceFetchError(
-      `trace search failed: HTTP ${res.status} from ${url} — ${text.slice(0, 200)}`,
-      res.status,
-      url,
-    );
-  }
-  if (!text) return {};
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch (err) {
-    throw new TraceFetchError(`trace search: invalid JSON response — ${(err as Error).message}`);
-  }
 }
 
 /**
@@ -147,70 +96,23 @@ function normalizeToRawSpan(source: Record<string, unknown>): RawSpan | null {
   };
 }
 
-/**
- * Fetch every span belonging to a conversation, normalized to `RawSpan[]`.
- *
- * Fixture-compat fast path: when the first response carries no `aggregations`
- * but does carry `hits.hits`, the implementation treats that as a flat spans
- * payload and skips hop 2. This keeps existing synthetic/real fixtures usable
- * (single mock-fetch response) while real platforms get the proper two-hop.
- */
 export async function getSpansByConversationId(
   opts: GetSpansByConversationIdOpts,
 ): Promise<GetSpansByConversationIdResult> {
-  const { baseUrl, token, businessDomain, conversationId } = opts;
-  const maxTraceIds = opts.maxTraceIds ?? 100;
-  const maxSpans = opts.maxSpans ?? 2000;
-
-  const aggResult = await postSearch(baseUrl, token, businessDomain, {
-    size: 0,
-    query: { term: { "attributes.gen_ai.conversation.id.keyword": conversationId } },
-    aggs: { tids: { terms: { field: "traceId.keyword", size: maxTraceIds } } },
+  const fetched = await fetchRawSpansByConversation({
+    baseUrl: opts.baseUrl,
+    accessToken: opts.token,
+    businessDomain: opts.businessDomain,
+    conversationId: opts.conversationId,
+    maxTraceIds: opts.maxTraceIds,
+    maxSpans: opts.maxSpans,
   });
 
-  const aggregations = aggResult.aggregations as Record<string, unknown> | undefined;
-  if (!aggregations) {
-    const directHits = (aggResult.hits as { hits?: Array<{ _source?: Record<string, unknown> }> } | undefined)?.hits;
-    if (Array.isArray(directHits)) {
-      const spans: RawSpan[] = [];
-      const traceIds = new Set<string>();
-      for (const h of directHits) {
-        if (!h._source) continue;
-        const span = normalizeToRawSpan(h._source);
-        if (!span) continue;
-        spans.push(span);
-        if (span.traceId) traceIds.add(span.traceId);
-      }
-      return { traceIds: [...traceIds], spans, truncated: false };
-    }
-  }
-
-  const tids = aggregations?.tids as
-    | { buckets?: Array<{ key: string }>; sum_other_doc_count?: number }
-    | undefined;
-  const buckets = tids?.buckets ?? [];
-  const truncated = (tids?.sum_other_doc_count ?? 0) > 0;
-  const traceIds = buckets
-    .map((b) => b.key)
-    .filter((k): k is string => typeof k === "string" && k.length > 0);
-
-  if (traceIds.length === 0) {
-    return { traceIds: [], spans: [], truncated: false };
-  }
-
-  const spansResult = await postSearch(baseUrl, token, businessDomain, {
-    size: maxSpans,
-    query: { terms: { "traceId.keyword": traceIds } },
-    sort: [{ startTime: "asc" }],
-  });
-
-  const hits = (spansResult.hits as { hits?: Array<{ _source?: Record<string, unknown> }> } | undefined)?.hits ?? [];
   const spans: RawSpan[] = [];
-  for (const h of hits) {
-    if (!h._source) continue;
-    const span = normalizeToRawSpan(h._source);
+  for (const src of fetched.rawSources) {
+    const span = normalizeToRawSpan(src);
     if (span) spans.push(span);
   }
 
-  return { traceIds, spans, truncated };
+  return { traceIds: fetched.traceIds, spans, truncated: fetched.truncated };
 }

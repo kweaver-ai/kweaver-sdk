@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 
 import { parseTraceArgs } from "../src/commands/trace.js";
 
-test("parseTraceArgs: 'diagnose <id>' parses traceId positional", () => {
+test("parseTraceArgs: 'diagnose <id>' parses conversationId positional", () => {
   const r = parseTraceArgs(["diagnose", "tr_de39"]);
   assert.equal(r.subcommand, "diagnose");
-  assert.equal(r.traceId, "tr_de39");
+  assert.equal(r.conversationId, "tr_de39");
   assert.equal(r.out, null);  // default → resolved later
   assert.equal(r.noBuiltin, false);
 });

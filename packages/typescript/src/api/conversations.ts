@@ -1,4 +1,5 @@
 import { buildHeaders } from "./headers.js";
+import { fetchRawSpansByConversation } from "./agent-observability.js";
 
 export interface ListConversationsOptions {
   baseUrl: string;
@@ -91,39 +92,6 @@ export async function listConversations(opts: ListConversationsOptions): Promise
   return body || "[]";
 }
 
-function buildTraceSearchUrl(baseUrl: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  return `${base}/api/agent-observability/v1/traces/_search`;
-}
-
-async function postTraceSearch(
-  baseUrl: string,
-  accessToken: string,
-  businessDomain: string,
-  body: unknown,
-): Promise<Record<string, unknown>> {
-  const response = await fetch(buildTraceSearchUrl(baseUrl), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...buildHeaders(accessToken, businessDomain),
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(
-      `getTracesByConversation failed: HTTP ${response.status} ${response.statusText} — ${text.slice(0, 200)}`,
-    );
-  }
-  if (!text) return {};
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch (err) {
-    throw new Error(`getTracesByConversation: invalid JSON response — ${(err as Error).message}`);
-  }
-}
-
 function computeDurationNanos(source: Record<string, unknown>): number | undefined {
   if (typeof source.durationInNanos === "number") return source.durationInNanos;
   if (typeof source.duration === "number") return source.duration;
@@ -175,14 +143,10 @@ function normalizeSpan(source: Record<string, unknown>): TraceSpan | null {
 }
 
 /**
- * Fetch all spans belonging to a conversation via trace-ai's OpenSearch-style _search.
- *
- * Two-hop strategy (see kweaver-sdk#115):
- *   1. Aggregate traceIds for spans tagged with gen_ai.conversation.id == conversationId.
- *   2. Fetch every span sharing those traceIds — this recovers pipeline spans
- *      (HTTP entry, internal RPCs, prompt-build) that are not tagged with conversation_id.
- *
- * Returns a structured result; callers can format as tree/perf/evidence views or stringify.
+ * Fetch all spans belonging to a conversation, shaped as `TraceSpan[]` for UI
+ * rendering (tree/perf/evidence/reasoning views). The wire-level two-hop and
+ * auth/header concerns live in `./agent-observability`; this function only
+ * normalizes the raw `_source` documents.
  */
 export async function getTracesByConversation(opts: GetTracesOptions): Promise<TracesByConversationResult> {
   const {
@@ -190,41 +154,26 @@ export async function getTracesByConversation(opts: GetTracesOptions): Promise<T
     accessToken,
     conversationId,
     businessDomain = "bd_public",
-    maxTraceIds = 100,
-    maxSpans = 2000,
+    maxTraceIds,
+    maxSpans,
   } = opts;
 
-  const aggResult = await postTraceSearch(baseUrl, accessToken, businessDomain, {
-    size: 0,
-    query: { term: { "attributes.gen_ai.conversation.id.keyword": conversationId } },
-    aggs: { tids: { terms: { field: "traceId.keyword", size: maxTraceIds } } },
+  const fetched = await fetchRawSpansByConversation({
+    baseUrl,
+    accessToken,
+    businessDomain,
+    conversationId,
+    maxTraceIds,
+    maxSpans,
   });
 
-  const aggregations = aggResult.aggregations as Record<string, unknown> | undefined;
-  const tids = aggregations?.tids as { buckets?: Array<{ key: string }>; sum_other_doc_count?: number } | undefined;
-  const buckets = tids?.buckets ?? [];
-  const truncated = (tids?.sum_other_doc_count ?? 0) > 0;
-  const traceIds = buckets.map((b) => b.key).filter((k): k is string => typeof k === "string" && k.length > 0);
-
-  if (traceIds.length === 0) {
-    return { conversationId, traceIds: [], spans: [], truncated: false };
-  }
-
-  const spansResult = await postTraceSearch(baseUrl, accessToken, businessDomain, {
-    size: maxSpans,
-    query: { terms: { "traceId.keyword": traceIds } },
-    sort: [{ startTime: "asc" }],
-  });
-
-  const hits = (spansResult.hits as { hits?: Array<{ _source?: Record<string, unknown> }> } | undefined)?.hits ?? [];
   const spans: TraceSpan[] = [];
-  for (const hit of hits) {
-    if (!hit._source) continue;
-    const span = normalizeSpan(hit._source);
+  for (const src of fetched.rawSources) {
+    const span = normalizeSpan(src);
     if (span) spans.push(span);
   }
 
-  return { conversationId, traceIds, spans, truncated };
+  return { conversationId, traceIds: fetched.traceIds, spans, truncated: fetched.truncated };
 }
 
 /**

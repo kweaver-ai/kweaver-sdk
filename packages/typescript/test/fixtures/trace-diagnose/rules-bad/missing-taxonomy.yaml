@@ -1,0 +1,7 @@
+schema_version: diagnosis-rule/v1
+id: r_bad
+severity: high
+symptom: s
+suggested_fix: { target: "t", change_template: "c" }
+verify_with: { assertion_templates: [] }
+predicate: builtin:r_bad

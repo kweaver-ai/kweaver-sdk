@@ -287,6 +287,8 @@ kweaver bkn subgraph / search
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
+kweaver trace diagnose <trace_id> [flags]           # diagnose a single trace; produces a YAML report (trace-diagnose-report/v1)
+kweaver trace diagnose rules validate <rule.yaml>   # validate a custom diagnosis-rule yaml
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader tools|resources|templates|prompts <kn-id>

@@ -213,7 +213,7 @@ export class ClaudeCodeSubprocessProvider implements AgentProvider {
   }
 
   /** Visible for testing. Builds the spawn args list including --model when tier is set. */
-  buildSpawnArgs(tier: 'fast' | 'std' | undefined): string[] {
+  buildSpawnArgs(tier: "fast" | "std" | undefined): string[] {
     const args = [
       ...this.extraArgs,
       "-p",

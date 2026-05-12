@@ -51,6 +51,13 @@ export interface ClaudeCodeSubprocessProviderOpts {
   env?: Record<string, string>;
   /** Override `name` reported on the provider (default: 'claude-code'). */
   name?: string;
+  /**
+   * Map the tier intent on a JudgmentRequest to a concrete claude model name.
+   * Defaults: fast='haiku', std='sonnet'. `--model {value}` is appended to
+   * spawn args only when `req.tier` is set; undefined tier omits the flag
+   * and lets claude CLI pick its own default (preserves PR-B behavior).
+   */
+  modelByTier?: { fast?: string; std?: string };
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -190,6 +197,7 @@ export class ClaudeCodeSubprocessProvider implements AgentProvider {
   private cwd: string;
   private env: Record<string, string>;
   private availabilityCache: { ok: boolean; checkedAt: number } | null = null;
+  private modelByTier: { fast: string; std: string };
 
   constructor(opts: ClaudeCodeSubprocessProviderOpts = {}) {
     this.name = opts.name ?? "claude-code";
@@ -198,6 +206,24 @@ export class ClaudeCodeSubprocessProvider implements AgentProvider {
     this.defaultTimeoutMs = opts.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.cwd = opts.cwd ?? process.cwd();
     this.env = opts.env ?? {};
+    this.modelByTier = {
+      fast: opts.modelByTier?.fast ?? "haiku",
+      std: opts.modelByTier?.std ?? "sonnet",
+    };
+  }
+
+  /** Visible for testing. Builds the spawn args list including --model when tier is set. */
+  buildSpawnArgs(tier: 'fast' | 'std' | undefined): string[] {
+    const args = [
+      ...this.extraArgs,
+      "-p",
+      "--output-format=json",
+      "--dangerously-skip-permissions",
+    ];
+    if (tier !== undefined) {
+      args.push("--model", this.modelByTier[tier]);
+    }
+    return args;
   }
 
   /**
@@ -241,12 +267,7 @@ export class ClaudeCodeSubprocessProvider implements AgentProvider {
     // can't answer from a subprocess. We deliberately do NOT pass `--bare`:
     // `--bare` forces ANTHROPIC_API_KEY / apiKeyHelper and refuses to read
     // OAuth or keychain — that breaks Claude Code subscription users.
-    const args = [
-      ...this.extraArgs,
-      "-p",
-      "--output-format=json",
-      "--dangerously-skip-permissions",
-    ];
+    const args = this.buildSpawnArgs(req.tier);
     const env = { ...process.env, ...this.env };
 
     // Attempt 1: as-is.

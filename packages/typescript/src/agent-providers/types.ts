@@ -32,6 +32,12 @@ export interface JudgmentRequest<TOutput = unknown> {
   correlationId?: string;
   /** Provider-specific overrides (e.g. model name); opaque here. */
   providerOpts?: Record<string, unknown>;
+  /**
+   * Task-difficulty intent for the LLM call. Providers map this to a concrete
+   * model via their own configuration. `undefined` = provider's default (no
+   * `--model` flag passed to claude CLI, preserving PR-B behavior).
+   */
+  tier?: 'fast' | 'std';
 }
 
 export interface JudgmentResponse<TOutput = unknown> {

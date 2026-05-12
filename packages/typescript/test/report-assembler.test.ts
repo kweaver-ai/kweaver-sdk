@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { assembleReport } from "../src/trace-core/diagnose/report-assembler.js";
-import type { Hit, Rule, Summary } from "../src/trace-core/diagnose/types.js";
+import { assembleReport } from "../src/trace-ai/diagnose/report-assembler.js";
+import type { Hit, Rule, Summary } from "../src/trace-ai/diagnose/types.js";
 
 const ruleA: Rule = {
   schemaVersion: "diagnosis-rule/v1",
@@ -13,6 +13,7 @@ const ruleA: Rule = {
   suggestedFix: { target: "agent.prompt", changeTemplate: "stop after {{count}} retries" },
   verifyWith: { assertionTemplates: ["count({{tool}}) <= 2"] },
   predicateRef: "builtin:rule_a",
+  rubric: null,
   params: {},
   sourcePath: "mem:rule_a",
 };
@@ -77,8 +78,8 @@ test("assembleReport: writes rules_applied and rules_skipped correctly", () => {
 });
 
 test("assembleReport: output passes ReportSchema (raw form)", async () => {
-  const { ReportSchema } = await import("../src/trace-core/diagnose/schemas.js");
-  const { reportToYamlObject } = await import("../src/trace-core/diagnose/report-assembler.js");
+  const { ReportSchema } = await import("../src/trace-ai/diagnose/schemas.js");
+  const { reportToYamlObject } = await import("../src/trace-ai/diagnose/report-assembler.js");
   const r = assembleReport({
     traceId: "tr_x",
     agentId: null,

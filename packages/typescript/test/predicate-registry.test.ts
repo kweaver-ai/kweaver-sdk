@@ -6,8 +6,8 @@ import {
   resolvePredicate,
   clearRegistry,
   PredicateNotFoundError,
-} from "../src/trace-core/diagnose/predicate-registry.js";
-import type { Hit, Predicate, TraceTree } from "../src/trace-core/diagnose/types.js";
+} from "../src/trace-ai/diagnose/predicate-registry.js";
+import type { Hit, Predicate, TraceTree } from "../src/trace-ai/diagnose/types.js";
 
 test("registerPredicate + resolvePredicate round-trip", () => {
   clearRegistry();

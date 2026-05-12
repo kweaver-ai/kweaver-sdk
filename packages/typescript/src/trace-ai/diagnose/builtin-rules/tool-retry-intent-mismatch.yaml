@@ -1,0 +1,66 @@
+schema_version: diagnosis-rule/v1
+id: tool_retry_intent_mismatch
+
+# Paired with the symbolic rule `tool_loop_no_state_change`:
+#   - symbolic rule:  "the same tool ran N times with identical args"
+#   - this rubric:    "given the user's intent and the retry context,
+#                      WHY did the agent keep retrying?"
+#
+# The two findings will share span sequences (Stage-1↔Stage-2 convergence
+# is enforced because output_schema.required includes
+# first_violating_step_id), so the within-trace synthesizer can collapse
+# them into one cross_finding_link with relation="same span sequence;
+# symbolic detects mechanical pattern, rubric judges semantic intent".
+
+severity: high
+symptom: repeated_tool_call_without_state_change
+
+taxonomy:
+  signals_axis: execution
+  ms_class: retry_loop
+
+suggested_fix:
+  target: decision_agent.prompt
+  change_template: "agent retried because of '{{category}}'; address that intent (e.g. add staleness detection, broaden query, escalate to human)"
+
+verify_with:
+  assertion_templates:
+    - "for the same conversation, the agent reaches a non-retry next step"
+
+rubric:
+  judge_question: >-
+    Given the user's intent and the tool retry pattern in this trace,
+    classify why the agent kept calling the same tool: a legitimate
+    retry strategy (expecting changed state), a stale-results handling
+    failure (results were identical and the agent didn't recognize that),
+    prompt confusion (the agent misinterpreted its own instructions),
+    or other.
+  inputs:
+    - kind: user_intent
+      source: extract_from_root_attr:gen_ai.user.message
+    - kind: span_sequence
+      source: filter_by_kind:[tool,llm]
+  output_schema:
+    type: object
+    required: [category, reasoning, severity, first_violating_step_id]
+    properties:
+      category:
+        type: string
+        enum: [legitimate_retry, stale_results, prompt_confusion, other]
+      reasoning:
+        type: string
+      severity:
+        type: string
+        enum: [low, medium, high]
+      confidence:
+        type: string
+        enum: [low, medium, high]
+      first_violating_step_id:
+        type: string
+      evidence_span_ids:
+        type: array
+        items:
+          type: string
+  agent_binding:
+    provider: claude-code
+    prompt_template_ref: builtin:rubric-judge-v1

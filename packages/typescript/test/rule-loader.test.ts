@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadRules, RuleLoadError } from "../src/trace-core/diagnose/rule-loader.js";
+import { loadRules, RuleLoadError } from "../src/trace-ai/diagnose/rule-loader.js";
 import {
   registerPredicate,
   clearRegistry,
-} from "../src/trace-core/diagnose/predicate-registry.js";
-import type { Predicate } from "../src/trace-core/diagnose/types.js";
+} from "../src/trace-ai/diagnose/predicate-registry.js";
+import type { Predicate } from "../src/trace-ai/diagnose/types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(__dirname, "fixtures/trace-diagnose");

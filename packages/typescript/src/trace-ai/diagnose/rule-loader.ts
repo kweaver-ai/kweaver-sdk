@@ -4,7 +4,8 @@ import yaml from "js-yaml";
 
 import { RuleSchema } from "./schemas.js";
 import { resolvePredicate } from "./predicate-registry.js";
-import type { Rule } from "./types.js";
+import { rubricOutputToZod, OutputSchemaConversionError } from "./output-schema-converter.js";
+import type { Rule, RubricSpec } from "./types.js";
 
 export class RuleLoadError extends Error {
   constructor(message: string) {
@@ -46,15 +47,46 @@ async function parseOne(filePath: string): Promise<Rule> {
     throw new RuleLoadError(`schema validation failed for ${filePath}: ${result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
   }
   const r = result.data;
-  if (!r.predicate) {
-    throw new RuleLoadError(`PR-A only supports symbolic rules; ${filePath} has no predicate`);
+
+  let predicateRef: string | null = null;
+  let rubric: RubricSpec | null = null;
+
+  if (r.predicate) {
+    // resolvePredicate throws PredicateNotFoundError; rewrap for uniform caller experience.
+    try {
+      resolvePredicate(r.predicate);
+    } catch (e) {
+      throw new RuleLoadError(`${filePath}: ${(e as Error).message}`);
+    }
+    predicateRef = r.predicate;
+  } else if (r.rubric) {
+    // Compile output_schema → zod at load time so authors see schema errors
+    // up-front via `trace diagnose rules validate <path>`, not at LLM call time.
+    let outputZodSchema;
+    try {
+      outputZodSchema = rubricOutputToZod(r.rubric);
+    } catch (e) {
+      if (e instanceof OutputSchemaConversionError) {
+        throw new RuleLoadError(`${filePath}: rubric.output_schema: ${e.message}`);
+      }
+      throw e;
+    }
+    rubric = {
+      judgeQuestion: r.rubric.judge_question,
+      inputs: r.rubric.inputs.map((i) => ({ kind: i.kind, source: i.source })),
+      outputSchemaRaw: r.rubric.output_schema as unknown as Record<string, unknown>,
+      outputZodSchema,
+      agentBinding: {
+        provider: r.rubric.agent_binding.provider,
+        promptTemplateRef: r.rubric.agent_binding.prompt_template_ref,
+      },
+    };
+  } else {
+    // RuleSchema's XOR refinement should have already caught this; keep an
+    // explicit branch so the failure mode is obvious if schemas drift.
+    throw new RuleLoadError(`${filePath}: rule has neither predicate nor rubric`);
   }
-  // resolvePredicate throws PredicateNotFoundError; rewrap for uniform caller experience.
-  try {
-    resolvePredicate(r.predicate);
-  } catch (e) {
-    throw new RuleLoadError(`${filePath}: ${(e as Error).message}`);
-  }
+
   return {
     schemaVersion: r.schema_version,
     id: r.id,
@@ -63,7 +95,8 @@ async function parseOne(filePath: string): Promise<Rule> {
     taxonomy: { signalsAxis: r.taxonomy.signals_axis, msClass: r.taxonomy.ms_class },
     suggestedFix: { target: r.suggested_fix.target, changeTemplate: r.suggested_fix.change_template },
     verifyWith: { assertionTemplates: r.verify_with.assertion_templates },
-    predicateRef: r.predicate,
+    predicateRef,
+    rubric,
     params: r.params,
     sourcePath: filePath,
   };

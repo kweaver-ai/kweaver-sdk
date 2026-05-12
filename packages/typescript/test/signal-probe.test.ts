@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { runRules } from "../src/trace-core/diagnose/signal-probe.js";
+import { runRules } from "../src/trace-ai/diagnose/signal-probe.js";
 import {
   registerPredicate,
   clearRegistry,
-} from "../src/trace-core/diagnose/predicate-registry.js";
-import type { Hit, Predicate, Rule, TraceTree } from "../src/trace-core/diagnose/types.js";
+} from "../src/trace-ai/diagnose/predicate-registry.js";
+import type { Hit, Predicate, Rule, TraceTree } from "../src/trace-ai/diagnose/types.js";
 
 const tree: TraceTree = {
   traceId: "tr_x",

@@ -140,6 +140,8 @@ export interface DiagnoseOpts {
    *  fall the synthesizer back from agent → template. Default is now false
    *  (both pillars on). */
   noLlm: boolean;
+  /** Skip artifact persistence. Default false (artifacts ARE written). */
+  noArtifacts?: boolean;
   /** Override default provider used by the agent synthesizer (rubric rules
    *  pick their own provider via `agent_binding.provider`). null = registry default. */
   agentProvider: string | null;

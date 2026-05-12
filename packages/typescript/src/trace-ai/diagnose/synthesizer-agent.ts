@@ -26,6 +26,7 @@ import {
 } from "../../agent-providers/prompt-template.js";
 import { SummaryOutputSchema } from "./schemas.js";
 import { templateSynthesize } from "./synthesizer-template.js";
+import type { ArtifactWriter } from "../scan/artifacts/writer.js";
 
 export interface AgentSynthesizeOpts {
   findings: Finding[];
@@ -37,6 +38,8 @@ export interface AgentSynthesizeOpts {
   timeoutMs?: number;
   /** Output locale for synthesizer prose. Default 'en'. */
   lang?: AgentOutputLang;
+  /** When provided, writes Stage-3 prompt/response artifacts. */
+  artifacts?: ArtifactWriter;
 }
 
 export interface AgentSynthesizeResult {
@@ -165,12 +168,18 @@ export async function agentSynthesize(opts: AgentSynthesizeOpts): Promise<AgentS
         fallbackReason: `provider-not-available:${opts.provider.name}`,
       };
     }
+    if (opts.artifacts) {
+      await opts.artifacts.writeStageThreeSynthPrompt(prompt);
+    }
     const resp = await opts.provider.invoke({
       prompt,
       outputSchema: SummaryOutputSchema,
       timeoutMs: opts.timeoutMs,
       correlationId: `synthesize:${opts.traceId}`,
     });
+    if (opts.artifacts) {
+      await opts.artifacts.writeStageThreeSynthResponse(resp.output);
+    }
     return { summary: toInternalSummary(resp.output), mode: "agent" };
   } catch (e) {
     if (e instanceof AgentProviderError) {

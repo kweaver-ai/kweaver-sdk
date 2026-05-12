@@ -18,6 +18,8 @@ import {
   defaultPromptRegistry,
   PromptTemplateRegistry,
 } from "../../agent-providers/prompt-template.js";
+import { ArtifactWriter } from "../scan/artifacts/writer.js";
+import { resolveArtifactsBase } from "../scan/artifacts/paths.js";
 
 import "./builtin-rules/register.js";  // side effect: registers all builtin predicates
 
@@ -67,10 +69,18 @@ export async function diagnose(
   opts: DiagnoseOpts,
   internal: DiagnoseInternalOpts = {},
 ): Promise<Report> {
+  const t_start = Date.now();
   const cwdRulesDir = opts.rulesDir ?? path.join(process.cwd(), "diagnosis-rules");
   const registry = internal.registry ?? defaultRegistry;
   const promptRegistry = internal.promptRegistry ?? defaultPromptRegistry;
   await ensureBuiltinPromptsLoaded(promptRegistry);
+
+  // ── Artifact writer setup ────────────────────────────────────────────────
+  const artifactsEnabled = !(opts.noArtifacts ?? false) && opts.out !== null;
+  const artifactsBase = artifactsEnabled
+    ? resolveArtifactsBase({ mode: "single", out: opts.out! })
+    : "";
+  const artifacts = new ArtifactWriter({ base: artifactsBase, enabled: artifactsEnabled });
 
   // ── 1. Fetch + shape spans ──────────────────────────────────────────────
   const fetched = await getSpansByConversationId({
@@ -121,6 +131,7 @@ export async function diagnose(
       noLlm: opts.noLlm,
       timeoutMs: opts.timeoutMs,
       lang: opts.lang,
+      artifacts,
     });
     rubricFindings = r.findings;
     rulesSkipped = r.skipped;
@@ -140,6 +151,7 @@ export async function diagnose(
     promptRegistry,
     timeoutMs: opts.timeoutMs,
     lang: opts.lang,
+    artifacts,
   });
 
   // ── 5. Assemble report ──────────────────────────────────────────────────
@@ -166,7 +178,28 @@ export async function diagnose(
     synthesizerMode: synth.mode,
   });
 
-  // ── 6. Emit ──────────────────────────────────────────────────────────────
+  // ── 6. Write run-metadata artifact ─────────────────────────────────────
+  const t_total = Date.now() - t_start;
+  await artifacts.writeRunMetadata({
+    cli_args: { conv_id: conversationId, out: opts.out, lang: opts.lang ?? "en" },
+    agent_id: extractAgentId(tree) ?? "",
+    rule_load_summary: {
+      rules_applied: rules.map((r) => r.id),
+      rules_skipped_at_load: [],
+      rules_dir: opts.rulesDir ?? "builtin",
+    },
+    single_agent_validation: { checked_conv_ids: 1, agent_id_resolved: extractAgentId(tree) ?? "" },
+    timing: { stage_1_ms: 0, stage_2_ms: 0, stage_3_ms: 0, stage_4_ms: 0, total_ms: t_total },
+    llm_calls: {
+      stage_2_chunks: rubricFindings.length > 0 ? 1 : 0,
+      stage_3: synth.mode === "agent" ? 1 : 0,
+      stage_4: 0,
+      total: (rubricFindings.length > 0 ? 1 : 0) + (synth.mode === "agent" ? 1 : 0),
+    },
+    cost_estimate_usd: { stage_2: 0, stage_4: 0, total: 0, model_price_table_version: "2026-05" },
+  });
+
+  // ── 7. Emit ──────────────────────────────────────────────────────────────
   const yamlText = yaml.dump(reportToYamlObject(report));
   // Markdown renderer also receives the conversation_id + business_domain so
   // the "How to verify" section can emit runnable CLI commands. These two

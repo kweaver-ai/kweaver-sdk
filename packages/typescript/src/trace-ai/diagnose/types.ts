@@ -51,6 +51,8 @@ export interface RubricSpec {
   /** Compiled zod schema (built once at load time via output-schema-converter). */
   outputZodSchema: import("zod").ZodTypeAny;
   agentBinding: { provider: string; promptTemplateRef: string };
+  /** Optional gating; see RuleSchema.rubric.gates_on. */
+  gatesOn?: string[];
 }
 
 export interface Rule {
@@ -138,6 +140,8 @@ export interface DiagnoseOpts {
    *  fall the synthesizer back from agent → template. Default is now false
    *  (both pillars on). */
   noLlm: boolean;
+  /** Skip artifact persistence. Default false (artifacts ARE written). */
+  noArtifacts?: boolean;
   /** Override default provider used by the agent synthesizer (rubric rules
    *  pick their own provider via `agent_binding.provider`). null = registry default. */
   agentProvider: string | null;

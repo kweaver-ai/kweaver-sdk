@@ -162,21 +162,34 @@ The legacy `agent.trace.type` attribute is still accepted as a fallback
 for synthetic fixtures and runtimes that pre-tag spans with the custom
 taxonomy.
 
-## Deferred to issue #2 (`scan` mode)
+## Batch mode (single agent)
 
-The current command operates on one trace at a time. Batch / time-window
-diagnosis ships in issue #2 as two sibling entry points sharing the same
-pipeline:
+```bash
+kweaver trace diagnose --traces=<list> --out=<dir> [flags]
+  --traces=conv1,conv2,...   # comma-separated conversation_ids
+  --traces=@file.txt          # or @file with one id per line
+  --out=<dir>                 # REQUIRED in batch mode
+```
 
-- `kweaver trace diagnose scan --time-range=24h --tenant=acme --out=diagnosis/latest/` — streaming pull from observability with optional tenant filter
-- `kweaver trace diagnose --traces=<id-list> --out=diagnosis/ticket-42/` — explicit list of conversation_ids (when you already have them from a ticket / log)
+Walks N traces (must all belong to one agent_id; mismatch → exit 2)
+through Stage-1 symbolic + batched Stage-2 rubric + Stage-3 template +
+Stage-4 cross-trace synthesizer. Emits per-trace yaml/md + scan-summary
+yaml/md.
 
-Both will additionally emit a cross-trace `scan-summary.yaml` (Stage-4
-synthesizer) ranking rules by frequency, agents by failure rate, and
-listing top-K improvement suggestions.
+LLM budget: 100-trace batch with B-mode gating → ~5 LLM calls (4 fast +
+1 std). `--no-llm` not supported (cross-trace synth requires LLM).
 
-Until issue #2 lands, batch coverage requires a shell loop over single
-diagnose invocations and manual aggregation of the resulting reports.
+### Artifacts
 
-See `docs/superpowers/specs/2026-05-11-m4-diagnose-issue1-design.md` for
-the full design.
+Default-on (`--no-artifacts` to opt out). Layout:
+- `<out>/artifacts/run-metadata.json` — CLI args, timing, LLM call counts, cost estimate
+- `<out>/artifacts/stage-2-rubric/<rule_id>/chunk-NNN.{prompt.md,response.json,parse-errors.json}` — Stage-2 LLM I/O per chunk
+- `<out>/artifacts/stage-4-cross-trace-synth/{aggregates.json, samples.json, prompt.md, response.json}` — Stage-4 inputs + LLM I/O
+
+Single-trace mode mirrors: `<stem>.artifacts/` sibling to the report file.
+
+### Resume
+
+Per-trace yaml on disk = ground truth. Rerunning with the same `--out`
+skips conv_ids whose `<conv_id>.yaml` is already valid; recomputes the
+rest plus Stage-4 + scan-summary.

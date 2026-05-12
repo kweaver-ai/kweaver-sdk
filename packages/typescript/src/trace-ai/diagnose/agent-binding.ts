@@ -30,6 +30,7 @@ import {
   languageInstructionFor,
   type AgentOutputLang,
 } from "../../agent-providers/prompt-template.js";
+import type { ArtifactWriter } from "../scan/artifacts/writer.js";
 
 export interface RubricEvaluateOpts {
   rules: Rule[];                        // mixed; non-rubric rules are skipped here
@@ -42,6 +43,8 @@ export interface RubricEvaluateOpts {
   timeoutMs?: number;
   /** Output locale for natural-language fields in the agent reply. Default 'en'. */
   lang?: AgentOutputLang;
+  /** When provided, writes Stage-2 prompt/response artifacts per rule invocation. */
+  artifacts?: ArtifactWriter;
 }
 
 export interface RubricEvaluateResult {
@@ -169,6 +172,7 @@ async function evaluateOne(
   promptRegistry: PromptTemplateRegistry,
   timeoutMs?: number,
   lang: AgentOutputLang = "en",
+  artifacts?: ArtifactWriter,
 ): Promise<Finding> {
   const rubric = rule.rubric!;  // caller guarantees
   // Resolve inputs.
@@ -179,6 +183,9 @@ async function evaluateOne(
   // Render prompt.
   const tpl = promptRegistry.get(rubric.agentBinding.promptTemplateRef);
   const prompt = renderPrompt(tpl, buildPromptVars(rule, tree, resolvedInputs, lang));
+  if (artifacts) {
+    await artifacts.writeStageTwoPrompt(rule.id, 0, prompt);  // chunk-000 — single-trace mode K=1
+  }
 
   // Invoke.
   const resp = await provider.invoke<RubricAgentOutput>({
@@ -187,6 +194,9 @@ async function evaluateOne(
     timeoutMs,
     correlationId: `${tree.traceId}/${rule.id}`,
   });
+  if (artifacts) {
+    await artifacts.writeStageTwoResponse(rule.id, 0, resp.output);
+  }
 
   const out = resp.output;
   const firstSpan = out.first_violating_step_id;
@@ -223,7 +233,7 @@ async function evaluateOne(
   };
 }
 
-function renderChangeTemplate(tpl: string, bindings: Record<string, unknown>): string {
+export function renderChangeTemplate(tpl: string, bindings: Record<string, unknown>): string {
   return tpl.replace(/{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}/g, (_, key) => {
     const v = bindings[key];
     if (v === undefined || v === null) return `{{${key}}}`;
@@ -299,7 +309,9 @@ export async function evaluateRubricRules(
     }
 
     try {
-      const finding = await evaluateOne(rule, opts.tree, provider, opts.promptRegistry, opts.timeoutMs, opts.lang ?? "en");
+      // Write work-queue once per rule before invoking (single-trace: 1 entry).
+      await opts.artifacts?.writeStageTwoWorkQueue(rule.id, [opts.tree.traceId]);
+      const finding = await evaluateOne(rule, opts.tree, provider, opts.promptRegistry, opts.timeoutMs, opts.lang ?? "en", opts.artifacts);
       findings.push(finding);
     } catch (e) {
       if (e instanceof AgentProviderError) {

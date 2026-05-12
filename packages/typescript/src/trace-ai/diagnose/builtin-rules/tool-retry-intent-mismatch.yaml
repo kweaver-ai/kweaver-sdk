@@ -28,6 +28,8 @@ verify_with:
     - "for the same conversation, the agent reaches a non-retry next step"
 
 rubric:
+  gates_on:
+    - tool_loop_no_state_change
   judge_question: >-
     Given the user's intent and the tool retry pattern in this trace,
     classify why the agent kept calling the same tool: a legitimate

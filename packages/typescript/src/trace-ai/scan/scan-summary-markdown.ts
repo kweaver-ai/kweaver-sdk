@@ -71,7 +71,8 @@ export function renderScanSummaryMarkdown(s: ScanSummary): string {
   lines.push("| conv_id | trace_id | findings | report |");
   lines.push("|---|---|---|---|");
   for (const item of s.per_trace_index) {
-    lines.push(`| \`${item.conversation_id}\` | \`${item.trace_id.slice(0, 16)}…\` | ${item.finding_count} | [yaml](${rel(item.report_path)}) |`);
+    const mdPath = item.report_path.replace(/\.yaml$/, ".md");
+    lines.push(`| \`${item.conversation_id}\` | \`${item.trace_id.slice(0, 16)}…\` | ${item.finding_count} | [yaml](${item.report_path}) / [md](${mdPath}) |`);
   }
   lines.push("");
 

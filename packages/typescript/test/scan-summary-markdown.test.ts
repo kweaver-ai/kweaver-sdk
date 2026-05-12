@@ -59,7 +59,7 @@ test("renderScanSummaryMarkdown: aggregates rule_frequency rendered as table", (
 test("renderScanSummaryMarkdown: per_trace_index rendered as table with report_path", () => {
   const md = renderScanSummaryMarkdown(makeScanSummary());
   assert.match(md, /## Per-Trace Reports/);
-  assert.match(md, /\| `conv_a` \| .* \| 1 \| \[yaml\]\(conv_a\.yaml\) \|/);
+  assert.match(md, /\| `conv_a` \| .* \| 1 \| \[yaml\]\(conv_a\.yaml\) \/ \[md\]\(conv_a\.md\) \|/);
 });
 
 test("renderScanSummaryMarkdown: summary=null → Stage-4 failure note + aggregates still rendered", () => {

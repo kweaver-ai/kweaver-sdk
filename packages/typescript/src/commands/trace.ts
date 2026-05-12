@@ -176,6 +176,27 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
     process.stderr.write("error: missing <conversation_id>\n");
     return 2;
   }
+  // Validate batch-mode args BEFORE platform/token resolution so arg-validation
+  // failures surface as exit 2 (bad usage) regardless of whether the user has
+  // an active platform configured — required for environments like CI.
+  if (args.mode === "batch") {
+    if (args.noLlm) {
+      process.stderr.write(
+        "error: --traces (batch mode) does not support --no-llm; the cross-trace synthesizer requires LLM. Use --traces with a fresh run or fall back to single-trace `diagnose <conv_id>` for offline cases.\n",
+      );
+      return 2;
+    }
+    if (args.out === null) {
+      process.stderr.write(
+        "error: --traces requires --out=<dir> to avoid writing N yaml files into the current working directory\n",
+      );
+      return 2;
+    }
+    if (!Number.isInteger(args.maxParallel) || args.maxParallel < 1 || args.maxParallel > 64) {
+      process.stderr.write(`error: --max-parallel must be a positive integer between 1 and 64; got ${args.maxParallel}\n`);
+      return 2;
+    }
+  }
   let baseUrl = args.baseUrl ?? process.env.KWEAVER_BASE_URL ?? "";
   let token = args.token ?? process.env.KWEAVER_TOKEN ?? "";
   const bd = args.businessDomain ?? process.env.KWEAVER_BUSINESS_DOMAIN ?? "bd_public";
@@ -201,22 +222,8 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
 
   // ── Batch mode dispatch ──────────────────────────────────────────────────
   if (args.mode === "batch") {
-    if (args.noLlm) {
-      process.stderr.write(
-        "error: --traces (batch mode) does not support --no-llm; the cross-trace synthesizer requires LLM. Use --traces with a fresh run or fall back to single-trace `diagnose <conv_id>` for offline cases.\n",
-      );
-      return 2;
-    }
-    if (args.out === null) {
-      process.stderr.write(
-        "error: --traces requires --out=<dir> to avoid writing N yaml files into the current working directory\n",
-      );
-      return 2;
-    }
-    if (!Number.isInteger(args.maxParallel) || args.maxParallel < 1 || args.maxParallel > 64) {
-      process.stderr.write(`error: --max-parallel must be a positive integer between 1 and 64; got ${args.maxParallel}\n`);
-      return 2;
-    }
+    // Narrowed by the early-validation block above (args.out !== null)
+    const outDir = args.out as string;
     let convIds: string[];
     try {
       convIds = await parseTracesList(args.traces!);
@@ -231,7 +238,7 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
     try {
       const result = await runBatch({
         traces: convIds,
-        out: args.out,
+        out: outDir,
         rulesDir: args.rulesDir,
         noBuiltin: args.noBuiltin,
         noArtifacts: args.noArtifacts,

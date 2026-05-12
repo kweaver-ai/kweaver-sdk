@@ -235,6 +235,7 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
         rulesDir: args.rulesDir,
         noBuiltin: args.noBuiltin,
         noArtifacts: args.noArtifacts,
+        format: args.format ?? undefined,    // ← plumb --format through
         lang: args.lang ?? undefined,
         timeoutMs: 60000,
         maxParallel: args.maxParallel,

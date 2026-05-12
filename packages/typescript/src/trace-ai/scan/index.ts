@@ -42,6 +42,12 @@ export interface RunBatchOpts {
   noBuiltin: boolean;
   noArtifacts: boolean;
   lang?: "en" | "zh";
+  /**
+   * Output format. The YAML report is always written (it's the resume
+   * ground truth via ReportSchema.safeParse). Markdown is written when
+   * format ∈ {'markdown', 'both'}. Default: 'both'.
+   */
+  format?: "yaml" | "markdown" | "both";
   timeoutMs: number;
   maxParallel: number;
   baseUrl: string;
@@ -131,6 +137,7 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
   const registry = defaultRegistry;
   const promptRegistry = defaultPromptRegistry;
   await ensurePromptsLoaded(promptRegistry);
+  const writeFormats = opts.format ?? "both";
 
   // 1. Single-agent validation (also caches first batch of getSpansByConversationId results)
   const cachedSpans = new Map<string, RawSpan[]>();
@@ -224,11 +231,13 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
               synthesizerMode: "template",
             });
             await fs.writeFile(partial, yaml.dump(reportToYamlObject(report)), "utf8");
-            await fs.writeFile(
-              path.join(path.dirname(partial), `${id}.md`),
-              renderReportMarkdown(report, { conversationId: id, businessDomain: opts.businessDomain }),
-              "utf8",
-            );
+            if (writeFormats !== "yaml") {
+              await fs.writeFile(
+                path.join(path.dirname(partial), `${id}.md`),
+                renderReportMarkdown(report, { conversationId: id, businessDomain: opts.businessDomain }),
+                "utf8",
+              );
+            }
             return { traceId: tree.traceId, agentId };
           },
         });
@@ -318,11 +327,13 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
         yaml.dump(reportToYamlObject(pt.report)),
         "utf8",
       );
-      await fs.writeFile(
-        path.join(opts.out, `${pt.convId}.md`),
-        renderReportMarkdown(pt.report, { conversationId: pt.convId, businessDomain: opts.businessDomain }),
-        "utf8",
-      );
+      if (writeFormats !== "yaml") {
+        await fs.writeFile(
+          path.join(opts.out, `${pt.convId}.md`),
+          renderReportMarkdown(pt.report, { conversationId: pt.convId, businessDomain: opts.businessDomain }),
+          "utf8",
+        );
+      }
     }
     for (const s of result.skipped) {
       const pt = perTrace.find((p) => p.report.trace.traceId === s.traceId);
@@ -394,7 +405,9 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
   const scanSummaryYamlPath = path.join(opts.out, "scan-summary.yaml");
   const scanSummaryMdPath = path.join(opts.out, "scan-summary.md");
   await fs.writeFile(scanSummaryYamlPath, yaml.dump(scanSummary), "utf8");
-  await fs.writeFile(scanSummaryMdPath, renderScanSummaryMarkdown(scanSummary), "utf8");
+  if (writeFormats !== "yaml") {
+    await fs.writeFile(scanSummaryMdPath, renderScanSummaryMarkdown(scanSummary), "utf8");
+  }
 
   // 9. Run metadata artifact
   const t_total = Date.now() - t_start;

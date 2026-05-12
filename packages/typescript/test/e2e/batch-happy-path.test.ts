@@ -77,6 +77,14 @@ test("e2e batch happy-path: 3 conv_ids, single agent, full pipeline produces all
       .then(() => true)
       .catch(() => false);
     assert.ok(summaryMdExists, "expected scan-summary.md");
+
+    // Verify that {{category}} placeholder was rendered with the verdict's category.
+    // The stub provider returns category="stale_results"; the rule's change_template is
+    // "agent retried because of '{{category}}'; address that intent..."
+    const sampleYamlPath = path.join(out, "conv_a.yaml");
+    const sampleYaml = await fs.readFile(sampleYamlPath, "utf8");
+    assert.ok(!/\{\{category\}\}/.test(sampleYaml), "change_template's {{category}} placeholder must be rendered, not left literal");
+    assert.match(sampleYaml, /'stale_results'/, "rendered change should mention the verdict's category 'stale_results'");
   } finally {
     fetcher.restore();
     await fs.rm(out, { recursive: true, force: true });

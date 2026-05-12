@@ -17,7 +17,7 @@ import type { Report } from "../diagnose/types.js";
 import { defaultRegistry } from "../../agent-providers/registry.js";
 import { defaultPromptRegistry, PromptTemplateRegistry } from "../../agent-providers/prompt-template.js";
 
-import { resolveRubricInput } from "../diagnose/agent-binding.js";
+import { resolveRubricInput, renderChangeTemplate } from "../diagnose/agent-binding.js";
 
 import { validateSingleAgent } from "./single-agent-validator.js";
 import { runPerTracePipeline } from "./runner.js";
@@ -301,6 +301,16 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
     for (const v of result.verdicts) {
       const pt = perTrace.find((p) => p.report.trace.traceId === v.traceId);
       if (!pt) continue;
+      // Build bindings for change_template / assertion_templates rendering.
+      // Bindings shape matches what PR-B single-trace agent-binding.ts passes:
+      // the rubric verdict's `out` object (category, severity, reasoning, first_violating_step_id, evidence_span_ids).
+      const bindings: Record<string, unknown> = {
+        category: v.category,
+        reasoning: v.reasoning,
+        severity: v.severity,
+        first_violating_step_id: v.firstViolatingStepId,
+        evidence_span_ids: v.evidenceSpanIds,
+      };
       pt.report.findings.push({
         ruleId,
         judgmentKind: "rubric",
@@ -310,14 +320,14 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
         evidence: { spans: v.evidenceSpanIds, excerpt: v.reasoning },
         suggestedFix: {
           target: rule.suggestedFix.target,
-          change: rule.suggestedFix.changeTemplate,
+          change: renderChangeTemplate(rule.suggestedFix.changeTemplate, bindings),
         },
         confidence: "medium",
         verifyWith: {
           suggestedEvalCase: {
             queryId: null,
             query: null,
-            assertions: rule.verifyWith.assertionTemplates,
+            assertions: rule.verifyWith.assertionTemplates.map((t) => renderChangeTemplate(t, bindings)),
           },
         },
       });

@@ -233,7 +233,7 @@ async function evaluateOne(
   };
 }
 
-function renderChangeTemplate(tpl: string, bindings: Record<string, unknown>): string {
+export function renderChangeTemplate(tpl: string, bindings: Record<string, unknown>): string {
   return tpl.replace(/{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}/g, (_, key) => {
     const v = bindings[key];
     if (v === undefined || v === null) return `{{${key}}}`;

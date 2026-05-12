@@ -18,7 +18,12 @@
 import type { Finding, Summary } from "./types.js";
 import type { AgentProvider } from "../agent/types.js";
 import { AgentProviderError } from "../agent/types.js";
-import { PromptTemplateRegistry, render as renderPrompt } from "../agent/prompt-template.js";
+import {
+  PromptTemplateRegistry,
+  render as renderPrompt,
+  languageInstructionFor,
+  type AgentOutputLang,
+} from "../agent/prompt-template.js";
 import { SummaryOutputSchema } from "./schemas.js";
 import { templateSynthesize } from "./synthesizer-template.js";
 
@@ -30,6 +35,8 @@ export interface AgentSynthesizeOpts {
   promptRegistry: PromptTemplateRegistry;
   promptRef?: string;                  // default 'builtin:within-trace-synthesizer-v1'
   timeoutMs?: number;
+  /** Output locale for synthesizer prose. Default 'en'. */
+  lang?: AgentOutputLang;
 }
 
 export interface AgentSynthesizeResult {
@@ -147,6 +154,7 @@ export async function agentSynthesize(opts: AgentSynthesizeOpts): Promise<AgentS
     agent_id: opts.agentId ?? "<unknown>",
     findings: opts.findings.map((f, i) => findingForPrompt(f, i)),
     output_schema: SUMMARY_OUTPUT_SCHEMA_DESCRIPTION,
+    language_instruction: languageInstructionFor(opts.lang ?? "en"),
   });
 
   try {

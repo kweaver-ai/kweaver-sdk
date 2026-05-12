@@ -101,3 +101,30 @@ export function render(template: PromptTemplate, vars: Record<string, unknown>):
 }
 
 export const defaultPromptRegistry = new PromptTemplateRegistry();
+
+/**
+ * Supported output locales for agent-judged natural-language fields.
+ * JSON keys, enum values, and span IDs are ALWAYS English regardless of
+ * locale — only prose fields (`headline`, `reasoning`, `description`,
+ * `reason`, `excerpt`) get localized. This keeps downstream report
+ * consumers locale-independent.
+ */
+export type AgentOutputLang = 'en' | 'zh';
+
+/**
+ * Render the boilerplate "respond in <language>" instruction injected via
+ * the `{{language_instruction}}` placeholder in rubric / synthesizer
+ * prompts. English returns "" so the placeholder collapses cleanly —
+ * prompts default to English without needing an instruction.
+ */
+export function languageInstructionFor(lang: AgentOutputLang): string {
+  if (lang === "zh") {
+    return [
+      "**Language: respond in Simplified Chinese (简体中文) for all natural-language fields** ",
+      "(e.g. `headline`, `reasoning`, `description`, `reason`, `excerpt`). JSON keys, ",
+      "enum values (like `severity: high`, `category: stale_results`), and span IDs ",
+      "MUST stay in English exactly as specified by the schema — only prose is localized.",
+    ].join("");
+  }
+  return "";
+}

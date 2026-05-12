@@ -27,6 +27,8 @@ markdown fences — the response is parsed programmatically.
 {{output_schema}}
 ```
 
+{{language_instruction}}
+
 ## Composition Rules
 1. **headline** ≤ 160 characters; one sentence; lead with the user-facing
    symptom, not the rule mechanics. ("Agent failed to recognize stale

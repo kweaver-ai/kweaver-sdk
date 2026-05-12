@@ -27,6 +27,8 @@ import type { AgentRegistry } from "../agent/registry.js";
 import {
   PromptTemplateRegistry,
   render as renderPrompt,
+  languageInstructionFor,
+  type AgentOutputLang,
 } from "../agent/prompt-template.js";
 
 export interface RubricEvaluateOpts {
@@ -38,6 +40,8 @@ export interface RubricEvaluateOpts {
   noLlm?: boolean;
   /** Per-invocation timeout in ms; provider may apply its own ceiling. */
   timeoutMs?: number;
+  /** Output locale for natural-language fields in the agent reply. Default 'en'. */
+  lang?: AgentOutputLang;
 }
 
 export interface RubricEvaluateResult {
@@ -138,16 +142,23 @@ interface RubricAgentOutput {
   [k: string]: unknown;
 }
 
-function buildPromptVars(rule: Rule, tree: TraceTree, resolvedInputs: Record<string, unknown>) {
+function buildPromptVars(
+  rule: Rule,
+  tree: TraceTree,
+  resolvedInputs: Record<string, unknown>,
+  lang: AgentOutputLang,
+) {
   // Surface enough context that builtin:rubric-judge-v1 can be a generic
   // template without per-rule knowledge: judge question + inputs blob +
-  // rule metadata.
+  // rule metadata. `language_instruction` localizes prose fields only;
+  // schema-fixed values (enums, span IDs) stay English regardless.
   return {
     rule_id: rule.id,
     judge_question: rule.rubric?.judgeQuestion ?? "",
     output_schema: rule.rubric?.outputSchemaRaw ?? {},
     inputs: resolvedInputs,
     trace_id: tree.traceId,
+    language_instruction: languageInstructionFor(lang),
   };
 }
 
@@ -157,6 +168,7 @@ async function evaluateOne(
   provider: AgentProvider,
   promptRegistry: PromptTemplateRegistry,
   timeoutMs?: number,
+  lang: AgentOutputLang = "en",
 ): Promise<Finding> {
   const rubric = rule.rubric!;  // caller guarantees
   // Resolve inputs.
@@ -166,7 +178,7 @@ async function evaluateOne(
   }
   // Render prompt.
   const tpl = promptRegistry.get(rubric.agentBinding.promptTemplateRef);
-  const prompt = renderPrompt(tpl, buildPromptVars(rule, tree, resolvedInputs));
+  const prompt = renderPrompt(tpl, buildPromptVars(rule, tree, resolvedInputs, lang));
 
   // Invoke.
   const resp = await provider.invoke<RubricAgentOutput>({
@@ -287,7 +299,7 @@ export async function evaluateRubricRules(
     }
 
     try {
-      const finding = await evaluateOne(rule, opts.tree, provider, opts.promptRegistry, opts.timeoutMs);
+      const finding = await evaluateOne(rule, opts.tree, provider, opts.promptRegistry, opts.timeoutMs, opts.lang ?? "en");
       findings.push(finding);
     } catch (e) {
       if (e instanceof AgentProviderError) {

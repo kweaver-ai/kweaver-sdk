@@ -25,6 +25,7 @@ export interface ParsedTraceArgs {
   noBuiltin: boolean;
   noLlm: boolean;
   format: 'yaml' | 'markdown' | 'both' | null;
+  lang: 'en' | 'zh' | null;
   baseUrl: string | null;
   token: string | null;
   businessDomain: string | null;
@@ -48,6 +49,7 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
     .option("builtin", { type: "boolean", default: true })  // --no-builtin sets this to false
     .option("llm", { type: "boolean", default: true })      // --no-llm sets this to false (PR-B reversal)
     .option("format", { type: "string", choices: ["yaml", "markdown", "both"], default: undefined })
+    .option("lang", { type: "string", choices: ["en", "zh"], default: undefined })
     .option("token", { type: "string" })
     .option("base-url", { type: "string" })
     .option("business-domain", { alias: "bd", type: "string" })
@@ -62,6 +64,7 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
     noBuiltin: !(parsed.builtin as boolean),
     noLlm: !(parsed.llm as boolean),
     format: (parsed.format as 'yaml' | 'markdown' | 'both' | undefined) ?? null,
+    lang: (parsed.lang as 'en' | 'zh' | undefined) ?? null,
     baseUrl: (parsed.baseUrl as string | undefined) ?? null,
     token: (parsed.token as string | undefined) ?? null,
     businessDomain: (parsed.businessDomain as string | undefined) ?? null,
@@ -76,6 +79,7 @@ function defaults(sub: ParsedTraceArgs["subcommand"]): ParsedTraceArgs {
     noBuiltin: false,
     noLlm: false,
     format: null,
+    lang: null,
     baseUrl: null,
     token: null,
     businessDomain: null,
@@ -101,6 +105,10 @@ Subcommands:
                                               <stem>.md side by side (default for --out).
                                               When piping to stdout (no --out), default is yaml; pass
                                               --format=markdown to emit markdown instead.
+    --lang <en|zh>                            Output locale for agent-judged natural-language fields:
+                                              rubric reasoning, synthesizer headline / fix_priority reason.
+                                              Default: en. JSON keys, enum values, and span IDs always
+                                              remain English regardless of --lang — only prose is localized.
 
   trace diagnose rules validate <rule.yaml>   Validate a rule yaml file (exit 0 ok, 6 fail)
 
@@ -158,6 +166,7 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
       noBuiltin: args.noBuiltin,
       noLlm: args.noLlm,
       format: args.format ?? undefined,
+      lang: args.lang ?? undefined,
       agentProvider: null,
       timeoutMs: 60000,
       baseUrl,

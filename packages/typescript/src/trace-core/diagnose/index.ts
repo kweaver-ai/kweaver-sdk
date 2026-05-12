@@ -117,6 +117,7 @@ export async function diagnose(
       promptRegistry,
       noLlm: opts.noLlm,
       timeoutMs: opts.timeoutMs,
+      lang: opts.lang,
     });
     rubricFindings = r.findings;
     rulesSkipped = r.skipped;
@@ -135,6 +136,7 @@ export async function diagnose(
     provider: synthProvider,
     promptRegistry,
     timeoutMs: opts.timeoutMs,
+    lang: opts.lang,
   });
 
   // ── 5. Assemble report ──────────────────────────────────────────────────

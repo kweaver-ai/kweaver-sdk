@@ -154,4 +154,10 @@ export interface DiagnoseOpts {
    * Default: 'both' when out is a file, 'yaml' when stdout.
    */
   format?: 'yaml' | 'markdown' | 'both';
+  /**
+   * Output locale for agent-judged natural-language fields (rubric reasoning,
+   * synthesizer headline / description / fix_priority reason). Default 'en'.
+   * Affects only prose; JSON keys / enum values / span IDs always stay English.
+   */
+  lang?: 'en' | 'zh';
 }

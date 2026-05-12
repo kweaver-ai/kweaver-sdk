@@ -32,6 +32,8 @@ parsed programmatically and rejected on any deviation.
 {{output_schema}}
 ```
 
+{{language_instruction}}
+
 ## Output Rules
 1. `first_violating_step_id` MUST be a real span id from the inputs above
    — the diagnose pipeline correlates rubric findings with symbolic

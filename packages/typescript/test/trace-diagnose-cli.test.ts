@@ -51,3 +51,18 @@ test("parseTraceArgs: --format=both parses", () => {
   const r = parseTraceArgs(["diagnose", "tr_x", "--format", "both"]);
   assert.equal(r.format, "both");
 });
+
+test("parseTraceArgs: default lang is null (resolved to 'en' by diagnose)", () => {
+  const r = parseTraceArgs(["diagnose", "tr_x"]);
+  assert.equal(r.lang, null);
+});
+
+test("parseTraceArgs: --lang=zh parses", () => {
+  const r = parseTraceArgs(["diagnose", "tr_x", "--lang", "zh"]);
+  assert.equal(r.lang, "zh");
+});
+
+test("parseTraceArgs: --lang=en parses", () => {
+  const r = parseTraceArgs(["diagnose", "tr_x", "--lang", "en"]);
+  assert.equal(r.lang, "en");
+});

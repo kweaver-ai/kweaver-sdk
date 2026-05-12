@@ -1,145 +1,147 @@
-# M4 Trace Diagnose — Issue #2 Design (Scan / Batch / Cross-Trace Synthesizer)
+# M4 Trace Diagnose — Issue #2 设计（Scan / Batch / Cross-Trace Synthesizer）
 
-Last updated: 2026-05-12
+最后更新：2026-05-12
+语言：中文。英文原版见 git history `61d0bd5`。
 
-Tracking issue: [kweaver-ai/kweaver-sdk#123](https://github.com/kweaver-ai/kweaver-sdk/issues/123)
-Predecessor: [#120](https://github.com/kweaver-ai/kweaver-sdk/issues/120) (PR-A symbolic + PR-B rubric, single-trace)
-Vision references: `plan-traceai/vision/trace-cli-detailed-design.md` §3.1 / §3.3.4
+跟踪 issue: [kweaver-ai/kweaver-sdk#123](https://github.com/kweaver-ai/kweaver-sdk/issues/123)
+前置 issue: [#120](https://github.com/kweaver-ai/kweaver-sdk/issues/120)（PR-A symbolic + PR-B rubric，单 trace）
+Vision 引用：`plan-traceai/vision/trace-cli-detailed-design.md` §3.1 / §3.3.4
 Issue plan: `plan-traceai/plan/2026-05-11-m4-diagnose-issue-plan.md` §2 #2
 
 ## Summary
 
-Extend `kweaver trace diagnose` from single-trace mode (#120, PR-A + PR-B) to two sibling batch entry points sharing the same internal pipeline:
+把 `kweaver trace diagnose` 从单 trace 模式（#120, PR-A + PR-B）扩展到 **两个对等 batch 入口共用同一条 pipeline**：
 
-- `kweaver trace diagnose scan --time-range=24h [--tenant=acme]` — streaming pull from `agent-observability` over a time window with optional tenant filter
-- `kweaver trace diagnose --traces=conv1,conv2,conv3` — explicit conversation_id list, used when the caller already has a triage queue (from a ticket / log / human review)
+- `kweaver trace diagnose scan --time-range=24h [--tenant=acme]` — 通过 `agent-observability` 流式拉取一个时间窗 / 租户过滤的 trace 集
+- `kweaver trace diagnose --traces=conv1,conv2,conv3` — 显式 conversation_id 列表，给"手头已经攥着 triage 队列"（从 ticket、日志、人工 review 摘出来）的场景用
 
-Both walk N traces through Stage-1 (symbolic) and a **batched** Stage-2 (rubric), produce a deterministic-template Stage-3 within-trace summary per trace, and end with a single LLM-driven Stage-4 cross-trace synthesizer over deterministic aggregates + K sampled trace summaries.
+两条路径走同一条 pipeline：**N 条 trace 过 Stage-1（symbolic）+ 批量化 Stage-2（rubric）+ deterministic Stage-3 per-trace synth + 1 次 LLM 调用的 Stage-4 cross-trace synthesizer**（输入是 deterministic aggregates + K 个采样 summary）。
 
-The cost / time profile is intentionally different from PR-B's single-trace mode. PR-B does one rubric LLM call per trace and one synthesizer LLM call per trace — fine for a single conversation but burns ~140 LLM calls on 100 traces. This issue batches rubric (chunks of K=10 traces per LLM call), drops Stage-3 to template mode (zero LLM calls), and lets a single Stage-4 LLM call produce the cross-trace narrative. Result for 100 traces / 38 flagged: **5 LLM calls total** (4 fast-tier Stage-2 batches + 1 std-tier Stage-4 synth).
+成本 / 时长画像跟 PR-B 单 trace 模式**有本质区别**。PR-B 每条 trace 1 次 rubric LLM + 1 次 synthesizer LLM——单条够用，100 条要烧 ~140 次 LLM 调用。本 issue 把 rubric 批量化（每次 LLM call 评 K=10 条），Stage-3 降级到 template 模式（0 次 LLM），Stage-4 单次 LLM 出 cross-trace 叙事。**100 trace / 38 flagged 场景：总共 5 次 LLM 调用**（4 fast-tier Stage-2 batches + 1 std-tier Stage-4 synth）。
 
-The cost reduction is structural, not just an optimization. It enables:
-- ~30× fewer LLM calls than naïve per-trace synthesis at the same trace count
-- The Stage-2 batched rubric prompt sees all flagged traces together — the LLM can recognize cross-trace patterns ("30/38 of these are `stale_results`") that per-trace evaluation would miss
-- A separate `tier: 'fast' | 'std'` abstraction in `AgentProvider` so callers express *task difficulty intent* (classification vs synthesis) instead of hardcoding model names (`haiku` vs `sonnet`)
+这个成本削减是**结构性的，不只是优化**。它带来：
 
-This work lands as a new `trace-ai/scan/` subtree (peer of `trace-ai/diagnose/`) plus thin extensions to `agent-providers/` and `trace-ai/diagnose/schemas.ts`. PR-B's existing `agent-providers/`, single-trace `diagnose()`, and report markdown renderer are reused — not refactored.
+- 同等 trace 规模下 LLM 调用数减 ~30×
+- Stage-2 批量化的 rubric prompt 让 LLM 一次看到所有 flagged trace —— **它能识别 per-trace 调用看不到的跨 trace 模式**（"30/38 都是 `stale_results`"）
+- `AgentProvider` 加 `tier: 'fast' | 'std'` 抽象，**调用方传任务难度 intent**（分类 vs 综合）而不是 hardcode 模型名（`haiku` vs `sonnet`）
+
+本 issue 落地：新增 `trace-ai/scan/` 子树（peer of `trace-ai/diagnose/`）+ `agent-providers/` 小幅扩展 + `trace-ai/diagnose/schemas.ts` 加一个字段。**PR-B 的 `agent-providers/`、单 trace `diagnose()`、report markdown renderer 全部复用，不重构**。
 
 ## Goals
 
-- Ship `kweaver trace diagnose scan` and `kweaver trace diagnose --traces=<list>` as sibling entry points sharing one pipeline.
-- Introduce **Stage-4 cross-trace synthesizer** producing `scan-summary/v1` reports — both yaml and markdown.
-- Introduce **Stage-1 → Stage-2 paired-rule gating** via `rubric.gates_on` in the rule YAML (resolves PR-B's known "rubric fires on benign traces" issue without breaking single-trace mode).
-- Introduce **batched rubric evaluation**: one LLM call evaluates a chunk of flagged traces. Costs O(N/K) LLM calls instead of O(N).
-- Introduce **`tier: 'fast' | 'std'` abstraction** in `JudgmentRequest`. Callers don't hardcode model names. Providers map tier → concrete model via constructor opts.
-- Establish **partial-output resume semantics**: per-trace yaml on disk = ground truth; re-running `scan` skips already-diagnosed traces by trace_id.
-- Reuse PR-B's `AgentProvider`, prompt-template, claude-code subprocess provider, and within-trace template synthesizer — no refactoring required.
+- Ship `kweaver trace diagnose scan` 和 `kweaver trace diagnose --traces=<list>` 两个对等入口，共用一条 pipeline
+- 新增 **Stage-4 cross-trace synthesizer**，产出 `scan-summary/v1` 报告（yaml 和 markdown 两种格式）
+- 通过 rule YAML 的 `rubric.gates_on` 实现 **Stage-1 → Stage-2 配对 gate**（解决 PR-B 已知的"rubric 在 benign trace 上误触发"问题，且不破坏单 trace 模式行为）
+- 实现 **batched rubric evaluation**：一次 LLM 调用评估一组 flagged traces。LLM 调用数从 O(N) 降到 O(N/K)
+- 在 `JudgmentRequest` 引入 **`tier: 'fast' | 'std'` 抽象**。调用方不 hardcode 模型名；provider 通过 constructor opts 映射 tier → 具体模型
+- 建立 **partial-output 续传语义**：磁盘上的 per-trace yaml = ground truth；scan 重跑按 trace_id 跳过已诊断的
+- 复用 PR-B 的 `AgentProvider` / prompt-template / claude-code subprocess provider / within-trace template synthesizer —— 不需要任何重构
 
 ## Non-goals
 
-- Do not support `--no-llm` in scan / batch mode. The cross-trace synthesizer is the value proposition of scan; without LLM the user gets only deterministic `aggregates` + per-trace reports (which they can already get from single-trace mode). Fail-fast with exit 2 + a clear message instead of silently degrading.
-- Do not support stdin (`--traces=-`) for the trace list in MVP. `<list>` accepts comma-separated values and `@<file>` (one id per line). stdin is post-MVP if a user needs it for shell pipelines.
-- Do not implement `--max-parallel` adaptive backoff under rate-limit conditions. The flag sets a cap; rate-limit hits surface as `agent-error:transport` and skip the affected batch. Self-tuning is post-MVP.
-- Do not implement payload `{shared_context, per_trace_overlay}` as an explicit data structure. The batched prompt template inherently factors shared context (judge_question + output_schema once, per-trace span lists in an array). No additional dedup machinery needed.
-- Do not implement `pattern_clusters` (similarity-based grouping beyond rule_id) in `aggregates`. Issue #2 ships rule_frequency + agent_failure_rate; clustering is post-MVP.
-- Do not extend the `tier` enum beyond `'fast' | 'std'` in this issue. `'premium'` (opus) is reserved for future enum extension.
-- Do not refactor PR-B's single-trace `diagnose()`. The CLI dispatches by subcommand; `scan` / `--traces` calls a new entry point.
+- **不支持 scan / batch 模式下的 `--no-llm`**。Cross-trace synthesizer 是 scan 的价值核心；没 LLM 时用户只能拿到 deterministic `aggregates`（已在 scan-summary 里）+ per-trace 报告（单 trace 模式本来就能给）。直接 fail-fast + 清晰错误信息，不静默降级
+- **不支持 stdin (`--traces=-`)** 形式输入 trace 列表。MVP 阶段 `<list>` 只接受 comma-separated 和 `@<file>`（每行一个 id）。stdin 留 post-MVP
+- **不实现 `--max-parallel` 在 rate-limit 触发时的自适应 backoff**。flag 设上限即可；rate-limit 触发表现为 `agent-error:transport` 跳过该 batch。自调节是 post-MVP
+- **不引入显式的 `{shared_context, per_trace_overlay}` 数据结构**。批量化的 prompt 模板天然把共享部分（judge_question + output_schema 各 1 份，trace span 列表是 array）抽出来了。不需要额外的 dedup 机制
+- **不实现 `pattern_clusters`**（基于相似度的聚类，超越 rule_id 维度）。Issue #2 ship rule_frequency + agent_failure_rate；clustering 留 post-MVP
+- **不扩展 `tier` enum 超出 `'fast' | 'std'`**。`'premium'`（opus 级别）保留给未来 enum 增量
+- **不重构 PR-B 的单 trace `diagnose()`**。CLI 按 subcommand 分发；`scan` / `--traces` 调新入口
 
-## Key Design Decisions
+## 关键设计决策
 
-| # | Decision | Choice | Rationale |
+| # | 决策 | 选择 | 理由 |
 |---|---|---|---|
-| 1 | scan vs `--traces=<list>` plumbing | Same pipeline, two trace-source adapters | Pipeline complexity is in Stage-2/3/4; only difference is whether trace_ids come from streaming search or a literal list. Treating them as separate codepaths would duplicate 90% of work. |
-| 2 | Stage-2 evaluation model | Batched-by-rule: one LLM call per chunk of K=10 flagged traces per rubric rule | Per-trace LLM evaluation costs scale O(N); batched scales O(N/K). LLM seeing the full chunk also enables cross-trace pattern recognition the per-trace path can't. |
-| 3 | Stage-3 evaluation model | Template-only (deterministic) in batch mode; PR-B's agent path remains for single-trace mode | Per-trace LLM synthesis is the dominant cost in PR-B (100/139 calls for the 100-trace example). Template mode produces correct-shape Summary blocks at zero LLM cost; users wanting a deep narrative re-run single-trace `diagnose <conv_id>` on the suspect. |
-| 4 | Stage-2 rubric gating | Paired gate: `rubric.gates_on: [<symbolic_rule_id>...]` in rule YAML. Stage-2 only triggers when at least one named symbolic rule fired on that trace | Solves PR-B's "rubric fires on benign traces" issue. The gate is explicit in YAML — the existing implicit pairing between `tool_retry_intent_mismatch` and `tool_loop_no_state_change` becomes machine-checkable. |
-| 5 | Single-trace mode + `gates_on` | Ignored in single-trace mode; rubric runs unconditionally as in PR-B | Single-trace mode already establishes a "diagnose this specific trace fully" UX. Applying the gate would surprise users who explicitly asked for one trace's diagnosis. |
-| 6 | Model selection | `JudgmentRequest.tier?: 'fast' \| 'std'`; provider maps tier → concrete model via `modelByTier` constructor opt. Stage-2 = fast, Stage-4 = std, PR-B mode = unset (CLI default) | Hardcoding `'haiku'` / `'sonnet'` in diagnose code leaks claude-specific model names into trace-ai logic. Tier abstraction stays stable across model upgrades and across providers. |
-| 7 | scan-summary schema | `scan-summary/v1` independent schema, `summary{}` field shape mirrors within-trace `Summary` field-by-field where the concept is the same, uses different names (`rule_id` vs `finding_id`) where ID spaces differ | "Don't allow ambiguity; maximize reuse where unambiguous." Same `headline` / `description` / `reason` / `relation` field names cross levels — md renderer reuses templates. Different `finding_id` vs `rule_id` field names keep cross-level reading unambiguous. |
-| 8 | `--no-llm` in scan | Fail-fast with exit 2 + message | Cross-trace synthesizer narrative is the scan value-add; without LLM the user gets only deterministic aggregates (already in scan-summary as a side-effect) plus per-trace reports (available from single-trace `diagnose` already). Silently degrading would emit half-useful reports. |
-| 9 | Cross-trace synth input | Pre-aggregated counts + K=5 sampled trace summaries; LLM does narrative on top | Sending all N raw summaries blows the token budget past ~50 traces and forces the LLM to find patterns in noise. Pre-aggregation does deterministic counting; sampler picks representatives so the LLM still sees concrete examples. |
-| 10 | Sampler discipline | Per dominant rule (frequency ≥ `max(3, 5% of N)`): top-1 by severity. Plus 2-3 cross-rule co-fire cases. Plus 1-2 outliers (rubric self-labeled false positive). Hard cap K=5 total. | Deterministic picks keep cross-trace synth reproducible. Outlier samples teach the LLM what noise looks like so it doesn't over-fit on dominant pattern. |
-| 11 | Resume semantics | Partial-output trust: `<out>/<trace_id>.yaml` exists → skip. Atomic write via `.partial` → rename. Corrupt yaml = re-diagnose. `--force` flag absent in MVP; user `rm` manually if they want full re-run | Filesystem is ground truth; no separate state file. Survives ctrl-c / OOM / network blip with minimal machinery. Distributed multi-worker scan is post-MVP — when needed, upgrade to explicit checkpoint state. |
-| 12 | LLM I/O formats | INPUT = YAML compact form (saves ~30-40% structural tokens vs `JSON.stringify(_, null, 2)`); OUTPUT = JSON + zod validation | claude's reliability advantage on JSON output (training + schema constraint) outweighs the 5-10% structural token savings of TOON/markdown. INPUT is read once; OUTPUT is parsed and validated downstream — flip the format-quality tradeoff per direction. |
-| 13 | Failure granularity | Per-chunk LLM call failure → all traces in chunk skipped with `rules_skipped[].reason = agent-error:<kind>`. Single per-trace schema_violation inside chunk → only that trace skipped; chunk's other 9 traces unaffected | Isolates blast radius. Chunked retries are post-MVP — MVP records the skip in the per-trace yaml and moves on. |
+| 1 | scan vs `--traces=<list>` 怎么布线 | 同一条 pipeline，两个 trace-source adapter | Pipeline 复杂度在 Stage-2/3/4；唯一差别是 trace_id 来源是 streaming search 还是 literal list。当成两套代码会重复 90% 工作 |
+| 2 | Stage-2 评估模型 | Batched-by-rule：每条 rubric rule 每 K=10 条 flagged trace 一次 LLM 调用 | Per-trace LLM 调用成本是 O(N)；批量化是 O(N/K)。LLM 看到整块还能识别跨 trace 模式，per-trace 调用看不到 |
+| 3 | Stage-3 评估模型 | batch 模式下 template-only（deterministic）；PR-B 的 agent 路径保留给单 trace 模式 | Per-trace LLM synth 是 PR-B 的成本主角（100 trace 例子里 100/139 调用）。Template 模式以零 LLM 成本产出合格 Summary 块；要深度叙事的用户对嫌疑 trace 重跑 `diagnose <conv_id>` 即可 |
+| 4 | Stage-2 rubric gate | 配对 gate：rule YAML 的 `rubric.gates_on: [<symbolic_rule_id>...]`。只在 trace 已经命中 `gates_on` 里的某条 symbolic rule 时，Stage-2 才触发 | 解决 PR-B "rubric 在 benign trace 上误触发" 问题。配对关系在 YAML 里显式化 —— 现有的 `tool_retry_intent_mismatch` ↔ `tool_loop_no_state_change` 隐式配对变成 machine-checkable |
+| 5 | 单 trace 模式 + `gates_on` | 单 trace 模式忽略 `gates_on`，rubric 跟 PR-B 一样无条件跑 | 单 trace 模式 UX 已经是"完整诊断这条 trace"，应用 gate 会让显式 diagnose 一条的用户困惑 |
+| 6 | 模型选择 | `JudgmentRequest.tier?: 'fast' \| 'std'`；provider 通过 `modelByTier` constructor opt 映射 tier → 具体模型。Stage-2 = fast，Stage-4 = std，PR-B 模式 = 不传（CLI 默认） | 在 diagnose 代码里 hardcode `'haiku'` / `'sonnet'` 是把 claude 特定模型名泄漏进 trace-ai 逻辑。tier 抽象跨模型升级 / 跨 provider 都稳 |
+| 7 | scan-summary schema | `scan-summary/v1` 独立 schema，`summary{}` 字段形状逐字段镜像 within-trace `Summary`（同概念字段同名），ID 空间不同的字段用不同名（`rule_id` vs `finding_id`） | "不允许歧义；不歧义则尽可能复用"。同名字段（headline / description / reason / relation）跨级别复用 → md renderer 共用模板。不同 ID 字段名（finding_id vs rule_id）保持跨级别阅读不歧义 |
+| 8 | scan 模式 `--no-llm` | fail-fast exit 2 + 错误信息 | Cross-trace synthesizer 叙事是 scan 的价值核心；没 LLM 时用户只能拿到 deterministic aggregates（在 scan-summary 里有）+ per-trace 报告（单 trace 模式本来就有）。静默降级只会出半成品 |
+| 9 | Cross-trace synth 输入 | Pre-aggregated 统计 + K=5 个采样 trace summary；LLM 在 deterministic 数据上写叙事 | 把全部 N 份原始 summary 送给 LLM 会在 ~50 trace 之后撑爆 token budget，并且 LLM 在噪音里找规律也吃力。Pre-aggregation 做 deterministic 计数；sampler 给具体例子兜底 |
+| 10 | 采样器纪律 | 每个 dominant rule（频次 ≥ `max(3, 5% of N)`）选 top-1 by severity。加 2-3 个 cross-rule co-fire。加 1-2 个 outlier（rubric 自标 false positive）。K=5 硬上限 | Deterministic 采样让 cross-trace synth 可复现。Outlier 样本教 LLM 噪音长什么样，避免 over-fit 在 dominant 模式 |
+| 11 | 续传语义 | Partial-output trust：`<out>/<trace_id>.yaml` 存在 → 跳过。原子写入：先写 `.partial` → rename。损坏 yaml = 重诊。MVP 不提供 `--force`；要全量重跑用户手动 `rm` | 文件系统就是 ground truth；不需要额外 state 文件。能从 ctrl-c / OOM / 网络断扛过去。多 worker 分布式 scan 是 post-MVP —— 真需要再升级显式 checkpoint state |
+| 12 | LLM I/O 格式 | INPUT = YAML 紧凑形态（比 `JSON.stringify(_, null, 2)` 省 ~30-40% 结构 token）；OUTPUT = JSON + zod 强校验 | claude 在 JSON 输出上的可靠性优势（训练 + schema 约束）压过 TOON/markdown 的 5-10% token 省。INPUT 读一次；OUTPUT 要 parse + 校验下游 —— 按方向翻转 format-quality trade-off |
+| 13 | 失败粒度 | per-chunk LLM 调用失败 → chunk 内全 K 条 trace 记 `rules_skipped[].reason = agent-error:<kind>`。chunk 内单条 schema_violation → 只跳那一条，其他 9 条不受影响 | 隔离 blast radius。带重试的 chunk 是 post-MVP —— MVP 记 skip 进 per-trace yaml 然后继续 |
 
-## Industry Alignment (delta from PR-B)
+## Industry Alignment（相对 PR-B 的增量）
 
-PR-B's spec §Industry Alignment already established the two-stage (deterministic triage + LLM judge) discipline used across LangSmith, Phoenix, Braintrust, Langfuse, OpenAI Evals, and the Signals paper. This issue exercises that discipline in its intended workload (batch evaluation) where it was originally motivated as a cost-control measure.
+PR-B spec §Industry Alignment 已经建立了两段式（deterministic triage + LLM judge）的纪律，LangSmith / Phoenix / Braintrust / Langfuse / OpenAI Evals / Signals paper 都是这套。本 issue 把这条纪律放到它**原本被设计的工作负载**（批量评估）里去用，那才是它作为成本控制手段被设计出来的本意。
 
-Two refinements relative to PR-B:
+相对 PR-B 的两个 refinement：
 
-1. **Stage-1 gate becomes operative** — PR-B noted "issue #1 single trace: runs rubric unconditionally; issue #2 scan: will gate on any Stage-1 hit." This issue implements the gate, with one refinement: gate by *paired* symbolic rule rather than "any Stage-1 hit" (decision #4 above). The Signals paper's 3-axis taxonomy already encourages per-axis pairing.
-2. **Batched LLM judgment** — the academic Agent-as-Judge work (NeurIPS'24, arXiv 2410.10934) reports per-trace judging only scales to ~50 traces due to cost. Batched evaluation is the industry response (e.g. Phoenix's batch eval mode). Our batched-by-rule formulation is the natural fit when rule YAML declares its own `inputs` schema — rubric template can grow a multi-trace input array without changing the rule's contract.
+1. **Stage-1 gate 正式生效** —— PR-B 注释里说 "issue #1 single trace: 无条件跑 rubric；issue #2 scan: 会按 any Stage-1 hit gate"。本 issue 实现 gate，且有一个 refinement：用**配对 symbolic rule** gate（决策 #4），而不是 "any Stage-1 hit"。Signals 论文的 3 轴 taxonomy 本来就鼓励 per-axis 配对
+2. **批量化 LLM 判定** —— 学术界 Agent-as-Judge 工作（NeurIPS'24, arXiv 2410.10934）报告 per-trace judging 只能 scale 到 ~50 trace（成本原因）。批量化是工业界回应（如 Phoenix 的 batch eval 模式）。Batched-by-rule 形态在 rule YAML 已经声明 `inputs` schema 的前提下天然合适 —— rubric 模板支持 multi-trace input array 不破坏 rule 契约
 
-## Architecture
+## 架构
 
-### Module layout
+### Module 布局
 
 ```
 packages/typescript/src/
-├── commands/trace.ts                                # +scan subcommand parsing; +--traces parsing; dispatch
+├── commands/trace.ts                                # +scan subcommand 解析; +--traces 解析; dispatch
 ├── api/trace.ts                                     # +searchTracesStream (streaming pagination)
-├── agent-providers/                                 # PR-B; tier abstraction added (small extension)
-│   ├── types.ts                                     # JudgmentRequest.tier?: 'fast' | 'std' (new field)
-│   └── providers/claude-code-subprocess.ts          # modelByTier opt; conditional --model flag
+├── agent-providers/                                 # PR-B; tier 抽象增量（小扩展）
+│   ├── types.ts                                     # JudgmentRequest.tier?: 'fast' | 'std' (新字段)
+│   └── providers/claude-code-subprocess.ts          # modelByTier opt; 条件性 --model flag
 └── trace-ai/
-    ├── diagnose/                                    # PR-B; unchanged in this issue except schemas.ts
-    │   └── schemas.ts                               # RuleSchema gains rubric.gates_on
-    └── scan/                                        # NEW peer subtree
+    ├── diagnose/                                    # PR-B; 本 issue 内除 schemas.ts 外不动
+    │   └── schemas.ts                               # RuleSchema 加 rubric.gates_on
+    └── scan/                                        # 新 peer 子树
         ├── index.ts                                 # runScan(opts) -> ScanSummary; orchestrator
-        ├── trace-source.ts                          # 'time-window' | 'explicit-list' adapters; both expose AsyncIterable<{conv_id, traces_for_conv}>
+        ├── trace-source.ts                          # 'time-window' | 'explicit-list' 适配器；都返回 AsyncIterable<{conv_id, traces_for_conv}>
         ├── traces-list-parser.ts                    # --traces=<list> | --traces=@file → string[]
-        ├── runner.ts                                # parallel per-trace Stage-1 + Stage-3-template; collects pending rubric work
-        ├── batched-rubric.ts                        # Stage-2: chunk flagged traces by rule, render multi-trace prompt, parse JSON, fan out verdicts to per-trace reports
+        ├── runner.ts                                # parallel per-trace Stage-1 + Stage-3-template；收集待办 rubric work
+        ├── batched-rubric.ts                        # Stage-2: 按 rule chunk flagged traces，render 多 trace prompt，parse JSON，fan out verdicts 到 per-trace 报告
         ├── aggregator.ts                            # deterministic aggregates: rule_frequency, agent_failure_rate
-        ├── sampler.ts                               # K=5 sample selector for cross-trace synth input
-        ├── cross-trace-synthesizer.ts               # Stage-4: one LLM call (tier: 'std') producing scan-summary.summary{} block
-        ├── scan-summary-schema.ts                   # zod schema for scan-summary/v1
-        ├── scan-summary-markdown.ts                 # md renderer (mirrors trace-ai/diagnose/report-markdown.ts)
+        ├── sampler.ts                               # K=5 采样器（给 cross-trace synth 输入用）
+        ├── cross-trace-synthesizer.ts               # Stage-4: 一次 LLM 调用 (tier: 'std')，产出 scan-summary.summary{} 块
+        ├── scan-summary-schema.ts                   # scan-summary/v1 的 zod schema
+        ├── scan-summary-markdown.ts                 # md renderer（镜像 trace-ai/diagnose/report-markdown.ts）
         └── prompts/
-            └── builtin/rubric-judge-batch-v1.prompt.md     # multi-trace rubric template
-            └── builtin/cross-trace-synthesizer-v1.prompt.md # cross-trace narrative template
+            └── builtin/rubric-judge-batch-v1.prompt.md     # 多 trace rubric 模板
+            └── builtin/cross-trace-synthesizer-v1.prompt.md # cross-trace 叙事模板
 ```
 
-### Data flow
+### 数据流
 
 ```
 $ kweaver trace diagnose scan --time-range=24h --tenant=acme --out=diagnosis/latest/
        │
        ▼
 [commands/trace.ts]
-  parse subcommand → call runScan(opts)
+  解析 subcommand → 调 runScan(opts)
        │
        ▼
 [trace-ai/scan/index.ts: runScan]
   1. trace-source → AsyncIterable<{conv_id, raw_spans}>
        - time-window: api/trace.searchTracesStream(query, page_size=500)
-       - explicit-list: parse --traces; for each conv_id, api/trace.getSpansByConversationId
-  2. per-trace loop (parallel, bounded by --max-parallel):
-       - resume check: if `<out>/<conv_id>.yaml` exists and parses → SKIP, count in traces_reused
-       - assembleTraceTree → run Stage-1 symbolic (reuse trace-ai/diagnose)
-       - collect into rubric_work_queue if `gates_on` matched for any rubric rule
-       - run Stage-3 template synth (reuse trace-ai/diagnose/synthesizer-template)
-       - assemble per-trace report (reuse trace-ai/diagnose/report-assembler)
-       - write `<conv_id>.yaml.partial`, fsync, atomic-rename to `<conv_id>.yaml`
-       - write `<conv_id>.md` (reuse trace-ai/diagnose/report-markdown)
-  3. Stage-2 batched rubric (sequential per rule, parallel chunks within rule):
+       - explicit-list: 解析 --traces；逐 conv_id 调 api/trace.getSpansByConversationId
+  2. per-trace 循环（并行，受 --max-parallel 限制）：
+       - 续传 check：若 `<out>/<conv_id>.yaml` 存在且能 parse → 跳过，traces_reused++
+       - assembleTraceTree → 跑 Stage-1 symbolic（复用 trace-ai/diagnose）
+       - 若任何 rubric rule 的 `gates_on` 命中，进 rubric_work_queue
+       - 跑 Stage-3 template synth（复用 trace-ai/diagnose/synthesizer-template）
+       - assemble per-trace 报告（复用 trace-ai/diagnose/report-assembler）
+       - 写 `<conv_id>.yaml.partial` → fsync → atomic rename 到 `<conv_id>.yaml`
+       - 写 `<conv_id>.md`（复用 trace-ai/diagnose/report-markdown）
+  3. Stage-2 batched rubric（按 rule 串行，rule 内 chunks 并行）：
        for each rubric_rule:
          flagged = rubric_work_queue[rubric_rule]
          for chunk in chunks(flagged, K=10):
            prompt = render(builtin:rubric-judge-batch-v1, {rubric_rule, traces: chunk.toYamlCompact()})
            response = provider.invoke({prompt, outputSchema: BatchedRubricSchema, tier: 'fast'})
            for verdict in response.trace_results:
-             update per-trace `<conv_id>.yaml` with new rubric Finding (atomic re-write)
-             update per-trace `<conv_id>.md`
-  4. aggregator over all final per-trace reports → AggregatesBlock
-  5. sampler picks K=5 representative trace summaries → SamplerOutput
+             更新 per-trace `<conv_id>.yaml` 加入新 rubric Finding（原子重写）
+             更新 per-trace `<conv_id>.md`
+  4. aggregator 在所有最终 per-trace 报告上算 → AggregatesBlock
+  5. sampler 选 K=5 个代表性 trace summary → SamplerOutput
   6. cross-trace-synthesizer:
        prompt = render(builtin:cross-trace-synthesizer-v1, {aggregates, samples, n_total, sample_ratio})
        response = provider.invoke({prompt, outputSchema: ScanSummaryShape, tier: 'std'})
-  7. assemble scan-summary.yaml + scan-summary.md
-       - emit aggregates, per_trace_index, summary, scan{traces_diagnosed, traces_reused, ...}
+  7. 拼装 scan-summary.yaml + scan-summary.md
+       - 写出 aggregates / per_trace_index / summary / scan{traces_diagnosed, traces_reused, ...}
 ```
 
 ## Contracts
@@ -150,35 +152,35 @@ $ kweaver trace diagnose scan --time-range=24h --tenant=acme --out=diagnosis/lat
 schema_version: scan-summary/v1
 
 scan:
-  scope:                                          # entry-point context
+  scope:                                          # 入口上下文
     kind: time_window | explicit_list
     time_range: 24h | null
     tenant: acme | null
-    traces: [conv1, conv2, ...] | null            # populated only when kind=explicit_list
+    traces: [conv1, conv2, ...] | null            # 仅当 kind=explicit_list 时填
   traces_diagnosed: 142
   traces_with_findings: 38
-  traces_reused: 78                               # resume: how many came from existing .yaml on disk
+  traces_reused: 78                               # 续传：磁盘上多少条复用
   traces_freshly_diagnosed: 64
-  resumed_from_partial: true | false              # true iff traces_reused > 0
+  resumed_from_partial: true | false              # iff traces_reused > 0
   diagnosed_at: 2026-05-12T...
   cli_version: 0.7.4
-  synthesizer_mode: agent                         # always 'agent' in scan mode (no template fallback)
+  synthesizer_mode: agent                         # scan 模式恒为 'agent'（无 template fallback）
 
-summary:                                          # Stage-4 cross-trace synthesizer output — field shape mirrors within-trace Summary
+summary:                                          # Stage-4 cross-trace synthesizer 输出 — 字段形状镜像 within-trace Summary
   headline: "tool_loop_no_state_change is the dominant failure mode (29% of flagged traces)"
   primary_root_cause:
-    rule_ids: [tool_loop_no_state_change]         # ★ rule_ids at scan level (cf. finding_ids at within-trace level — same concept different ID space)
+    rule_ids: [tool_loop_no_state_change]         # ★ scan 级用 rule_ids（cf. within-trace 用 finding_ids — 同概念不同 ID 空间）
     description: "..."
     target_for_fix: decision_agent.prompt
   fix_priority:
-    - rule_id: tool_loop_no_state_change          # ★ rule_id at scan level (cf. finding_id at within-trace level)
+    - rule_id: tool_loop_no_state_change          # ★ scan 级用 rule_id（cf. within-trace 用 finding_id）
       affected_trace_count: 41
       reason: "highest-frequency failure mode; fixing the loop prevention prompt would reduce the dominant pattern"
-  cross_rule_links:                               # ★ cross-rule rather than cross-finding (rules cross-pollinate at scan level)
+  cross_rule_links:                               # ★ scan 级是 cross-rule（rule 跨触发）
     - rule_ids: [tool_loop_no_state_change, tool_retry_intent_mismatch]
       relation: "fires on same span sequence in 38/41 cases — semantic and mechanical aspects of one incident class"
 
-aggregates:                                       # deterministic, computed without LLM
+aggregates:                                       # deterministic，不走 LLM
   rule_frequency:
     - rule_id: tool_loop_no_state_change
       count: 41
@@ -189,14 +191,14 @@ aggregates:                                       # deterministic, computed with
       traces_with_findings: 24
       top_rules: [tool_loop_no_state_change, tool_retry_intent_mismatch]
 
-per_trace_index:                                  # pointers to per-trace artifacts
+per_trace_index:                                  # per-trace 报告指针
   - trace_id: ...
     conversation_id: ...
     report_path: diagnosis/latest/<conv_id>.yaml
     finding_count: N
 ```
 
-### `diagnosis-rule/v1` extension (backwards-compatible)
+### `diagnosis-rule/v1` 增量（向后兼容）
 
 ```yaml
 rubric:
@@ -204,15 +206,16 @@ rubric:
   inputs: [...]
   output_schema: { ... }
   agent_binding: { ... }
-  gates_on:                                       # NEW; optional
-    - tool_loop_no_state_change                   # array of symbolic rule_ids; OR-joined
+  gates_on:                                       # 新增；可选
+    - tool_loop_no_state_change                   # symbolic rule_id 数组；OR 关系
 ```
 
-Semantics:
-- In scan / batch mode: Stage-2 evaluates a rubric rule on a trace only if at least one rule_id in `gates_on` produced a symbolic Finding on that trace. Empty / missing `gates_on` → rubric is evaluated on **all** traces (preserves PR-B fallback behavior; explicit-list mode honors this for compatibility).
-- In single-trace mode: `gates_on` is **ignored**; rubric runs unconditionally (preserves PR-B UX where `kweaver trace diagnose <conv>` fully diagnoses the requested trace).
+语义：
 
-### `JudgmentRequest.tier` (backwards-compatible)
+- **scan / batch 模式**：rubric rule 只在 trace 上至少有一条 `gates_on` 列出的 symbolic rule 命中时才评估。空 / 缺省 `gates_on` → rubric 在**所有** trace 上评估（保留 PR-B fallback 行为；explicit-list 模式也尊重此兼容性）
+- **单 trace 模式**：`gates_on` **被忽略**；rubric 无条件跑（保留 PR-B 的"完整诊断你显式请求的 trace" UX）
+
+### `JudgmentRequest.tier`（向后兼容）
 
 ```typescript
 export interface JudgmentRequest<T> {
@@ -220,22 +223,22 @@ export interface JudgmentRequest<T> {
   outputSchema: ZodType<T>;
   timeoutMs?: number;
   correlationId?: string;
-  tier?: 'fast' | 'std';                          // NEW; undefined = provider default (no --model flag)
+  tier?: 'fast' | 'std';                          // 新增；undefined = provider 默认（不传 --model flag）
 }
 ```
 
-### `ClaudeCodeSubprocessProvider` tier mapping
+### `ClaudeCodeSubprocessProvider` tier 映射
 
 ```typescript
 export interface ClaudeCodeSubprocessProviderOpts {
   // ...existing
-  modelByTier?: { fast?: string; std?: string };  // defaults: fast='haiku', std='sonnet'
+  modelByTier?: { fast?: string; std?: string };  // 默认: fast='haiku', std='sonnet'
 }
 ```
 
-`invoke()` appends `--model {modelByTier[req.tier]}` to spawn args when `req.tier` is set; otherwise omits `--model` entirely (preserves PR-B behavior — claude CLI picks its own default).
+`invoke()` 在 `req.tier` 有值时给 spawn args 追加 `--model {modelByTier[req.tier]}`；否则不传 `--model`（保留 PR-B 行为 —— claude CLI 用自己默认）
 
-### Batched rubric LLM output schema
+### 批量化 rubric LLM 输出 schema
 
 ```yaml
 type: object
@@ -247,20 +250,21 @@ properties:
       type: object
       required: [trace_id, category, reasoning, severity, first_violating_step_id]
       properties:
-        trace_id: { type: string }                # must echo back one of the trace_ids supplied in input
+        trace_id: { type: string }                # 必须回填输入 chunk 里的某个 trace_id
         category: { type: string, enum: [...rule-specific...] }
         reasoning: { type: string }
         severity: { type: string, enum: [low, medium, high] }
-        first_violating_step_id: { type: string } # must be a real span_id from THIS trace's spans
+        first_violating_step_id: { type: string } # 必须是**该 trace 自己** spans 里的真实 span_id
         evidence_span_ids: { type: array, items: { type: string } }
 ```
 
-Validation enforced post-parse:
-- `trace_id` in each item maps to a unique input trace (1:1 with input chunk)
-- `first_violating_step_id` is a real span_id from that trace's input spans
-- Item failing either check → recorded as `rules_skipped[].reason = agent-error:schema_violation` on the affected trace only
+Parse 之后强校验：
 
-## Stage-2 Batched Rubric — Prompt Structure
+- 每条 `trace_id` 唯一映射到一条 input trace（1:1）
+- `first_violating_step_id` 是该 trace 输入 spans 里的真实 span_id
+- 任一条 fail → 记 `rules_skipped[].reason = agent-error:schema_violation`，**只影响那一条 trace**
+
+## Stage-2 批量化 Rubric — Prompt 结构
 
 `builtin:rubric-judge-batch-v1`:
 
@@ -310,7 +314,7 @@ back the trace_id from the input.
    `first_violating_step_id` = any real span_id from that trace.
 ```
 
-## Stage-4 Cross-Trace Synthesizer — Prompt Structure
+## Stage-4 Cross-Trace Synthesizer — Prompt 结构
 
 `builtin:cross-trace-synthesizer-v1`:
 
@@ -363,105 +367,106 @@ JSON.
 
 ```shell
 kweaver trace diagnose scan
-  [--time-range <duration>]                       # e.g. 24h, 7d; required when --traces not set
-  [--tenant <name>]                               # optional filter
-  [--out <dir>]                                   # default: ./diagnosis/scan-<timestamp>/
-  [--rules <dir>]                                 # override <cwd>/diagnosis-rules/
-  [--no-builtin]                                  # disable the 5+1 builtin baseline rules
-  [--max-parallel <n>]                            # default 4
-  [--max-traces-per-batch <n>]                    # default 100; cap on streaming pull
-  [--format yaml|markdown|both]                   # default 'both'
-  [--lang en|zh]                                  # default 'en'
-  [--token <token>] [--base-url <url>] [-bd <bd>] # match existing convention
+  [--time-range <duration>]                       # 例如 24h, 7d；--traces 未传时必填
+  [--tenant <name>]                               # 可选过滤
+  [--out <dir>]                                   # 默认 ./diagnosis/scan-<timestamp>/
+  [--rules <dir>]                                 # 覆盖 <cwd>/diagnosis-rules/
+  [--no-builtin]                                  # 禁用 5+1 条 builtin baseline 规则
+  [--max-parallel <n>]                            # 默认 4
+  [--max-traces-per-batch <n>]                    # 默认 100；streaming pull 上限
+  [--format yaml|markdown|both]                   # 默认 'both'
+  [--lang en|zh]                                  # 默认 'en'
+  [--token <token>] [--base-url <url>] [-bd <bd>] # 与现有约定一致
 
 kweaver trace diagnose --traces=<list>
   --traces=conv1,conv2,...                        # comma-separated conversation_ids
-  --traces=@/path/to/ids.txt                      # OR @file with one id per line
-  [other flags same as scan above]
+  --traces=@/path/to/ids.txt                      # 或者 @file，每行一个 id
+  [其余 flag 同 scan]
 
-# Single-trace mode (unchanged from PR-B):
-kweaver trace diagnose <conv_id> [...]            # rejects --traces and scan-only flags
+# 单 trace 模式（PR-B 已 ship，不动）：
+kweaver trace diagnose <conv_id> [...]            # 拒绝 --traces 和 scan-only flags
 ```
 
-Error / exit codes:
+错误 / exit codes：
 
-| Exit | Condition |
+| Exit | 条件 |
 |---|---|
-| 2 | `scan` or `--traces` with `--no-llm` (fail-fast; see decision #8) |
-| 2 | `--traces=@file` where file does not exist |
-| 4 | scan returned zero traces (empty time-window result, or all --traces id lookups returned 0 spans) |
-| 5 | Auth missing / unreachable |
-| 6 | Rule load / schema validation failure |
-| 1 | Token budget exceeded during Stage-2 batch chunk preparation; message includes `--max-traces-per-batch` suggestion |
+| 2 | `scan` 或 `--traces` 带 `--no-llm`（fail-fast；见决策 #8） |
+| 2 | `--traces=@file` 文件不存在 |
+| 4 | scan 返回零 trace（空时间窗 / 所有 --traces id 查询返回 0 spans） |
+| 5 | Auth 缺失 / 不可达 |
+| 6 | Rule load / schema 校验失败 |
+| 1 | Stage-2 batch chunk 准备时 token 预算超限；消息含 `--max-traces-per-batch` 建议 |
 
 ## Checkpoint / Resume
 
-Filesystem-grounded, no separate state file.
+文件系统作 ground truth，不另开 state 文件。
 
-**Write path**: every per-trace report is written as `<conv_id>.yaml.partial` first, then `fsync`'d, then atomic-renamed to `<conv_id>.yaml`. Same for `<conv_id>.md`. A partial file is never used.
+**写入路径**：每条 per-trace 报告先写 `<conv_id>.yaml.partial`，`fsync`，atomic rename 到 `<conv_id>.yaml`。`<conv_id>.md` 同理。partial 文件永远不被使用。
 
-**Resume path**: at runScan start, for each trace_source-emitted conv_id, check if `<out>/<conv_id>.yaml` exists.
-- If yes and parses as `trace-diagnose-report/v1`: count as `traces_reused`, skip Stage-1/2/3 entirely, include this report in aggregator + sampler input.
-- If yes but yaml is malformed or schema-incompatible: log warning to stderr, delete, re-diagnose. Treat as a leftover from a crashed older CLI version.
-- If no: full pipeline.
+**续传路径**：runScan 启动时，对每条 trace_source 给出的 conv_id 检查 `<out>/<conv_id>.yaml` 是否存在：
 
-**scan-summary failure path**: if Stage-4 errors out (or aggregator / sampler errors out) but per-trace reports were written successfully, the user can re-run the same command — all per-trace yaml files are reused and only Stage-4 + scan-summary write get retried.
+- 在且能 parse 为 `trace-diagnose-report/v1`：计入 `traces_reused`，**跳过 Stage-1/2/3**，把该报告纳入 aggregator + sampler 输入
+- 在但 yaml 损坏 / schema 不匹配：log warning 到 stderr，删除，重诊。当作旧版本 CLI 崩溃留下的残留处理
+- 不在：走全 pipeline
 
-**`--force` flag** is **not** in MVP scope. Users who want a clean re-run delete `--out` directory contents manually (and the CLI doesn't auto-delete to avoid catastrophic data loss).
+**scan-summary 失败路径**：若 Stage-4 报错（或 aggregator / sampler 报错），per-trace 报告写出成功，用户可以重跑相同命令 —— 所有 per-trace yaml 复用，**只重跑 Stage-4 + scan-summary 写入**
+
+**`--force` flag** 不在 MVP scope。要全量重跑的用户手动删 `--out` 目录内容（CLI 不自动删，避免灾难性数据丢失）
 
 ## Error Handling
 
-| Failure | Behavior | Effect on scan-summary |
+| 失败 | 行为 | 对 scan-summary 影响 |
 |---|---|---|
-| Stage-2 chunk LLM call timeout / transport / 4xx | All K traces in chunk recorded under `rules_skipped[].reason = agent-error:<kind>`; their per-trace yaml is re-written (kept Stage-1 findings; no rubric finding) | aggregates count these in `rules_skipped` per trace; cross-trace synth sees the skip count |
-| Stage-2 single-item schema_violation (within otherwise-successful chunk) | Affected trace records `rules_skipped[].reason = agent-error:schema_violation`; other 9 chunk items unaffected | same as above, single-trace granularity |
-| Stage-4 cross-trace synth failure | scan-summary.yaml emitted with `summary: null`; aggregates + per_trace_index still populated. User reruns; per-trace reports skipped on resume | scan-summary missing `summary` block |
-| Provider returns malformed JSON envelope (Stage-2 or Stage-4) | Same as transport error; trigger one retry per PR-B's existing claude-code-subprocess retry path | n/a |
-| `--traces=@file` parsed but file is empty or all-whitespace | Exit 2 with clear message ("no conversation_ids found in <file>") | scan does not start |
-| time-window mode: streaming search throws after some pages consumed | Exit 5 with `HttpError` formatting; per-trace reports emitted so far are preserved; resume works | scan-summary not written; resume reuses partial work |
+| Stage-2 chunk LLM 调用 timeout / transport / 4xx | chunk 内 K 条 trace 全部记 `rules_skipped[].reason = agent-error:<kind>`；其 per-trace yaml 重写（保留 Stage-1 findings；无 rubric finding） | aggregates 在 per-trace 计入 `rules_skipped`；cross-trace synth 看到 skip 计数 |
+| Stage-2 单条 schema_violation（在其他成功的 chunk 内） | 仅该 trace 记 `rules_skipped[].reason = agent-error:schema_violation`；chunk 内其他 9 条不受影响 | 同上，单 trace 粒度 |
+| Stage-4 cross-trace synth 失败 | scan-summary.yaml 写出但 `summary: null`；aggregates + per_trace_index 仍填充。用户重跑；per-trace 报告在续传时跳过 | scan-summary 缺 `summary` 块 |
+| Provider 返回 malformed JSON envelope（Stage-2 或 Stage-4） | 同 transport error；触发 PR-B 现有 claude-code-subprocess 重试路径，重试一次 | n/a |
+| `--traces=@file` 解析成功但文件为空或全空白 | exit 2 带清晰信息（"no conversation_ids found in <file>"） | scan 不启动 |
+| time-window 模式：streaming search 在消费过一些页之后 throw | exit 5 + `HttpError` formatting；已写出的 per-trace 报告保留；续传可用 | scan-summary 未写；续传复用 partial work |
 
 ## Testing
 
-Test framework: Node native `node:test` + `node:assert/strict`. HTTP mocked via the existing `mockFetchSequence()` pattern from PR-B tests.
+测试框架：Node native `node:test` + `node:assert/strict`。HTTP mock 复用 PR-B 测试里既有的 `mockFetchSequence()` 模式。
 
 ### Unit tests
 
-- `traces-list-parser.test.ts`: comma-separated; `@file` syntax; missing file; empty file; whitespace handling
-- `aggregator.test.ts`: rule_frequency over N synthetic per-trace reports; severity_breakdown sum invariant; agent_failure_rate dedup; deterministic ordering
-- `sampler.test.ts`: dominant rule threshold edges (`max(3, 5% of N)`); top-1-by-severity per rule; cross-rule co-fire detection; outlier (rubric self-labeled FP) selection; K=5 hard cap
-- `batched-rubric.test.ts`: chunk K=10 split; per-chunk prompt assembly; per-item schema validation (trace_id echo, first_violating_step_id in spans); single-item failure isolation; full-chunk failure recording
-- `cross-trace-synthesizer.test.ts`: aggregator + sampler output assembled into prompt; output schema validation; missing aggregate field surfaces as schema_violation
-- `scan-summary-schema.test.ts`: zod round-trip; field name mirroring with within-trace Summary; nullable `summary` block under Stage-4 failure
-- `scan-summary-markdown.test.ts`: aggregates rendered; per_trace_index with relative paths; summary block under both success and `summary: null` paths
-- `agent-providers/tier.test.ts`: `JudgmentRequest.tier` plumbing; ClaudeCodeSubprocessProvider model arg injection; modelByTier override
+- `traces-list-parser.test.ts`: comma-separated；`@file` 语法；文件不存在；空文件；空白处理
+- `aggregator.test.ts`: N 条 synthetic per-trace 报告上的 rule_frequency；severity_breakdown 加和不变；agent_failure_rate dedup；deterministic 排序
+- `sampler.test.ts`: dominant rule 阈值边界（`max(3, 5% of N)`）；每 rule top-1 by severity；cross-rule co-fire 检测；outlier（rubric 自标 FP）选择；K=5 硬上限
+- `batched-rubric.test.ts`: chunk K=10 切分；per-chunk prompt 拼装；per-item schema 校验（trace_id 回填、first_violating_step_id 在 spans 内）；单条 failure 隔离；整 chunk failure 记录
+- `cross-trace-synthesizer.test.ts`: aggregator + sampler 输出拼到 prompt；输出 schema 校验；缺失 aggregate 字段触发 schema_violation
+- `scan-summary-schema.test.ts`: zod round-trip；字段名跟 within-trace Summary 的镜像关系；Stage-4 失败时 `summary` 可空
+- `scan-summary-markdown.test.ts`: aggregates 渲染；per_trace_index 相对路径；summary 块在 success 和 `summary: null` 两种路径
+- `agent-providers/tier.test.ts`: `JudgmentRequest.tier` 串通；ClaudeCodeSubprocessProvider 的 model arg 注入；modelByTier override
 
 ### End-to-end tests
 
-- `scan-with-list.test.ts`: `runScan({ traceIds: [...] })` with mocked agent-observability and stub agent provider; assert per-trace yaml + scan-summary.yaml + .md emitted; aggregates correct; sample selection correct
-- `scan-with-time-window.test.ts`: same with mocked streaming search; assert pagination consumed; same outputs
-- `scan-resume.test.ts`: write 5 fake per-trace yamls into `--out` dir, invoke scan over 10 traces, assert 5 reused + 5 freshly diagnosed; resumed_from_partial=true; scan-summary regenerated
-- `scan-gates-on.test.ts`: rubric with `gates_on: [tool_loop_no_state_change]` runs only on traces where symbolic fired; verify rubric_work_queue dedup
-- `scan-batched-rubric-failure.test.ts`: stub provider returns malformed JSON for one chunk; assert affected traces have `rules_skipped[].reason = agent-error:schema_violation`; other chunks succeed; scan-summary still emits
-- `scan-no-llm-fail-fast.test.ts`: `scan --no-llm` exits 2 with message
+- `scan-with-list.test.ts`: `runScan({ traceIds: [...] })` 配 mock agent-observability + stub agent provider；断言 per-trace yaml + scan-summary.yaml + .md 全部写出；aggregates 正确；sample 选择正确
+- `scan-with-time-window.test.ts`: 同上但 mock streaming search；断言 pagination 被消费；同样输出
+- `scan-resume.test.ts`: 在 `--out` 目录预写 5 条 fake per-trace yaml，invoke 10 条 trace 的 scan，断言 5 复用 + 5 新诊断；resumed_from_partial=true；scan-summary 重新生成
+- `scan-gates-on.test.ts`: `gates_on: [tool_loop_no_state_change]` 的 rubric 只在 symbolic 命中的 trace 上跑；验证 rubric_work_queue dedup
+- `scan-batched-rubric-failure.test.ts`: stub provider 给一个 chunk 返 malformed JSON；断言受影响 trace 记 `rules_skipped[].reason = agent-error:schema_violation`；其他 chunk 成功；scan-summary 仍写出
+- `scan-no-llm-fail-fast.test.ts`: `scan --no-llm` exit 2 + 信息
 
 ### Coverage
 
-No coverage threshold change. New modules in `trace-ai/scan/` should ship with both unit + e2e coverage proportional to PR-B's coverage levels.
+无 coverage 阈值变更。`trace-ai/scan/` 新模块 unit + e2e 覆盖率应与 PR-B 水平相当。
 
 ## Open Questions Deferred to Implementation
 
-1. **Streaming search query shape** — `searchTracesStream` page size, sort order, and whether to filter by `traceId.keyword` agg in the first pass or query spans directly. To resolve when first benchmarked against 62 agent-observability.
-2. **`--max-parallel` upper bound under fast tier** — haiku has higher rate limits than sonnet; whether to expose a separate `--max-parallel-fast` / `--max-parallel-std`. Defer until rate-limiting is observed.
-3. **Aggregator's `top_rules` selection per agent** — currently spec says "top rules" without specifying ranking. Default to top 3 by count; may revise based on real data.
-4. **Cross-trace synth `cross_rule_links` threshold** — "≥ X traces fire both rules together". X TBD; aggregator should surface co-fire counts and let cross-trace synth decide based on the data.
-5. **`--max-traces-per-batch` interaction with token budget** — soft cap for scan; the LLM-side cap is K=10 per batch and is fixed. Whether to expose token-budget as a config or auto-compute. Default 100 traces per scan run (UX cap, not LLM cap).
-6. **Resume semantics for `--rules` changes** — if user re-runs scan with a different rules directory, should reused per-trace yamls still apply? MVP says yes (filesystem trumps); spec note that mixed-rules scans produce undefined behavior in aggregates.
+1. **streaming search query 形态** —— `searchTracesStream` 的 page size、sort order，以及第一遍是 filter by `traceId.keyword` agg 还是直接查 spans。在 62 agent-observability 上第一次 benchmark 时解决
+2. **fast tier 下的 `--max-parallel` 上限** —— haiku rate limit 比 sonnet 高；是否要独立 `--max-parallel-fast` / `--max-parallel-std`。等观察到限流再说
+3. **Aggregator 的 per-agent `top_rules` 选法** —— 当前 spec 说 "top rules" 没指定 ranking。默认按 count top 3；按真数据再调
+4. **Cross-trace synth `cross_rule_links` 阈值** —— "≥ X traces fire both rules together"。X TBD；aggregator 应该把 co-fire counts 暴露出来，让 cross-trace synth 根据数据决定
+5. **`--max-traces-per-batch` 与 token 预算交互** —— scan 软上限；LLM 侧上限是 K=10 per batch 且固定。是否要把 token 预算暴露成 config 还是自动算。默认 100 trace per scan run（UX cap，不是 LLM cap）
+6. **续传语义对 `--rules` 变化的处理** —— 如果用户改了 rules 目录重跑 scan，已复用的 per-trace yaml 是否仍应用？MVP 说 yes（文件系统优先）；spec 注释 "rules 混跑 scan 的 aggregates 行为未定义"
 
 ## References
 
-- Tracking issue: [kweaver-ai/kweaver-sdk#123](https://github.com/kweaver-ai/kweaver-sdk/issues/123)
-- Predecessor: [#120 (PR-A + PR-B)](https://github.com/kweaver-ai/kweaver-sdk/pull/122)
-- PR-B design: `docs/superpowers/specs/2026-05-11-m4-diagnose-issue1-design.md`
+- 跟踪 issue: [kweaver-ai/kweaver-sdk#123](https://github.com/kweaver-ai/kweaver-sdk/issues/123)
+- 前置: [#120 (PR-A + PR-B)](https://github.com/kweaver-ai/kweaver-sdk/pull/122)
+- PR-B 设计: `docs/superpowers/specs/2026-05-11-m4-diagnose-issue1-design.md`
 - Issue plan: `plan-traceai/plan/2026-05-11-m4-diagnose-issue-plan.md` §2 #2
-- Vision: `plan-traceai/vision/trace-cli-detailed-design.md` §3.1 L382-384 (the original two-entry-points form), §3.3.4 (provider wrapper abstraction)
-- Reference provider implementation (model tier pattern): `~/dev/github/petri/src/providers/claude-code.ts`
+- Vision: `plan-traceai/vision/trace-cli-detailed-design.md` §3.1 L382-384（原本的两入口形态）、§3.3.4（provider wrapper 抽象）
+- Reference provider 实现（model tier 模式）: `~/dev/github/petri/src/providers/claude-code.ts`

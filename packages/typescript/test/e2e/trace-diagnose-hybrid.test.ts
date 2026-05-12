@@ -17,10 +17,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { diagnose } from "../../src/trace-core/diagnose/index.js";
-import { AgentRegistry } from "../../src/trace-core/agent/registry.js";
-import { PromptTemplateRegistry } from "../../src/trace-core/agent/prompt-template.js";
-import { StubAgentProvider } from "../../src/trace-core/agent/providers/stub.js";
+import { diagnose } from "../../src/trace-ai/diagnose/index.js";
+import { AgentRegistry } from "../../src/agent-providers/registry.js";
+import { PromptTemplateRegistry } from "../../src/agent-providers/prompt-template.js";
+import { StubAgentProvider } from "../../src/agent-providers/providers/stub.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(__dirname, "..", "fixtures/trace-diagnose");

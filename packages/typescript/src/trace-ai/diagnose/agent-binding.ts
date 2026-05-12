@@ -21,15 +21,15 @@ import type {
   Span,
   TraceTree,
 } from "./types.js";
-import type { AgentProvider } from "../agent/types.js";
-import { AgentProviderError } from "../agent/types.js";
-import type { AgentRegistry } from "../agent/registry.js";
+import type { AgentProvider } from "../../agent-providers/types.js";
+import { AgentProviderError } from "../../agent-providers/types.js";
+import type { AgentRegistry } from "../../agent-providers/registry.js";
 import {
   PromptTemplateRegistry,
   render as renderPrompt,
   languageInstructionFor,
   type AgentOutputLang,
-} from "../agent/prompt-template.js";
+} from "../../agent-providers/prompt-template.js";
 
 export interface RubricEvaluateOpts {
   rules: Rule[];                        // mixed; non-rubric rules are skipped here

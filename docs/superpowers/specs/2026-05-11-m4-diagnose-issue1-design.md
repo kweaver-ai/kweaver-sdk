@@ -15,19 +15,21 @@ Introduce a new `trace diagnose` command family in the TypeScript CLI that turns
 
 For single-trace mode (this issue), both stages run unconditionally on the requested trace. For batch / `scan` mode (issue #2), Stage-1 acts as a gate so Stage-2 only runs on triage-flagged traces — this is the cost-control reason the two stages are layered, not parallel. See §Industry Alignment for evidence that this layering is the published convergent design across LangSmith, Phoenix, Braintrust, Langfuse, and the Signals paper (arXiv 2604.00356).
 
-After Stage-1 + Stage-2 produce findings, a **within-trace Synthesizer** (Stage-3) collapses N raw findings into a single short narrative: top-1 root-cause hypothesis, fix priority, and cross-finding links (which findings are different views of the same incident). Without this layer, a report with 3+ findings is "trees, no forest" — the user has to manually correlate span_ids across findings to see the picture. The Synthesizer is `trace-core/agent/`'s second user (a peer of `DiagnosisAgentBinding`), uses the same `AgentProvider`, and falls back to a deterministic template under `--no-llm`.
+After Stage-1 + Stage-2 produce findings, a **within-trace Synthesizer** (Stage-3) collapses N raw findings into a single short narrative: top-1 root-cause hypothesis, fix priority, and cross-finding links (which findings are different views of the same incident). Without this layer, a report with 3+ findings is "trees, no forest" — the user has to manually correlate span_ids across findings to see the picture. The Synthesizer is `agent-providers/`'s second user (a peer of `DiagnosisAgentBinding`), uses the same `AgentProvider`, and falls back to a deterministic template under `--no-llm`.
 
 Issue #2 (`scan` mode) extends synthesis cross-trace: aggregate per-rule frequencies, cluster similar evidence patterns, rank agents/programs by failure rate, and emit a `scan-summary.yaml` alongside the per-trace reports.
 
-The agent abstraction (`trace-core/agent/`) is intentionally placed at a layer above `diagnose/` because it will be reused by future trace-ai modules (M6 Agent Synthesizer, future Triage). `diagnose/` adds thin domain bindings on top — this issue ships two of them (`agent-binding.ts` for rubric judgments, `synthesizer.ts` for within-trace narratives).
+The agent abstraction (`agent-providers/`) is intentionally placed at a layer above `diagnose/` because it will be reused by future trace-ai modules (M6 Agent Synthesizer, future Triage). `diagnose/` adds thin domain bindings on top — this issue ships two of them (`agent-binding.ts` for rubric judgments, `synthesizer.ts` for within-trace narratives).
 
-This work is intentionally isolated and lands as a new top-level subtree under `packages/typescript/src/trace-core/`. It does not refactor existing `commands/`, `api/`, `auth/`, or `config/` modules. The only edit to existing files is wiring the new top-level command into `packages/typescript/src/cli.ts`.
+This work lands as **two peer top-level subtrees** under `packages/typescript/src/`: `trace-ai/` (the feature module — currently holds `diagnose/`; future M6 Synthesizer, Triage etc. will live alongside as siblings) and `agent-providers/` (the cross-feature LLM-provider abstraction, peer to `api/` — `AgentProvider` interface + claude-code subprocess provider + stub). The two are at the same layer as the existing `bkn / dataflow / vega / agent` modules so the project layout reflects the actual peering of feature areas. The only edit to pre-existing files is wiring the new top-level command into `packages/typescript/src/cli.ts`; `commands/`, `api/`, `auth/`, `config/` are untouched.
+
+> Refactor note (2026-05-12, mid-PR-B): an earlier revision of this spec placed both subtrees inside a single `trace-core/` container. That naming made trace-ai look "special" relative to peer modules (bkn / dataflow / vega) and buried `agent/` (which is platform infrastructure, not trace-ai-specific) one level too deep. The current layout — `agent-providers/` hoisted to top level, `trace-ai/` named to match the M-vocabulary — is what shipped. The refactor was done while PR-B was still on the feature branch and only PR-B referenced the paths, so the cost was a single mechanical sweep.
 
 ## Goals
 
 - Expose `kweaver trace diagnose <trace_id>` and `kweaver trace diagnose rules validate <rule.yaml>` in the CLI.
 - Establish the durable contracts: `diagnosis-rule/v1`, `trace-diagnose-report/v1`, `AgentProvider`. These are intended to remain stable across future M4 / M6 / triage work.
-- Promote the agent abstraction to `trace-core/agent/` as a reusable shared layer with one concrete provider (`claude-code` subprocess) and one stub provider (for tests / CI).
+- Promote the agent abstraction to `agent-providers/` as a reusable shared layer with one concrete provider (`claude-code` subprocess) and one stub provider (for tests / CI).
 - Match existing CLI conventions for auth, business-domain resolution, and error formatting (see `AGENTS.md` at the repo root).
 - Reuse the existing M3 trace search API (`POST /api/trace-ai/_search`) rather than waiting on a new backend single-trace endpoint.
 
@@ -49,7 +51,7 @@ This work is intentionally isolated and lands as a new top-level subtree under `
 | 1 | M3 trace fetch | Reuse `POST /api/trace-ai/_search` with `{"query":{"term":{"traceId":"..."}}}` | The single-trace `GET /traces/{id}` endpoint named in vision §3.1 does not exist in the backend. Reusing `_search` keeps issue #1 self-contained. The `getTrace` API hides the OpenSearch DSL and assembles the in-memory tree locally. |
 | 2 | Schema validation library | `zod` (not `ajv` as named in vision) | TS-first; type inference removes the need to maintain a separate `interface` and `.schema.json` pair. `zod.toJsonSchema()` provides a future bridge if cross-language reuse is ever needed. |
 | 3 | Rule expression form | Hybrid: YAML metadata + one of `predicate:` (TS function) or `rubric:` (structured judge spec) | A 1-rule-only YAML DSL is over-engineering. A pure-TS approach leaks the contract into code. The hybrid keeps the team-facing contract in YAML while letting predicate / rubric complexity live in TypeScript or in the agent. |
-| 4 | Agent abstraction location | `packages/typescript/src/trace-core/agent/` (a peer of `trace-core/diagnose/`, not nested under it) | Vision §3.3.4 calls for the same wrapper pattern in M4 Diagnose Provider, M6 Agent Synthesizer, and the future Triage Wrapper. Promoting the abstraction to a shared layer prevents three near-duplicate implementations. |
+| 4 | Agent abstraction location | `packages/typescript/src/agent-providers/` (a peer of `trace-ai/diagnose/`, not nested under it) | Vision §3.3.4 calls for the same wrapper pattern in M4 Diagnose Provider, M6 Agent Synthesizer, and the future Triage Wrapper. Promoting the abstraction to a shared layer prevents three near-duplicate implementations. |
 | 5 | Agent transport for issue #1 | `claude-code` invoked as a local subprocess | Zero remote service dependency, dogfoods the Claude Code agent, can ship independently. The remote `decision-agent` provider is reserved as a stub and TODO for post-MVP. |
 | 6 | Default rule loading | `builtin` (5) merged with `<cwd>/diagnosis-rules/*.yaml`. `--rules <dir>` overrides the cwd default; `--no-builtin` disables baselines. Name conflicts fail-fast. | Most users start by `cd`-ing into the agent project; auto-loading the team's local rules removes a "always forget --rules" footgun. The output report's `run.rules_applied` makes the implicit loading auditable. |
 | 7 | Report shape | Wrapped: `{schema_version, trace, run, findings[]}` | Trace-level and run-level metadata are recorded once. Zero-finding case is represented explicitly by `findings: []` and the file is still written, so "the diagnoser ran" is provable. |
@@ -92,15 +94,15 @@ packages/typescript/src/
 ├── cli.ts                                      # +trace top-level dispatch
 ├── commands/trace.ts                           # 二级 dispatch via yargs: diagnose / diagnose rules validate
 ├── api/trace.ts                                # B1 minimal: getTrace via _search
-└── trace-core/                                 # NEW subtree
-    ├── agent/                                  # Cross-trace-ai shared layer
-    │   ├── types.ts                            # AgentProvider, JudgmentRequest/Response, AgentRegistry
-    │   ├── registry.ts                         # registerProvider / resolveProvider; capability check
-    │   ├── prompt-template.ts                  # PromptTemplateRegistry, render()
-    │   └── providers/
-    │       ├── claude-code-subprocess.ts       # spawn `claude -p --output-format=json`
-    │       ├── stub.ts                         # fixture-replay provider for tests
-    │       └── decision-agent-remote.ts        # stub + TODO; post-MVP implements remote HTTP
+├── agent-providers/                            # NEW peer of api/ — cross-feature LLM provider abstraction
+│   ├── types.ts                                # AgentProvider, JudgmentRequest/Response, AgentRegistry
+│   ├── registry.ts                             # registerProvider / resolveProvider; capability check
+│   ├── prompt-template.ts                      # PromptTemplateRegistry, render()
+│   └── providers/
+│       ├── claude-code-subprocess.ts           # spawn `claude -p --output-format=json`
+│       ├── stub.ts                             # fixture-replay provider for tests
+│       └── decision-agent-remote.ts            # stub + TODO; post-MVP implements remote HTTP
+└── trace-ai/                                   # NEW peer of bkn / dataflow / vega — feature module
     └── diagnose/                               # M4 module
         ├── index.ts                            # diagnose(traceId, opts) -> Report
         ├── schemas.ts                          # B5: zod schemas (rule, report, finding, judgment, summary)
@@ -132,7 +134,7 @@ $ kweaver trace diagnose tr_de39 --out=diagnosis/refund.yaml
    parse args -> resolve auth / baseUrl / business-domain -> call diagnose(traceId, opts)
        │
        ▼
-[trace-core/diagnose/index.ts]
+[trace-ai/diagnose/index.ts]
    1. B1.getTrace(traceId)
         -> POST /api/trace-ai/_search {"query":{"term":{"traceId":"..."}}}
         -> raw spans[]
@@ -304,7 +306,7 @@ findings:
 
 ### `AgentProvider` interface (cross-trace-ai shared)
 
-Located at `trace-core/agent/types.ts`. Domain-agnostic — does not know about diagnosis or rubrics specifically.
+Located at `agent-providers/types.ts`. Domain-agnostic — does not know about diagnosis or rubrics specifically.
 
 ```typescript
 export interface AgentProvider {
@@ -413,7 +415,7 @@ Pairing this rubric with the `tool_loop_no_state_change` symbolic rule on the sa
 
 ## Synthesizer (Stage-3, within-trace)
 
-Located at `trace-core/diagnose/synthesizer.ts`. Runs after Stage-1 + Stage-2 produce findings; emits the report's top-level `summary:` block. The synthesizer is the second consumer of `trace-core/agent/`'s `AgentProvider` (peer of `agent-binding.ts`).
+Located at `trace-ai/diagnose/synthesizer.ts`. Runs after Stage-1 + Stage-2 produce findings; emits the report's top-level `summary:` block. The synthesizer is the second consumer of `agent-providers/`'s `AgentProvider` (peer of `agent-binding.ts`).
 
 **Why this exists** — without Stage-3, a report with 3+ findings forces the user to manually correlate span_ids across findings to see the picture. In particular, when symbolic and rubric rules fire on the same span sequence (the `tool_loop_no_state_change` + `tool_retry_intent_mismatch` pair), they describe one incident from two angles; Stage-3 makes that explicit via `cross_finding_links`.
 
@@ -477,7 +479,7 @@ Help output and all log lines must be in English (per `AGENTS.md`).
 
 ## Provider Implementation: claude-code subprocess
 
-Located at `trace-core/agent/providers/claude-code-subprocess.ts`.
+Located at `agent-providers/providers/claude-code-subprocess.ts`.
 
 ```typescript
 class ClaudeCodeSubprocessProvider implements AgentProvider {
@@ -574,7 +576,7 @@ For `rules validate` command:
 
 ### Coverage gates
 
-The Makefile target `make test-cover` should continue to pass; new modules in `trace-core/` should not regress overall coverage. No coverage gate threshold change is requested for this issue.
+The Makefile target `make test-cover` should continue to pass; new modules in `trace-ai/` and `agent-providers/` should not regress overall coverage. No coverage gate threshold change is requested for this issue.
 
 ## Documentation Synchronization
 

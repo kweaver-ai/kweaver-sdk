@@ -16,14 +16,14 @@
  */
 
 import type { Finding, Summary } from "./types.js";
-import type { AgentProvider } from "../agent/types.js";
-import { AgentProviderError } from "../agent/types.js";
+import type { AgentProvider } from "../../agent-providers/types.js";
+import { AgentProviderError } from "../../agent-providers/types.js";
 import {
   PromptTemplateRegistry,
   render as renderPrompt,
   languageInstructionFor,
   type AgentOutputLang,
-} from "../agent/prompt-template.js";
+} from "../../agent-providers/prompt-template.js";
 import { SummaryOutputSchema } from "./schemas.js";
 import { templateSynthesize } from "./synthesizer-template.js";
 

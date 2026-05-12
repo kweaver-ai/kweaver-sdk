@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { RuleSchema, ReportSchema } from "../src/trace-core/diagnose/schemas.js";
-import { rubricOutputToZod, OutputSchemaConversionError } from "../src/trace-core/diagnose/output-schema-converter.js";
+import { RuleSchema, ReportSchema } from "../src/trace-ai/diagnose/schemas.js";
+import { rubricOutputToZod, OutputSchemaConversionError } from "../src/trace-ai/diagnose/output-schema-converter.js";
 
 test("RuleSchema accepts a minimal valid symbolic rule", () => {
   const ok = RuleSchema.safeParse({

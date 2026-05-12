@@ -4,7 +4,7 @@
 
 **Goal:** Ship the symbolic-only path of `kweaver trace diagnose <trace_id>` — 5 builtin rules detect mechanical antipatterns over a single trace; output is a `trace-diagnose-report/v1` YAML; `--no-llm` deterministic-only path. Rubric / agent / synthesizer (LLM-driven) are PR-B.
 
-**Architecture:** New top-level subtree `packages/typescript/src/trace-core/diagnose/`. CLI command `commands/trace.ts` dispatches `diagnose <trace_id>` and `diagnose rules validate <path>`. B1 minimal API client (`api/trace.ts`) reuses `POST /api/trace-ai/_search` with a `traceId` term query. Rule loader merges `builtin/` (ships with CLI) and `<cwd>/diagnosis-rules/` (team-supplied), conflict = fail-fast. Signal-probe runs predicates on an in-memory `TraceTree`. Report-assembler renders templates and emits YAML. Synthesizer for PR-A is the deterministic template fallback only (`run.synthesizer_mode: 'template'`).
+**Architecture:** New top-level subtree `packages/typescript/src/trace-ai/diagnose/`. CLI command `commands/trace.ts` dispatches `diagnose <trace_id>` and `diagnose rules validate <path>`. B1 minimal API client (`api/trace.ts`) reuses `POST /api/trace-ai/_search` with a `traceId` term query. Rule loader merges `builtin/` (ships with CLI) and `<cwd>/diagnosis-rules/` (team-supplied), conflict = fail-fast. Signal-probe runs predicates on an in-memory `TraceTree`. Report-assembler renders templates and emits YAML. Synthesizer for PR-A is the deterministic template fallback only (`run.synthesizer_mode: 'template'`).
 
 **Tech Stack:** TypeScript (strict), Node native test runner (`node:test` + `node:assert/strict`), `zod` for schemas, `js-yaml` for YAML parsing, `yargs` (already present) for subcommand args. No LLM SDKs in PR-A.
 
@@ -18,21 +18,21 @@
 | Path | Action | Responsibility |
 |------|--------|----------------|
 | `packages/typescript/package.json` | MODIFY | Add `zod` + `js-yaml` deps; add `@types/js-yaml` devDep |
-| `packages/typescript/src/trace-core/diagnose/types.ts` | CREATE | `Span`, `TraceTree`, `Hit`, `Predicate`, `Rule`, `Finding`, `Summary`, `Report` |
-| `packages/typescript/src/trace-core/diagnose/schemas.ts` | CREATE | zod schemas: `RuleSchema` (`diagnosis-rule/v1`), `ReportSchema` (`trace-diagnose-report/v1`), helpers |
-| `packages/typescript/src/trace-core/diagnose/trace-shaper.ts` | CREATE | `assembleTraceTree(spans)` → `TraceTree` with `byId`, `parentToChildren`, `byKind` indexes |
+| `packages/typescript/src/trace-ai/diagnose/types.ts` | CREATE | `Span`, `TraceTree`, `Hit`, `Predicate`, `Rule`, `Finding`, `Summary`, `Report` |
+| `packages/typescript/src/trace-ai/diagnose/schemas.ts` | CREATE | zod schemas: `RuleSchema` (`diagnosis-rule/v1`), `ReportSchema` (`trace-diagnose-report/v1`), helpers |
+| `packages/typescript/src/trace-ai/diagnose/trace-shaper.ts` | CREATE | `assembleTraceTree(spans)` → `TraceTree` with `byId`, `parentToChildren`, `byKind` indexes |
 | `packages/typescript/src/api/trace.ts` | CREATE | `getTraceById(opts)` — POST `_search` with `traceId` term; returns spans[] |
-| `packages/typescript/src/trace-core/diagnose/predicate-registry.ts` | CREATE | `registerPredicate`, `resolvePredicate` for `builtin:<name>` references |
-| `packages/typescript/src/trace-core/diagnose/rule-loader.ts` | CREATE | Load builtin yamls + `<dir>/diagnosis-rules/*.yaml`, validate via `RuleSchema`, resolve predicate refs, detect name conflicts |
-| `packages/typescript/src/trace-core/diagnose/signal-probe.ts` | CREATE | `runRules(rules, tree)` — iterate rules, call predicates, collect `Hit[]` per rule |
-| `packages/typescript/src/trace-core/diagnose/synthesizer-template.ts` | CREATE | Deterministic `templateSynthesize(findings)` → `Summary`. PR-A only emits this mode. |
-| `packages/typescript/src/trace-core/diagnose/report-assembler.ts` | CREATE | `assembleReport({trace, run, summary, findings, hits, rules})` — render templates, build `Finding[]`, validate, return `Report` |
-| `packages/typescript/src/trace-core/diagnose/index.ts` | CREATE | `diagnose(traceId, opts)` — wire B1 → shaper → loader → probe → synthesizer → assembler → write YAML |
-| `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-loop-no-state-change.{yaml,ts}` | CREATE | Rule #1: same tool, same args, no state change ≥ 3× |
-| `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-error-swallowed.{yaml,ts}` | CREATE | Rule #2: tool status=error, next LLM prompt lacks error |
-| `packages/typescript/src/trace-core/diagnose/builtin-rules/retrieval-empty-no-fallback.{yaml,ts}` | CREATE | Rule #3: retrieval result_count=0, no retry/rewrite/fallback |
-| `packages/typescript/src/trace-core/diagnose/builtin-rules/llm-response-truncated-no-continue.{yaml,ts}` | CREATE | Rule #4: LLM finish_reason=length, no continuation span |
-| `packages/typescript/src/trace-core/diagnose/builtin-rules/excessive-tool-calls-per-turn.{yaml,ts}` | CREATE | Rule #5: tool count per user turn > threshold |
+| `packages/typescript/src/trace-ai/diagnose/predicate-registry.ts` | CREATE | `registerPredicate`, `resolvePredicate` for `builtin:<name>` references |
+| `packages/typescript/src/trace-ai/diagnose/rule-loader.ts` | CREATE | Load builtin yamls + `<dir>/diagnosis-rules/*.yaml`, validate via `RuleSchema`, resolve predicate refs, detect name conflicts |
+| `packages/typescript/src/trace-ai/diagnose/signal-probe.ts` | CREATE | `runRules(rules, tree)` — iterate rules, call predicates, collect `Hit[]` per rule |
+| `packages/typescript/src/trace-ai/diagnose/synthesizer-template.ts` | CREATE | Deterministic `templateSynthesize(findings)` → `Summary`. PR-A only emits this mode. |
+| `packages/typescript/src/trace-ai/diagnose/report-assembler.ts` | CREATE | `assembleReport({trace, run, summary, findings, hits, rules})` — render templates, build `Finding[]`, validate, return `Report` |
+| `packages/typescript/src/trace-ai/diagnose/index.ts` | CREATE | `diagnose(traceId, opts)` — wire B1 → shaper → loader → probe → synthesizer → assembler → write YAML |
+| `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-loop-no-state-change.{yaml,ts}` | CREATE | Rule #1: same tool, same args, no state change ≥ 3× |
+| `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-error-swallowed.{yaml,ts}` | CREATE | Rule #2: tool status=error, next LLM prompt lacks error |
+| `packages/typescript/src/trace-ai/diagnose/builtin-rules/retrieval-empty-no-fallback.{yaml,ts}` | CREATE | Rule #3: retrieval result_count=0, no retry/rewrite/fallback |
+| `packages/typescript/src/trace-ai/diagnose/builtin-rules/llm-response-truncated-no-continue.{yaml,ts}` | CREATE | Rule #4: LLM finish_reason=length, no continuation span |
+| `packages/typescript/src/trace-ai/diagnose/builtin-rules/excessive-tool-calls-per-turn.{yaml,ts}` | CREATE | Rule #5: tool count per user turn > threshold |
 | `packages/typescript/src/commands/trace.ts` | CREATE | `runTraceCommand(rest)` — yargs dispatch: `diagnose <id>` / `diagnose rules validate <path>` |
 | `packages/typescript/src/cli.ts` | MODIFY | Add `if (command === "trace") return runTraceCommand(rest)`; update `printHelp()` |
 | `packages/typescript/test/trace-shaper.test.ts` | CREATE | Unit tests for tree assembly + indexes |
@@ -108,13 +108,13 @@ git commit -m "chore(deps): add zod + js-yaml for trace diagnose"
 ## Task 2: Define Core Types
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/types.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/types.ts`
 
 This file defines all shared types. No tests yet — types are exercised by every later test.
 
 - [ ] **Step 1: Create the types file**
 
-Create `packages/typescript/src/trace-core/diagnose/types.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/types.ts`:
 
 ```typescript
 // Trace-shape types (built from the OpenSearch _search response).
@@ -254,7 +254,7 @@ Expected: clean compile (file is exports-only; no usage yet, so no errors expect
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/types.ts
+git add packages/typescript/src/trace-ai/diagnose/types.ts
 git commit -m "feat(trace-diagnose): define core types"
 ```
 
@@ -263,7 +263,7 @@ git commit -m "feat(trace-diagnose): define core types"
 ## Task 3: Define zod Schemas
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/schemas.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/schemas.ts`
 - Test: `packages/typescript/test/trace-diagnose-schemas.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -274,7 +274,7 @@ Create `packages/typescript/test/trace-diagnose-schemas.test.ts`:
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { RuleSchema, ReportSchema } from "../src/trace-core/diagnose/schemas.js";
+import { RuleSchema, ReportSchema } from "../src/trace-ai/diagnose/schemas.js";
 
 test("RuleSchema accepts a minimal valid symbolic rule", () => {
   const ok = RuleSchema.safeParse({
@@ -348,7 +348,7 @@ Expected: FAIL with import error (`schemas.js` does not exist).
 
 - [ ] **Step 3: Implement the schemas**
 
-Create `packages/typescript/src/trace-core/diagnose/schemas.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/schemas.ts`:
 
 ```typescript
 import { z } from "zod";
@@ -475,7 +475,7 @@ Expected: 4 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/schemas.ts packages/typescript/test/trace-diagnose-schemas.test.ts
+git add packages/typescript/src/trace-ai/diagnose/schemas.ts packages/typescript/test/trace-diagnose-schemas.test.ts
 git commit -m "feat(trace-diagnose): zod schemas for rule and report v1"
 ```
 
@@ -484,7 +484,7 @@ git commit -m "feat(trace-diagnose): zod schemas for rule and report v1"
 ## Task 4: Trace Shaper (spans → tree)
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/trace-shaper.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/trace-shaper.ts`
 - Test: `packages/typescript/test/trace-shaper.test.ts`
 
 The shaper takes the raw `_source` array from a `_search` response and produces a `TraceTree` with indexes. The OTel attribute `agent.trace.type` (one of `model | tool | retrieval | reasoning`) is mapped to our `SpanKind`.
@@ -497,7 +497,7 @@ Create `packages/typescript/test/trace-shaper.test.ts`:
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { assembleTraceTree } from "../src/trace-core/diagnose/trace-shaper.js";
+import { assembleTraceTree } from "../src/trace-ai/diagnose/trace-shaper.js";
 
 const baseSpan = (id: string, parent: string | null, attrs: Record<string, unknown> = {}) => ({
   spanId: id,
@@ -569,7 +569,7 @@ Expected: FAIL — `trace-shaper.js` does not exist.
 
 - [ ] **Step 3: Implement the shaper**
 
-Create `packages/typescript/src/trace-core/diagnose/trace-shaper.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/trace-shaper.ts`:
 
 ```typescript
 import type { Span, SpanKind, TraceTree } from "./types.js";
@@ -658,7 +658,7 @@ Expected: 5 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/trace-shaper.ts packages/typescript/test/trace-shaper.test.ts
+git add packages/typescript/src/trace-ai/diagnose/trace-shaper.ts packages/typescript/test/trace-shaper.test.ts
 git commit -m "feat(trace-diagnose): trace-shaper builds in-memory tree + indexes"
 ```
 
@@ -837,7 +837,7 @@ git commit -m "feat(api): B1 getTraceById via _search term query"
 ## Task 6: Predicate Registry
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/predicate-registry.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/predicate-registry.ts`
 - Test: `packages/typescript/test/predicate-registry.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -853,8 +853,8 @@ import {
   resolvePredicate,
   clearRegistry,
   PredicateNotFoundError,
-} from "../src/trace-core/diagnose/predicate-registry.js";
-import type { Hit, Predicate, TraceTree } from "../src/trace-core/diagnose/types.js";
+} from "../src/trace-ai/diagnose/predicate-registry.js";
+import type { Hit, Predicate, TraceTree } from "../src/trace-ai/diagnose/types.js";
 
 test("registerPredicate + resolvePredicate round-trip", () => {
   clearRegistry();
@@ -896,7 +896,7 @@ Expected: FAIL — module does not exist.
 
 - [ ] **Step 3: Implement the registry**
 
-Create `packages/typescript/src/trace-core/diagnose/predicate-registry.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/predicate-registry.ts`:
 
 ```typescript
 import type { Predicate } from "./types.js";
@@ -943,7 +943,7 @@ Expected: 4 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/predicate-registry.ts packages/typescript/test/predicate-registry.test.ts
+git add packages/typescript/src/trace-ai/diagnose/predicate-registry.ts packages/typescript/test/predicate-registry.test.ts
 git commit -m "feat(trace-diagnose): predicate registry with builtin: scheme"
 ```
 
@@ -952,7 +952,7 @@ git commit -m "feat(trace-diagnose): predicate registry with builtin: scheme"
 ## Task 7: Rule Loader
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/rule-loader.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/rule-loader.ts`
 - Test: `packages/typescript/test/rule-loader.test.ts`
 - Test fixture: `packages/typescript/test/fixtures/trace-diagnose/rules-good/r1.yaml`
 - Test fixture: `packages/typescript/test/fixtures/trace-diagnose/rules-bad/missing-taxonomy.yaml`
@@ -1001,12 +1001,12 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadRules, RuleLoadError } from "../src/trace-core/diagnose/rule-loader.js";
+import { loadRules, RuleLoadError } from "../src/trace-ai/diagnose/rule-loader.js";
 import {
   registerPredicate,
   clearRegistry,
-} from "../src/trace-core/diagnose/predicate-registry.js";
-import type { Predicate } from "../src/trace-core/diagnose/types.js";
+} from "../src/trace-ai/diagnose/predicate-registry.js";
+import type { Predicate } from "../src/trace-ai/diagnose/types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(__dirname, "fixtures/trace-diagnose");
@@ -1087,7 +1087,7 @@ Expected: FAIL — `rule-loader.js` does not exist.
 
 - [ ] **Step 4: Implement the loader**
 
-Create `packages/typescript/src/trace-core/diagnose/rule-loader.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/rule-loader.ts`:
 
 ```typescript
 import fs from "node:fs/promises";
@@ -1196,7 +1196,7 @@ Expected: 5 tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/rule-loader.ts packages/typescript/test/rule-loader.test.ts packages/typescript/test/fixtures/trace-diagnose/
+git add packages/typescript/src/trace-ai/diagnose/rule-loader.ts packages/typescript/test/rule-loader.test.ts packages/typescript/test/fixtures/trace-diagnose/
 git commit -m "feat(trace-diagnose): rule-loader with builtin+cwd merge and conflict detection"
 ```
 
@@ -1205,7 +1205,7 @@ git commit -m "feat(trace-diagnose): rule-loader with builtin+cwd merge and conf
 ## Task 8: Signal Probe
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/signal-probe.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/signal-probe.ts`
 - Test: `packages/typescript/test/signal-probe.test.ts`
 
 `signal-probe` runs all rules against the tree, collects `Hit[]` per rule. It does not yet build `Finding[]` — that's report-assembler's job.
@@ -1218,12 +1218,12 @@ Create `packages/typescript/test/signal-probe.test.ts`:
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { runRules } from "../src/trace-core/diagnose/signal-probe.js";
+import { runRules } from "../src/trace-ai/diagnose/signal-probe.js";
 import {
   registerPredicate,
   clearRegistry,
-} from "../src/trace-core/diagnose/predicate-registry.js";
-import type { Hit, Predicate, Rule, TraceTree } from "../src/trace-core/diagnose/types.js";
+} from "../src/trace-ai/diagnose/predicate-registry.js";
+import type { Hit, Predicate, Rule, TraceTree } from "../src/trace-ai/diagnose/types.js";
 
 const tree: TraceTree = {
   traceId: "tr_x",
@@ -1292,7 +1292,7 @@ Expected: FAIL — `signal-probe.js` does not exist.
 
 - [ ] **Step 3: Implement the probe**
 
-Create `packages/typescript/src/trace-core/diagnose/signal-probe.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/signal-probe.ts`:
 
 ```typescript
 import { resolvePredicate } from "./predicate-registry.js";
@@ -1328,7 +1328,7 @@ Expected: 3 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/signal-probe.ts packages/typescript/test/signal-probe.test.ts
+git add packages/typescript/src/trace-ai/diagnose/signal-probe.ts packages/typescript/test/signal-probe.test.ts
 git commit -m "feat(trace-diagnose): signal-probe runs predicates and groups hits"
 ```
 
@@ -1337,7 +1337,7 @@ git commit -m "feat(trace-diagnose): signal-probe runs predicates and groups hit
 ## Task 9: Synthesizer Template (PR-A deterministic fallback)
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/synthesizer-template.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/synthesizer-template.ts`
 - Test: `packages/typescript/test/synthesizer-template.test.ts`
 
 PR-A only ships the template path; PR-B adds the agent path. Determinism is essential — the same `Finding[]` always produces the same `Summary`.
@@ -1350,8 +1350,8 @@ Create `packages/typescript/test/synthesizer-template.test.ts`:
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { templateSynthesize } from "../src/trace-core/diagnose/synthesizer-template.js";
-import type { Finding } from "../src/trace-core/diagnose/types.js";
+import { templateSynthesize } from "../src/trace-ai/diagnose/synthesizer-template.js";
+import type { Finding } from "../src/trace-ai/diagnose/types.js";
 
 const finding = (overrides: Partial<Finding> = {}): Finding => ({
   ruleId: "r1",
@@ -1429,7 +1429,7 @@ Expected: FAIL — module does not exist.
 
 - [ ] **Step 3: Implement the template synthesizer**
 
-Create `packages/typescript/src/trace-core/diagnose/synthesizer-template.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/synthesizer-template.ts`:
 
 ```typescript
 import type { Finding, Summary, SummaryFixPriority, SummaryCrossLink } from "./types.js";
@@ -1500,7 +1500,7 @@ Expected: 6 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/synthesizer-template.ts packages/typescript/test/synthesizer-template.test.ts
+git add packages/typescript/src/trace-ai/diagnose/synthesizer-template.ts packages/typescript/test/synthesizer-template.test.ts
 git commit -m "feat(trace-diagnose): deterministic template synthesizer (PR-A)"
 ```
 
@@ -1509,7 +1509,7 @@ git commit -m "feat(trace-diagnose): deterministic template synthesizer (PR-A)"
 ## Task 10: Report Assembler
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/report-assembler.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/report-assembler.ts`
 - Test: `packages/typescript/test/report-assembler.test.ts`
 
 The assembler turns `Hit[]` per rule into `Finding[]` (rendering templates), takes the `Summary` from the synthesizer, and emits a `Report` validated against `ReportSchema`.
@@ -1522,8 +1522,8 @@ Create `packages/typescript/test/report-assembler.test.ts`:
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { assembleReport } from "../src/trace-core/diagnose/report-assembler.js";
-import type { Hit, Rule, Summary } from "../src/trace-core/diagnose/types.js";
+import { assembleReport } from "../src/trace-ai/diagnose/report-assembler.js";
+import type { Hit, Rule, Summary } from "../src/trace-ai/diagnose/types.js";
 
 const ruleA: Rule = {
   schemaVersion: "diagnosis-rule/v1",
@@ -1598,8 +1598,8 @@ test("assembleReport: writes rules_applied and rules_skipped correctly", () => {
 });
 
 test("assembleReport: output passes ReportSchema (raw form)", async () => {
-  const { ReportSchema } = await import("../src/trace-core/diagnose/schemas.js");
-  const { reportToYamlObject } = await import("../src/trace-core/diagnose/report-assembler.js");
+  const { ReportSchema } = await import("../src/trace-ai/diagnose/schemas.js");
+  const { reportToYamlObject } = await import("../src/trace-ai/diagnose/report-assembler.js");
   const r = assembleReport({
     traceId: "tr_x",
     agentId: null,
@@ -1622,7 +1622,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement the assembler**
 
-Create `packages/typescript/src/trace-core/diagnose/report-assembler.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/report-assembler.ts`:
 
 ```typescript
 import type { Finding, Hit, Report, Rule, Summary } from "./types.js";
@@ -1739,7 +1739,7 @@ Expected: 4 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/report-assembler.ts packages/typescript/test/report-assembler.test.ts
+git add packages/typescript/src/trace-ai/diagnose/report-assembler.ts packages/typescript/test/report-assembler.test.ts
 git commit -m "feat(trace-diagnose): report-assembler renders templates and validates"
 ```
 
@@ -1748,13 +1748,13 @@ git commit -m "feat(trace-diagnose): report-assembler renders templates and vali
 ## Task 11: Diagnose Entrypoint (`index.ts`)
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/index.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/index.ts`
 
 Wires the pipeline: B1 → shaper → loader → probe → synthesizer → assembler → write YAML.
 
 - [ ] **Step 1: Write the entrypoint** (no test yet — entrypoint is exercised by the e2e test in Task 21)
 
-Create `packages/typescript/src/trace-core/diagnose/index.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/index.ts`:
 
 ```typescript
 import fs from "node:fs/promises";
@@ -1868,7 +1868,7 @@ export { TraceNotFoundError as DiagnoseTraceNotFound, RuleLoadError, RuleProbeEr
 
 - [ ] **Step 2: Create a placeholder `register.ts` so the import resolves now**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts`:
 
 ```typescript
 // Register builtin predicates here. Each rule task (12–16) appends its line.
@@ -1898,7 +1898,7 @@ And make `diagnose()` `await cliVersion()` accordingly.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/index.ts packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts
+git add packages/typescript/src/trace-ai/diagnose/index.ts packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts
 git commit -m "feat(trace-diagnose): diagnose() entrypoint wires the pipeline"
 ```
 
@@ -1907,9 +1907,9 @@ git commit -m "feat(trace-diagnose): diagnose() entrypoint wires the pipeline"
 ## Task 12: Builtin Rule #1 — `tool_loop_no_state_change`
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-loop-no-state-change.yaml`
-- Create: `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-loop-no-state-change.ts`
-- Modify: `packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-loop-no-state-change.yaml`
+- Create: `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-loop-no-state-change.ts`
+- Modify: `packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts`
 - Test: `packages/typescript/test/builtin-rule-tool-loop-no-state-change.test.ts`
 - Fixture: `packages/typescript/test/fixtures/trace-diagnose/synthetic/tool-loop-no-state-change.json`
 
@@ -1917,7 +1917,7 @@ git commit -m "feat(trace-diagnose): diagnose() entrypoint wires the pipeline"
 
 - [ ] **Step 1: Write the rule yaml**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-loop-no-state-change.yaml`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-loop-no-state-change.yaml`:
 
 ```yaml
 schema_version: diagnosis-rule/v1
@@ -1966,8 +1966,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assembleTraceTree } from "../src/trace-core/diagnose/trace-shaper.js";
-import { predicate } from "../src/trace-core/diagnose/builtin-rules/tool-loop-no-state-change.js";
+import { assembleTraceTree } from "../src/trace-ai/diagnose/trace-shaper.js";
+import { predicate } from "../src/trace-ai/diagnose/builtin-rules/tool-loop-no-state-change.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2029,7 +2029,7 @@ Expected: FAIL — predicate module does not exist.
 
 - [ ] **Step 5: Implement the predicate**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-loop-no-state-change.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-loop-no-state-change.ts`:
 
 ```typescript
 import type { Hit, Predicate, Span, TraceTree } from "../types.js";
@@ -2082,7 +2082,7 @@ export const predicate: Predicate = (trace: TraceTree, params: Record<string, un
 
 - [ ] **Step 6: Register the predicate**
 
-Modify `packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts`:
+Modify `packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts`:
 
 ```typescript
 import { registerPredicate } from "../predicate-registry.js";
@@ -2102,7 +2102,7 @@ Expected: 4 tests pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/builtin-rules/tool-loop-no-state-change.* packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-tool-loop-no-state-change.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/tool-loop-no-state-change.json
+git add packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-loop-no-state-change.* packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-tool-loop-no-state-change.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/tool-loop-no-state-change.json
 git commit -m "feat(trace-diagnose): builtin rule #1 tool_loop_no_state_change"
 ```
 
@@ -2111,8 +2111,8 @@ git commit -m "feat(trace-diagnose): builtin rule #1 tool_loop_no_state_change"
 ## Task 13: Builtin Rule #2 — `tool_error_swallowed`
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-error-swallowed.{yaml,ts}`
-- Modify: `packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts`
+- Create: `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-error-swallowed.{yaml,ts}`
+- Modify: `packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts`
 - Test: `packages/typescript/test/builtin-rule-tool-error-swallowed.test.ts`
 - Fixture: `packages/typescript/test/fixtures/trace-diagnose/synthetic/tool-error-swallowed.json`
 
@@ -2120,7 +2120,7 @@ git commit -m "feat(trace-diagnose): builtin rule #1 tool_loop_no_state_change"
 
 - [ ] **Step 1: Write the rule yaml**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-error-swallowed.yaml`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-error-swallowed.yaml`:
 
 ```yaml
 schema_version: diagnosis-rule/v1
@@ -2167,8 +2167,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assembleTraceTree } from "../src/trace-core/diagnose/trace-shaper.js";
-import { predicate } from "../src/trace-core/diagnose/builtin-rules/tool-error-swallowed.js";
+import { assembleTraceTree } from "../src/trace-ai/diagnose/trace-shaper.js";
+import { predicate } from "../src/trace-ai/diagnose/builtin-rules/tool-error-swallowed.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2210,7 +2210,7 @@ Expected: FAIL.
 
 - [ ] **Step 5: Implement the predicate**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/tool-error-swallowed.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-error-swallowed.ts`:
 
 ```typescript
 import type { Hit, Predicate, Span, TraceTree } from "../types.js";
@@ -2262,7 +2262,7 @@ export const predicate: Predicate = (trace: TraceTree): Hit[] => {
 
 - [ ] **Step 6: Register the predicate**
 
-Modify `packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts`:
+Modify `packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts`:
 
 ```typescript
 import { registerPredicate } from "../predicate-registry.js";
@@ -2284,7 +2284,7 @@ Expected: 3 tests pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/builtin-rules/tool-error-swallowed.* packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-tool-error-swallowed.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/tool-error-swallowed.json
+git add packages/typescript/src/trace-ai/diagnose/builtin-rules/tool-error-swallowed.* packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-tool-error-swallowed.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/tool-error-swallowed.json
 git commit -m "feat(trace-diagnose): builtin rule #2 tool_error_swallowed"
 ```
 
@@ -2293,7 +2293,7 @@ git commit -m "feat(trace-diagnose): builtin rule #2 tool_error_swallowed"
 ## Task 14: Builtin Rule #3 — `retrieval_empty_no_fallback`
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/builtin-rules/retrieval-empty-no-fallback.{yaml,ts}`
+- Create: `packages/typescript/src/trace-ai/diagnose/builtin-rules/retrieval-empty-no-fallback.{yaml,ts}`
 - Modify: `register.ts`
 - Test: `packages/typescript/test/builtin-rule-retrieval-empty-no-fallback.test.ts`
 - Fixture: `packages/typescript/test/fixtures/trace-diagnose/synthetic/retrieval-empty-no-fallback.json`
@@ -2305,7 +2305,7 @@ git commit -m "feat(trace-diagnose): builtin rule #2 tool_error_swallowed"
 
 - [ ] **Step 1: Write the rule yaml**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/retrieval-empty-no-fallback.yaml`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/retrieval-empty-no-fallback.yaml`:
 
 ```yaml
 schema_version: diagnosis-rule/v1
@@ -2352,8 +2352,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assembleTraceTree } from "../src/trace-core/diagnose/trace-shaper.js";
-import { predicate } from "../src/trace-core/diagnose/builtin-rules/retrieval-empty-no-fallback.js";
+import { assembleTraceTree } from "../src/trace-ai/diagnose/trace-shaper.js";
+import { predicate } from "../src/trace-ai/diagnose/builtin-rules/retrieval-empty-no-fallback.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2395,7 +2395,7 @@ Expected: FAIL.
 
 - [ ] **Step 5: Implement the predicate**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/retrieval-empty-no-fallback.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/retrieval-empty-no-fallback.ts`:
 
 ```typescript
 import type { Hit, Predicate, Span, TraceTree } from "../types.js";
@@ -2431,7 +2431,7 @@ export const predicate: Predicate = (trace: TraceTree): Hit[] => {
 
 - [ ] **Step 6: Register the predicate**
 
-Modify `packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts` (append):
+Modify `packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts` (append):
 
 ```typescript
 import { predicate as retrievalEmptyNoFallback } from "./retrieval-empty-no-fallback.js";
@@ -2446,7 +2446,7 @@ Expected: 3 tests pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/builtin-rules/retrieval-empty-no-fallback.* packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-retrieval-empty-no-fallback.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/retrieval-empty-no-fallback.json
+git add packages/typescript/src/trace-ai/diagnose/builtin-rules/retrieval-empty-no-fallback.* packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-retrieval-empty-no-fallback.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/retrieval-empty-no-fallback.json
 git commit -m "feat(trace-diagnose): builtin rule #3 retrieval_empty_no_fallback"
 ```
 
@@ -2455,7 +2455,7 @@ git commit -m "feat(trace-diagnose): builtin rule #3 retrieval_empty_no_fallback
 ## Task 15: Builtin Rule #4 — `llm_response_truncated_no_continue`
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/builtin-rules/llm-response-truncated-no-continue.{yaml,ts}`
+- Create: `packages/typescript/src/trace-ai/diagnose/builtin-rules/llm-response-truncated-no-continue.{yaml,ts}`
 - Modify: `register.ts`
 - Test: `packages/typescript/test/builtin-rule-llm-response-truncated.test.ts`
 - Fixture: `packages/typescript/test/fixtures/trace-diagnose/synthetic/llm-response-truncated-no-continue.json`
@@ -2464,7 +2464,7 @@ git commit -m "feat(trace-diagnose): builtin rule #3 retrieval_empty_no_fallback
 
 - [ ] **Step 1: Write the rule yaml**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/llm-response-truncated-no-continue.yaml`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/llm-response-truncated-no-continue.yaml`:
 
 ```yaml
 schema_version: diagnosis-rule/v1
@@ -2510,8 +2510,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assembleTraceTree } from "../src/trace-core/diagnose/trace-shaper.js";
-import { predicate } from "../src/trace-core/diagnose/builtin-rules/llm-response-truncated-no-continue.js";
+import { assembleTraceTree } from "../src/trace-ai/diagnose/trace-shaper.js";
+import { predicate } from "../src/trace-ai/diagnose/builtin-rules/llm-response-truncated-no-continue.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2552,7 +2552,7 @@ Expected: FAIL.
 
 - [ ] **Step 5: Implement the predicate**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/llm-response-truncated-no-continue.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/llm-response-truncated-no-continue.ts`:
 
 ```typescript
 import type { Hit, Predicate, Span, TraceTree } from "../types.js";
@@ -2608,7 +2608,7 @@ Expected: 3 tests pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/builtin-rules/llm-response-truncated-no-continue.* packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-llm-response-truncated.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/llm-response-truncated-no-continue.json
+git add packages/typescript/src/trace-ai/diagnose/builtin-rules/llm-response-truncated-no-continue.* packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-llm-response-truncated.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/llm-response-truncated-no-continue.json
 git commit -m "feat(trace-diagnose): builtin rule #4 llm_response_truncated_no_continue"
 ```
 
@@ -2617,7 +2617,7 @@ git commit -m "feat(trace-diagnose): builtin rule #4 llm_response_truncated_no_c
 ## Task 16: Builtin Rule #5 — `excessive_tool_calls_per_turn`
 
 **Files:**
-- Create: `packages/typescript/src/trace-core/diagnose/builtin-rules/excessive-tool-calls-per-turn.{yaml,ts}`
+- Create: `packages/typescript/src/trace-ai/diagnose/builtin-rules/excessive-tool-calls-per-turn.{yaml,ts}`
 - Modify: `register.ts`
 - Test: `packages/typescript/test/builtin-rule-excessive-tool-calls.test.ts`
 - Fixture: `packages/typescript/test/fixtures/trace-diagnose/synthetic/excessive-tool-calls-per-turn.json`
@@ -2626,7 +2626,7 @@ git commit -m "feat(trace-diagnose): builtin rule #4 llm_response_truncated_no_c
 
 - [ ] **Step 1: Write the rule yaml**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/excessive-tool-calls-per-turn.yaml`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/excessive-tool-calls-per-turn.yaml`:
 
 ```yaml
 schema_version: diagnosis-rule/v1
@@ -2684,8 +2684,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assembleTraceTree } from "../src/trace-core/diagnose/trace-shaper.js";
-import { predicate } from "../src/trace-core/diagnose/builtin-rules/excessive-tool-calls-per-turn.js";
+import { assembleTraceTree } from "../src/trace-ai/diagnose/trace-shaper.js";
+import { predicate } from "../src/trace-ai/diagnose/builtin-rules/excessive-tool-calls-per-turn.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2730,7 +2730,7 @@ Expected: FAIL.
 
 - [ ] **Step 5: Implement the predicate**
 
-Create `packages/typescript/src/trace-core/diagnose/builtin-rules/excessive-tool-calls-per-turn.ts`:
+Create `packages/typescript/src/trace-ai/diagnose/builtin-rules/excessive-tool-calls-per-turn.ts`:
 
 ```typescript
 import type { Hit, Predicate, TraceTree } from "../types.js";
@@ -2763,7 +2763,7 @@ Expected: 3 tests pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/typescript/src/trace-core/diagnose/builtin-rules/excessive-tool-calls-per-turn.* packages/typescript/src/trace-core/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-excessive-tool-calls.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/excessive-tool-calls-per-turn.json
+git add packages/typescript/src/trace-ai/diagnose/builtin-rules/excessive-tool-calls-per-turn.* packages/typescript/src/trace-ai/diagnose/builtin-rules/register.ts packages/typescript/test/builtin-rule-excessive-tool-calls.test.ts packages/typescript/test/fixtures/trace-diagnose/synthetic/excessive-tool-calls-per-turn.json
 git commit -m "feat(trace-diagnose): builtin rule #5 excessive_tool_calls_per_turn"
 ```
 
@@ -2830,9 +2830,9 @@ Create `packages/typescript/src/commands/trace.ts`:
 ```typescript
 import yargs from "yargs";
 
-import { diagnose, TraceNotFoundError } from "../trace-core/diagnose/index.js";
-import { RuleLoadError } from "../trace-core/diagnose/rule-loader.js";
-import { RuleSchema } from "../trace-core/diagnose/schemas.js";
+import { diagnose, TraceNotFoundError } from "../trace-ai/diagnose/index.js";
+import { RuleLoadError } from "../trace-ai/diagnose/rule-loader.js";
+import { RuleSchema } from "../trace-ai/diagnose/schemas.js";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 
@@ -3148,7 +3148,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
-import { diagnose } from "../../src/trace-core/diagnose/index.js";
+import { diagnose } from "../../src/trace-ai/diagnose/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(__dirname, "..", "fixtures/trace-diagnose");
@@ -3236,7 +3236,7 @@ test("e2e: real fixture (status_quo de39cbe9) triggers zero findings", async () 
 
 test("e2e: report file is valid yaml conforming to schema", async () => {
   const yaml = await import("js-yaml");
-  const { ReportSchema } = await import("../../src/trace-core/diagnose/schemas.js");
+  const { ReportSchema } = await import("../../src/trace-ai/diagnose/schemas.js");
   const data = await loadFixture(path.join(FIX, "synthetic/tool-loop-no-state-change.json"));
   const m = mockFetchSequence([data]);
   const tmpOut = path.join(os.tmpdir(), `diag-yaml-${Date.now()}.yaml`);

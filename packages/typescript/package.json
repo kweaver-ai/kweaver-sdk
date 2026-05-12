@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "dev": "tsx watch src/cli.ts",
-    "build": "node node_modules/typescript/bin/tsc -p tsconfig.json && rm -rf dist/templates && cp -R src/templates dist/templates && cp src/trace-core/diagnose/builtin-rules/*.yaml dist/trace-core/diagnose/builtin-rules/ && mkdir -p dist/trace-core/agent/prompts && cp src/trace-core/agent/prompts/*.prompt.md dist/trace-core/agent/prompts/ && cp src/trace-core/diagnose/builtin-rules/*.prompt.md dist/trace-core/diagnose/builtin-rules/ 2>/dev/null || true",
+    "build": "node node_modules/typescript/bin/tsc -p tsconfig.json && rm -rf dist/templates && cp -R src/templates dist/templates && cp src/trace-ai/diagnose/builtin-rules/*.yaml dist/trace-ai/diagnose/builtin-rules/ && mkdir -p dist/agent-providers/prompts && cp src/agent-providers/prompts/*.prompt.md dist/agent-providers/prompts/ && cp src/trace-ai/diagnose/builtin-rules/*.prompt.md dist/trace-ai/diagnose/builtin-rules/ 2>/dev/null || true",
     "start": "node ./dist/cli.js",
     "lint": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",

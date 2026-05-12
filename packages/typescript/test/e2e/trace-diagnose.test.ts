@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
-import { diagnose } from "../../src/trace-core/diagnose/index.js";
+import { diagnose } from "../../src/trace-ai/diagnose/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(__dirname, "..", "fixtures/trace-diagnose");
@@ -123,7 +123,7 @@ test("e2e: real fixture (truncation: e5fe0274 from 192.168.40.62) fires llm_resp
 
 test("e2e: report file is valid yaml conforming to schema", async () => {
   const yaml = await import("js-yaml");
-  const { ReportSchema } = await import("../../src/trace-core/diagnose/schemas.js");
+  const { ReportSchema } = await import("../../src/trace-ai/diagnose/schemas.js");
   const data = await loadFixture(path.join(FIX, "synthetic/tool-loop-no-state-change.json"));
   const m = mockFetchSequence([data]);
   const tmpOut = path.join(os.tmpdir(), `diag-yaml-${Date.now()}.yaml`);

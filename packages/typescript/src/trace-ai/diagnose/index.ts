@@ -12,18 +12,21 @@ import { evaluateRubricRules } from "./agent-binding.js";
 import { assembleReport, reportToYamlObject, symbolicHitsToFindings } from "./report-assembler.js";
 import { renderReportMarkdown } from "./report-markdown.js";
 import type { DiagnoseOpts, Report } from "./types.js";
-import type { AgentRegistry } from "../agent/registry.js";
-import { defaultRegistry } from "../agent/registry.js";
+import type { AgentRegistry } from "../../agent-providers/registry.js";
+import { defaultRegistry } from "../../agent-providers/registry.js";
 import {
   defaultPromptRegistry,
   PromptTemplateRegistry,
-} from "../agent/prompt-template.js";
+} from "../../agent-providers/prompt-template.js";
 
 import "./builtin-rules/register.js";  // side effect: registers all builtin predicates
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUILTIN_DIR = path.join(__dirname, "builtin-rules");
-const SHARED_PROMPT_DIR = path.join(__dirname, "..", "agent", "prompts");
+// Prompts moved to top-level agent-providers/ when the trace-core/ container
+// was split (refactor 2026-05-12). diagnose/ now sits two levels under src/,
+// so we go up two and across.
+const SHARED_PROMPT_DIR = path.join(__dirname, "..", "..", "agent-providers", "prompts");
 
 export class TraceNotFoundError extends Error {
   constructor(conversationId: string) {

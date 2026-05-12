@@ -4,14 +4,14 @@ import assert from "node:assert/strict";
 import {
   languageInstructionFor,
   PromptTemplateRegistry,
-} from "../src/trace-core/agent/prompt-template.js";
-import { RuleSchema } from "../src/trace-core/diagnose/schemas.js";
-import { rubricOutputToZod } from "../src/trace-core/diagnose/output-schema-converter.js";
-import { evaluateRubricRules } from "../src/trace-core/diagnose/agent-binding.js";
-import { agentSynthesize } from "../src/trace-core/diagnose/synthesizer-agent.js";
-import { AgentRegistry } from "../src/trace-core/agent/registry.js";
-import { StubAgentProvider } from "../src/trace-core/agent/providers/stub.js";
-import type { Finding, Rule, RubricSpec, Span, TraceTree } from "../src/trace-core/diagnose/types.js";
+} from "../src/agent-providers/prompt-template.js";
+import { RuleSchema } from "../src/trace-ai/diagnose/schemas.js";
+import { rubricOutputToZod } from "../src/trace-ai/diagnose/output-schema-converter.js";
+import { evaluateRubricRules } from "../src/trace-ai/diagnose/agent-binding.js";
+import { agentSynthesize } from "../src/trace-ai/diagnose/synthesizer-agent.js";
+import { AgentRegistry } from "../src/agent-providers/registry.js";
+import { StubAgentProvider } from "../src/agent-providers/providers/stub.js";
+import type { Finding, Rule, RubricSpec, Span, TraceTree } from "../src/trace-ai/diagnose/types.js";
 
 test("languageInstructionFor('en') returns empty string so the placeholder collapses cleanly", () => {
   assert.equal(languageInstructionFor("en"), "");

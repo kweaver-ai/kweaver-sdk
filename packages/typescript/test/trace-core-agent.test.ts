@@ -11,7 +11,7 @@ import {
   StubAgentProvider,
   AgentProviderError,
   render,
-} from "../src/trace-core/agent/index.js";
+} from "../src/agent-providers/index.js";
 
 // ── AgentRegistry ───────────────────────────────────────────────────────────
 

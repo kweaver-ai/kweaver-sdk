@@ -1,12 +1,12 @@
 import yargs from "yargs";
 
-import { derivePaths, diagnose, TraceNotFoundError } from "../trace-core/diagnose/index.js";
-import { RuleLoadError } from "../trace-core/diagnose/rule-loader.js";
-import { RuleProbeError } from "../trace-core/diagnose/signal-probe.js";
-import { RuleSchema } from "../trace-core/diagnose/schemas.js";
+import { derivePaths, diagnose, TraceNotFoundError } from "../trace-ai/diagnose/index.js";
+import { RuleLoadError } from "../trace-ai/diagnose/rule-loader.js";
+import { RuleProbeError } from "../trace-ai/diagnose/signal-probe.js";
+import { RuleSchema } from "../trace-ai/diagnose/schemas.js";
 import { ensureValidToken } from "../auth/oauth.js";
-import { defaultRegistry } from "../trace-core/agent/registry.js";
-import { ClaudeCodeSubprocessProvider } from "../trace-core/agent/providers/claude-code-subprocess.js";
+import { defaultRegistry } from "../agent-providers/registry.js";
+import { ClaudeCodeSubprocessProvider } from "../agent-providers/providers/claude-code-subprocess.js";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 

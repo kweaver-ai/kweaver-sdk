@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { assembleTraceTree } from "../src/trace-core/diagnose/trace-shaper.js";
+import { assembleTraceTree } from "../src/trace-ai/diagnose/trace-shaper.js";
 
 const baseSpan = (id: string, parent: string | null, attrs: Record<string, unknown> = {}) => ({
   spanId: id,

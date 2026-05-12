@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { agentSynthesize } from "../src/trace-core/diagnose/synthesizer-agent.js";
-import { PromptTemplateRegistry } from "../src/trace-core/agent/prompt-template.js";
-import { StubAgentProvider } from "../src/trace-core/agent/providers/stub.js";
-import type { Finding } from "../src/trace-core/diagnose/types.js";
+import { agentSynthesize } from "../src/trace-ai/diagnose/synthesizer-agent.js";
+import { PromptTemplateRegistry } from "../src/agent-providers/prompt-template.js";
+import { StubAgentProvider } from "../src/agent-providers/providers/stub.js";
+import type { Finding } from "../src/trace-ai/diagnose/types.js";
 
 function makeFinding(overrides: Partial<Finding> = {}): Finding {
   return {

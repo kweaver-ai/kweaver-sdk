@@ -1,5 +1,5 @@
 /**
- * `trace-core/agent/` is a cross-trace-ai shared abstraction.
+ * `agent-providers/` is a cross-trace-ai shared abstraction.
  *
  * Why it lives above `diagnose/`: future trace-ai modules (M6 Agent
  * Synthesizer, future Triage, scan-mode in issue #2) all need to invoke

@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { templateSynthesize } from "../src/trace-core/diagnose/synthesizer-template.js";
-import type { Finding } from "../src/trace-core/diagnose/types.js";
+import { templateSynthesize } from "../src/trace-ai/diagnose/synthesizer-template.js";
+import type { Finding } from "../src/trace-ai/diagnose/types.js";
 
 const finding = (overrides: Partial<Finding> = {}): Finding => ({
   ruleId: "r1",

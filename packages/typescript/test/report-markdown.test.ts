@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { renderReportMarkdown } from "../src/trace-core/diagnose/report-markdown.js";
-import { derivePaths } from "../src/trace-core/diagnose/index.js";
-import type { Finding, Report, Summary } from "../src/trace-core/diagnose/types.js";
+import { renderReportMarkdown } from "../src/trace-ai/diagnose/report-markdown.js";
+import { derivePaths } from "../src/trace-ai/diagnose/index.js";
+import type { Finding, Report, Summary } from "../src/trace-ai/diagnose/types.js";
 
 function makeReport(overrides: Partial<Report> = {}): Report {
   const summary: Summary = {

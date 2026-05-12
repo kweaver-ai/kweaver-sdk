@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 
-import { ClaudeCodeSubprocessProvider } from "../src/trace-core/agent/providers/claude-code-subprocess.js";
-import { AgentProviderError } from "../src/trace-core/agent/types.js";
+import { ClaudeCodeSubprocessProvider } from "../src/agent-providers/providers/claude-code-subprocess.js";
+import { AgentProviderError } from "../src/agent-providers/types.js";
 
 /**
  * The provider shells out to `claude`. Tests inject a fake script via the

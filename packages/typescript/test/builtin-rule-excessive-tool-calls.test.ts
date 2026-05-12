@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assembleTraceTree } from "../src/trace-core/diagnose/trace-shaper.js";
-import { predicate } from "../src/trace-core/diagnose/builtin-rules/excessive-tool-calls-per-turn.js";
+import { assembleTraceTree } from "../src/trace-ai/diagnose/trace-shaper.js";
+import { predicate } from "../src/trace-ai/diagnose/builtin-rules/excessive-tool-calls-per-turn.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -138,6 +138,7 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
   const promptRegistry = defaultPromptRegistry;
   await ensurePromptsLoaded(promptRegistry);
   const writeFormats = opts.format ?? "both";
+  const tracesDir = path.join(opts.out, "traces");
 
   // 1. Single-agent validation (also caches first batch of getSpansByConversationId results)
   const cachedSpans = new Map<string, RawSpan[]>();
@@ -181,7 +182,8 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
       chunk.map(async (convId) => {
         const r = await runPerTracePipeline({
           convId,
-          outDir: opts.out,
+          outDir: tracesDir,
+          legacyOutDir: opts.out,
           runDiagnose: async (id, partial) => {
             const rawSpans =
               cachedSpans.get(id) ??
@@ -243,7 +245,7 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
         });
 
         // Re-read the (possibly just-written, possibly reused) report from disk
-        const report = await readReportFromDisk(path.join(opts.out, `${convId}.yaml`));
+        const report = await readReportFromDisk(path.join(tracesDir, `${convId}.yaml`));
         return { convId, report, reused: r.reused };
       }),
     );
@@ -333,13 +335,13 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
       });
       // Re-write yaml + md with updated findings
       await fs.writeFile(
-        path.join(opts.out, `${pt.convId}.yaml`),
+        path.join(tracesDir, `${pt.convId}.yaml`),
         yaml.dump(reportToYamlObject(pt.report)),
         "utf8",
       );
       if (writeFormats !== "yaml") {
         await fs.writeFile(
-          path.join(opts.out, `${pt.convId}.md`),
+          path.join(tracesDir, `${pt.convId}.md`),
           renderReportMarkdown(pt.report, { conversationId: pt.convId, businessDomain: opts.businessDomain }),
           "utf8",
         );
@@ -350,7 +352,7 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
       if (!pt) continue;
       pt.report.run.rulesSkipped.push({ ruleId, reason: s.reason });
       await fs.writeFile(
-        path.join(opts.out, `${pt.convId}.yaml`),
+        path.join(tracesDir, `${pt.convId}.yaml`),
         yaml.dump(reportToYamlObject(pt.report)),
         "utf8",
       );
@@ -408,7 +410,7 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
     per_trace_index: perTrace.map((p) => ({
       trace_id: p.report.trace.traceId,
       conversation_id: p.convId,
-      report_path: `${p.convId}.yaml`,
+      report_path: `traces/${p.convId}.yaml`,
       finding_count: p.report.findings.length,
     })),
   };
@@ -456,7 +458,7 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
 
   return {
     scanSummaryPath: scanSummaryYamlPath,
-    perTraceReportPaths: perTrace.map((p) => path.join(opts.out, `${p.convId}.yaml`)),
+    perTraceReportPaths: perTrace.map((p) => path.join(tracesDir, `${p.convId}.yaml`)),
     tracesDiagnosed: allReports.length,
     tracesReused,
   };

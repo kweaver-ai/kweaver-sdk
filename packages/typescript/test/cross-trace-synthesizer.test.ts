@@ -41,20 +41,21 @@ test("runCrossTraceSynthesizer: tier=std, prompt contains agent_id", async () =>
   assert.match(stub.calls[0].prompt, /agent=01KR_test/);
 });
 
-test("runCrossTraceSynthesizer: schema_violation → summary=null + error recorded", async () => {
+test("runCrossTraceSynthesizer: schema_violation → deterministic fallback summary + error recorded", async () => {
   const stub = new StubAgentProvider({
     name: "stub",
     responses: [{ headline: "h" }],   // missing required fields
   });
   const out = await runCrossTraceSynthesizer({
     agentId: "01KR_test",
-    aggregates: { rule_frequency: [] },
+    aggregates: { rule_frequency: [{ rule_id: "tool_loop_no_state_change", count: 2, severity_breakdown: { high: 1, medium: 1, low: 0 } }] },
     samples: { samples: [] },
-    nTotal: 0,
+    nTotal: 3,
     provider: stub,
     promptRegistry: buildPromptRegistry(),
   });
-  assert.equal(out.summary, null);
+  assert.equal(out.summary?.primary_root_cause?.rule_ids[0], "tool_loop_no_state_change");
+  assert.equal(out.summary?.fix_priority[0].affected_trace_count, 2);
   assert.ok(out.fallbackReason);
   assert.match(out.fallbackReason!, /schema_violation|agent-error/);
 });

@@ -77,7 +77,7 @@ test("e2e batch rubric failure: malformed rubric response → traces have rules_
     let anySkipped = false;
     for (const convId of ["fail_a", "fail_b"]) {
       const reportRaw = yaml.load(
-        await fs.readFile(path.join(out, `${convId}.yaml`), "utf8"),
+        await fs.readFile(path.join(out, "traces", `${convId}.yaml`), "utf8"),
       ) as Record<string, unknown>;
       const run = reportRaw.run as Record<string, unknown>;
       const skipped = run.rules_skipped as Array<{ rule_id: string; reason: string }>;

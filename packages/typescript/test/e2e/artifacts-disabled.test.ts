@@ -76,7 +76,7 @@ test("e2e --no-artifacts batch: no artifacts dir, but per-trace reports + scan-s
     assert.equal(result.tracesDiagnosed, 2);
     for (const conv of ["noart_a", "noart_b"]) {
       const yamlExists = await fs
-        .stat(path.join(out, `${conv}.yaml`))
+        .stat(path.join(out, "traces", `${conv}.yaml`))
         .then(() => true)
         .catch(() => false);
       assert.ok(yamlExists, `${conv}.yaml must still be written`);

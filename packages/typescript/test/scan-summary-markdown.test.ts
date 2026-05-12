@@ -37,7 +37,7 @@ function makeScanSummary(overrides: Partial<ScanSummary> = {}): ScanSummary {
       ],
     },
     per_trace_index: [
-      { trace_id: "tr_a", conversation_id: "conv_a", report_path: "conv_a.yaml", finding_count: 1 },
+      { trace_id: "tr_a", conversation_id: "conv_a", report_path: "traces/conv_a.yaml", finding_count: 1 },
     ],
     ...overrides,
   };
@@ -59,7 +59,7 @@ test("renderScanSummaryMarkdown: aggregates rule_frequency rendered as table", (
 test("renderScanSummaryMarkdown: per_trace_index rendered as table with report_path", () => {
   const md = renderScanSummaryMarkdown(makeScanSummary());
   assert.match(md, /## Per-Trace Reports/);
-  assert.match(md, /\| `conv_a` \| .* \| 1 \| \[yaml\]\(conv_a\.yaml\) \/ \[md\]\(conv_a\.md\) \|/);
+  assert.match(md, /\| `conv_a` \| .* \| 1 \| \[yaml\]\(traces\/conv_a\.yaml\) \/ \[md\]\(traces\/conv_a\.md\) \|/);
 });
 
 test("renderScanSummaryMarkdown: summary=null → Stage-4 failure note + aggregates still rendered", () => {

@@ -41,14 +41,14 @@ test("e2e batch happy-path: 3 conv_ids, single agent, full pipeline produces all
     assert.equal(result.tracesReused, 0);
 
     for (const conv of ["conv_a", "conv_b", "conv_c"]) {
-      const yamlPath = path.join(out, `${conv}.yaml`);
+      const yamlPath = path.join(out, "traces", `${conv}.yaml`);
       const exists = await fs
         .stat(yamlPath)
         .then(() => true)
         .catch(() => false);
       assert.ok(exists, `expected ${conv}.yaml`);
 
-      const mdPath = path.join(out, `${conv}.md`);
+      const mdPath = path.join(out, "traces", `${conv}.md`);
       const mdExists = await fs
         .stat(mdPath)
         .then(() => true)
@@ -70,6 +70,8 @@ test("e2e batch happy-path: 3 conv_ids, single agent, full pipeline produces all
       (summary as { schema_version: string }).schema_version,
       "scan-summary/v1",
     );
+    const perTraceIndex = (summary as { per_trace_index: Array<{ report_path: string }> }).per_trace_index;
+    assert.ok(perTraceIndex.every((item) => item.report_path.startsWith("traces/")));
 
     const summaryMdPath = path.join(out, "scan-summary.md");
     const summaryMdExists = await fs
@@ -81,7 +83,7 @@ test("e2e batch happy-path: 3 conv_ids, single agent, full pipeline produces all
     // Verify that {{category}} placeholder was rendered with the verdict's category.
     // The stub provider returns category="stale_results"; the rule's change_template is
     // "agent retried because of '{{category}}'; address that intent..."
-    const sampleYamlPath = path.join(out, "conv_a.yaml");
+    const sampleYamlPath = path.join(out, "traces", "conv_a.yaml");
     const sampleYaml = await fs.readFile(sampleYamlPath, "utf8");
     assert.ok(!/\{\{category\}\}/.test(sampleYaml), "change_template's {{category}} placeholder must be rendered, not left literal");
     assert.match(sampleYaml, /'stale_results'/, "rendered change should mention the verdict's category 'stale_results'");

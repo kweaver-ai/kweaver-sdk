@@ -69,7 +69,7 @@ test("e2e batch enforces single agent: conv_a→agent_A, conv_b→agent_B → th
         (e as SingleAgentValidationError).code === "mixed",
     );
     const partialExists = await fs
-      .stat(`${out}/conv_a.yaml`)
+      .stat(`${out}/traces/conv_a.yaml`)
       .then(() => true)
       .catch(() => false);
     assert.equal(

@@ -25,8 +25,8 @@ test("e2e batch --format=yaml: emits .yaml only, no .md", async () => {
       timeoutMs: 60000, maxParallel: 4,
       baseUrl: "http://x", token: "tk", businessDomain: "bd_public",
     });
-    assert.ok(await exists(path.join(out, "conv_a.yaml")), "per-trace yaml must exist");
-    assert.ok(!await exists(path.join(out, "conv_a.md")), "per-trace md must NOT exist under --format=yaml");
+    assert.ok(await exists(path.join(out, "traces", "conv_a.yaml")), "per-trace yaml must exist");
+    assert.ok(!await exists(path.join(out, "traces", "conv_a.md")), "per-trace md must NOT exist under --format=yaml");
     assert.ok(await exists(path.join(out, "scan-summary.yaml")), "scan-summary.yaml must exist");
     assert.ok(!await exists(path.join(out, "scan-summary.md")), "scan-summary.md must NOT exist under --format=yaml");
   } finally {
@@ -48,8 +48,8 @@ test("e2e batch --format=both (default): emits both .yaml and .md", async () => 
       timeoutMs: 60000, maxParallel: 4,
       baseUrl: "http://x", token: "tk", businessDomain: "bd_public",
     });
-    assert.ok(await exists(path.join(out, "conv_a.yaml")), "per-trace yaml");
-    assert.ok(await exists(path.join(out, "conv_a.md")), "per-trace md (default both)");
+    assert.ok(await exists(path.join(out, "traces", "conv_a.yaml")), "per-trace yaml");
+    assert.ok(await exists(path.join(out, "traces", "conv_a.md")), "per-trace md (default both)");
     assert.ok(await exists(path.join(out, "scan-summary.yaml")), "scan-summary.yaml");
     assert.ok(await exists(path.join(out, "scan-summary.md")), "scan-summary.md (default both)");
   } finally {

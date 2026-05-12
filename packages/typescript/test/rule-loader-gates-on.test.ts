@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import yaml from "js-yaml";
 
 import { RuleSchema } from "../src/trace-ai/diagnose/schemas.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BUILTIN_RULES = path.join(__dirname, "..", "src", "trace-ai", "diagnose", "builtin-rules");
 
 const minimalRubricYaml = {
   schema_version: "diagnosis-rule/v1",
@@ -49,4 +56,10 @@ test("RuleSchema: gates_on must be string array (rejects number)", () => {
   const bad = { ...minimalRubricYaml, rubric: { ...minimalRubricYaml.rubric, gates_on: [123] } };
   const r = RuleSchema.safeParse(bad);
   assert.equal(r.success, false);
+});
+
+test("builtin tool_retry_intent_mismatch is gated by tool_loop_no_state_change in batch mode", () => {
+  const text = fs.readFileSync(path.join(BUILTIN_RULES, "tool-retry-intent-mismatch.yaml"), "utf8");
+  const parsed = RuleSchema.parse(yaml.load(text));
+  assert.deepEqual(parsed.rubric?.gates_on, ["tool_loop_no_state_change"]);
 });

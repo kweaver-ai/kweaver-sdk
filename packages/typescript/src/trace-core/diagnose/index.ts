@@ -10,6 +10,7 @@ import { runRules, RuleProbeError, rubricRules } from "./signal-probe.js";
 import { agentSynthesize } from "./synthesizer-agent.js";
 import { evaluateRubricRules } from "./agent-binding.js";
 import { assembleReport, reportToYamlObject, symbolicHitsToFindings } from "./report-assembler.js";
+import { renderReportMarkdown } from "./report-markdown.js";
 import type { DiagnoseOpts, Report } from "./types.js";
 import type { AgentRegistry } from "../agent/registry.js";
 import { defaultRegistry } from "../agent/registry.js";
@@ -161,16 +162,46 @@ export async function diagnose(
   });
 
   // ── 6. Emit ──────────────────────────────────────────────────────────────
+  const yamlText = yaml.dump(reportToYamlObject(report));
+  const format = opts.format ?? (opts.out !== null ? "both" : "yaml");
   if (opts.out !== null) {
     await fs.mkdir(path.dirname(opts.out), { recursive: true });
-    await fs.writeFile(opts.out, yaml.dump(reportToYamlObject(report)), "utf8");
+    const { yamlPath, mdPath } = derivePaths(opts.out, format);
+    if (yamlPath !== null) await fs.writeFile(yamlPath, yamlText, "utf8");
+    if (mdPath !== null) await fs.writeFile(mdPath, renderReportMarkdown(report), "utf8");
   } else {
-    process.stdout.write(yaml.dump(reportToYamlObject(report)));
+    // stdout — markdown to stdout would corrupt downstream `yq` / yaml consumers, so
+    // 'both' degrades to yaml-only. Users who want md on stdout pass --format=markdown.
+    if (format === "markdown") {
+      process.stdout.write(renderReportMarkdown(report));
+    } else {
+      process.stdout.write(yamlText);
+    }
   }
   if (report.findings.length === 0) {
     process.stderr.write("no findings\n");
   }
   return report;
+}
+
+/** Resolve which file paths to write given the user-supplied --out and format.
+ *  Both: derive the missing extension from the given one; if --out had no
+ *  recognized extension, append .yaml / .md. Single-format: write to --out
+ *  verbatim (caller's extension is honored as-is). */
+export function derivePaths(out: string, format: 'yaml' | 'markdown' | 'both'): { yamlPath: string | null; mdPath: string | null } {
+  if (format === "yaml") return { yamlPath: out, mdPath: null };
+  if (format === "markdown") return { yamlPath: null, mdPath: out };
+  // both
+  const lower = out.toLowerCase();
+  if (lower.endsWith(".yaml") || lower.endsWith(".yml")) {
+    const stem = out.slice(0, out.lastIndexOf("."));
+    return { yamlPath: out, mdPath: `${stem}.md` };
+  }
+  if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
+    const stem = out.slice(0, out.lastIndexOf("."));
+    return { yamlPath: `${stem}.yaml`, mdPath: out };
+  }
+  return { yamlPath: `${out}.yaml`, mdPath: `${out}.md` };
 }
 
 function extractAgentId(tree: ReturnType<typeof assembleTraceTree>): string | null {

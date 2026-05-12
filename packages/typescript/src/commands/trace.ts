@@ -1,6 +1,6 @@
 import yargs from "yargs";
 
-import { diagnose, TraceNotFoundError } from "../trace-core/diagnose/index.js";
+import { derivePaths, diagnose, TraceNotFoundError } from "../trace-core/diagnose/index.js";
 import { RuleLoadError } from "../trace-core/diagnose/rule-loader.js";
 import { RuleProbeError } from "../trace-core/diagnose/signal-probe.js";
 import { RuleSchema } from "../trace-core/diagnose/schemas.js";
@@ -24,6 +24,7 @@ export interface ParsedTraceArgs {
   rulesDir: string | null;
   noBuiltin: boolean;
   noLlm: boolean;
+  format: 'yaml' | 'markdown' | 'both' | null;
   baseUrl: string | null;
   token: string | null;
   businessDomain: string | null;
@@ -46,6 +47,7 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
     .option("rules", { type: "string", default: undefined })
     .option("builtin", { type: "boolean", default: true })  // --no-builtin sets this to false
     .option("llm", { type: "boolean", default: true })      // --no-llm sets this to false (PR-B reversal)
+    .option("format", { type: "string", choices: ["yaml", "markdown", "both"], default: undefined })
     .option("token", { type: "string" })
     .option("base-url", { type: "string" })
     .option("business-domain", { alias: "bd", type: "string" })
@@ -59,6 +61,7 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
     rulesDir: parsed.rules ?? null,
     noBuiltin: !(parsed.builtin as boolean),
     noLlm: !(parsed.llm as boolean),
+    format: (parsed.format as 'yaml' | 'markdown' | 'both' | undefined) ?? null,
     baseUrl: (parsed.baseUrl as string | undefined) ?? null,
     token: (parsed.token as string | undefined) ?? null,
     businessDomain: (parsed.businessDomain as string | undefined) ?? null,
@@ -72,6 +75,7 @@ function defaults(sub: ParsedTraceArgs["subcommand"]): ParsedTraceArgs {
     rulesDir: null,
     noBuiltin: false,
     noLlm: false,
+    format: null,
     baseUrl: null,
     token: null,
     businessDomain: null,
@@ -91,6 +95,12 @@ Subcommands:
     --no-llm                                  Disable LLM-judged rubric rules and the agent synthesizer.
                                               Rubric findings are skipped (recorded in rules_skipped);
                                               the within-trace summary falls back to template mode.
+    --format <yaml|markdown|both>             Output format. yaml is the machine-readable source of truth;
+                                              markdown is the human-readable view (paste into tickets / PRs).
+                                              When --out is a file path, both = write <stem>.yaml AND
+                                              <stem>.md side by side (default for --out).
+                                              When piping to stdout (no --out), default is yaml; pass
+                                              --format=markdown to emit markdown instead.
 
   trace diagnose rules validate <rule.yaml>   Validate a rule yaml file (exit 0 ok, 6 fail)
 
@@ -142,17 +152,30 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
   }
   if (!args.noLlm) ensureDefaultProviderRegistered();
   try {
-    await diagnose(args.conversationId, {
+    const report = await diagnose(args.conversationId, {
       out: args.out,
       rulesDir: args.rulesDir,
       noBuiltin: args.noBuiltin,
       noLlm: args.noLlm,
+      format: args.format ?? undefined,
       agentProvider: null,
       timeoutMs: 60000,
       baseUrl,
       token,
       businessDomain: bd,
     });
+    // Tell the user which file(s) we wrote, so they know whether to look for
+    // .yaml, .md, or both.
+    if (args.out !== null) {
+      const fmt = args.format ?? "both";
+      const { yamlPath, mdPath } = derivePaths(args.out, fmt);
+      const written: string[] = [];
+      if (yamlPath !== null) written.push(yamlPath);
+      if (mdPath !== null) written.push(mdPath);
+      if (written.length > 0) {
+        process.stderr.write(`wrote ${written.join(" + ")} (${report.findings.length} findings)\n`);
+      }
+    }
     return 0;
   } catch (e) {
     if (e instanceof TraceNotFoundError) {

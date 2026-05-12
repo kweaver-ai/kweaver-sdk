@@ -31,3 +31,23 @@ test("parseTraceArgs: missing subcommand returns help intent", () => {
   const r = parseTraceArgs([]);
   assert.equal(r.subcommand, "help");
 });
+
+test("parseTraceArgs: default format is null (resolved to 'both' by diagnose when --out given)", () => {
+  const r = parseTraceArgs(["diagnose", "tr_x", "--out", "out.yaml"]);
+  assert.equal(r.format, null);
+});
+
+test("parseTraceArgs: --format=markdown parses", () => {
+  const r = parseTraceArgs(["diagnose", "tr_x", "--format", "markdown"]);
+  assert.equal(r.format, "markdown");
+});
+
+test("parseTraceArgs: --format=yaml parses", () => {
+  const r = parseTraceArgs(["diagnose", "tr_x", "--format", "yaml"]);
+  assert.equal(r.format, "yaml");
+});
+
+test("parseTraceArgs: --format=both parses", () => {
+  const r = parseTraceArgs(["diagnose", "tr_x", "--format", "both"]);
+  assert.equal(r.format, "both");
+});

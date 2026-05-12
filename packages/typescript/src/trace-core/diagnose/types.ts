@@ -145,4 +145,13 @@ export interface DiagnoseOpts {
   baseUrl: string;
   token: string;
   businessDomain: string;
+  /**
+   * Output format(s). yaml is the source of truth (always re-derivable into
+   * markdown). When `--out` is a file path, `both` writes <stem>.yaml +
+   * <stem>.md side by side; `yaml` or `markdown` writes a single file at the
+   * given path. When `--out` is null (stdout), `both` collapses to yaml only —
+   * piping markdown to a downstream YAML consumer would silently corrupt it.
+   * Default: 'both' when out is a file, 'yaml' when stdout.
+   */
+  format?: 'yaml' | 'markdown' | 'both';
 }

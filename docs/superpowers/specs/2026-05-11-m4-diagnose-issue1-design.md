@@ -34,7 +34,8 @@ This work is intentionally isolated and lands as a new top-level subtree under `
 ## Non-goals
 
 - Do not implement a remote `decision-agent` provider — ship as stub with TODO; real implementation deferred to post-MVP.
-- Do not implement `kweaver trace diagnose scan` (batch / time-window mode) — deferred to issue #2.
+- Do not implement `kweaver trace diagnose scan` (time-window / tenant-filtered batch) — deferred to issue #2.
+- Do not implement `kweaver trace diagnose --traces=<id-list>` (explicit conversation-id list batch, named in vision §3.1 L383) — deferred to issue #2 as a sibling entry point to `scan`. Both share the same Stage-1 → Stage-3 pipeline; the only difference is the trace source (streaming search vs. explicit enumeration). Until issue #2 lands, callers needing batch coverage must shell-loop over `diagnose <conv_id>` invocations and aggregate the resulting YAML reports manually.
 - Do not implement `diagnose rules list`. Teams can use `ls diagnosis-rules/`.
 - Do not allow team-authored TypeScript predicates. Team YAML files may only reference `predicate: builtin:<name>` or define inline `rubric:` blocks.
 - Do not introduce `ajv` or any other JSON Schema runtime. Schema validation uses `zod`.
@@ -110,6 +111,7 @@ packages/typescript/src/
         ├── agent-binding.ts                    # Stage-2: Rubric -> AgentProvider.invoke -> RubricJudgment
         ├── synthesizer.ts                      # Stage-3: (meta, findings[]) -> Summary; LLM via AgentProvider OR template fallback under --no-llm
         ├── report-assembler.ts                 # findings + summary + meta -> Report (template rendering)
+        ├── report-markdown.ts                  # Report -> human-readable markdown projection (--format=markdown|both)
         └── builtin-rules/
             ├── tool-loop-no-state-change.yaml + .ts
             ├── tool-error-swallowed.yaml + .ts
@@ -457,6 +459,7 @@ kweaver trace diagnose <trace_id>
   [--rules <dir>]                           # override <cwd>/diagnosis-rules/
   [--no-builtin]                            # disable the 5 symbolic baselines (debug only)
   [--no-llm]                                # skip rubric rules; symbolic only
+  [--format yaml|markdown|both]             # yaml = source of truth; markdown = human view; both = write both side by side. Default: 'both' when --out is a file, 'yaml' when stdout.
   [--agent-provider <name>]                 # default: 'claude-code'; testing: 'stub'
   [--timeout-ms <n>]                        # per-rubric agent invocation; default 60000
   [-bd | --business-domain <bd>]            # match existing kweaver-sdk convention
@@ -467,6 +470,8 @@ kweaver trace diagnose rules validate <rule.yaml>
 ```
 
 Default `--out` strategy: if the directory does not exist, it is created (`mkdir -p`). If `--out -` is passed, the report is written to stdout (used by tests and pipelines).
+
+**Output format**: YAML is canonical (machine-readable, schema-validated). Markdown is a deterministic projection of the same `Report` object via `report-markdown.ts` — there are no facts in the md that are not in the yaml. When `--out diagnosis/refund.yaml --format=both` is given, the renderer writes `diagnosis/refund.yaml` + `diagnosis/refund.md` side by side; user can paste the md straight into a ticket / PR / wiki while the yaml lives in git for tooling. Md → YAML round-tripping is intentionally NOT supported (md is lossy by design — the `verify_with.suggested_eval_case.query_id` etc. structured fields are flattened into prose).
 
 Help output and all log lines must be in English (per `AGENTS.md`).
 

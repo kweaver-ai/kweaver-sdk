@@ -72,6 +72,35 @@ function buildTracesYaml(chunk: BatchTraceItem[]): string {
 }
 
 /**
+ * Takes the single-verdict raw JSON Schema object (from rule YAML's `output_schema`
+ * block) and returns a wrapper schema that:
+ *   1. Injects `trace_id` into the item's `required` array and `properties` map.
+ *   2. Wraps the augmented item inside `{ trace_results: array<augmented-item> }`.
+ *
+ * This ensures the prompt's `output_schema` block instructs the LLM to emit
+ * `trace_id` on every verdict, matching the zod schema used for validation.
+ */
+function wrapSchemaForBatch(single: Record<string, unknown>): Record<string, unknown> {
+  const required = Array.isArray(single.required)
+    ? [...(single.required as string[]), "trace_id"]
+    : ["trace_id"];
+  const properties: Record<string, unknown> = {
+    ...((single.properties as Record<string, unknown>) ?? {}),
+    trace_id: { type: "string", description: "Echo back the trace_id from input" },
+  };
+  return {
+    type: "object",
+    required: ["trace_results"],
+    properties: {
+      trace_results: {
+        type: "array",
+        items: { ...single, type: "object", required, properties },
+      },
+    },
+  };
+}
+
+/**
  * Stage-2 batched rubric evaluator. Splits flagged traces into chunks of K
  * (default 10), one LLM call per chunk, then validates each per-trace verdict
  * against the rule's output schema PLUS two ground-truth checks:
@@ -103,7 +132,7 @@ export async function runBatchedRubric(opts: RunBatchedRubricOpts): Promise<Batc
       agent_id: agentId,
       judge_question: rule.judgeQuestion,
       traces_yaml: buildTracesYaml(chunk),
-      output_schema: rule.outputSchemaRaw,
+      output_schema: wrapSchemaForBatch(rule.outputSchemaRaw),
       language_instruction: languageInstructionFor(opts.lang ?? "en"),
     });
 
@@ -112,8 +141,13 @@ export async function runBatchedRubric(opts: RunBatchedRubricOpts): Promise<Batc
     // rule.outputSchema is the SINGLE-verdict shape (zod converted from rule YAML's
     // output_schema block). The Stage-2 batched prompt asks the LLM to return
     // { trace_results: [<verdict>, ...] }, so we wrap before validation.
+    // We also extend each array item with trace_id (the LLM echoes back the
+    // trace_id from the input; the raw prompt schema enforces this via
+    // wrapSchemaForBatch above, so the zod schema must match).
     const batchedOutputSchema = z.object({
-      trace_results: z.array(rule.outputSchema),
+      trace_results: z.array(
+        (rule.outputSchema as z.ZodTypeAny).and(z.object({ trace_id: z.string() })),
+      ),
     });
 
     let response: unknown;

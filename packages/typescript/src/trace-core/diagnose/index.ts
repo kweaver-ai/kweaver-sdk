@@ -165,17 +165,22 @@ export async function diagnose(
 
   // ── 6. Emit ──────────────────────────────────────────────────────────────
   const yamlText = yaml.dump(reportToYamlObject(report));
+  // Markdown renderer also receives the conversation_id + business_domain so
+  // the "How to verify" section can emit runnable CLI commands. These two
+  // values are NOT in the yaml schema (yaml stays CLI-agnostic) — they live
+  // only in the md projection.
+  const mdOpts = { conversationId, businessDomain: opts.businessDomain };
   const format = opts.format ?? (opts.out !== null ? "both" : "yaml");
   if (opts.out !== null) {
     await fs.mkdir(path.dirname(opts.out), { recursive: true });
     const { yamlPath, mdPath } = derivePaths(opts.out, format);
     if (yamlPath !== null) await fs.writeFile(yamlPath, yamlText, "utf8");
-    if (mdPath !== null) await fs.writeFile(mdPath, renderReportMarkdown(report), "utf8");
+    if (mdPath !== null) await fs.writeFile(mdPath, renderReportMarkdown(report, mdOpts), "utf8");
   } else {
     // stdout — markdown to stdout would corrupt downstream `yq` / yaml consumers, so
     // 'both' degrades to yaml-only. Users who want md on stdout pass --format=markdown.
     if (format === "markdown") {
-      process.stdout.write(renderReportMarkdown(report));
+      process.stdout.write(renderReportMarkdown(report, mdOpts));
     } else {
       process.stdout.write(yamlText);
     }

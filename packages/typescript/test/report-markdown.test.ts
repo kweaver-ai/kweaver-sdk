@@ -200,6 +200,73 @@ test("renderReportMarkdown: agentId null renders as em-dash in meta line", () =>
   assert.match(md, /agent `—` · tenant `acme`/);
 });
 
+// ── How to verify section ───────────────────────────────────────────────────
+
+test("renderReportMarkdown: verification section emits 'kweaver call' command containing the trace_id", () => {
+  const md = renderReportMarkdown(makeReport({ findings: [symbolicFinding] }), {
+    conversationId: "01KCONV",
+    businessDomain: "bd_public",
+  });
+  assert.match(md, /## How to verify/);
+  assert.match(md, /kweaver call -X POST '\/api\/agent-observability\/v1\/traces\/_search'/);
+  assert.match(md, /"term":\{"traceId":"2854f77162dcf3675d1e7297a956cd24"\}/);
+});
+
+test("renderReportMarkdown: verification emits 'kweaver trace diagnose <conv_id>' with the supplied conversationId", () => {
+  const md = renderReportMarkdown(makeReport(), { conversationId: "01KCONV", businessDomain: "bd_public" });
+  assert.match(md, /kweaver trace diagnose 01KCONV --no-llm --out \/tmp\/verify\.yaml -bd bd_public/);
+});
+
+test("renderReportMarkdown: missing conversationId falls back to <conversation_id> placeholder", () => {
+  const md = renderReportMarkdown(makeReport());
+  assert.match(md, /kweaver trace diagnose <conversation_id> --no-llm/);
+});
+
+test("renderReportMarkdown: -bd flag is omitted when businessDomain is undefined", () => {
+  const md = renderReportMarkdown(makeReport(), { conversationId: "01KCONV" });
+  assert.match(md, /kweaver trace diagnose 01KCONV --no-llm --out \/tmp\/verify\.yaml\n/, "no -bd suffix on diagnose command");
+  // The fetch command also has no -bd flag.
+  assert.ok(!/\}'  \\\n/.test(md), "no stray -bd injection");
+});
+
+test("renderReportMarkdown: per-finding inspect block lists exactly that finding's evidence spans", () => {
+  const md = renderReportMarkdown(makeReport({ findings: [symbolicFinding, rubricFinding] }), {
+    conversationId: "01KCONV", businessDomain: "bd_public",
+  });
+  assert.match(md, /Finding #0 \(`tool_loop_no_state_change`\):/);
+  assert.match(md, /"terms":\{"spanId":\["sp_7", "sp_8", "sp_9"\]\}/);
+  assert.match(md, /Finding #1 \(`tool_retry_intent_mismatch`\):/);
+  assert.match(md, /"terms":\{"spanId":\["sp_7", "sp_8"\]\}/);
+});
+
+test("renderReportMarkdown: zero findings → verification section keeps re-fetch + re-diagnose + recurrence but omits the 'inspect spans' block", () => {
+  const md = renderReportMarkdown(makeReport(), { conversationId: "01KCONV", businessDomain: "bd_public" });
+  assert.match(md, /## How to verify/);
+  assert.match(md, /### 1\. Re-fetch the raw trace/);
+  assert.match(md, /### 2\. Re-run diagnosis/);
+  assert.ok(!/### 3\. Inspect the suspect spans/.test(md), "no inspect section when no findings");
+  // recurrence becomes section 3 when no findings
+  assert.match(md, /### 3\. Check whether this pattern recurs/);
+});
+
+test("renderReportMarkdown: recurrence section is suppressed when agentId is null (no agent to query)", () => {
+  const md = renderReportMarkdown(makeReport({
+    trace: { traceId: "tr_x", agentId: null, tenant: null },
+    findings: [symbolicFinding],
+  }), { conversationId: "01KCONV" });
+  assert.ok(!/Check whether this pattern recurs/.test(md), "no recurrence section without an agent id");
+});
+
+test("renderReportMarkdown: a finding whose evidence.spans is empty does not emit an empty inspect block", () => {
+  const noSpansFinding: Finding = { ...symbolicFinding, evidence: { spans: [], excerpt: "no spans" } };
+  const md = renderReportMarkdown(makeReport({ findings: [noSpansFinding] }), {
+    conversationId: "01KCONV", businessDomain: "bd_public",
+  });
+  // The 'Inspect' section header exists (we have ≥1 finding) but no finding-#0 sub-block.
+  assert.match(md, /### 3\. Inspect the suspect spans/);
+  assert.ok(!/Finding #0 \(`tool_loop_no_state_change`\):/.test(md), "should skip findings with no spans");
+});
+
 test("derivePaths: format=yaml writes only yaml at the given path", () => {
   assert.deepEqual(derivePaths("diagnosis/refund.yaml", "yaml"), { yamlPath: "diagnosis/refund.yaml", mdPath: null });
   assert.deepEqual(derivePaths("anything.foo", "yaml"), { yamlPath: "anything.foo", mdPath: null });

@@ -77,52 +77,10 @@ function formatRatio(k: number, n: number): string {
   return `${Math.round((k / n) * 100)}%`;
 }
 
-function fallbackSummary(
-  aggregates: AggregatesBlock,
-  nTotal: number,
-  lang: AgentOutputLang,
-): import("zod").infer<typeof ScanSummaryShape> {
-  const rules = aggregates.rule_frequency;
-  if (rules.length === 0) {
-    return {
-      headline: lang === "zh"
-        ? `未在 ${nTotal} 条 trace 中发现可聚合的诊断规则命中`
-        : `No aggregate diagnosis findings across ${nTotal} traces`,
-      primary_root_cause: null,
-      fix_priority: [],
-      cross_rule_links: [],
-    };
-  }
-
-  const top = rules[0];
-  const headline = lang === "zh"
-    ? `检测到 ${rules.length} 类规则命中，最高频为 ${top.rule_id}（${top.count}/${nTotal}）`
-    : `Detected ${rules.length} rule pattern(s); ${top.rule_id} is most frequent (${top.count}/${nTotal})`;
-  return {
-    headline,
-    primary_root_cause: {
-      rule_ids: [top.rule_id],
-      description: lang === "zh"
-        ? `跨 trace LLM 总结失败，已回退到确定性聚合摘要。${top.rule_id} 命中 ${top.count} 条 trace，是当前批次最高频规则。`
-        : `The cross-trace LLM summary failed, so this deterministic aggregate fallback is shown. ${top.rule_id} appears in ${top.count} trace(s), making it the highest-frequency rule in this batch.`,
-      target_for_fix: top.rule_id,
-    },
-    fix_priority: rules.map((r) => ({
-      rule_id: r.rule_id,
-      affected_trace_count: r.count,
-      reason: lang === "zh"
-        ? `确定性聚合显示该规则命中 ${r.count} 条 trace（high=${r.severity_breakdown.high}, medium=${r.severity_breakdown.medium}, low=${r.severity_breakdown.low}）。`
-        : `Deterministic aggregation shows ${r.count} affected trace(s) (high=${r.severity_breakdown.high}, medium=${r.severity_breakdown.medium}, low=${r.severity_breakdown.low}).`,
-    })),
-    cross_rule_links: [],
-  };
-}
-
 export async function runCrossTraceSynthesizer(opts: RunCrossTraceSynthesizerOpts): Promise<CrossTraceSynthesizerResult> {
   const { agentId, aggregates, samples, nTotal, provider, promptRegistry, artifacts } = opts;
   const ref = opts.promptRef ?? "builtin:cross-trace-synthesizer-v1";
   const sampleCount = samples.samples.length;
-  const lang = opts.lang ?? "en";
 
   if (artifacts) await artifacts.writeStageFourInputs(aggregates, samples);
 
@@ -135,7 +93,7 @@ export async function runCrossTraceSynthesizer(opts: RunCrossTraceSynthesizerOpt
     aggregates: yaml.dump(aggregates, { lineWidth: 120 }),
     samples_yaml: yaml.dump(samples, { lineWidth: 120 }),
     output_schema: SUMMARY_OUTPUT_SCHEMA_DESCRIPTION,
-    language_instruction: languageInstructionFor(lang),
+    language_instruction: languageInstructionFor(opts.lang ?? "en"),
   });
 
   if (artifacts) await artifacts.writeStageFourPrompt(prompt);
@@ -156,6 +114,6 @@ export async function runCrossTraceSynthesizer(opts: RunCrossTraceSynthesizerOpt
       await artifacts.writeStageFourResponse({ error: String(e) });
       await artifacts.writeStageFourParseErrors([{ reason: `agent-error:${kind}`, detail: String(e) }]);
     }
-    return { summary: fallbackSummary(aggregates, nTotal, lang), fallbackReason: `agent-error:${kind}` };
+    return { summary: null, fallbackReason: `agent-error:${kind}` };
   }
 }

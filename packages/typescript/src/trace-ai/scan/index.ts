@@ -183,7 +183,6 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
         const r = await runPerTracePipeline({
           convId,
           outDir: tracesDir,
-          legacyOutDir: opts.out,
           runDiagnose: async (id, partial) => {
             const rawSpans =
               cachedSpans.get(id) ??

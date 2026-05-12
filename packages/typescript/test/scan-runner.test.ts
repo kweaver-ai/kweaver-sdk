@@ -30,31 +30,6 @@ test("runPerTracePipeline: existing <conv_id>.yaml → skipped, returns reused=t
   await fs.rm(out, { recursive: true, force: true });
 });
 
-test("runPerTracePipeline: legacy flat report is copied into outDir and reused", async () => {
-  const legacy = await tmpDir();
-  const out = path.join(legacy, "traces");
-  const legacyYaml =
-    "schema_version: trace-diagnose-report/v1\n" +
-    "trace: { trace_id: tr_a, agent_id: 01KR_x, tenant: null }\n" +
-    "run: { diagnosed_at: x, cli_version: 0.7.4, mode: hybrid, rules_applied: [], rules_skipped: [], synthesizer_mode: template }\n" +
-    "summary: { headline: h, primary_root_cause: null, fix_priority: [], cross_finding_links: [] }\n" +
-    "findings: []\n";
-  await fs.writeFile(path.join(legacy, "conv_a.yaml"), legacyYaml, "utf8");
-  await fs.writeFile(path.join(legacy, "conv_a.md"), "# legacy\n", "utf8");
-  let pipelineCalled = false;
-  const r = await runPerTracePipeline({
-    convId: "conv_a",
-    outDir: out,
-    legacyOutDir: legacy,
-    runDiagnose: async () => { pipelineCalled = true; return null as never; },
-  });
-  assert.equal(r.reused, true);
-  assert.equal(pipelineCalled, false);
-  assert.equal(await fs.readFile(path.join(out, "conv_a.yaml"), "utf8"), legacyYaml);
-  assert.equal(await fs.readFile(path.join(out, "conv_a.md"), "utf8"), "# legacy\n");
-  await fs.rm(legacy, { recursive: true, force: true });
-});
-
 test("runPerTracePipeline: no existing yaml → calls runDiagnose, returns reused=false", async () => {
   const out = await tmpDir();
   let calls = 0;

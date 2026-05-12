@@ -53,12 +53,13 @@ test("e2e batch resume: 2-of-5 pre-written → 2 reused, 3 fresh, resumed_from_p
   defaultRegistry.register(stub, { setAsDefault: true });
   const out = await tmpOutDir("batch-resume");
 
-  // Pre-write 2 valid per-trace yamls
-  await fs.mkdir(out, { recursive: true });
+  // Pre-write 2 valid per-trace yamls into the new traces/ subdir layout
+  const tracesDir = path.join(out, "traces");
+  await fs.mkdir(tracesDir, { recursive: true });
   for (const convId of preWritten) {
     const report = makeMinimalReport(`trace_${convId}`, "agent_loop_tester");
     await fs.writeFile(
-      path.join(out, `${convId}.yaml`),
+      path.join(tracesDir, `${convId}.yaml`),
       yaml.dump(reportToYamlObject(report)),
       "utf8",
     );

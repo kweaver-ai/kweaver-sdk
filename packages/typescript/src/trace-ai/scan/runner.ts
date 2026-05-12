@@ -13,7 +13,6 @@ export interface DiagnoseInvocation {
 export interface RunPerTracePipelineOpts {
   convId: string;
   outDir: string;
-  legacyOutDir?: string;
   runDiagnose: DiagnoseInvocation;
 }
 
@@ -47,7 +46,6 @@ async function isValidExistingReport(filePath: string): Promise<boolean> {
 export async function runPerTracePipeline(opts: RunPerTracePipelineOpts): Promise<RunPerTracePipelineResult> {
   const finalPath = path.join(opts.outDir, `${opts.convId}.yaml`);
   const partialPath = `${finalPath}.partial`;
-  const legacyPath = opts.legacyOutDir ? path.join(opts.legacyOutDir, `${opts.convId}.yaml`) : null;
 
   const existed = await fs.stat(finalPath).then(() => true).catch(() => false);
   if (existed) {
@@ -56,17 +54,6 @@ export async function runPerTracePipeline(opts: RunPerTracePipelineOpts): Promis
     }
     process.stderr.write(`warning: existing ${finalPath} is corrupt or schema-incompatible; re-diagnosing\n`);
     await fs.rm(finalPath, { force: true });
-  }
-
-  if (legacyPath && legacyPath !== finalPath && await isValidExistingReport(legacyPath)) {
-    await fs.mkdir(opts.outDir, { recursive: true });
-    await fs.copyFile(legacyPath, finalPath);
-    const legacyMdPath = legacyPath.replace(/\.yaml$/, ".md");
-    const finalMdPath = finalPath.replace(/\.yaml$/, ".md");
-    if (await fs.stat(legacyMdPath).then(() => true).catch(() => false)) {
-      await fs.copyFile(legacyMdPath, finalMdPath);
-    }
-    return { reused: true };
   }
 
   await fs.mkdir(opts.outDir, { recursive: true });

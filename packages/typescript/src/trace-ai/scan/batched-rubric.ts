@@ -109,11 +109,18 @@ export async function runBatchedRubric(opts: RunBatchedRubricOpts): Promise<Batc
 
     if (artifacts) await artifacts.writeStageTwoPrompt(rule.ruleId, chunkIdx, prompt);
 
+    // rule.outputSchema is the SINGLE-verdict shape (zod converted from rule YAML's
+    // output_schema block). The Stage-2 batched prompt asks the LLM to return
+    // { trace_results: [<verdict>, ...] }, so we wrap before validation.
+    const batchedOutputSchema = z.object({
+      trace_results: z.array(rule.outputSchema),
+    });
+
     let response: unknown;
     try {
       const resp = await provider.invoke({
         prompt,
-        outputSchema: rule.outputSchema,
+        outputSchema: batchedOutputSchema,
         tier: "fast",
         timeoutMs: opts.timeoutMs,
         correlationId: `stage-2/${rule.ruleId}/chunk-${chunkIdx}`,

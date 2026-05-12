@@ -19,22 +19,18 @@ function buildPromptRegistry(): PromptTemplateRegistry {
   return r;
 }
 
-const OutputSchema = z.object({
-  trace_results: z.array(z.object({
-    trace_id: z.string(),
-    category: z.enum(["a", "b", "other"]),
-    reasoning: z.string(),
-    severity: z.enum(["low", "medium", "high"]),
-    first_violating_step_id: z.string(),
-    evidence_span_ids: z.array(z.string()).optional(),
-  })),
-});
-
 function rubric() {
   return {
     ruleId: "r_batch",
     judgeQuestion: "is this A or B?",
-    outputSchema: OutputSchema,
+    outputSchema: z.object({                         // single-verdict shape (matches production callsite)
+      trace_id: z.string(),
+      category: z.enum(["a", "b", "other"]),
+      reasoning: z.string(),
+      severity: z.enum(["low", "medium", "high"]),
+      first_violating_step_id: z.string(),
+      evidence_span_ids: z.array(z.string()).optional(),
+    }),
     outputSchemaRaw: { type: "object" },                  // simplified for prompt render
     promptTemplateRef: "builtin:rubric-judge-batch-v1",
   };
@@ -176,4 +172,44 @@ test("runBatchedRubric: with ArtifactWriter, writes work-queue + prompt + respon
   assert.ok(await fs.stat(path.join(ruleDir, "chunk-000.prompt.md")).then(() => true).catch(() => false));
   assert.ok(await fs.stat(path.join(ruleDir, "chunk-000.response.json")).then(() => true).catch(() => false));
   await fs.rm(base, { recursive: true, force: true });
+});
+
+test("runBatchedRubric: wraps rule's single-verdict schema into batched {trace_results: [...]} shape before validation", async () => {
+  // SINGLE-verdict schema, as rubricOutputToZod would produce from rule YAML's output_schema.
+  // This is the shape `scan/index.ts` actually passes (see rule.rubric.outputZodSchema).
+  const singleVerdictSchema = z.object({
+    trace_id: z.string(),
+    category: z.enum(["a", "b", "other"]),
+    reasoning: z.string(),
+    severity: z.enum(["low", "medium", "high"]),
+    first_violating_step_id: z.string(),
+    evidence_span_ids: z.array(z.string()).optional(),
+  });
+  // Stub returns the WRAPPER shape (what real LLM returns per Stage-2 prompt).
+  const stub = new StubAgentProvider({
+    name: "stub",
+    responseFn: async () => ({
+      trace_results: [
+        { trace_id: "tr_0", category: "a", reasoning: "ok", severity: "high", first_violating_step_id: "sp_0_a" },
+      ],
+    }),
+  });
+  const out = await runBatchedRubric({
+    rule: {
+      ruleId: "r_single",
+      judgeQuestion: "q",
+      outputSchema: singleVerdictSchema,         // single-verdict, NOT wrapper
+      outputSchemaRaw: { type: "object" },
+      promptTemplateRef: "builtin:rubric-judge-batch-v1",
+    },
+    traces: [traceItem("tr_0", ["sp_0_a"])],
+    agentId: "agent_A",
+    provider: stub,
+    promptRegistry: buildPromptRegistry(),
+    chunkSize: 10,
+  });
+  // Before fix: provider validates wrapper against single-verdict schema → fails → skipped
+  // After fix: runBatchedRubric wraps internally → validation passes → verdict emitted
+  assert.equal(out.verdicts.length, 1, `expected 1 verdict, got skipped: ${JSON.stringify(out.skipped)}`);
+  assert.equal(out.verdicts[0].traceId, "tr_0");
 });

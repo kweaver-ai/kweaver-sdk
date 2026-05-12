@@ -104,6 +104,17 @@ function runOnce(
       }
       resolve({ stdout, stderr, exitCode: code ?? -1, durationMs });
     });
+    // The child may close stdin before we finish writing — happens whenever the
+    // child path doesn't actually consume stdin (e.g. `claude --version` only
+    // echoes a version and exits). On Linux that races our `.end(stdin)` and
+    // surfaces as an uncaught EPIPE; on macOS the timing usually hides it.
+    // The child's exit code is the real signal we care about; swallow EPIPE
+    // here and let the `close` handler decide pass/fail.
+    child.stdin.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EPIPE") return;
+      clearTimeout(killer);
+      reject(err);
+    });
     child.stdin.end(stdin);
   });
 }

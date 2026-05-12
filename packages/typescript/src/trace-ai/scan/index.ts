@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { getSpansByConversationId, type RawSpan } from "../../api/trace.js";
 import { assembleTraceTree } from "../diagnose/trace-shaper.js";
 import { loadRules } from "../diagnose/rule-loader.js";
+import "../diagnose/builtin-rules/register.js";  // side effect: registers all builtin predicates
 import { runRules, rubricRules } from "../diagnose/signal-probe.js";
 import { templateSynthesize } from "../diagnose/synthesizer-template.js";
 import { assembleReport, reportToYamlObject, symbolicHitsToFindings } from "../diagnose/report-assembler.js";

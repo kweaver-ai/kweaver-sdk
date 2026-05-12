@@ -1,0 +1,10 @@
+{
+  "hits": {
+    "hits": [
+      { "_source": { "spanId": "root", "parentSpanId": null, "name": "chat", "startTimeUnixNano": "1700000000000000000", "endTimeUnixNano": "1700000000100000000", "status": { "code": "OK" }, "attributes": { "agent.trace.type": "model", "gen_ai.conversation.state": "v1", "gen_ai.agent.id": "agent_loop_tester" } } },
+      { "_source": { "spanId": "t1", "parentSpanId": "root", "name": "retrieval", "startTimeUnixNano": "1700000000010000000", "endTimeUnixNano": "1700000000020000000", "status": { "code": "OK" }, "attributes": { "agent.trace.type": "tool", "gen_ai.tool.name": "retrieval", "gen_ai.tool.args": { "q": "refund 2024" }, "gen_ai.conversation.state": "v1", "gen_ai.agent.id": "agent_loop_tester" } } },
+      { "_source": { "spanId": "t2", "parentSpanId": "root", "name": "retrieval", "startTimeUnixNano": "1700000000030000000", "endTimeUnixNano": "1700000000040000000", "status": { "code": "OK" }, "attributes": { "agent.trace.type": "tool", "gen_ai.tool.name": "retrieval", "gen_ai.tool.args": { "q": "refund 2024" }, "gen_ai.conversation.state": "v1", "gen_ai.agent.id": "agent_loop_tester" } } },
+      { "_source": { "spanId": "t3", "parentSpanId": "root", "name": "retrieval", "startTimeUnixNano": "1700000000050000000", "endTimeUnixNano": "1700000000060000000", "status": { "code": "OK" }, "attributes": { "agent.trace.type": "tool", "gen_ai.tool.name": "retrieval", "gen_ai.tool.args": { "q": "refund 2024" }, "gen_ai.conversation.state": "v1", "gen_ai.agent.id": "agent_loop_tester" } } }
+    ]
+  }
+}

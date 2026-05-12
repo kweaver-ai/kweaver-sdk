@@ -16,6 +16,8 @@ import type { Report } from "../diagnose/types.js";
 import { defaultRegistry } from "../../agent-providers/registry.js";
 import { defaultPromptRegistry, PromptTemplateRegistry } from "../../agent-providers/prompt-template.js";
 
+import { resolveRubricInput } from "../diagnose/agent-binding.js";
+
 import { validateSingleAgent } from "./single-agent-validator.js";
 import { runPerTracePipeline } from "./runner.js";
 import { runBatchedRubric, type BatchTraceItem, type BatchedRubricRule } from "./batched-rubric.js";
@@ -193,12 +195,16 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
             for (const rule of rubricRules(rules)) {
               const gates = rule.rubric?.gatesOn;
               if (gates && gates.length > 0 && !gates.some((g) => firedRuleIds.has(g))) continue;
+              const resolvedInputs: Record<string, unknown> = {};
+              for (const inp of rule.rubric!.inputs) {
+                resolvedInputs[inp.kind] = resolveRubricInput(inp, tree);
+              }
               allRubricWork.push({
                 rule,
                 trace: {
                   traceId: tree.traceId,
                   spans: tree.spans.map((s) => s.spanId),
-                  inputs: {},
+                  inputs: resolvedInputs,
                 },
               });
             }
@@ -267,7 +273,7 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchResult> {
       judgeQuestion: rule.rubric!.judgeQuestion,
       outputSchema: rule.rubric!.outputZodSchema,
       outputSchemaRaw: rule.rubric!.outputSchemaRaw,
-      promptTemplateRef: rule.rubric!.agentBinding.promptTemplateRef,
+      promptTemplateRef: "builtin:rubric-judge-batch-v1",
     };
     const result = await runBatchedRubric({
       rule: batchedRule,

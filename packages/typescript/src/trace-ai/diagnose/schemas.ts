@@ -60,6 +60,12 @@ const RubricSchema = z.object({
   inputs: z.array(RubricInputSchema).default([]),
   output_schema: RubricOutputSchemaSchema,
   agent_binding: AgentBindingSchema,
+  /**
+   * Optional symbolic rule_ids that act as gate for this rubric in batch mode.
+   * Empty/missing → rubric runs on all traces (PR-B fallback). In single-trace
+   * mode this field is ignored; rubric always runs.
+   */
+  gates_on: z.array(z.string()).optional(),
 });
 
 export type RubricYaml = z.infer<typeof RubricSchema>;

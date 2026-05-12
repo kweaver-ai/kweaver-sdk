@@ -80,6 +80,7 @@ async function parseOne(filePath: string): Promise<Rule> {
         provider: r.rubric.agent_binding.provider,
         promptTemplateRef: r.rubric.agent_binding.prompt_template_ref,
       },
+      gatesOn: r.rubric.gates_on,
     };
   } else {
     // RuleSchema's XOR refinement should have already caught this; keep an

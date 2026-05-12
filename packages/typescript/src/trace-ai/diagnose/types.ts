@@ -51,6 +51,8 @@ export interface RubricSpec {
   /** Compiled zod schema (built once at load time via output-schema-converter). */
   outputZodSchema: import("zod").ZodTypeAny;
   agentBinding: { provider: string; promptTemplateRef: string };
+  /** Optional gating; see RuleSchema.rubric.gates_on. */
+  gatesOn?: string[];
 }
 
 export interface Rule {

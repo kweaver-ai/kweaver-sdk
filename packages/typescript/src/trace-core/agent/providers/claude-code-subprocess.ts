@@ -1,7 +1,7 @@
 /**
  * AgentProvider that spawns the Claude Code CLI as a one-shot subprocess.
  *
- *   $ claude -p --output-format=json --bare <prompt-on-stdin>
+ *   $ claude -p --output-format=json --dangerously-skip-permissions <prompt-on-stdin>
  *
  * Why subprocess + the `claude` CLI (vs an HTTP / SDK transport):
  *   - Zero remote service dependency for trace-ai diagnose — dogfoods
@@ -225,13 +225,16 @@ export class ClaudeCodeSubprocessProvider implements AgentProvider {
       );
     }
     const timeoutMs = req.timeoutMs ?? this.defaultTimeoutMs;
-    // `-p` print mode + json envelope; `--bare` skips hooks/MCP/CLAUDE.md so a
-    // judgment call doesn't get tangled in the user's project context.
+    // `-p` print mode + json envelope. `--dangerously-skip-permissions` so the
+    // subscription/OAuth flow doesn't block on a TTY permission prompt that we
+    // can't answer from a subprocess. We deliberately do NOT pass `--bare`:
+    // `--bare` forces ANTHROPIC_API_KEY / apiKeyHelper and refuses to read
+    // OAuth or keychain — that breaks Claude Code subscription users.
     const args = [
       ...this.extraArgs,
       "-p",
       "--output-format=json",
-      "--bare",
+      "--dangerously-skip-permissions",
     ];
     const env = { ...process.env, ...this.env };
 

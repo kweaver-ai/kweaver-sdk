@@ -213,6 +213,10 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
       );
       return 2;
     }
+    if (!Number.isInteger(args.maxParallel) || args.maxParallel < 1 || args.maxParallel > 64) {
+      process.stderr.write(`error: --max-parallel must be a positive integer between 1 and 64; got ${args.maxParallel}\n`);
+      return 2;
+    }
     let convIds: string[];
     try {
       convIds = await parseTracesList(args.traces!);

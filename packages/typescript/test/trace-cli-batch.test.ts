@@ -50,3 +50,37 @@ test("parseTraceArgs: positional <conv_id> sets mode='single'", () => {
   assert.equal(r.mode, "single");
   assert.equal(r.conversationId, "01KCONV_x");
 });
+
+test("runTraceCommand: --max-parallel=0 → exit 2 + error message", async () => {
+  const origWrite = process.stderr.write.bind(process.stderr);
+  let captured = "";
+  (process.stderr as unknown as { write: (s: string | Uint8Array) => boolean }).write = (s) => {
+    captured += String(s);
+    return true;
+  };
+  try {
+    const { runTraceCommand } = await import("../src/commands/trace.js");
+    const code = await runTraceCommand(["diagnose", "--traces=conv_a", "--out=/tmp/x", "--max-parallel=0"]);
+    assert.equal(code, 2);
+    assert.match(captured, /--max-parallel must be a positive integer/);
+  } finally {
+    (process.stderr as unknown as { write: typeof origWrite }).write = origWrite;
+  }
+});
+
+test("runTraceCommand: --max-parallel=-3 → exit 2 + error message", async () => {
+  const origWrite = process.stderr.write.bind(process.stderr);
+  let captured = "";
+  (process.stderr as unknown as { write: (s: string | Uint8Array) => boolean }).write = (s) => {
+    captured += String(s);
+    return true;
+  };
+  try {
+    const { runTraceCommand } = await import("../src/commands/trace.js");
+    const code = await runTraceCommand(["diagnose", "--traces=conv_a", "--out=/tmp/x", "--max-parallel=-3"]);
+    assert.equal(code, 2);
+    assert.match(captured, /--max-parallel must be a positive integer/);
+  } finally {
+    (process.stderr as unknown as { write: typeof origWrite }).write = origWrite;
+  }
+});

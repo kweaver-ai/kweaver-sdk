@@ -1,7 +1,7 @@
 # M4 Trace Diagnose — Issue #2 设计（Batch / Cross-Trace Synthesizer，单 agent）
 
 最后更新：2026-05-12
-语言：中文。英文原版（含 time-scan 形态）见 git history `61d0bd5`；2026-05-12 用户 challenge 后做了两条减法：(1) batch 强制单 agent，(2) 砍掉 time-scan，本版本反映减法后的最终设计。
+语言：中文。英文原版（含 time-scan 形态）见 git history `61d0bd5`；2026-05-12 用户多轮 challenge 后做了三条调整：(1) batch 强制单 agent，(2) 砍掉 time-scan，(3) 每 Stage 的 LLM I/O 产物持久化到 `artifacts/` 用于追溯，且单 trace 模式同等对齐（单 trace = batch N=1 特例）。本版本反映调整后的最终设计。
 
 跟踪 issue: [kweaver-ai/kweaver-sdk#123](https://github.com/kweaver-ai/kweaver-sdk/issues/123)
 前置 issue: [#120](https://github.com/kweaver-ai/kweaver-sdk/issues/120)（PR-A symbolic + PR-B rubric，单 trace）
@@ -29,12 +29,14 @@ Batch 走一条新 pipeline：**N 条 trace 过 Stage-1（symbolic）+ 批量化
 - Stage-2 批量化的 rubric prompt 让 LLM 一次看到所有 flagged trace —— **它能识别 per-trace 调用看不到的跨 trace 模式**（"30/38 都是 `stale_results`"）
 - `AgentProvider` 加 `tier: 'fast' | 'std'` 抽象，**调用方传任务难度 intent**（分类 vs 综合）而不是 hardcode 模型名（`haiku` vs `sonnet`）
 - **单 agent 不变性**让所有 aggregate 数据语义清晰 —— "agent X 的 dominant 失败模式是 Y" 是可解读的；混 agent 等价于把不同程序的失败模式平均，给出无意义结论
+- **每个 Stage 的 LLM I/O 产物持久化** —— prompt、response、采样决策、parse errors 全部写到 `artifacts/` 子目录。出问题时能回溯"为什么 trace X 被 rubric 判成 Y"、"为什么 cross-trace summary 没提到 rule Z"。**单 trace 模式也对齐**（PR-B 加 emit-stage hook 调用同一个 artifact writer），因为单 trace 概念上是 batch N=1 特例
 
-本 issue 落地：新增 `trace-ai/scan/` 子树（peer of `trace-ai/diagnose/`）+ `agent-providers/` 小幅扩展 + `trace-ai/diagnose/schemas.ts` 加一个字段。**PR-B 的 `agent-providers/`、单 trace `diagnose()`、report markdown renderer 全部复用，不重构**。
+本 issue 落地：新增 `trace-ai/scan/` 子树（peer of `trace-ai/diagnose/`）+ `agent-providers/` 小幅扩展 + `trace-ai/diagnose/schemas.ts` 加一个字段 + `trace-ai/diagnose/index.ts` 加 artifact hook（PR-B 行为零变化，只在 emit 时多一步落盘）。**PR-B 的 `agent-providers/`、单 trace `diagnose()` pipeline shape、report markdown renderer 全部复用，不重构**。
 
 ## Goals
 
 - Ship `kweaver trace diagnose --traces=<list>` batch 入口，**强制所有 conv_id 属于同一个 agent_id**（不一致 fail-fast）
+- **每 Stage 的 LLM I/O 产物持久化到 `artifacts/`** —— 单 trace 和 batch 两种模式共用同一套结构（单 trace = batch N=1 特例）。默认开启，`--no-artifacts` flag 关
 - 新增 **Stage-4 cross-trace synthesizer**，产出 `scan-summary/v1` 报告（yaml 和 markdown 两种格式）
 - 通过 rule YAML 的 `rubric.gates_on` 实现 **Stage-1 → Stage-2 配对 gate**（解决 PR-B 已知的"rubric 在 benign trace 上误触发"问题，且不破坏单 trace 模式行为）
 - 实现 **batched rubric evaluation**：一次 LLM 调用评估一组 flagged traces。LLM 调用数从 O(N) 降到 O(N/K)
@@ -74,6 +76,8 @@ Batch 走一条新 pipeline：**N 条 trace 过 Stage-1（symbolic）+ 批量化
 | 13 | 续传语义 | Partial-output trust：`<out>/<trace_id>.yaml` 存在 → 跳过。原子写入：先写 `.partial` → rename。损坏 yaml = 重诊。MVP 不提供 `--force`；要全量重跑用户手动 `rm` | 文件系统就是 ground truth；不需要额外 state 文件 |
 | 14 | LLM I/O 格式 | INPUT = YAML 紧凑形态；OUTPUT = JSON + zod 强校验 | INPUT 读一次；OUTPUT 要 parse + 校验下游 —— 按方向翻转 format-quality trade-off |
 | 15 | 失败粒度 | per-chunk LLM 调用失败 → chunk 内全 K 条 trace 记 `rules_skipped[].reason = agent-error:<kind>`。chunk 内单条 schema_violation → 只跳那一条，其他 9 条不受影响 | 隔离 blast radius |
+| 16 | LLM I/O 产物持久化 | 默认开启，写到 `<output>/artifacts/`（batch）或 `<stem>.artifacts/`（单 trace）。`--no-artifacts` flag 关。Stage-2 / Stage-3 (单 trace agent 模式) / Stage-4 各自的 prompt + response + parse-errors 全留盘。Stage-1 不写（无 LLM；findings 已在 per-trace yaml）。单 trace 和 batch 共用同一套子目录结构 | LLM 调用是 pipeline 里**唯一不可重现**的环节。Stage-2 误判 / Stage-4 叙事跑偏时，没有 prompt + response 原始记录就无从下手。100 trace batch artifacts 总量 ~70KB，可忽略 |
+| 17 | 单 trace 模式 artifact 对齐 | 单 trace = batch N=1 特例。Stage-2 chunk-000.{prompt.md, response.json} 形式同 batch；新增 Stage-3 synthesizer artifact（单 trace 走 agent 模式，batch 走 template 无 artifact）；无 Stage-4。`trace-ai/diagnose/index.ts` 加 ArtifactWriter hook（PR-B pipeline shape 不变） | "单 trace 和 batch 是同一个 pipeline 的 N=1 vs N≥2 instance" 这条不变性贯穿设计：调试体验、目录结构、CLI flag 全部对齐 |
 
 ## Industry Alignment（相对 PR-B 的增量）
 
@@ -96,8 +100,9 @@ packages/typescript/src/
 │   ├── types.ts                                     # JudgmentRequest.tier?: 'fast' | 'std' (新字段)
 │   └── providers/claude-code-subprocess.ts          # modelByTier opt; 条件性 --model flag
 └── trace-ai/
-    ├── diagnose/                                    # PR-B; 本 issue 内除 schemas.ts 外不动
-    │   └── schemas.ts                               # RuleSchema 加 rubric.gates_on
+    ├── diagnose/                                    # PR-B; 本 issue 内除 schemas.ts + index.ts hook 外不动
+    │   ├── schemas.ts                               # RuleSchema 加 rubric.gates_on
+    │   └── index.ts                                 # 加 ArtifactWriter hook（emit 阶段调用；PR-B pipeline shape 不变）
     └── scan/                                        # 新 peer 子树
         ├── index.ts                                 # runBatch(opts) -> ScanSummary; orchestrator
         ├── traces-list-parser.ts                    # --traces=<list> | --traces=@file → string[]
@@ -109,6 +114,9 @@ packages/typescript/src/
         ├── cross-trace-synthesizer.ts               # Stage-4: 一次 LLM 调用 (tier: 'std')，产出 scan-summary.summary{} 块
         ├── scan-summary-schema.ts                   # scan-summary/v1 的 zod schema
         ├── scan-summary-markdown.ts                 # md renderer（镜像 trace-ai/diagnose/report-markdown.ts）
+        ├── artifacts/
+        │   ├── writer.ts                            # ArtifactWriter 共享模块：单 trace + batch 都用
+        │   └── paths.ts                             # 路径策略：batch→<out>/artifacts/，单 trace→<stem>.artifacts/
         └── prompts/
             ├── builtin/rubric-judge-batch-v1.prompt.md     # 多 trace rubric 模板
             └── builtin/cross-trace-synthesizer-v1.prompt.md # cross-trace 叙事模板
@@ -143,19 +151,28 @@ $ kweaver trace diagnose --traces=@/tmp/ticket-42.txt --out=diagnosis/ticket-42/
   4. Stage-2 batched rubric（按 rule 串行，rule 内 chunks 并行）：
        for each rubric_rule:
          flagged = rubric_work_queue[rubric_rule]
-         for chunk in chunks(flagged, K=10):
+         artifacts.writeStageTwoWorkQueue(rubric_rule, flagged)        # ← artifact
+         for chunk_idx, chunk in enumerate(chunks(flagged, K=10)):
            prompt = render(builtin:rubric-judge-batch-v1, {rubric_rule, traces: chunk.toYamlCompact()})
+           artifacts.writeStageTwoPrompt(rubric_rule, chunk_idx, prompt) # ← artifact
            response = provider.invoke({prompt, outputSchema: BatchedRubricSchema, tier: 'fast'})
+           artifacts.writeStageTwoResponse(rubric_rule, chunk_idx, response) # ← artifact
            for verdict in response.trace_results:
              更新 per-trace `<conv_id>.yaml` 加入新 rubric Finding（原子重写）
              更新 per-trace `<conv_id>.md`
+           if any parse-errors:
+             artifacts.writeStageTwoParseErrors(rubric_rule, chunk_idx, errors) # ← artifact
   5. aggregator 在所有最终 per-trace 报告上算 → AggregatesBlock (rule_frequency)
   6. sampler 选 K=5 个代表性 trace summary → SamplerOutput
+     artifacts.writeStageFourInputs(aggregates, samples)                 # ← artifact
   7. cross-trace-synthesizer:
        prompt = render(builtin:cross-trace-synthesizer-v1, {agent_id, aggregates, samples, n_total, sample_ratio})
+       artifacts.writeStageFourPrompt(prompt)                            # ← artifact
        response = provider.invoke({prompt, outputSchema: ScanSummaryShape, tier: 'std'})
+       artifacts.writeStageFourResponse(response)                        # ← artifact
   8. 拼装 scan-summary.yaml + scan-summary.md
        - 写出 aggregates / per_trace_index / summary / scan{agent_id, traces_diagnosed, traces_reused, ...}
+  9. artifacts.writeRunMetadata({cli_args, agent_id, rule_load_summary, timing, llm_calls, cost_estimate}) # ← artifact
 ```
 
 ## Contracts
@@ -373,18 +390,101 @@ JSON.
    LLM does not invent new rule_ids or trace counts.
 ```
 
+## Artifacts / Provenance
+
+Each LLM call's input + output is persisted to disk so users can answer "why did the analysis say X" after the fact. Batch 和单 trace 共用同一套结构，目录基址不同：
+
+| 模式 | 主产物路径 | Artifacts 基址 |
+|---|---|---|
+| Batch (`--traces=<list> --out=<dir>`) | `<dir>/<conv_id>.yaml + .md`、`<dir>/scan-summary.yaml + .md` | `<dir>/artifacts/` |
+| 单 trace (`<conv_id> --out=<file.yaml>`) | `<file.yaml>` + `<file>.md` | `<dirname(file)>/<stem>.artifacts/` |
+
+Artifact 目录结构：
+
+```
+<artifacts-base>/
+├── run-metadata.json                  ← CLI args / agent_id / rule_load 摘要 / 时序 / LLM 调用计数 / cost 估算
+├── stage-2-rubric/
+│   └── <rule_id>/                     ← 每条 rubric rule 一个子目录（若该 rule 触发）
+│       ├── work-queue.json            ← 哪些 conv_id 命中 gates_on 进入这条 rule（batch 模式；单 trace 模式简化为 1 条）
+│       ├── chunk-000.prompt.md        ← render 后的完整 prompt 文本
+│       ├── chunk-000.response.json    ← LLM 原始 envelope（解析前；含 result / usage / latency）
+│       ├── chunk-000.parse-errors.json ← 若有单条 schema_violation
+│       ├── chunk-001.prompt.md        ← batch 模式可有多 chunk；单 trace 永远只 chunk-000
+│       └── ...
+├── stage-3-synth/                     ← **单 trace 模式独有**（batch Stage-3 走 template 无 LLM）
+│   ├── prompt.md
+│   └── response.json
+└── stage-4-cross-trace-synth/         ← **batch 模式独有**
+    ├── aggregates.json                ← 喂给 prompt 前的 deterministic 聚合
+    ├── samples.json                   ← K=5 采样器选了哪 5 条 + 选择理由（如 `selected_as: "top-1 high-severity for tool_loop_no_state_change"`）
+    ├── prompt.md
+    ├── response.json
+    └── parse-errors.json              ← 若有
+```
+
+### 默认行为
+
+**默认开启**，`--no-artifacts` flag 关。理由：100 trace batch artifacts 总量 ~70KB（per-chunk prompt ~10KB / response ~3KB），可忽略；用户出问题想回溯时已经在那。
+
+### 续传时 artifacts 怎么办
+
+- per-trace yaml 复用 → **不动其 artifacts**（旧 artifacts 留在原位作为历史记录；与本次主产物不一致是预期）
+- Stage-2 重跑（如 chunk fail 后用户改 rules 重跑）→ **覆盖对应 `<rule_id>/chunk-NNN.*`**
+- Stage-4 重跑 → **覆盖 `stage-4-cross-trace-synth/*`**
+- Artifact 目录不参与续传判断（只看 per-trace yaml 是否存在）
+
+### `run-metadata.json` 内容
+
+```json
+{
+  "cli_args": { "traces": "...", "out": "...", "lang": "en", ... },
+  "agent_id": "01KR0327YK6...",
+  "rule_load_summary": {
+    "rules_applied": ["tool_loop_no_state_change", "tool_retry_intent_mismatch", ...],
+    "rules_skipped_at_load": [],
+    "rules_dir": "builtin + /path/to/diagnosis-rules"
+  },
+  "single_agent_validation": { "checked_conv_ids": 142, "agent_id_resolved": "01KR..." },
+  "timing": {
+    "stage_1_ms": 45,
+    "stage_2_ms": 28400,
+    "stage_3_ms": 12,
+    "stage_4_ms": 8200,
+    "total_ms": 36657
+  },
+  "llm_calls": {
+    "stage_2_chunks": 4,
+    "stage_3": 0,                    // batch 模式
+    "stage_4": 1,
+    "total": 5
+  },
+  "cost_estimate_usd": {
+    "stage_2": 0.020,                // 4 chunks × haiku 估算
+    "stage_4": 0.050,                // 1 call × sonnet 估算
+    "total": 0.070,
+    "model_price_table_version": "2026-05"   // 价格估算依据
+  }
+}
+```
+
+`cost_estimate_usd` 走 deterministic 表（`provider.modelByTier[tier].price_per_call`）；价格表后续维护方式 spec 不锁。
+
 ## CLI Surface
 
 ```shell
-# 单 trace 模式（PR-B 已 ship，不动）
-kweaver trace diagnose <conv_id> [--out=file.yaml] [...]
+# 单 trace 模式（PR-B 已 ship；本 issue 仅在 emit 阶段加 artifact hook）
+kweaver trace diagnose <conv_id>
+  [--out=file.yaml]                               # 默认 stdout（PR-B 行为不变）
+  [--no-artifacts]                                # 关闭 artifact 持久化；默认开
+  [...PR-B 已 ship flags 不变...]
 
 # Batch 模式（issue #2 唯一新入口）
-kweaver trace diagnose --traces=<list> --out=<dir> [...]
-
+kweaver trace diagnose --traces=<list> --out=<dir>
   --traces=conv1,conv2,...                        # comma-separated conversation_ids
   --traces=@/path/to/ids.txt                      # 或者 @file，每行一个 id
   --out=<dir>                                     # 必填；batch 模式 fail-fast 若缺
+  [--no-artifacts]                                # 关闭 artifact 持久化；默认开
   [--rules <dir>]                                 # 覆盖 <cwd>/diagnosis-rules/
   [--no-builtin]                                  # 禁用 5+1 条 builtin baseline 规则
   [--max-parallel <n>]                            # 默认 4
@@ -450,6 +550,7 @@ kweaver trace diagnose --traces=<list> --out=<dir> [...]
 - `scan-summary-schema.test.ts`: zod round-trip；字段名跟 within-trace Summary 的镜像关系；Stage-4 失败时 `summary` 可空；agent_id 必填
 - `scan-summary-markdown.test.ts`: aggregates 渲染；per_trace_index 相对路径；summary 块在 success 和 `summary: null` 两种路径
 - `agent-providers/tier.test.ts`: `JudgmentRequest.tier` 串通；ClaudeCodeSubprocessProvider 的 model arg 注入；modelByTier override
+- `artifacts-writer.test.ts`: ArtifactWriter 路径策略（batch `<dir>/artifacts/` vs 单 trace `<stem>.artifacts/`）；各 Stage write 方法；`--no-artifacts` 时全部 noop；run-metadata.json schema
 
 ### End-to-end tests
 
@@ -460,6 +561,9 @@ kweaver trace diagnose --traces=<list> --out=<dir> [...]
 - `batch-rubric-failure.test.ts`: stub provider 给一个 chunk 返 malformed JSON；断言受影响 trace 记 `rules_skipped[].reason = agent-error:schema_violation`；其他 chunk 成功；scan-summary 仍写出
 - `batch-no-llm-fail-fast.test.ts`: `--traces=... --no-llm` exit 2 + 信息
 - `batch-no-out-fail-fast.test.ts`: `--traces=...` 不带 `--out` exit 2 + 信息
+- `batch-artifacts-emission.test.ts`: 跑完一次 batch，断言 `<out>/artifacts/` 下所有 5 类文件齐（run-metadata.json / stage-2-rubric/*/chunk-NNN.* / stage-4-cross-trace-synth/*）+ 内容格式正确（prompt 是 md 文本；response 是合法 JSON envelope；run-metadata 通过 zod 校验）
+- `single-trace-artifacts-emission.test.ts`: 跑完一次单 trace diagnose，断言 `<stem>.artifacts/` 下文件齐（run-metadata.json / stage-2-rubric/*/chunk-000.* / stage-3-synth/*）；无 stage-4-cross-trace-synth/
+- `artifacts-disabled.test.ts`: 两种模式带 `--no-artifacts`，artifact 目录不创建；主产物正常写
 
 ### Coverage
 
@@ -467,7 +571,7 @@ kweaver trace diagnose --traces=<list> --out=<dir> [...]
 
 ## 估算
 
-**3-4d**（plan 原 5-7d 估算减去 time-scan / streaming search / tenant filter / per-agent aggregate 工作量）。
+**3.5-4.5d**（plan 原 5-7d 估算减去 time-scan 工作量，加 artifacts 半天）。
 
 主要新增工作：
 - `--traces=<list>` parser + `@file` 解析
@@ -479,7 +583,8 @@ kweaver trace diagnose --traces=<list> --out=<dir> [...]
 - `rubric.gates_on` 字段 + scan 模式 gate 逻辑
 - aggregator + sampler
 - partial-output 续传逻辑（atomic write + 续传校验）
-- 8 unit + 7 e2e 测试
+- **ArtifactWriter 共享模块**（batch + 单 trace 都用）+ `trace-ai/diagnose/index.ts` 加 hook
+- 9 unit + 10 e2e 测试
 
 ## Open Questions Deferred to Implementation
 

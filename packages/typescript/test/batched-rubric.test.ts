@@ -130,6 +130,31 @@ test("runBatchedRubric: trace_id echo-back missing → that entry is dropped wit
   assert.match(out.skipped[0].reason, /schema_violation/);
 });
 
+test("runBatchedRubric: duplicate trace_id in LLM response → second occurrence dropped with schema_violation, first kept", async () => {
+  const stub = new StubAgentProvider({
+    name: "stub",
+    responseFn: async () => ({
+      trace_results: [
+        { trace_id: "tr_0", category: "a", reasoning: "first", severity: "high", first_violating_step_id: "sp_0_a" },
+        { trace_id: "tr_0", category: "b", reasoning: "duplicate", severity: "low", first_violating_step_id: "sp_0_a" },
+      ],
+    }),
+  });
+  const out = await runBatchedRubric({
+    rule: rubric(),
+    traces: [traceItem("tr_0", ["sp_0_a"])],
+    agentId: "agent_A",
+    provider: stub,
+    promptRegistry: buildPromptRegistry(),
+    chunkSize: 10,
+  });
+  assert.equal(out.verdicts.length, 1);
+  assert.equal(out.verdicts[0].reasoning, "first");
+  assert.equal(out.skipped.length, 1);
+  assert.match(out.skipped[0].reason, /duplicate/);
+  assert.equal(out.skipped[0].traceId, "tr_0");
+});
+
 test("runBatchedRubric: with ArtifactWriter, writes work-queue + prompt + response per chunk", async () => {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), "br-art-"));
   const artifacts = new ArtifactWriter({ base, enabled: true });

@@ -130,6 +130,7 @@ export async function runBatchedRubric(opts: RunBatchedRubricOpts): Promise<Batc
 
     const parseErrors: { traceId: string; reason: string }[] = [];
     const items = (response as { trace_results?: unknown[] }).trace_results ?? [];
+    const seenInChunk = new Set<string>(); // NEW: defend against LLM emitting same trace_id twice
     for (const item of items) {
       const itm = item as Record<string, unknown>;
       const traceId = typeof itm.trace_id === "string" ? itm.trace_id : undefined;
@@ -138,6 +139,13 @@ export async function runBatchedRubric(opts: RunBatchedRubricOpts): Promise<Batc
         // loop below will create a schema_violation entry for the actual input trace.
         continue;
       }
+      if (seenInChunk.has(traceId)) {
+        // LLM violated "no duplicates" — drop the duplicate verdict, record parse-error.
+        // The first occurrence has already been accepted; we keep that one as the verdict.
+        parseErrors.push({ traceId, reason: "schema_violation: duplicate trace_id in trace_results" });
+        continue;
+      }
+      seenInChunk.add(traceId);
       const first = typeof itm.first_violating_step_id === "string" ? itm.first_violating_step_id : undefined;
       if (!first || !spansByTraceId.get(traceId)!.has(first)) {
         parseErrors.push({

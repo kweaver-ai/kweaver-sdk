@@ -107,6 +107,21 @@ export async function build(opts: BuildOpts): Promise<BuildResult> {
   const apply = (s: string) => applyRules(s, rulesResult.rules);
   const redacted = withIds.map((c) => redactCase(c, apply));
 
+  // Stage 3.5: guard against 0-cases lift (better UX than letting writer fail
+  // with cryptic "Too small: expected array to have >=1 items"). Common cause:
+  // --diagnosis= where every finding has query=null (e.g. runtime doesn't emit
+  // gen_ai.input.messages) or empty assertions[].
+  if (redacted.length === 0) {
+    const sourceLabel = opts.source.kind === "diagnosis" ? "--diagnosis=" : "--queries=";
+    const skippedNote =
+      skippedFindingsCount > 0
+        ? `\n  Skipped ${skippedFindingsCount} finding(s) — common causes:\n    - findings have query: null (M4 trace runtime doesn't emit gen_ai.input.messages)\n    - findings have empty assertions[]`
+        : "";
+    throw new BuilderError(
+      `lifted 0 eval-cases from ${sourceLabel}${opts.source.path}.${skippedNote}\n  Alternatives: use --queries=<file> to provide queries manually, or upgrade M4 trace runtime to emit gen_ai.input.messages.`,
+    );
+  }
+
   // Stage 4: write + conflict + validate
   let writeRes;
   try {

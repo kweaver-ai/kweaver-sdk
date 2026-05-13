@@ -114,3 +114,67 @@ cases:
     await fs.rm(out, { recursive: true, force: true });
   }
 });
+
+test("build with --diagnosis= where all findings have query=null throws friendly 0-cases error", async () => {
+  const diagDir = await fs.mkdtemp(path.join(tmpdir(), "m5-zero-cases-"));
+  const out = await mkTempDir();
+  try {
+    // M4 report where the only finding has query: null (the 62 runtime case)
+    await fs.writeFile(
+      path.join(diagDir, "report.yaml"),
+      `schema_version: trace-diagnose-report/v1
+trace: { trace_id: tr1, agent_id: agt, tenant: null }
+run:
+  diagnosed_at: "2026-05-13T00:00:00Z"
+  cli_version: "0.7.4"
+  mode: symbolic-only
+  rules_applied: ["r1"]
+  rules_skipped: []
+  synthesizer_mode: template
+summary:
+  headline: x
+  primary_root_cause: null
+  fix_priority: []
+  cross_finding_links: []
+findings:
+  - rule_id: r1
+    judgment_kind: symbolic
+    severity: low
+    symptom: s
+    likely_cause: lc
+    evidence: { spans: [sp1], excerpt: e }
+    suggested_fix: { target: t, change: c }
+    confidence: low
+    verify_with:
+      suggested_eval_case:
+        query_id: conv1
+        query: null
+        assertions: ["some_assertion"]
+`,
+      "utf8",
+    );
+    await assert.rejects(
+      build({
+        source: { kind: "diagnosis", path: diagDir },
+        outDir: out,
+        evalSetId: "x",
+        onConflict: "fail",
+        redactionRulesCliFlag: undefined,
+        repoDir: undefined,
+      }),
+      (e) => {
+        if (!(e instanceof BuilderError)) return false;
+        // verify message mentions 0-cases + actionable alternatives
+        return (
+          /lifted 0 eval-cases/.test(e.message) &&
+          /Skipped 1 finding/.test(e.message) &&
+          /--queries=/.test(e.message) &&
+          /gen_ai\.input\.messages/.test(e.message)
+        );
+      },
+    );
+  } finally {
+    await fs.rm(diagDir, { recursive: true, force: true });
+    await fs.rm(out, { recursive: true, force: true });
+  }
+});

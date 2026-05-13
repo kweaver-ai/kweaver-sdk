@@ -2,6 +2,26 @@
 
 MCP JSON-RPC 协议的分层检索。
 
+## Help 优先工作流
+
+排查参数或让 agent 自动选择命令时，先读 CLI help。以下 help 路径只打印本地文案，不触发登录、配置读取或网络请求：
+
+```bash
+kweaver context-loader --help
+kweaver context-loader help <subcommand>
+kweaver context-loader <subcommand> --help
+kweaver context-loader <subcommand> -h
+```
+
+`context-loader --help` 采用 `USAGE` / `COMMANDS` / `FLAGS` / `LEARN MORE` 风格：顶层只列命令名和一句话描述，不展示 `<kn-id>`、JSON body 等具体参数。具体参数、JSON shape 和示例统一查看 `context-loader <subcommand> --help`。顶层命令按任务优先级分组展示：`SCHEMA DISCOVERY COMMANDS`、`INSTANCE QUERY COMMANDS`、`INSTANCE ENRICHMENT AND ACTION COMMANDS`、`ADVANCED MCP COMMANDS`、`DEPRECATED CONFIGURATION COMMANDS`。
+
+推荐流程：
+
+1. `search-schema`：发现 Schema 概念。
+2. `query-*`：使用发现到的 Schema ID 查询实例。
+3. `get-*` / `find-skills`：增强实例信息或检查动作。
+4. `tool-call`：仅用于 raw MCP 调试或当前没有专用 CLI wrapper 的工具。
+
 ## KN 选择
 
 运行时子命令接受 `<kn-id>` 作为**第一个位置参数**（与 `kweaver bkn …` 风格一致），MCP endpoint 自动从当前平台派生为 `<base-url>/api/agent-retrieval/v1/mcp`，无需任何持久化配置。也支持全局 `--kn-id <id>` / `-k <id>` flag。
@@ -27,42 +47,43 @@ kweaver context-loader config show
 kweaver context-loader config remove myconfig
 ```
 
-## MCP 内省
+## Schema discovery — Schema 搜索
 
-下面所有示例中的 `<kn-id>` 也可以省略以回退到 deprecated 的 saved config（见上节）。
-
-```bash
-kweaver context-loader tools <kn-id>                       # 可用工具列表
-kweaver context-loader tool-call <kn-id> <name> --args '<json>'  # 直接调用任意 MCP tool
-kweaver context-loader resources <kn-id>                   # 可用资源列表
-kweaver context-loader resource <kn-id> <uri>              # 读取资源
-kweaver context-loader templates <kn-id>                   # 资源模板
-kweaver context-loader prompts <kn-id>                     # 可用 prompt
-kweaver context-loader prompt <kn-id> <name> [--args '<json>']
-```
-
-## Layer 1 — Schema 搜索
-
-推荐使用 `search-schema`，它调用 MCP `search_schema`，支持 `object_types`、`relation_types`、`action_types`、`metric_types`。
+推荐使用 `search-schema`，它调用 MCP `search_schema`，支持 `object_types`、`relation_types`、`action_types`、`metric_types`。`--concept-groups` 会写入 `search_scope.concept_groups`，用于按 BKN 概念分组 ID 限定 Schema 发现范围；它只作用于概念层发现，不是实例数据过滤条件。
 
 ```bash
+kweaver context-loader help search-schema
 kweaver context-loader search-schema <kn-id> "Pod"
-kweaver context-loader search-schema <kn-id> "利润率" --scope object,metric --max 10 --brief --no-rerank
+kweaver context-loader search-schema <kn-id> "利润率" --scope object,metric --concept-groups finance --max 10 --brief --no-rerank
 kweaver context-loader search-schema <kn-id> "Pod" --format toon
 ```
 
-参数映射：`--format` -> `response_format`，`--scope` -> `search_scope`，`--max` -> `max_concepts`，`--brief` -> `schema_brief: true`，`--no-rerank` -> `enable_rerank: false`。
+参数映射：`--format` -> `response_format`，`--scope` -> `search_scope`，`--concept-groups a,b` -> `search_scope.concept_groups: ["a","b"]`，`--max` -> `max_concepts`，`--brief` -> `schema_brief: true`，`--no-rerank` -> `enable_rerank: false`。
 
-兼容命令仍保留，但**全部走 Context Loader 公共 HTTP endpoint**（`/api/agent-retrieval/v1/kn/kn_search` 与 `/semantic-search`），不再触碰已被移除的 MCP `kn_search` / `kn_schema_search`：
+**search-schema 参数与默认值**
+
+| 项 | 必填 | 默认值 | 说明 |
+|----|:----:|--------|------|
+| `<query>` | 是 | 无 | 自然语言 Schema 搜索文本 |
+| `<kn-id>` 或 `--kn-id <kn-id>` | 推荐必填 | 省略时回退 deprecated saved config（若存在） | 新用法建议显式传 KN ID |
+| `--format json\|toon` | 否 | `json` | SDK/CLI 会默认发送 `response_format: "json"` |
+| `--scope object,relation,action,metric` | 否 | 不发送，使用服务端默认 | 限定 Schema 类型搜索范围 |
+| `--concept-groups <ids>` / `--concept-group <ids>` | 否 | 不发送，不限制 concept group | 写入 `search_scope.concept_groups` |
+| `--max <n>` / `-n <n>` | 否 | 不发送，使用服务端默认 | 最大概念数 |
+| `--brief` | 否 | 不发送 | 指定时发送 `schema_brief: true` |
+| `--no-rerank` | 否 | 不发送，使用服务端默认 | 指定时发送 `enable_rerank: false` |
+| `--pretty` | 否 | 启用 | CLI JSON 输出默认 pretty print |
+
+Deprecated 兼容命令仍保留给老脚本，但**全部走 Context Loader 公共 HTTP endpoint**（`/api/agent-retrieval/v1/kn/kn_search` 与 `/semantic-search`），不再触碰已被移除的 MCP `kn_search` / `kn_schema_search`，也不承诺获得 `search_schema` 的新能力（例如 `concept_groups`）：
 
 ```bash
 kweaver context-loader kn-search <kn-id> "Pod" [--only-schema]
 kweaver context-loader kn-schema-search <kn-id> "Pod" [--max 10]
 ```
 
-> SDK 层同样走 HTTP：TS `client.bkn.knSearch(...)`、Python `client.query.kn_search(...)` / `client.query.kn_schema_search(...)`。`ContextLoaderResource` 不再暴露 `kn_search` / `kn_schema_search` 方法——MCP 入口请直接用 `searchSchema` / `callTool`。
+> SDK 层同样走 HTTP：TS `client.bkn.knSearch(...)`、Python `client.query.kn_search(...)` / `client.query.kn_schema_search(...)` 均已 deprecated。`ContextLoaderResource` 不再暴露 `kn_search` / `kn_schema_search` 方法；新接入的 Schema 发现请使用 `searchSchema` / `search_schema` / `callTool`。
 
-## Layer 2 — 实例查询
+## Instance query — 实例查询
 
 ```bash
 # 条件查询
@@ -72,7 +93,9 @@ kweaver context-loader query-object-instance <kn-id> '{"ot_id": "ot-1", "conditi
 kweaver context-loader query-instance-subgraph <kn-id> '{"relation_type_paths": [{"start_ot_id": "ot-1", "paths": [{"rt_id": "rt-1", "direction": "positive"}]}]}'
 ```
 
-## Layer 3 — 逻辑属性 & Action
+## Instance enrichment and actions — 实例增强与动作
+
+这组命令对应 Layer 3 风格的能力，用于围绕已选实例获取逻辑属性、动作信息或相关 Skill。
 
 ```bash
 # 获取逻辑属性
@@ -150,6 +173,22 @@ result = client.context_loader.find_skills(
 - `top_k`（若提供）必须在 `[1, 20]`，否则抛错；不传时由服务端按默认 10 处理。
 - `instance_identities`（若提供）必须是数组，每个元素是普通对象（复用 `validateInstanceIdentities`）。
 - `response_format` 仅接受 `"json"` / `"toon"`。
+
+## Advanced MCP interface — MCP 调试与直通
+
+这组命令是对 context-loader MCP 协议层接口的直接封装，主要用于调试、探索服务端能力，以及在没有专用 CLI wrapper 时作为 escape hatch。日常任务优先使用上面的 `search-schema`、实例查询和实例增强与动作命令。
+
+下面所有示例中的 `<kn-id>` 也可以省略以回退到 deprecated 的 saved config（见上节）。
+
+```bash
+kweaver context-loader tools <kn-id>                       # 可用工具列表
+kweaver context-loader resources <kn-id>                   # 可用资源列表
+kweaver context-loader resource <kn-id> <uri>              # 读取资源
+kweaver context-loader templates <kn-id>                   # 资源模板
+kweaver context-loader prompts <kn-id>                     # 可用 prompt
+kweaver context-loader prompt <kn-id> <name> [--args '<json>']
+kweaver context-loader tool-call <kn-id> <name> --args '<json>'  # 直接调用任意 MCP tool
+```
 
 ## JSON 格式
 

@@ -157,7 +157,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Action 类 | `client.action_types` | `list`, `execute`, `cancel` |
 | 概念组 | `client.concept_groups` | `list`, `get`, `create`, `update`, `delete`, `add_members`, `remove_members` |
 | 任务 | `client.jobs` | `list`, `get_tasks`, `delete`, `wait` |
-| 查询 | `client.query` | `semantic_search`, `instances`, `instances_iter`, `kn_search`, `subgraph` |
+| 查询 | `client.query` | `semantic_search`, `instances`, `instances_iter`, `kn_search`（Schema 发现已不推荐）, `kn_schema_search`（deprecated）, `subgraph` |
 | Agent | `client.agents` | `list`, `get`, `get_by_key`, `create`, `update`, `delete`, `publish`, `unpublish` |
 | 对话 | `client.conversations` | `send_message`, `list_messages` |
 | Dataflow（旧生命周期接口） | `client.dataflows` | `create`, `run`, `poll`, `delete`, `execute` |
@@ -174,11 +174,13 @@ Context Loader MCP 可直接使用 `ContextLoaderResource`：
 from kweaver.resources import ContextLoaderResource
 
 cl = ContextLoaderResource(base_url, token, kn_id="kn_01")
-schema = cl.search_schema("利润率")
+schema = cl.search_schema("利润率", search_scope={"concept_groups": ["finance"]})
 raw = cl.call_tool("search_schema", {"query": "利润率"})
 ```
 
-`search_schema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
+`search_schema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。`search_scope.concept_groups` 用于按 BKN 概念分组 ID 限定 Schema 发现范围，不是实例数据过滤条件。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
+
+`client.query.kn_search()` / `client.query.kn_schema_search()` 是 Schema 发现的 deprecated 兼容/legacy 入口。新接入请使用 `ContextLoaderResource.search_schema()`。
 
 需要直接使用 MCP 原生 `tools/call` 时，使用 `call_tool(name, args)`。这适用于服务端新增工具但 SDK 尚未提供类型化封装的场景，参数会原样透传。
 

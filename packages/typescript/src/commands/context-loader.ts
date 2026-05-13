@@ -36,6 +36,602 @@ const MCP_NOT_CONFIGURED =
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 
+const DEPRECATED_KN_SEARCH_MESSAGE =
+  "[deprecated] context-loader kn-search is deprecated. Use context-loader search-schema instead.";
+const DEPRECATED_KN_SCHEMA_SEARCH_MESSAGE =
+  "[deprecated] context-loader kn-schema-search is deprecated. Use context-loader search-schema instead.";
+
+const CONTEXT_LOADER_HELP = `kweaver context-loader
+
+USAGE
+  kweaver context-loader <subcommand> [flags]
+  kweaver context-loader help <subcommand>
+  kweaver context-loader --help
+  kweaver context-loader <subcommand> --help
+
+KN SELECTION
+  Most runtime subcommands require a KN. Pass it as the first positional
+  argument or use --kn-id <id> / -k <id>. Omitting KN falls back to the
+  deprecated saved config managed by kweaver context-loader config.
+
+RECOMMENDED FLOW
+  search-schema:       Discover schema concepts
+  query-*:             Query instances using discovered schema IDs
+  get-*/find-skills:   Enrich instances or inspect actions
+  tool-call:           Raw MCP debugging or unsupported tools only
+
+SCHEMA DISCOVERY COMMANDS
+  search-schema:       Search object/relation/action/metric schemas
+  kn-search:           [deprecated] Use search-schema
+  kn-schema-search:    [deprecated] Use search-schema
+
+INSTANCE QUERY COMMANDS
+  query-object-instance:    Query object instances
+  query-instance-subgraph:  Query instance subgraphs
+
+INSTANCE ENRICHMENT AND ACTION COMMANDS
+  get-logic-properties: Get calculated logic property values
+  get-action-info:      Get action metadata and executable info
+  find-skills:          Recall skills for an object type
+
+ADVANCED MCP COMMANDS
+  tools:       List MCP tools
+  resources:   List MCP resources
+  resource:    Read an MCP resource by URI
+  templates:   List MCP resource templates
+  prompts:     List MCP prompts
+  prompt:      Get an MCP prompt by name
+  tool-call:   Call any MCP tool directly
+
+DEPRECATED CONFIGURATION COMMANDS
+  config:      Manage legacy saved KN selection
+
+FLAGS
+  -k, --kn-id <id>   KN selector for runtime subcommands
+  --pretty           Pretty-print JSON output
+  --compact          Print compact JSON output
+  -h, --help         Show help
+
+LEARN MORE
+  Use \`kweaver context-loader <subcommand> --help\` for arguments, JSON shapes, and examples.`;
+
+const CONTEXT_LOADER_CONFIG_HELP = `kweaver context-loader config  [deprecated]
+
+Usage:
+  kweaver context-loader config set --kn-id <id> [--name <name>]
+  kweaver context-loader config use <name>
+  kweaver context-loader config list
+  kweaver context-loader config remove <name>
+  kweaver context-loader config show
+
+Description:
+  Manage the deprecated saved context-loader KN selection. Runtime commands should pass
+  <kn-id> as the first positional or use --kn-id <id> / -k <id> instead.
+
+Arguments:
+  <name>          Saved config name.
+
+Options:
+  --kn-id <id>    KN ID to save for config set.
+  --name <name>   Saved config name for config set. Default: default.
+  --help, -h      Show this help and exit before auth/config/network checks.
+
+Examples:
+  kweaver context-loader tools d5iv6c9818p72mpje8pg
+  kweaver context-loader tools --kn-id d5iv6c9818p72mpje8pg
+
+Notes:
+  This command group is deprecated and will be removed in a future release.
+  It is disabled in stateless mode (--token).`;
+
+const CONTEXT_LOADER_SUBCOMMAND_HELP: Record<string, string> = {
+  tools: `kweaver context-loader tools
+
+Usage:
+  kweaver context-loader tools <kn-id> [--cursor <cursor>] [--pretty]
+  kweaver context-loader tools --kn-id <kn-id> [--cursor <cursor>] [--pretty]
+
+Description:
+  List MCP tools exposed by the context-loader server for the selected KN.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --cursor <cursor>, -c <cursor>
+                              Cursor returned by a previous page.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Output shape:
+  MCP tools/list response, usually { "tools": [...], "nextCursor": "..." }.
+
+Examples:
+  kweaver context-loader tools d5iv6c9818p72mpje8pg
+  kweaver context-loader tools --kn-id d5iv6c9818p72mpje8pg --cursor next-page`,
+
+  resources: `kweaver context-loader resources
+
+Usage:
+  kweaver context-loader resources <kn-id> [--cursor <cursor>] [--pretty]
+
+Description:
+  List context-loader MCP resources for the selected KN.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --cursor <cursor>, -c <cursor>
+                              Cursor returned by a previous page.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Output shape:
+  MCP resources/list response, usually { "resources": [...], "nextCursor": "..." }.
+
+Examples:
+  kweaver context-loader resources d5iv6c9818p72mpje8pg`,
+
+  resource: `kweaver context-loader resource
+
+Usage:
+  kweaver context-loader resource <kn-id> <uri> [--pretty]
+
+Description:
+  Read one context-loader MCP resource by URI.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <uri>               MCP resource URI returned by resources/list.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Output shape:
+  MCP resources/read response for the requested URI.
+
+Examples:
+  kweaver context-loader resource d5iv6c9818p72mpje8pg kweaver://resource/example`,
+
+  templates: `kweaver context-loader templates
+
+Usage:
+  kweaver context-loader templates <kn-id> [--cursor <cursor>] [--pretty]
+
+Description:
+  List MCP resource templates exposed by context-loader.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --cursor <cursor>, -c <cursor>
+                              Cursor returned by a previous page.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Output shape:
+  MCP resources/templates/list response.
+
+Examples:
+  kweaver context-loader templates d5iv6c9818p72mpje8pg`,
+
+  prompts: `kweaver context-loader prompts
+
+Usage:
+  kweaver context-loader prompts <kn-id> [--cursor <cursor>] [--pretty]
+
+Description:
+  List MCP prompts exposed by context-loader.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --cursor <cursor>, -c <cursor>
+                              Cursor returned by a previous page.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Output shape:
+  MCP prompts/list response.
+
+Examples:
+  kweaver context-loader prompts d5iv6c9818p72mpje8pg`,
+
+  prompt: `kweaver context-loader prompt
+
+Usage:
+  kweaver context-loader prompt <kn-id> <name> [--args '<json>'] [--pretty]
+
+Description:
+  Get a named MCP prompt from context-loader.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <name>              Prompt name.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --args '<json>', -a '<json>'  Optional prompt arguments as a JSON object.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Input JSON shape:
+  --args must be a JSON object, for example {"topic":"profit margin"}.
+
+Output shape:
+  MCP prompts/get response.
+
+Examples:
+  kweaver context-loader prompt d5iv6c9818p72mpje8pg explain --args '{"topic":"利润率"}'`,
+
+  "search-schema": `kweaver context-loader search-schema
+
+Usage:
+  kweaver context-loader search-schema <kn-id> <query> [options]
+  kweaver context-loader search-schema --kn-id <kn-id> <query> [options]
+
+Description:
+  Call the context-loader MCP search_schema tool. Use it to search schema concepts
+  such as object types, relation types, action types, metric types, and optional
+  concept_group scoped schemas.
+
+Arguments:
+  <kn-id>             Recommended KN selector. Alternative: --kn-id <kn-id>.
+                      If omitted, falls back to deprecated saved config when present.
+  <query>             Required. Natural-language query text.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --format json|toon, -f json|toon
+                              Response format requested from search_schema.
+                              Default: json.
+  --scope object,relation,action,metric
+                              Comma-separated schema type filters.
+                              Default: not sent; server default applies.
+  --concept-groups <ids>       Comma-separated concept_group IDs.
+                              Default: not sent; no concept_group filter.
+  --concept-group <ids>        Alias of --concept-groups.
+  --max <n>, -n <n>            Maximum concepts to request.
+                              Default: not sent; server default applies.
+  --brief                      Request brief schema output.
+                              Default: not sent.
+  --no-rerank                  Disable server-side rerank.
+                              Default: not sent; server default applies.
+  --pretty                     Pretty-print JSON output. This is the default.
+                              Default: enabled.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+MCP arguments:
+  {
+    "query": "<query>",
+    "response_format": "json|toon",
+    "search_scope": {
+      "include_object_types": true,
+      "include_relation_types": true,
+      "include_action_types": true,
+      "include_metric_types": true,
+      "concept_groups": ["group_id"]
+    },
+    "max_concepts": 5,
+    "schema_brief": true,
+    "enable_rerank": false
+  }
+
+Concept group semantics:
+  --concept-groups maps to search_scope.concept_groups. It limits schema discovery
+  to the selected concept_group definitions and is not an instance-data filter.
+
+Output shape:
+  MCP tools/call response for search_schema. The content may be structured JSON or
+  text depending on --format and server behavior.
+
+Equivalent tool-call:
+  kweaver context-loader tool-call <kn-id> search_schema --args '{"query":"需求","search_scope":{"concept_groups":["group_id"]}}'
+
+Examples:
+  kweaver context-loader search-schema d5iv6c9818p72mpje8pg "需求"
+  kweaver context-loader search-schema d5iv6c9818p72mpje8pg "利润率" --scope object,metric --concept-groups finance --max 5 --brief
+  kweaver context-loader search-schema --kn-id d5iv6c9818p72mpje8pg "需求" --format toon --no-rerank
+
+Notes:
+  kn-search and kn-schema-search are deprecated. Use context-loader search-schema instead.`,
+
+  "tool-call": `kweaver context-loader tool-call
+
+Usage:
+  kweaver context-loader tool-call <kn-id> <name> --args '<json>' [--pretty]
+
+Description:
+  Call any context-loader MCP tool by name. Prefer dedicated CLI wrappers such as
+  search-schema when they exist because their arguments are easier to inspect.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <name>              MCP tool name, for example search_schema.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --args '<json>', -a '<json>'  Tool arguments as a JSON object.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Input JSON shape:
+  --args must be a JSON object accepted by the selected MCP tool.
+
+Output shape:
+  MCP tools/call response, usually { "content": [...], "isError": false }.
+
+Examples:
+  kweaver context-loader tool-call d5iv6c9818p72mpje8pg search_schema --args '{"query":"需求"}'
+  kweaver context-loader tool-call d5iv6c9818p72mpje8pg query_object_instance --args '{"query":{"ot_id":"material"}}'`,
+
+  "query-object-instance": `kweaver context-loader query-object-instance
+
+Usage:
+  kweaver context-loader query-object-instance <kn-id> '<json>' [--pretty]
+
+Description:
+  Query object instances from a selected KN object type. This is an instance-data
+  query and is separate from schema discovery.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <json>              Query payload as a JSON object.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Input JSON shape:
+  {
+    "ot_id": "object_type_id",
+    "condition": {
+      "property": "name",
+      "operator": "contains",
+      "value_from": "const",
+      "value": "需求"
+    },
+    "limit": 20
+  }
+
+Output shape:
+  MCP query_object_instance tool response, usually instance rows plus metadata.
+
+Examples:
+  kweaver context-loader query-object-instance d5iv6c9818p72mpje8pg '{"ot_id":"material","condition":{"property":"name","operator":"contains","value_from":"const","value":"铜"}}'`,
+
+  "query-instance-subgraph": `kweaver context-loader query-instance-subgraph
+
+Usage:
+  kweaver context-loader query-instance-subgraph <kn-id> '<json>' [--pretty]
+
+Description:
+  Query a subgraph around selected object instances.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <json>              Subgraph query payload as a JSON object.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Input JSON shape:
+  {
+    "relation_type_paths": [
+      {
+        "rt_id": "relation_type_id",
+        "from": {
+          "ot_id": "source_object_type_id",
+          "condition": {
+            "property": "name",
+            "operator": "contains",
+            "value_from": "const",
+            "value": "需求"
+          }
+        },
+        "to": {
+          "ot_id": "target_object_type_id"
+        }
+      }
+    ]
+  }
+
+Output shape:
+  MCP query_instance_subgraph tool response with nodes and relations.
+
+Examples:
+  kweaver context-loader query-instance-subgraph d5iv6c9818p72mpje8pg '{"relation_type_paths":[{"rt_id":"depends_on","from":{"ot_id":"requirement","condition":{"property":"name","operator":"contains","value_from":"const","value":"需求"}},"to":{"ot_id":"task"}}]}'`,
+
+  "get-logic-properties": `kweaver context-loader get-logic-properties
+
+Usage:
+  kweaver context-loader get-logic-properties <kn-id> '<json>' [--pretty]
+
+Description:
+  Layer 3-style instance enrichment: get calculated logic property values for
+  object instances.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <json>              Request payload as a JSON object.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Input JSON shape:
+  {
+    "ot_id": "object_type_id",
+    "query": "natural-language query",
+    "_instance_identities": [{"id": "instance_id"}],
+    "properties": ["logic_property_id"],
+    "additional_context": "optional context"
+  }
+
+Output shape:
+  MCP get_logic_properties tool response with property values.
+
+Examples:
+  kweaver context-loader get-logic-properties d5iv6c9818p72mpje8pg '{"ot_id":"material","query":"风险评分","_instance_identities":[{"id":"m1"}],"properties":["risk_score"]}'`,
+
+  "get-action-info": `kweaver context-loader get-action-info
+
+Usage:
+  kweaver context-loader get-action-info <kn-id> '<json>' [--pretty]
+
+Description:
+  Layer 3-style instance action inspection: get action metadata and executable
+  information for selected schema or instance context.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <json>              Request payload as a JSON object.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Input JSON shape:
+  {
+    "at_id": "action_type_id",
+    "_instance_identity": {"id": "instance_id"}
+  }
+
+Output shape:
+  MCP get_action_info tool response.
+
+Examples:
+  kweaver context-loader get-action-info d5iv6c9818p72mpje8pg '{"at_id":"approve","_instance_identity":{"id":"r1"}}'`,
+
+  "find-skills": `kweaver context-loader find-skills
+
+Usage:
+  kweaver context-loader find-skills <kn-id> <ot_id> [options]
+
+Description:
+  Layer 3-style instance action discovery: recall skills related to an object type.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <ot_id>             Object type ID.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --query <text>, -q <text>     Optional skill search query.
+  --top-k <n>, -n <n>           Maximum skills to return.
+  --instance-identities '<json>', -i '<json>'
+                                Optional JSON array of instance identities.
+  --format json|toon, -f json|toon
+                                Response format requested from the server.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Input JSON shape:
+  Positional and option values are converted to:
+  {
+    "object_type_id": "object_type_id",
+    "skill_query": "optional query",
+    "top_k": 10,
+    "instance_identities": [{"id": "instance_id"}],
+    "response_format": "json|toon"
+  }
+
+Output shape:
+  MCP find_skills tool response with matched skills.
+
+Examples:
+  kweaver context-loader find-skills d5iv6c9818p72mpje8pg requirement --query "review requirement quality" --top-k 5`,
+
+  "kn-search": `kweaver context-loader kn-search  [deprecated]
+
+Usage:
+  kweaver context-loader kn-search <kn-id> <query> [--only-schema] [--pretty]
+
+Description:
+  [deprecated] Legacy KN semantic search wrapper.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <query>             Search query text.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --only-schema                 Return schema-oriented results when supported.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Output shape:
+  Legacy semantic search response.
+
+Examples:
+  kweaver context-loader search-schema d5iv6c9818p72mpje8pg "需求"
+
+Notes:
+  Use context-loader search-schema instead. kn-search is deprecated.`,
+
+  "kn-schema-search": `kweaver context-loader kn-schema-search  [deprecated]
+
+Usage:
+  kweaver context-loader kn-schema-search <kn-id> <query> [--max <n>] [--pretty]
+
+Description:
+  [deprecated] Legacy schema search wrapper.
+
+Arguments:
+  <kn-id>             KN ID. Prefer the first positional argument.
+  <query>             Search query text.
+
+Options:
+  --kn-id <kn-id>, -k <kn-id>   Alternative KN selector.
+  --max <n>, -n <n>             Maximum results.
+  --pretty                     Pretty-print JSON output. This is the default.
+  --help, -h                   Show this help and exit before auth/config/network checks.
+
+Output shape:
+  Legacy schema search response.
+
+Examples:
+  kweaver context-loader search-schema d5iv6c9818p72mpje8pg "需求"
+
+Notes:
+  Use context-loader search-schema instead. kn-schema-search is deprecated.`,
+
+  config: CONTEXT_LOADER_CONFIG_HELP,
+};
+
+function hasHelpFlag(args: string[]): boolean {
+  return args.includes("--help") || args.includes("-h");
+}
+
+function printContextLoaderHelp(topic?: string): number {
+  if (!topic || topic === "--help" || topic === "-h") {
+    console.log(CONTEXT_LOADER_HELP);
+    return 0;
+  }
+  const help = CONTEXT_LOADER_SUBCOMMAND_HELP[topic];
+  if (!help) {
+    console.error(`Unknown context-loader help topic: ${topic}`);
+    console.error(`Available topics: ${Object.keys(CONTEXT_LOADER_SUBCOMMAND_HELP).sort().join(", ")}`);
+    return 1;
+  }
+  console.log(help);
+  return 0;
+}
+
 function ensureContextLoaderConfig(knIdOverride?: string): {
   baseUrl: string;
   mcpUrl: string;
@@ -130,41 +726,15 @@ export async function runContextLoaderCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(`kweaver context-loader
+    return printContextLoaderHelp();
+  }
 
-KN selection (for runtime subcommands below):
-  Pass <kn-id> as the FIRST positional, e.g. \`kweaver context-loader tools <kn-id>\`,
-  or use the global \`--kn-id <id>\` / \`-k <id>\` flag. When omitted, falls back to
-  the deprecated saved config managed by \`kweaver context-loader config\`.
+  if (subcommand === "help") {
+    return printContextLoaderHelp(rest[0]);
+  }
 
-Subcommands:
-  config set --kn-id <id> [--name n]   [deprecated] Add or update kn config
-  config use <name>                    [deprecated] Switch current config
-  config list                          [deprecated] List all configs and current
-  config remove <name>                 [deprecated] Remove a config
-  config show                          [deprecated] Show current config (knId + mcpUrl)
-  tools <kn-id>                        tools/list - list available tools
-  resources <kn-id>                    resources/list - list resources
-  resource <kn-id> <uri>               resources/read - read resource by URI
-  templates <kn-id>                    resources/templates/list - list resource templates
-  prompts <kn-id>                      prompts/list - list prompts
-  prompt <kn-id> <name> [--args json]  prompts/get - get prompt by name
-  search-schema <kn-id> <query> [opts] MCP search_schema (object/relation/action/metric)
-  tool-call <kn-id> <name> --args '<json>'  MCP tools/call for any server tool
-  kn-search <kn-id> <query> [--only-schema]  Compatibility: HTTP kn_search
-  kn-schema-search <kn-id> <query> [--max N] Compatibility: HTTP semantic-search
-  query-object-instance <kn-id> <json>       Layer 2: Query instances
-  query-instance-subgraph <kn-id> <json>     Layer 2: Query subgraph
-  get-logic-properties <kn-id> <json>        Layer 3: Get logic property values
-  get-action-info <kn-id> <json>             Layer 3: Get action info
-  find-skills <kn-id> <ot_id> [options]      Layer 3: Recall skills for an object type
-
-Examples:
-  kweaver context-loader tools d5iv6c9818p72mpje8pg
-  kweaver context-loader search-schema d5iv6c9818p72mpje8pg "利润率" --scope object,metric --max 5
-  kweaver context-loader tool-call d5iv6c9818p72mpje8pg search_schema --args '{"query":"利润率"}'
-  kweaver context-loader kn-search d5iv6c9818p72mpje8pg "高血压 治疗 药品" --only-schema --pretty`);
-    return 0;
+  if (hasHelpFlag(rest)) {
+    return printContextLoaderHelp(subcommand);
   }
 
   if (subcommand === "config") {
@@ -458,13 +1028,14 @@ function parseResponseText(text: string): unknown {
 }
 
 function parseSearchSchemaScope(raw: string): SearchSchemaScope {
-  const scope: Required<SearchSchemaScope> = {
+  type SearchSchemaIncludeField = Exclude<keyof SearchSchemaScope, "concept_groups">;
+  const scope: SearchSchemaScope = {
     include_object_types: false,
     include_relation_types: false,
     include_action_types: false,
     include_metric_types: false,
   };
-  const aliases: Record<string, keyof SearchSchemaScope> = {
+  const aliases: Record<string, SearchSchemaIncludeField> = {
     object: "include_object_types",
     objects: "include_object_types",
     object_type: "include_object_types",
@@ -495,6 +1066,18 @@ function parseSearchSchemaScope(raw: string): SearchSchemaScope {
   return scope;
 }
 
+function parseConceptGroups(raw: string): string[] {
+  const seen = new Set<string>();
+  const groups: string[] = [];
+  for (const item of raw.split(",")) {
+    const value = item.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    groups.push(value);
+  }
+  return groups;
+}
+
 async function runSearchSchema(
   options: { mcpUrl: string; knId: string; accessToken: string },
   args: string[],
@@ -506,13 +1089,14 @@ async function runSearchSchema(
   let maxConcepts: number | undefined;
   let schemaBrief: boolean | undefined;
   let enableRerank: boolean | undefined;
+  let conceptGroups: string[] | undefined;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if ((arg === "--format" || arg === "-f") && args[i + 1]) {
       const value = args[i + 1];
       if (value !== "json" && value !== "toon") {
-        console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--max N] [--brief] [--no-rerank]");
+        console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--concept-groups ids] [--max N] [--brief] [--no-rerank]");
         return 1;
       }
       responseFormat = value;
@@ -524,6 +1108,9 @@ async function runSearchSchema(
         console.error(error instanceof Error ? error.message : String(error));
         return 1;
       }
+      i += 1;
+    } else if ((arg === "--concept-groups" || arg === "--concept-group") && args[i + 1]) {
+      conceptGroups = parseConceptGroups(args[i + 1]);
       i += 1;
     } else if ((arg === "--max" || arg === "-n") && args[i + 1]) {
       maxConcepts = parseInt(args[i + 1], 10);
@@ -542,8 +1129,15 @@ async function runSearchSchema(
   }
 
   if (!query) {
-    console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--max N] [--brief] [--no-rerank]");
+    console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--concept-groups ids] [--max N] [--brief] [--no-rerank]");
     return 1;
+  }
+
+  if (conceptGroups !== undefined) {
+    searchScope = {
+      ...(searchScope ?? {}),
+      concept_groups: conceptGroups,
+    };
   }
 
   const result = await searchSchema(options, {
@@ -620,6 +1214,7 @@ async function runKnSearch(
     return 1;
   }
 
+  console.error(DEPRECATED_KN_SEARCH_MESSAGE);
   const raw = await knSearchHttp({
     baseUrl: options.baseUrl,
     accessToken: options.accessToken,
@@ -652,10 +1247,11 @@ async function runKnSchemaSearch(
   }
 
   if (!query) {
-    console.error("Usage: kweaver context-loader kn-schema-search <query> [--max N]");
+    console.error("Usage: kweaver context-loader kn-schema-search <kn-id> <query> [--max N]");
     return 1;
   }
 
+  console.error(DEPRECATED_KN_SCHEMA_SEARCH_MESSAGE);
   const raw = await semanticSearch({
     baseUrl: options.baseUrl,
     accessToken: options.accessToken,

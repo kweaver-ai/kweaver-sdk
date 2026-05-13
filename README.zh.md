@@ -292,8 +292,11 @@ kweaver trace diagnose --traces=<list> --out=<dir>    # 批量诊断（单 agent
 kweaver trace diagnose rules validate <rule.yaml>     # 校验规则
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
+kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
+kweaver context-loader tool-call <kn-id> <name> --args '<json>'
+kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  （deprecated；请使用 search-schema）
 kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
 kweaver context-loader config set/use/list/show                       （deprecated；省略 <kn-id> 时回退到已保存配置）
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
@@ -306,7 +309,7 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 | `kweaver query search <kn_id> <query>` | `kweaver bkn search <kn-id> <query>` |
 | `kweaver query instances <kn_id> <ot_id> …` | `kweaver bkn object-type query <kn-id> <ot-id> …` |
 | `kweaver query subgraph <kn_id> …`（用 flags 拼路径） | `kweaver bkn subgraph <kn-id> <body-json>`（JSON 体，格式不同） |
-| `kweaver query kn-search <kn_id> <query>`（REST） | `kweaver context-loader kn-search <query>`（HTTP 兼容，使用已配置 KN），或 `kweaver context-loader search-schema <query>`（MCP `search_schema`） |
+| `kweaver query kn-search <kn_id> <query>`（REST；Schema 发现已不推荐） | 推荐 `kweaver context-loader search-schema <kn-id> <query>`（MCP `search_schema`）；`kweaver context-loader kn-search <kn-id> <query>` 仅作 deprecated 兼容入口 |
 | `kweaver action query` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
 
 **仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver model`、`kweaver dataview`（别名 `dv`）、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。
@@ -359,10 +362,9 @@ kweaver bkn object-type list <kn_id>
 kweaver bkn relation-type list <kn_id>
 
 # 5. Context-loader
-kweaver context-loader config set --kn-id <kn_id> --name my-bkn
-kweaver context-loader config use my-bkn
-kweaver context-loader search-schema "关键词"
-kweaver context-loader tool-call search_schema --args '{"query":"关键词"}'
+kweaver context-loader help search-schema
+kweaver context-loader search-schema <kn_id> "关键词" --concept-groups supply_chain
+kweaver context-loader tool-call <kn_id> search_schema --args '{"query":"关键词"}'
 
 # 6. 原始 API 调用
 kweaver call "/api/agent-factory/v3/personal-space/agent-list?offset=0&limit=3" --pretty
@@ -377,7 +379,7 @@ npx tsx src/cli.ts agent list
 npx tsx src/cli.ts agent chat <agent_id> -m "你好"
 npx tsx src/cli.ts bkn list
 npx tsx src/cli.ts bkn object-type list <kn_id>
-npx tsx src/cli.ts context-loader search-schema "关键词"
+npx tsx src/cli.ts context-loader search-schema <kn_id> "关键词"
 ```
 
 **Python CLI**：

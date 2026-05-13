@@ -60,6 +60,11 @@ export interface KnSearchHttpOptions {
   onlySchema?: boolean;
 }
 
+/**
+ * @deprecated Use Context Loader `search_schema` for new schema discovery integrations.
+ * The HTTP `kn_search` endpoint is kept only as a compatibility entry point
+ * and may not receive new `search_schema` capabilities.
+ */
 export async function knSearchHttp(
   options: KnSearchHttpOptions
 ): Promise<string> {

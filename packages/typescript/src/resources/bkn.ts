@@ -133,6 +133,11 @@ export class BknResource {
   /**
    * Search KN schema — finds matching object types, relation types, and action types.
    * Uses the public agent-retrieval HTTP compatibility endpoint.
+   *
+   * @deprecated Use `client.contextLoader(...).searchSchema(...)` for new
+   * schema discovery integrations. `knSearch` is kept only for compatibility
+   * with the legacy HTTP `kn_search` endpoint and may not receive new
+   * `search_schema` capabilities.
    */
   async knSearch(
     knId: string,

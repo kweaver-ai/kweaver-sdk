@@ -230,12 +230,17 @@ class ContextLoaderResource:
         query: str,
         *,
         response_format: Literal["json", "toon"] = "json",
-        search_scope: dict[str, bool] | None = None,
+        search_scope: dict[str, Any] | None = None,
         max_concepts: int | None = None,
         schema_brief: bool | None = None,
         enable_rerank: bool | None = None,
     ) -> dict[str, Any]:
-        """Search schema via the MCP search_schema tool."""
+        """Search schema via the MCP search_schema tool.
+
+        ``search_scope`` may include ``concept_groups`` to limit schema
+        discovery to BKN concept group IDs. The scope only affects concept
+        discovery; it is not an instance-data filter.
+        """
         args: dict[str, Any] = {
             "query": query,
             "response_format": response_format,

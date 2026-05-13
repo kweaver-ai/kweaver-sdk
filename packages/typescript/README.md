@@ -165,7 +165,10 @@ const rows = await client.vega.sqlQuery(
 
 // Context Loader (MCP search_schema plus generic tools/call)
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
-const schema  = await cl.searchSchema({ query: "hypertension treatment" });
+const schema  = await cl.searchSchema({
+  query: "hypertension treatment",
+  search_scope: { concept_groups: ["clinical"] },
+});
 const rawTool = await cl.callTool("search_schema", { query: "hypertension treatment" });
 
 // Skills (registry + market + progressive read)
@@ -173,7 +176,9 @@ const skills = await client.skills.market({ name: "kweaver" });
 const skillMd = await client.skills.fetchContent("skill-id");
 ```
 
-`searchSchema()` is the typed wrapper for the Context Loader MCP `search_schema` tool. It defaults `response_format` to `json` and accepts `query`, `response_format`, `search_scope`, `max_concepts`, `schema_brief`, and `enable_rerank`. The parsed response may contain `object_types`, `relation_types`, `action_types`, and `metric_types`.
+`searchSchema()` is the typed wrapper for the Context Loader MCP `search_schema` tool. It defaults `response_format` to `json` and accepts `query`, `response_format`, `search_scope`, `max_concepts`, `schema_brief`, and `enable_rerank`. `search_scope.concept_groups` limits schema discovery to BKN concept group IDs; it is not an instance-data filter. The parsed response may contain `object_types`, `relation_types`, `action_types`, and `metric_types`.
+
+`client.bkn.knSearch(...)` is deprecated. Use `client.contextLoader(...).searchSchema(...)` for new schema discovery integrations.
 
 Use `callTool(name, args)` when you need native MCP `tools/call` access for newly added server tools before the SDK adds a typed wrapper. Arguments are passed through unchanged.
 
@@ -211,8 +216,11 @@ kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
+kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
+kweaver context-loader tool-call <kn-id> <name> --args '<json>'
+kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  (deprecated; use search-schema)
 kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
 kweaver context-loader config set/use/list/show                       (deprecated; <kn-id> may be omitted to fall back to saved config)
 kweaver toolbox create/list/publish/unpublish/delete
@@ -332,7 +340,7 @@ When `--token` is used, write-disk commands (`auth login` / `logout` / `use` / `
 
 `auth whoami` / `auth status` distinguish the two stateless modes: `Source: CLI (flag: --token)` for flag mode, `env (KWEAVER_TOKEN)` for env mode (`whoami --json` uses `"source": "flag"` vs `"source": "env"`).
 
-`kweaver context-loader` runtime subcommands accept `<kn-id>` as the first positional (e.g. `kweaver context-loader tools <kn-id>`) or via the global `--kn-id <id>` / `-k <id>` flag, so they work in stateless mode without any saved config. The `context-loader config set|use|list|remove|show` management group is deprecated, prints a warning on use, and is disabled in its entirety under `--token`.
+`kweaver context-loader` runtime subcommands accept `<kn-id>` as the first positional (e.g. `kweaver context-loader tools <kn-id>`) or via the global `--kn-id <id>` / `-k <id>` flag, so they work in stateless mode without any saved config. Use `kweaver context-loader help <subcommand>` or `<subcommand> --help` to inspect arguments before login/network checks. The `context-loader config set|use|list|remove|show` management group is deprecated, prints a warning on use, and is disabled in its entirety under `--token`.
 
 ### TLS Certificate Troubleshooting
 

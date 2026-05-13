@@ -156,7 +156,10 @@ const rows = await client.vega.sqlQuery(
 
 // Context Loader（MCP search_schema + 通用 tools/call）
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
-const schema  = await cl.searchSchema({ query: "高血压 治疗" });
+const schema  = await cl.searchSchema({
+  query: "高血压 治疗",
+  search_scope: { concept_groups: ["clinical"] },
+});
 const rawTool = await cl.callTool("search_schema", { query: "高血压 治疗" });
 
 // Skill（注册表/市场/渐进式读取）
@@ -164,7 +167,9 @@ const skills = await client.skills.market({ name: "kweaver" });
 const skillMd = await client.skills.fetchContent("skill-id");
 ```
 
-`searchSchema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
+`searchSchema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。`search_scope.concept_groups` 用于按 BKN 概念分组 ID 限定 Schema 发现范围，不是实例数据过滤条件。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
+
+`client.bkn.knSearch(...)` 已过时。新接入的 Schema 发现请使用 `client.contextLoader(...).searchSchema(...)`。
 
 需要直接使用 MCP 原生 `tools/call` 时，使用 `callTool(name, args)`。这适用于服务端新增工具但 SDK 尚未提供类型化封装的场景，参数会原样透传。
 
@@ -197,8 +202,11 @@ kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
+kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
+kweaver context-loader tool-call <kn-id> <name> --args '<json>'
+kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  （deprecated；请使用 search-schema）
 kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
 kweaver context-loader config set/use/list/show                       （deprecated；省略 <kn-id> 时回退到已保存配置）
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]
@@ -289,7 +297,7 @@ kweaver --base-url https://platform.example.com --token "$TOK" bkn list
 
 `auth whoami` / `auth status` 通过文案区分来源：flag 模式为 `CLI (flag: --token)`，env 模式为 `env (KWEAVER_TOKEN)`（`whoami --json` 为 `"source": "flag"` 与 `"source": "env"`）。
 
-`kweaver context-loader` 运行时子命令将 `<kn-id>` 作为第一个位置参数（如 `kweaver context-loader tools <kn-id>`），也支持全局 `--kn-id <id>` / `-k <id>` flag，因此在 stateless 模式下可直接使用，无需任何持久化配置。`context-loader config set|use|list|remove|show` 管理子命令已被标记为 deprecated（每次调用打印警告），且在 `--token` 下整组被禁用。
+`kweaver context-loader` 运行时子命令将 `<kn-id>` 作为第一个位置参数（如 `kweaver context-loader tools <kn-id>`），也支持全局 `--kn-id <id>` / `-k <id>` flag，因此在 stateless 模式下可直接使用，无需任何持久化配置。调试参数时可先执行 `kweaver context-loader help <subcommand>` 或 `<subcommand> --help`，这些 help 路径不会触发登录、配置读取或网络请求。`context-loader config set|use|list|remove|show` 管理子命令已被标记为 deprecated（每次调用打印警告），且在 `--token` 下整组被禁用。
 
 ### TLS 证书问题排查
 

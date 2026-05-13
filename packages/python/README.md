@@ -157,7 +157,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Action Types | `client.action_types` | `list`, `execute`, `cancel` |
 | Concept Groups | `client.concept_groups` | `list`, `get`, `create`, `update`, `delete`, `add_members`, `remove_members` |
 | Jobs | `client.jobs` | `list`, `get_tasks`, `delete`, `wait` |
-| Query | `client.query` | `semantic_search`, `instances`, `instances_iter`, `kn_search`, `subgraph` |
+| Query | `client.query` | `semantic_search`, `instances`, `instances_iter`, `kn_search` (deprecated for schema discovery), `kn_schema_search` (deprecated), `subgraph` |
 | Agents | `client.agents` | `list`, `get`, `get_by_key`, `create`, `update`, `delete`, `publish`, `unpublish` |
 | Conversations | `client.conversations` | `send_message`, `list_messages` |
 | Dataflows | `client.dataflows` | `create`, `run`, `poll`, `delete`, `execute` |
@@ -174,11 +174,13 @@ For Context Loader MCP access, use `ContextLoaderResource` directly:
 from kweaver.resources import ContextLoaderResource
 
 cl = ContextLoaderResource(base_url, token, kn_id="kn_01")
-schema = cl.search_schema("margin")
+schema = cl.search_schema("margin", search_scope={"concept_groups": ["finance"]})
 raw = cl.call_tool("search_schema", {"query": "margin"})
 ```
 
-`search_schema()` is the typed wrapper for the Context Loader MCP `search_schema` tool. It defaults `response_format` to `json` and accepts `query`, `response_format`, `search_scope`, `max_concepts`, `schema_brief`, and `enable_rerank`. The parsed response may contain `object_types`, `relation_types`, `action_types`, and `metric_types`.
+`search_schema()` is the typed wrapper for the Context Loader MCP `search_schema` tool. It defaults `response_format` to `json` and accepts `query`, `response_format`, `search_scope`, `max_concepts`, `schema_brief`, and `enable_rerank`. `search_scope.concept_groups` limits schema discovery to BKN concept group IDs; it is not an instance-data filter. The parsed response may contain `object_types`, `relation_types`, `action_types`, and `metric_types`.
+
+`client.query.kn_search()` and `client.query.kn_schema_search()` are deprecated compatibility/legacy entry points for schema discovery. Use `ContextLoaderResource.search_schema()` for new integrations.
 
 Use `call_tool(name, args)` when you need native MCP `tools/call` access for newly added server tools before the SDK adds a typed wrapper. Arguments are passed through unchanged.
 

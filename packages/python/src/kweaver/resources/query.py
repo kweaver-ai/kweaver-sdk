@@ -57,7 +57,13 @@ class QueryResource:
         *,
         only_schema: bool = False,
     ) -> KnSearchResult:
-        """Search KN schema via the public HTTP compatibility endpoint."""
+        """Search KN schema via the public HTTP compatibility endpoint.
+
+        Deprecated:
+            Use ``ContextLoaderResource.search_schema`` for new schema
+            discovery integrations. This compatibility endpoint may not
+            receive new ``search_schema`` capabilities.
+        """
         data = self._http.post(
             "/api/agent-retrieval/v1/kn/kn_search",
             json={
@@ -82,7 +88,13 @@ class QueryResource:
         max_concepts: int = 10,
         mode: str = "keyword_vector_retrieval",
     ) -> SemanticSearchResult:
-        """Schema-only semantic search via the public HTTP compatibility endpoint."""
+        """Schema-only semantic search via the legacy semantic-search endpoint.
+
+        Deprecated:
+            Use ``ContextLoaderResource.search_schema`` for new schema
+            discovery integrations. The legacy endpoint may not receive new
+            ``search_schema`` capabilities.
+        """
         return self.semantic_search(
             kn_id, query, mode=mode, max_concepts=max_concepts
         )

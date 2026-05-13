@@ -341,6 +341,80 @@ test("run context-loader search-schema calls MCP search_schema", async () => {
   }
 });
 
+test("run context-loader search-schema passes concept groups in search_scope", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://concept-groups.example",
+    accessToken: "t",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://concept-groups.example");
+  store.addContextLoaderEntry("https://concept-groups.example", "default", "kn-concept-groups");
+
+  const captured: { args?: Record<string, unknown> } = {};
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  console.log = () => {};
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(init?.body as string) as Record<string, unknown>;
+    if (body.method === "initialize") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), {
+        status: 200,
+        headers: { "MCP-Session-Id": "cli-concept-groups-session" },
+      });
+    }
+    if (body.method === "notifications/initialized") {
+      return new Response(JSON.stringify({ jsonrpc: "2.0" }), { status: 200 });
+    }
+    if (body.method === "tools/call") {
+      const params = body.params as { arguments?: Record<string, unknown> };
+      captured.args = params.arguments;
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { content: [{ type: "text", text: "{}" }] },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response("{}", { status: 200 });
+  };
+
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run([
+      "context-loader",
+      "search-schema",
+      "inventory risk",
+      "--scope",
+      "object,action",
+      "--concept-groups",
+      "supply_chain, procurement ,supply_chain",
+    ]);
+    assert.equal(code, 0);
+    assert.deepEqual(captured.args, {
+      query: "inventory risk",
+      response_format: "json",
+      search_scope: {
+        include_object_types: true,
+        include_relation_types: false,
+        include_action_types: true,
+        include_metric_types: false,
+        concept_groups: ["supply_chain", "procurement"],
+      },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+  }
+});
+
 test("run context-loader search-schema accepts positional <kn-id> (no saved config)", async () => {
   // No `addContextLoaderEntry` is called: the only path from <kn-id> to mcpUrl
   // must be the override branch in `ensureContextLoaderConfig`.
@@ -409,6 +483,106 @@ test("run context-loader search-schema accepts positional <kn-id> (no saved conf
   } finally {
     globalThis.fetch = originalFetch;
     console.log = originalLog;
+  }
+});
+
+test("run context-loader kn-search prints deprecation warning to stderr", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://deprecated-kn-search.example",
+    accessToken: "t",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://deprecated-kn-search.example");
+
+  const errors: string[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = () => {};
+  console.error = (message?: unknown) => {
+    errors.push(String(message ?? ""));
+  };
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ object_types: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run([
+      "context-loader",
+      "kn-search",
+      "kn-deprecated",
+      "Pod",
+    ]);
+    assert.equal(code, 0);
+    assert.ok(
+      errors.some((line) =>
+        line.includes("context-loader kn-search is deprecated") &&
+        line.includes("context-loader search-schema"),
+      ),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+    console.error = originalError;
+  }
+});
+
+test("run context-loader kn-schema-search prints deprecation warning to stderr", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const store = await importStoreModule(configDir);
+  store.saveTokenConfig({
+    baseUrl: "https://deprecated-kn-schema-search.example",
+    accessToken: "t",
+    tokenType: "bearer",
+    scope: "openid",
+    obtainedAt: new Date().toISOString(),
+  });
+  store.setCurrentPlatform("https://deprecated-kn-schema-search.example");
+
+  const errors: string[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = () => {};
+  console.error = (message?: unknown) => {
+    errors.push(String(message ?? ""));
+  };
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ concepts: [], hits_total: 0 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    const cli = await importCliModule(configDir);
+    const code = await cli.run([
+      "context-loader",
+      "kn-schema-search",
+      "kn-deprecated",
+      "Pod",
+    ]);
+    assert.equal(code, 0);
+    assert.ok(
+      errors.some((line) =>
+        line.includes("context-loader kn-schema-search is deprecated") &&
+        line.includes("context-loader search-schema"),
+      ),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+    console.error = originalError;
   }
 });
 

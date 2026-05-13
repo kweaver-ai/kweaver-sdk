@@ -139,10 +139,10 @@ Usage:
   kweaver context-loader tools|resources|templates|prompts <kn-id> [--cursor]
   kweaver context-loader resource <kn-id> <uri>
   kweaver context-loader prompt <kn-id> <name> [--args json]
-  kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--max N]
+  kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids] [--max N]
   kweaver context-loader tool-call <kn-id> <name> --args '<json>'
-  kweaver context-loader kn-search <kn-id> <query> [--only-schema]                 (compat HTTP)
-  kweaver context-loader kn-schema-search <kn-id> <query> [--max N]                (compat HTTP)
+  kweaver context-loader kn-search <kn-id> <query> [--only-schema]                 (deprecated; use search-schema)
+  kweaver context-loader kn-schema-search <kn-id> <query> [--max N]                (deprecated; use search-schema)
   kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
                                                           (omit <kn-id> to fall back to deprecated saved config)
   (alias: kweaver context ...)

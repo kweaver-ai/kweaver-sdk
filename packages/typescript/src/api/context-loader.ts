@@ -80,6 +80,7 @@ async function ensureSession(options: ContextLoaderCallOptions): Promise<string>
 }
 
 export interface SearchSchemaScope {
+  concept_groups?: string[];
   include_object_types?: boolean;
   include_relation_types?: boolean;
   include_action_types?: boolean;

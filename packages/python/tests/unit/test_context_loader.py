@@ -245,6 +245,25 @@ def test_search_schema_passes_optional_parameters():
         pass
 
 
+def test_search_schema_passes_concept_groups_scope():
+    """search_schema: passes concept_groups through search_scope."""
+    cl, transport = _make_cl([_tool_response({"object_types": []})])
+    scope = {
+        "concept_groups": ["supply_chain", "procurement"],
+        "include_object_types": True,
+        "include_relation_types": False,
+    }
+    try:
+        cl.search_schema("inventory risk", search_scope=scope)
+        assert transport.requests[-1]["params"]["arguments"] == {
+            "query": "inventory risk",
+            "response_format": "json",
+            "search_scope": scope,
+        }
+    finally:
+        pass
+
+
 # ── Layer 2: query_object_instance ────────────────────────────────────────────
 
 

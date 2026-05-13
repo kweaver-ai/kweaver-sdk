@@ -36,6 +36,11 @@ const MCP_NOT_CONFIGURED =
 
 const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 
+const DEPRECATED_KN_SEARCH_MESSAGE =
+  "[deprecated] context-loader kn-search is deprecated. Use context-loader search-schema instead.";
+const DEPRECATED_KN_SCHEMA_SEARCH_MESSAGE =
+  "[deprecated] context-loader kn-schema-search is deprecated. Use context-loader search-schema instead.";
+
 function ensureContextLoaderConfig(knIdOverride?: string): {
   baseUrl: string;
   mcpUrl: string;
@@ -149,10 +154,10 @@ Subcommands:
   templates <kn-id>                    resources/templates/list - list resource templates
   prompts <kn-id>                      prompts/list - list prompts
   prompt <kn-id> <name> [--args json]  prompts/get - get prompt by name
-  search-schema <kn-id> <query> [opts] MCP search_schema (object/relation/action/metric)
+  search-schema <kn-id> <query> [--scope ...] [--concept-groups ids] MCP search_schema
   tool-call <kn-id> <name> --args '<json>'  MCP tools/call for any server tool
-  kn-search <kn-id> <query> [--only-schema]  Compatibility: HTTP kn_search
-  kn-schema-search <kn-id> <query> [--max N] Compatibility: HTTP semantic-search
+  kn-search <kn-id> <query> [--only-schema]  [deprecated] use search-schema
+  kn-schema-search <kn-id> <query> [--max N] [deprecated] use search-schema
   query-object-instance <kn-id> <json>       Layer 2: Query instances
   query-instance-subgraph <kn-id> <json>     Layer 2: Query subgraph
   get-logic-properties <kn-id> <json>        Layer 3: Get logic property values
@@ -161,7 +166,7 @@ Subcommands:
 
 Examples:
   kweaver context-loader tools d5iv6c9818p72mpje8pg
-  kweaver context-loader search-schema d5iv6c9818p72mpje8pg "利润率" --scope object,metric --max 5
+  kweaver context-loader search-schema d5iv6c9818p72mpje8pg "利润率" --scope object,metric --concept-groups finance --max 5
   kweaver context-loader tool-call d5iv6c9818p72mpje8pg search_schema --args '{"query":"利润率"}'
   kweaver context-loader kn-search d5iv6c9818p72mpje8pg "高血压 治疗 药品" --only-schema --pretty`);
     return 0;
@@ -458,13 +463,14 @@ function parseResponseText(text: string): unknown {
 }
 
 function parseSearchSchemaScope(raw: string): SearchSchemaScope {
-  const scope: Required<SearchSchemaScope> = {
+  type SearchSchemaIncludeField = Exclude<keyof SearchSchemaScope, "concept_groups">;
+  const scope: SearchSchemaScope = {
     include_object_types: false,
     include_relation_types: false,
     include_action_types: false,
     include_metric_types: false,
   };
-  const aliases: Record<string, keyof SearchSchemaScope> = {
+  const aliases: Record<string, SearchSchemaIncludeField> = {
     object: "include_object_types",
     objects: "include_object_types",
     object_type: "include_object_types",
@@ -495,6 +501,18 @@ function parseSearchSchemaScope(raw: string): SearchSchemaScope {
   return scope;
 }
 
+function parseConceptGroups(raw: string): string[] {
+  const seen = new Set<string>();
+  const groups: string[] = [];
+  for (const item of raw.split(",")) {
+    const value = item.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    groups.push(value);
+  }
+  return groups;
+}
+
 async function runSearchSchema(
   options: { mcpUrl: string; knId: string; accessToken: string },
   args: string[],
@@ -506,13 +524,14 @@ async function runSearchSchema(
   let maxConcepts: number | undefined;
   let schemaBrief: boolean | undefined;
   let enableRerank: boolean | undefined;
+  let conceptGroups: string[] | undefined;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if ((arg === "--format" || arg === "-f") && args[i + 1]) {
       const value = args[i + 1];
       if (value !== "json" && value !== "toon") {
-        console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--max N] [--brief] [--no-rerank]");
+        console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--concept-groups ids] [--max N] [--brief] [--no-rerank]");
         return 1;
       }
       responseFormat = value;
@@ -524,6 +543,9 @@ async function runSearchSchema(
         console.error(error instanceof Error ? error.message : String(error));
         return 1;
       }
+      i += 1;
+    } else if ((arg === "--concept-groups" || arg === "--concept-group") && args[i + 1]) {
+      conceptGroups = parseConceptGroups(args[i + 1]);
       i += 1;
     } else if ((arg === "--max" || arg === "-n") && args[i + 1]) {
       maxConcepts = parseInt(args[i + 1], 10);
@@ -542,8 +564,15 @@ async function runSearchSchema(
   }
 
   if (!query) {
-    console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--max N] [--brief] [--no-rerank]");
+    console.error("Usage: kweaver context-loader search-schema <query> [--format json|toon] [--scope object,relation,action,metric] [--concept-groups ids] [--max N] [--brief] [--no-rerank]");
     return 1;
+  }
+
+  if (conceptGroups !== undefined) {
+    searchScope = {
+      ...(searchScope ?? {}),
+      concept_groups: conceptGroups,
+    };
   }
 
   const result = await searchSchema(options, {
@@ -620,6 +649,7 @@ async function runKnSearch(
     return 1;
   }
 
+  console.error(DEPRECATED_KN_SEARCH_MESSAGE);
   const raw = await knSearchHttp({
     baseUrl: options.baseUrl,
     accessToken: options.accessToken,
@@ -652,10 +682,11 @@ async function runKnSchemaSearch(
   }
 
   if (!query) {
-    console.error("Usage: kweaver context-loader kn-schema-search <query> [--max N]");
+    console.error("Usage: kweaver context-loader kn-schema-search <kn-id> <query> [--max N]");
     return 1;
   }
 
+  console.error(DEPRECATED_KN_SCHEMA_SEARCH_MESSAGE);
   const raw = await semanticSearch({
     baseUrl: options.baseUrl,
     accessToken: options.accessToken,

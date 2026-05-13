@@ -43,24 +43,24 @@ kweaver context-loader prompt <kn-id> <name> [--args '<json>']
 
 ## Layer 1 — Schema 搜索
 
-推荐使用 `search-schema`，它调用 MCP `search_schema`，支持 `object_types`、`relation_types`、`action_types`、`metric_types`。
+推荐使用 `search-schema`，它调用 MCP `search_schema`，支持 `object_types`、`relation_types`、`action_types`、`metric_types`。`--concept-groups` 会写入 `search_scope.concept_groups`，用于按 BKN 概念分组 ID 限定 Schema 发现范围；它只作用于概念层发现，不是实例数据过滤条件。
 
 ```bash
 kweaver context-loader search-schema <kn-id> "Pod"
-kweaver context-loader search-schema <kn-id> "利润率" --scope object,metric --max 10 --brief --no-rerank
+kweaver context-loader search-schema <kn-id> "利润率" --scope object,metric --concept-groups finance --max 10 --brief --no-rerank
 kweaver context-loader search-schema <kn-id> "Pod" --format toon
 ```
 
-参数映射：`--format` -> `response_format`，`--scope` -> `search_scope`，`--max` -> `max_concepts`，`--brief` -> `schema_brief: true`，`--no-rerank` -> `enable_rerank: false`。
+参数映射：`--format` -> `response_format`，`--scope` -> `search_scope`，`--concept-groups a,b` -> `search_scope.concept_groups: ["a","b"]`，`--max` -> `max_concepts`，`--brief` -> `schema_brief: true`，`--no-rerank` -> `enable_rerank: false`。
 
-兼容命令仍保留，但**全部走 Context Loader 公共 HTTP endpoint**（`/api/agent-retrieval/v1/kn/kn_search` 与 `/semantic-search`），不再触碰已被移除的 MCP `kn_search` / `kn_schema_search`：
+Deprecated 兼容命令仍保留给老脚本，但**全部走 Context Loader 公共 HTTP endpoint**（`/api/agent-retrieval/v1/kn/kn_search` 与 `/semantic-search`），不再触碰已被移除的 MCP `kn_search` / `kn_schema_search`，也不承诺获得 `search_schema` 的新能力（例如 `concept_groups`）：
 
 ```bash
 kweaver context-loader kn-search <kn-id> "Pod" [--only-schema]
 kweaver context-loader kn-schema-search <kn-id> "Pod" [--max 10]
 ```
 
-> SDK 层同样走 HTTP：TS `client.bkn.knSearch(...)`、Python `client.query.kn_search(...)` / `client.query.kn_schema_search(...)`。`ContextLoaderResource` 不再暴露 `kn_search` / `kn_schema_search` 方法——MCP 入口请直接用 `searchSchema` / `callTool`。
+> SDK 层同样走 HTTP：TS `client.bkn.knSearch(...)`、Python `client.query.kn_search(...)` / `client.query.kn_schema_search(...)` 均已 deprecated。`ContextLoaderResource` 不再暴露 `kn_search` / `kn_schema_search` 方法；新接入的 Schema 发现请使用 `searchSchema` / `search_schema` / `callTool`。
 
 ## Layer 2 — 实例查询
 

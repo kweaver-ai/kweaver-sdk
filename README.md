@@ -293,7 +293,9 @@ kweaver trace diagnose rules validate <rule.yaml>     # validate a rule
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
+kweaver context-loader tool-call <kn-id> <name> --args '<json>'
+kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  (deprecated; use search-schema)
 kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
 kweaver context-loader config set/use/list/show                       (deprecated; <kn-id> may be omitted to fall back to saved config)
 kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
@@ -306,7 +308,7 @@ The two CLIs use different top-level command names for some features. The table 
 | `kweaver query search <kn_id> <query>` | `kweaver bkn search <kn-id> <query>` |
 | `kweaver query instances <kn_id> <ot_id> …` | `kweaver bkn object-type query <kn-id> <ot-id> …` |
 | `kweaver query subgraph <kn_id> …` (flags build the path) | `kweaver bkn subgraph <kn-id> <body-json>` (JSON body; shape differs) |
-| `kweaver query kn-search <kn_id> <query>` (REST) | `kweaver context-loader kn-search <query>` (HTTP compatibility with configured KN), or `kweaver context-loader search-schema <query>` for MCP `search_schema` |
+| `kweaver query kn-search <kn_id> <query>` (REST, deprecated for schema discovery) | `kweaver context-loader search-schema <kn-id> <query>` for MCP `search_schema`; `kweaver context-loader kn-search <kn-id> <query>` is deprecated compatibility only |
 | `kweaver action query …` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
 
 **Only on TypeScript CLI:** `kweaver vega`, `kweaver dataview list|find|get|delete`, `kweaver ds import-csv`, `kweaver bkn create-from-csv`, and full `kweaver agent` create/update/delete/publish (see `kweaver agent --help`). Both CLIs support `kweaver config show|list-bd|set-bd` and `kweaver dataview query` (SQL via mdl-uniquery; Python requires `pip install kweaver-sdk[cli]`).

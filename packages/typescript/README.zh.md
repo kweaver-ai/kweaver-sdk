@@ -156,7 +156,10 @@ const rows = await client.vega.sqlQuery(
 
 // Context Loader（MCP search_schema + 通用 tools/call）
 const cl      = client.contextLoader(mcpUrl, "bkn-id");
-const schema  = await cl.searchSchema({ query: "高血压 治疗" });
+const schema  = await cl.searchSchema({
+  query: "高血压 治疗",
+  search_scope: { concept_groups: ["clinical"] },
+});
 const rawTool = await cl.callTool("search_schema", { query: "高血压 治疗" });
 
 // Skill（注册表/市场/渐进式读取）
@@ -164,7 +167,9 @@ const skills = await client.skills.market({ name: "kweaver" });
 const skillMd = await client.skills.fetchContent("skill-id");
 ```
 
-`searchSchema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
+`searchSchema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。`search_scope.concept_groups` 用于按 BKN 概念分组 ID 限定 Schema 发现范围，不是实例数据过滤条件。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
+
+`client.bkn.knSearch(...)` 已过时。新接入的 Schema 发现请使用 `client.contextLoader(...).searchSchema(...)`。
 
 需要直接使用 MCP 原生 `tools/call` 时，使用 `callTool(name, args)`。这适用于服务端新增工具但 SDK 尚未提供类型化封装的场景，参数会原样透传。
 
@@ -198,7 +203,9 @@ kweaver agent list/get/chat/sessions/history
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema|tool-call|kn-search|kn-schema-search <kn-id> <query|name> [...]
+kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
+kweaver context-loader tool-call <kn-id> <name> --args '<json>'
+kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  （deprecated；请使用 search-schema）
 kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
 kweaver context-loader config set/use/list/show                       （deprecated；省略 <kn-id> 时回退到已保存配置）
 kweaver call <path> [-X METHOD] [-d BODY] [-H header]

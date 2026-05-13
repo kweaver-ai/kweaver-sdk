@@ -1,3 +1,4 @@
+import path from "node:path";
 import yargs from "yargs";
 
 import { derivePaths, diagnose, TraceNotFoundError } from "../trace-ai/diagnose/index.js";
@@ -10,6 +11,7 @@ import { ClaudeCodeSubprocessProvider } from "../agent-providers/providers/claud
 import { runBatch } from "../trace-ai/scan/index.js";
 import { parseTracesList, TracesListError } from "../trace-ai/scan/traces-list-parser.js";
 import { SingleAgentValidationError } from "../trace-ai/scan/single-agent-validator.js";
+import { build, BuilderError } from "../trace-ai/eval-set/index.js";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 
@@ -20,7 +22,7 @@ function ensureDefaultProviderRegistered(): void {
 }
 
 export interface ParsedTraceArgs {
-  subcommand: "diagnose" | "rules-validate" | "help";
+  subcommand: "diagnose" | "rules-validate" | "eval-set-build" | "schema-validate" | "help";
   mode?: "single" | "batch";
   conversationId?: string;       // single mode
   traces?: string;               // batch mode raw value (string or "@path") — resolved at runtime
@@ -36,6 +38,15 @@ export interface ParsedTraceArgs {
   baseUrl: string | null;
   token: string | null;
   businessDomain: string | null;
+  // ── M5 PR-A 新增字段 ────────────────────────────────────────────────
+  queriesPath?: string;
+  diagnosisPath?: string;
+  onConflict?: "fail" | "skip" | "overwrite";
+  redactionRules?: string;
+  evalSetId?: string;
+  // Task 9 schema validate
+  schemaValidatePath?: string;
+  schemaKind?: string;
 }
 
 export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
@@ -43,11 +54,36 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
     return defaults("help");
   }
   const head = argv[0];
-  if (head !== "diagnose") {
+  if (head !== "diagnose" && head !== "eval-set" && head !== "schema") {
     return defaults("help");
   }
   if (argv[1] === "rules" && argv[2] === "validate") {
     return { ...defaults("rules-validate"), rulePath: argv[3] };
+  }
+  // M5 PR-A: eval-set build
+  if (head === "eval-set" && argv[1] === "build") {
+    const parsed = yargs(argv.slice(2))
+      .option("queries", { type: "string", default: undefined })
+      .option("diagnosis", { type: "string", default: undefined })
+      .option("out", { type: "string", default: undefined })
+      .option("on-conflict", {
+        type: "string",
+        choices: ["fail", "skip", "overwrite"],
+        default: "fail",
+      })
+      .option("redaction-rules", { type: "string", default: undefined })
+      .option("eval-set-id", { type: "string", default: undefined })
+      .help(false)
+      .parseSync();
+    return {
+      ...defaults("eval-set-build"),
+      queriesPath: parsed.queries as string | undefined,
+      diagnosisPath: parsed.diagnosis as string | undefined,
+      out: (parsed.out as string | undefined) ?? null,
+      onConflict: parsed["on-conflict"] as "fail" | "skip" | "overwrite",
+      redactionRules: parsed["redaction-rules"] as string | undefined,
+      evalSetId: parsed["eval-set-id"] as string | undefined,
+    };
   }
   // diagnose [<conversation_id>] [flags...]
   const parsed = yargs(argv.slice(1))
@@ -170,6 +206,9 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
   }
   if (args.subcommand === "rules-validate") {
     return await runRulesValidate(args.rulePath ?? "");
+  }
+  if (args.subcommand === "eval-set-build") {
+    return await runEvalSetBuild(args);
   }
   // diagnose — batch or single
   if (args.mode !== "batch" && !args.conversationId) {
@@ -337,4 +376,54 @@ async function runRulesValidate(rulePath: string): Promise<number> {
   }
   process.stdout.write(`ok: ${rulePath} validates against diagnosis-rule/v1\n`);
   return 0;
+}
+
+async function runEvalSetBuild(args: ParsedTraceArgs): Promise<number> {
+  // 参数检查：互斥 + 必填
+  const hasQueries = !!args.queriesPath;
+  const hasDiagnosis = !!args.diagnosisPath;
+  if (hasQueries === hasDiagnosis) {
+    process.stderr.write(
+      "error: must pass exactly one of --queries=<file> | --diagnosis=<dir>\n",
+    );
+    return 2;
+  }
+  if (!args.out) {
+    process.stderr.write("error: --out=<dir> is required\n");
+    return 2;
+  }
+
+  // eval_set_id 默认 = basename(out)
+  const evalSetId = args.evalSetId ?? path.basename(args.out.replace(/\/+$/, ""));
+  const repoDir = path.join(process.cwd(), "redaction-rules");
+
+  try {
+    const result = await build({
+      source: hasQueries
+        ? { kind: "queries", path: args.queriesPath! }
+        : { kind: "diagnosis", path: args.diagnosisPath! },
+      outDir: args.out,
+      evalSetId,
+      onConflict: args.onConflict ?? "fail",
+      redactionRulesCliFlag: args.redactionRules,
+      repoDir,
+    });
+    process.stdout.write(
+      `✓ wrote ${result.cases_written} cases (${result.cases_skipped} skipped), ${result.shard_paths.length} shard(s)\n`,
+    );
+    process.stdout.write(`  redaction_rules: ${result.redaction_rules_source}\n`);
+    if (result.conflicts.length > 0) {
+      process.stdout.write(`  conflicts: ${result.conflicts.join(", ")}\n`);
+    }
+    return 0;
+  } catch (e) {
+    if (e instanceof BuilderError) {
+      process.stderr.write(`error: ${e.message}\n`);
+      // query_id 冲突 → exit 6 (spec doc §5.4)
+      if (e.message.includes("query_id conflict")) return 6;
+      return 1;
+    }
+    process.stderr.write(`error: ${(e as Error).message}\n`);
+    return 1;
+  }
 }

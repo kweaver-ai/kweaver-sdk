@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import yargs from "yargs";
 
 import { derivePaths, diagnose, TraceNotFoundError } from "../trace-ai/diagnose/index.js";
@@ -12,6 +13,12 @@ import { runBatch } from "../trace-ai/scan/index.js";
 import { parseTracesList, TracesListError } from "../trace-ai/scan/traces-list-parser.js";
 import { SingleAgentValidationError } from "../trace-ai/scan/single-agent-validator.js";
 import { build, BuilderError } from "../trace-ai/eval-set/index.js";
+import {
+  EvalSetIndexSchema,
+  EvalSetShardSchema,
+  EvalSetInputSchema,
+  TestReportSchema,
+} from "../trace-ai/eval-set/schemas.js";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 
@@ -83,6 +90,18 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
       onConflict: parsed["on-conflict"] as "fail" | "skip" | "overwrite",
       redactionRules: parsed["redaction-rules"] as string | undefined,
       evalSetId: parsed["eval-set-id"] as string | undefined,
+    };
+  }
+  // M5 PR-A: schema validate
+  if (head === "schema" && argv[1] === "validate") {
+    const parsed = yargs(argv.slice(2))
+      .option("kind", { type: "string", default: undefined })
+      .help(false)
+      .parseSync();
+    return {
+      ...defaults("schema-validate"),
+      schemaValidatePath: String(parsed._[0] ?? ""),
+      schemaKind: parsed.kind as string | undefined,
     };
   }
   // diagnose [<conversation_id>] [flags...]
@@ -209,6 +228,20 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
   }
   if (args.subcommand === "eval-set-build") {
     return await runEvalSetBuild(args);
+  }
+  if (args.subcommand === "schema-validate") {
+    try {
+      return await runSchemaValidate({
+        filePath: args.schemaValidatePath ?? "",
+        kind: args.schemaKind,
+      });
+    } catch (e) {
+      if (e instanceof SchemaKindRequiredError) {
+        process.stderr.write(`error: ${e.message}\n`);
+        return 2;
+      }
+      throw e;
+    }
   }
   // diagnose — batch or single
   if (args.mode !== "batch" && !args.conversationId) {
@@ -376,6 +409,89 @@ async function runRulesValidate(rulePath: string): Promise<number> {
   }
   process.stdout.write(`ok: ${rulePath} validates against diagnosis-rule/v1\n`);
   return 0;
+}
+
+export class SchemaKindRequiredError extends Error {
+  constructor(filePath: string) {
+    super(
+      `cannot infer schema kind for ${filePath}; pass --kind=<eval-set|eval-set-index|eval-set-input|test-report>`,
+    );
+    this.name = "SchemaKindRequiredError";
+  }
+}
+
+export function inferKind(filePath: string): string | null {
+  const norm = filePath.replace(/\\/g, "/");
+  const base = norm.split("/").pop() ?? "";
+  // index.yaml in an eval-set dir (absolute or relative path)
+  if (base === "index.yaml" && /(^|\/)eval-sets\/[^/]+\/index\.yaml$/.test(norm)) {
+    return "eval-set-index";
+  }
+  if (base.endsWith("-test-report.yaml") || base === "test-report.yaml" || base === "report.yaml") {
+    if (/(^|\/)test-runs\//.test(norm) || base.includes("test-report")) return "test-report";
+  }
+  if (base.endsWith("-eval-set-input.yaml") || base.includes("queries-input")) {
+    return "eval-set-input";
+  }
+  // shard inside eval-set dir (anything not index.yaml)
+  if (/(^|\/)eval-sets\/[^/]+\/[^/]+\.yaml$/.test(norm) && base !== "index.yaml") {
+    return "eval-set";
+  }
+  return null;
+}
+
+const SCHEMA_BY_KIND: Record<string, { safeParse: (x: unknown) => { success: boolean; error?: { issues: Array<{ message: string; path: PropertyKey[] }> } } }> = {
+  "eval-set": EvalSetShardSchema,
+  "eval-set-index": EvalSetIndexSchema,
+  "eval-set-input": EvalSetInputSchema,
+  "test-report": TestReportSchema,
+};
+
+export interface RunSchemaValidateOpts {
+  filePath: string;
+  kind: string | undefined;
+}
+
+export async function runSchemaValidate(opts: RunSchemaValidateOpts): Promise<number> {
+  if (!opts.filePath) {
+    process.stderr.write("error: schema validate requires a file path argument\n");
+    return 2;
+  }
+  const kind = opts.kind ?? inferKind(opts.filePath);
+  if (!kind) {
+    throw new SchemaKindRequiredError(opts.filePath);
+  }
+  const schema = SCHEMA_BY_KIND[kind];
+  if (!schema) {
+    process.stderr.write(`error: unknown --kind=${kind}; valid: ${Object.keys(SCHEMA_BY_KIND).join(", ")}\n`);
+    return 2;
+  }
+  let raw: string;
+  try {
+    raw = await readFile(opts.filePath, "utf8");
+  } catch (e) {
+    process.stderr.write(`error: cannot read ${opts.filePath}: ${(e as Error).message}\n`);
+    return 1;
+  }
+  const yamlMod = await import("js-yaml");
+  let parsed: unknown;
+  try {
+    parsed = yamlMod.default.load(raw);
+  } catch (e) {
+    process.stderr.write(`error: yaml parse failed: ${(e as Error).message}\n`);
+    return 1;
+  }
+  const result = schema.safeParse(parsed);
+  if (result.success) {
+    process.stdout.write(`✓ ${opts.filePath} valid against ${kind}\n`);
+    return 0;
+  }
+  const issue = result.error!.issues[0];
+  const where = issue.path.map(String).join(".");
+  process.stderr.write(
+    `✗ ${opts.filePath} invalid at '${where}': ${issue.message}\n`,
+  );
+  return 1;
 }
 
 async function runEvalSetBuild(args: ParsedTraceArgs): Promise<number> {

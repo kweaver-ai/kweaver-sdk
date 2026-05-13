@@ -166,14 +166,14 @@ kweaver bkn search <kn_id> "物料"
 ### Context Loader（MCP 分层检索）
 
 ```bash
-# 配置 KN 上下文
-kweaver context-loader config set --kn-id <kn_id>
+# 先查看子命令 help，确认参数与 JSON shape
+kweaver context-loader help search-schema
 
 # Schema 搜索（推荐 MCP search_schema）
-kweaver context-loader search-schema "物料" --scope object,relation,action
+kweaver context-loader search-schema <kn_id> "物料" --scope object,relation,action
 
 # 实例查询
-kweaver context-loader query-object-instance '{"ot_id":"<ot_id>","condition":{"field":"material_code","operation":"==","value_from":"const","value":"101-000025"},"limit":1}'
+kweaver context-loader query-object-instance <kn_id> '{"ot_id":"<ot_id>","condition":{"field":"material_code","operation":"==","value_from":"const","value":"101-000025"},"limit":1}'
 ```
 
 ## 绑定 Agent 进行对话

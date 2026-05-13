@@ -216,6 +216,7 @@ kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
+kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>
 kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
 kweaver context-loader tool-call <kn-id> <name> --args '<json>'
@@ -339,7 +340,7 @@ When `--token` is used, write-disk commands (`auth login` / `logout` / `use` / `
 
 `auth whoami` / `auth status` distinguish the two stateless modes: `Source: CLI (flag: --token)` for flag mode, `env (KWEAVER_TOKEN)` for env mode (`whoami --json` uses `"source": "flag"` vs `"source": "env"`).
 
-`kweaver context-loader` runtime subcommands accept `<kn-id>` as the first positional (e.g. `kweaver context-loader tools <kn-id>`) or via the global `--kn-id <id>` / `-k <id>` flag, so they work in stateless mode without any saved config. The `context-loader config set|use|list|remove|show` management group is deprecated, prints a warning on use, and is disabled in its entirety under `--token`.
+`kweaver context-loader` runtime subcommands accept `<kn-id>` as the first positional (e.g. `kweaver context-loader tools <kn-id>`) or via the global `--kn-id <id>` / `-k <id>` flag, so they work in stateless mode without any saved config. Use `kweaver context-loader help <subcommand>` or `<subcommand> --help` to inspect arguments before login/network checks. The `context-loader config set|use|list|remove|show` management group is deprecated, prints a warning on use, and is disabled in its entirety under `--token`.
 
 ### TLS Certificate Troubleshooting
 

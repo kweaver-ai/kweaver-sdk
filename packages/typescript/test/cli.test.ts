@@ -241,14 +241,240 @@ test("run context-loader help includes standard MCP short commands", async () =>
   try {
     await run(["context-loader"]);
     const help = lines.join("\n");
-    assert.ok(help.includes("resource <kn-id> <uri>"), "help should include resource");
-    assert.ok(help.includes("templates"), "help should include templates");
-    assert.ok(help.includes("prompts"), "help should include prompts");
-    assert.ok(help.includes("prompt <kn-id> <name>"), "help should include prompt");
-    assert.ok(help.includes("tools/list"), "help should map tools to tools/list");
-    assert.ok(help.includes("resources/list"), "help should map resources to resources/list");
-    assert.ok(help.includes("search-schema <kn-id> <query>"), "help should include search-schema");
-    assert.ok(help.includes("tool-call <kn-id> <name>"), "help should include generic tool-call");
+    assert.ok(help.includes("ADVANCED MCP COMMANDS"), "help should include advanced MCP commands");
+    assert.ok(help.includes("tools:"), "help should include tools");
+    assert.ok(help.includes("resources:"), "help should include resources");
+    assert.ok(help.includes("resource:"), "help should include resource");
+    assert.ok(help.includes("templates:"), "help should include templates");
+    assert.ok(help.includes("prompts:"), "help should include prompts");
+    assert.ok(help.includes("prompt:"), "help should include prompt");
+    assert.ok(help.includes("tool-call:"), "help should include generic tool-call");
+    assert.equal(help.includes("resource <kn-id> <uri>"), false, "top-level help should omit resource arguments");
+    assert.equal(help.includes("prompt <kn-id> <name>"), false, "top-level help should omit prompt arguments");
+    assert.equal(help.includes("tool-call <kn-id> <name>"), false, "top-level help should omit tool-call arguments");
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test("run context-loader help groups commands by task-oriented capability", async () => {
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["context-loader", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.equal(help.includes("Discovery:"), false, "help should avoid ambiguous Discovery grouping");
+    assert.ok(help.includes("USAGE"), "help should include a standard usage section");
+    assert.ok(
+      help.includes("kweaver context-loader <subcommand> [flags]"),
+      "usage should show the context-loader subcommand shape",
+    );
+    assert.ok(help.includes("KN SELECTION"), "help should describe shared KN selection");
+    assert.ok(help.includes("RECOMMENDED FLOW"), "help should describe the recommended command flow");
+    assert.ok(
+      help.includes("search-schema:       Discover schema concepts"),
+      "recommended flow should start with schema discovery",
+    );
+    assert.ok(
+      help.includes("query-*:             Query instances using discovered schema IDs"),
+      "recommended flow should point instance reads to query-* commands",
+    );
+    assert.ok(
+      help.includes("get-*/find-skills:   Enrich instances or inspect actions"),
+      "recommended flow should position enrichment/action commands after query",
+    );
+    assert.ok(
+      help.includes("tool-call:           Raw MCP debugging or unsupported tools only"),
+      "recommended flow should keep raw MCP calls as the last resort",
+    );
+    assert.ok(help.includes("SCHEMA DISCOVERY COMMANDS"), "help should group schema discovery commands");
+    assert.ok(
+      help.includes("search-schema:       Search object/relation/action/metric schemas"),
+      "schema discovery should list command descriptions without arguments",
+    );
+    assert.ok(help.includes("INSTANCE QUERY COMMANDS"), "help should group instance query commands");
+    assert.ok(
+      help.includes("query-object-instance:    Query object instances"),
+      "instance query should list command descriptions without arguments",
+    );
+    assert.ok(
+      help.includes("INSTANCE ENRICHMENT AND ACTION COMMANDS"),
+      "help should use a user-facing enrichment/actions group name",
+    );
+    assert.equal(help.includes("Instance enrichment and actions (Layer 3):"), false, "Layer 3 should not be in the group title");
+    assert.ok(
+      help.includes("get-logic-properties: Get calculated logic property values"),
+      "enrichment/action commands should list command descriptions without arguments",
+    );
+    assert.ok(help.includes("ADVANCED MCP COMMANDS"), "help should group MCP interface wrappers");
+    assert.ok(
+      help.includes("tool-call:   Call any MCP tool directly"),
+      "advanced MCP commands should list command descriptions without arguments",
+    );
+    assert.ok(help.includes("DEPRECATED CONFIGURATION COMMANDS"), "help should group deprecated config separately");
+    assert.ok(help.includes("FLAGS"), "help should include shared flags");
+    assert.ok(help.includes("-k, --kn-id <id>"), "help should document the shared KN selector flag");
+    assert.ok(help.includes("LEARN MORE"), "help should point to subcommand help for details");
+    assert.ok(
+      help.includes("Use `kweaver context-loader <subcommand> --help` for arguments, JSON shapes, and examples."),
+      "help should point to subcommand help",
+    );
+    assert.equal(help.includes("Examples:"), false, "top-level help should avoid detailed examples");
+    assert.equal(help.includes("Advanced MCP example:"), false, "raw MCP examples belong in subcommand help");
+    assert.equal(help.includes("search-schema <kn-id>"), false, "top-level help should omit search-schema arguments");
+    assert.equal(help.includes("query-object-instance <kn-id>"), false, "top-level help should omit query arguments");
+    assert.equal(help.includes("kn-search <kn-id>"), false, "top-level help should omit deprecated command arguments");
+
+    const usageIdx = help.indexOf("USAGE");
+    const knIdx = help.indexOf("KN SELECTION");
+    const flowIdx = help.indexOf("RECOMMENDED FLOW");
+    const schemaIdx = help.indexOf("SCHEMA DISCOVERY COMMANDS");
+    const instanceIdx = help.indexOf("INSTANCE QUERY COMMANDS");
+    const layer3Idx = help.indexOf("INSTANCE ENRICHMENT AND ACTION COMMANDS");
+    const mcpIdx = help.indexOf("ADVANCED MCP COMMANDS");
+    const configIdx = help.indexOf("DEPRECATED CONFIGURATION COMMANDS");
+    const flagsIdx = help.indexOf("FLAGS");
+    const learnMoreIdx = help.indexOf("LEARN MORE");
+    assert.ok(usageIdx < knIdx, "usage should appear before shared KN selection");
+    assert.ok(knIdx < flowIdx, "KN selection should appear before recommended flow");
+    assert.ok(flowIdx < schemaIdx, "recommended flow should appear before the command groups");
+    assert.ok(schemaIdx < instanceIdx, "schema discovery should be the first task group");
+    assert.ok(instanceIdx < layer3Idx, "instance query should come before enrichment/actions");
+    assert.ok(layer3Idx < mcpIdx, "advanced MCP interface should come after core task groups");
+    assert.ok(mcpIdx < configIdx, "deprecated config should remain last");
+    assert.ok(configIdx < flagsIdx, "flags should appear after command groups");
+    assert.ok(flagsIdx < learnMoreIdx, "learn more should appear last");
+
+    const toolCallIdx = help.indexOf("tool-call:", mcpIdx);
+    assert.ok(toolCallIdx > mcpIdx && toolCallIdx < configIdx, "tool-call should be under Advanced MCP interface");
+
+    const knSearchIdx = help.indexOf("kn-search:");
+    const knSchemaSearchIdx = help.indexOf("kn-schema-search:");
+    assert.ok(knSearchIdx > schemaIdx && knSearchIdx < instanceIdx, "kn-search should stay under schema discovery");
+    assert.ok(
+      knSchemaSearchIdx > schemaIdx && knSchemaSearchIdx < instanceIdx,
+      "kn-schema-search should stay under schema discovery",
+    );
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test("run context-loader help search-schema prints detailed help without auth or network", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const lines: string[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  globalThis.fetch = async () => {
+    throw new Error("help should not make network requests");
+  };
+
+  try {
+    const cli = await importCliModule(configDir);
+    assert.equal(await cli.run(["context-loader", "help", "search-schema"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("kweaver context-loader search-schema"));
+    assert.ok(help.includes("Arguments:"));
+    assert.equal(help.includes("Required:"), false, "use standard Arguments section name");
+    assert.ok(help.includes("<query>             Required. Natural-language query text."));
+    assert.ok(help.includes("<kn-id>             Recommended KN selector. Alternative: --kn-id <kn-id>."));
+    assert.ok(help.includes("Options:"));
+    assert.equal(help.includes("Optional:"), false, "use standard Options section name");
+    assert.ok(help.includes("--format json|toon"));
+    assert.ok(help.includes("Default: json."));
+    assert.ok(help.includes("--scope object,relation,action,metric"));
+    assert.ok(help.includes("Default: not sent; server default applies."));
+    assert.ok(help.includes("--concept-groups <ids>"));
+    assert.ok(help.includes("Default: not sent; no concept_group filter."));
+    assert.ok(help.includes("search_scope.concept_groups"));
+    assert.ok(help.includes("--max <n>, -n <n>"));
+    assert.ok(help.includes("--brief"));
+    assert.ok(help.includes("--no-rerank"));
+    assert.ok(help.includes("--pretty"));
+    assert.ok(help.includes("Default: enabled."));
+    assert.ok(help.includes("not an instance-data filter"));
+    assert.ok(help.includes("MCP arguments:"));
+    assert.ok(help.includes("Equivalent tool-call:"));
+    assert.ok(help.includes("kn-search and kn-schema-search are deprecated"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+  }
+});
+
+test("run context-loader search-schema --help prints subcommand help without auth", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const lines: string[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  globalThis.fetch = async () => {
+    throw new Error("help should not make network requests");
+  };
+
+  try {
+    const cli = await importCliModule(configDir);
+    assert.equal(await cli.run(["context-loader", "search-schema", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("Usage:"));
+    assert.ok(help.includes("kweaver context-loader search-schema <kn-id> <query> [options]"));
+    assert.ok(help.includes("--kn-id <kn-id>"));
+    assert.ok(help.includes("--no-rerank"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
+  }
+});
+
+test("run context-loader query-object-instance --help includes JSON shape without auth", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    const cli = await importCliModule(configDir);
+    assert.equal(await cli.run(["context-loader", "query-object-instance", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("Input JSON shape:"));
+    assert.ok(help.includes('"ot_id"'));
+    assert.ok(help.includes('"condition"'));
+    assert.ok(help.includes('"value_from": "const"'));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test("run context-loader kn-search --help marks command deprecated without auth", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    const cli = await importCliModule(configDir);
+    assert.equal(await cli.run(["context-loader", "kn-search", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("[deprecated]"));
+    assert.ok(help.includes("Use context-loader search-schema instead"));
   } finally {
     console.log = originalLog;
   }

@@ -292,6 +292,7 @@ kweaver trace diagnose --traces=<list> --out=<dir>    # 批量诊断（单 agent
 kweaver trace diagnose rules validate <rule.yaml>     # 校验规则
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
+kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>
 kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
 kweaver context-loader tool-call <kn-id> <name> --args '<json>'
@@ -361,10 +362,9 @@ kweaver bkn object-type list <kn_id>
 kweaver bkn relation-type list <kn_id>
 
 # 5. Context-loader
-kweaver context-loader config set --kn-id <kn_id> --name my-bkn
-kweaver context-loader config use my-bkn
-kweaver context-loader search-schema "关键词" --concept-groups supply_chain
-kweaver context-loader tool-call search_schema --args '{"query":"关键词"}'
+kweaver context-loader help search-schema
+kweaver context-loader search-schema <kn_id> "关键词" --concept-groups supply_chain
+kweaver context-loader tool-call <kn_id> search_schema --args '{"query":"关键词"}'
 
 # 6. 原始 API 调用
 kweaver call "/api/agent-factory/v3/personal-space/agent-list?offset=0&limit=3" --pretty
@@ -379,7 +379,7 @@ npx tsx src/cli.ts agent list
 npx tsx src/cli.ts agent chat <agent_id> -m "你好"
 npx tsx src/cli.ts bkn list
 npx tsx src/cli.ts bkn object-type list <kn_id>
-npx tsx src/cli.ts context-loader search-schema "关键词"
+npx tsx src/cli.ts context-loader search-schema <kn_id> "关键词"
 ```
 
 **Python CLI**：

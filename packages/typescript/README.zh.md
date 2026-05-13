@@ -202,6 +202,7 @@ kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
+kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>
 kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
 kweaver context-loader tool-call <kn-id> <name> --args '<json>'
@@ -296,7 +297,7 @@ kweaver --base-url https://platform.example.com --token "$TOK" bkn list
 
 `auth whoami` / `auth status` 通过文案区分来源：flag 模式为 `CLI (flag: --token)`，env 模式为 `env (KWEAVER_TOKEN)`（`whoami --json` 为 `"source": "flag"` 与 `"source": "env"`）。
 
-`kweaver context-loader` 运行时子命令将 `<kn-id>` 作为第一个位置参数（如 `kweaver context-loader tools <kn-id>`），也支持全局 `--kn-id <id>` / `-k <id>` flag，因此在 stateless 模式下可直接使用，无需任何持久化配置。`context-loader config set|use|list|remove|show` 管理子命令已被标记为 deprecated（每次调用打印警告），且在 `--token` 下整组被禁用。
+`kweaver context-loader` 运行时子命令将 `<kn-id>` 作为第一个位置参数（如 `kweaver context-loader tools <kn-id>`），也支持全局 `--kn-id <id>` / `-k <id>` flag，因此在 stateless 模式下可直接使用，无需任何持久化配置。调试参数时可先执行 `kweaver context-loader help <subcommand>` 或 `<subcommand> --help`，这些 help 路径不会触发登录、配置读取或网络请求。`context-loader config set|use|list|remove|show` 管理子命令已被标记为 deprecated（每次调用打印警告），且在 `--token` 下整组被禁用。
 
 ### TLS 证书问题排查
 

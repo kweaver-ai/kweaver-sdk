@@ -135,6 +135,7 @@ Usage:
   kweaver vega query execute|sql [options]
   kweaver vega connector-type list|get [options]
 
+  kweaver context-loader help <subcommand>
   kweaver context-loader config set|use|list|remove|show [options]                (deprecated; not supported with --token)
   kweaver context-loader tools|resources|templates|prompts <kn-id> [--cursor]
   kweaver context-loader resource <kn-id> <uri>

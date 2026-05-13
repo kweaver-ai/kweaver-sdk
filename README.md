@@ -292,6 +292,7 @@ kweaver trace diagnose --traces=<list> --out=<dir>    # batch (single agent)
 kweaver trace diagnose rules validate <rule.yaml>     # validate a rule
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
+kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>
 kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
 kweaver context-loader tool-call <kn-id> <name> --args '<json>'

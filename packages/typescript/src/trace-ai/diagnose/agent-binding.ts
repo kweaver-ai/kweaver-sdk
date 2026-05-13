@@ -45,6 +45,10 @@ export interface RubricEvaluateOpts {
   lang?: AgentOutputLang;
   /** When provided, writes Stage-2 prompt/response artifacts per rule invocation. */
   artifacts?: ArtifactWriter;
+  /** User query extracted from trace input.messages (2026-05-13). */
+  userQuery?: string | null;
+  /** Conversation/query ID for suggested_eval_case correlation (2026-05-13). */
+  queryId?: string | null;
 }
 
 export interface RubricEvaluateResult {
@@ -173,6 +177,8 @@ async function evaluateOne(
   timeoutMs?: number,
   lang: AgentOutputLang = "en",
   artifacts?: ArtifactWriter,
+  userQuery: string | null = null,
+  queryId: string | null = null,
 ): Promise<Finding> {
   const rubric = rule.rubric!;  // caller guarantees
   // Resolve inputs.
@@ -223,8 +229,8 @@ async function evaluateOne(
     confidence: out.confidence ?? "medium",          // rubric default > symbolic
     verifyWith: {
       suggestedEvalCase: {
-        queryId: null,
-        query: null,
+        queryId,
+        query: userQuery,
         assertions: rule.verifyWith.assertionTemplates.map((t) =>
           renderChangeTemplate(t, out),
         ),
@@ -311,7 +317,7 @@ export async function evaluateRubricRules(
     try {
       // Write work-queue once per rule before invoking (single-trace: 1 entry).
       await opts.artifacts?.writeStageTwoWorkQueue(rule.id, [opts.tree.traceId]);
-      const finding = await evaluateOne(rule, opts.tree, provider, opts.promptRegistry, opts.timeoutMs, opts.lang ?? "en", opts.artifacts);
+      const finding = await evaluateOne(rule, opts.tree, provider, opts.promptRegistry, opts.timeoutMs, opts.lang ?? "en", opts.artifacts, opts.userQuery ?? null, opts.queryId ?? null);
       findings.push(finding);
     } catch (e) {
       if (e instanceof AgentProviderError) {

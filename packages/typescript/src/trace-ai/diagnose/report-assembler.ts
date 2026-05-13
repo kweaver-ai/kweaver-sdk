@@ -23,12 +23,21 @@ export interface AssembleReportOpts {
   rulesSkipped?: { ruleId: string; reason: string }[];
   /** Stage-3 synthesizer that produced `summary`. */
   synthesizerMode?: 'template' | 'agent';
+  /** User query extracted from trace input.messages (2026-05-13). */
+  userQuery?: string | null;
+  /** Conversation/query ID for suggested_eval_case correlation (2026-05-13). */
+  queryId?: string | null;
 }
 
 /** Build symbolic-pillar findings from rule+hit pairs.
  *  Exported so callers (e.g. tests, index.ts) can compose findings from
  *  multiple sources before handing them to a custom summary path. */
-export function symbolicHitsToFindings(rules: Rule[], hits: Map<string, Hit[]>): Finding[] {
+export function symbolicHitsToFindings(
+  rules: Rule[],
+  hits: Map<string, Hit[]>,
+  userQuery: string | null = null,
+  queryId: string | null = null,
+): Finding[] {
   const findings: Finding[] = [];
   for (const rule of rules) {
     if (rule.predicateRef === null) continue;
@@ -48,8 +57,8 @@ export function symbolicHitsToFindings(rules: Rule[], hits: Map<string, Hit[]>):
         confidence: "low",
         verifyWith: {
           suggestedEvalCase: {
-            queryId: null,
-            query: null,
+            queryId,
+            query: userQuery,
             assertions: rule.verifyWith.assertionTemplates.map((t) => renderTemplate(t, hit.bindings)),
           },
         },
@@ -60,7 +69,7 @@ export function symbolicHitsToFindings(rules: Rule[], hits: Map<string, Hit[]>):
 }
 
 export function assembleReport(opts: AssembleReportOpts): Report {
-  const symbolicFindings = symbolicHitsToFindings(opts.rules, opts.hits);
+  const symbolicFindings = symbolicHitsToFindings(opts.rules, opts.hits, opts.userQuery ?? null, opts.queryId ?? null);
   const findings: Finding[] = [...symbolicFindings, ...(opts.extraFindings ?? [])];
   return {
     schemaVersion: "trace-diagnose-report/v1",

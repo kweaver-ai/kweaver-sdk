@@ -201,6 +201,25 @@ Subcommands:
 
   trace diagnose rules validate <rule.yaml>   Validate a rule yaml file (exit 0 ok, 6 fail)
 
+  trace eval-set build [--diagnosis=<dir> | --queries=<file>] --out=<dir>
+                                              Build a git-trackable eval-set yaml directory from
+                                              either M4 diagnosis reports or a simplified
+                                              queries+golden-truth input file.
+    --diagnosis=<dir>                         Lift suggested_eval_case from M4 report findings
+                                              (mutually exclusive with --queries=)
+    --queries=<file>                          Lift from simplified trace-eval-set-input/v1 yaml
+                                              (mutually exclusive with --diagnosis=)
+    --out=<dir>                               Required output directory; index.yaml + cases.yaml
+    --on-conflict=fail|skip|overwrite         query_id conflict strategy (default: fail; exit 6 on conflict)
+    --redaction-rules=<path>                  Override <repo>/redaction-rules/ source for PII redaction
+    --eval-set-id=<id>                        Override default eval_set_id (basename of --out)
+
+  trace schema validate <file> [--kind=<kind>]
+                                              Validate a yaml file against its M5/M4 zod schema
+                                              (eval-set / eval-set-index / eval-set-input / test-report).
+                                              --kind auto-inferred from file path; pass explicitly
+                                              if inference fails (exit 2 = kind required).
+
 Auth flags (any subcommand): --token, --base-url, --business-domain (-bd).
 
 Batch mode constraints:

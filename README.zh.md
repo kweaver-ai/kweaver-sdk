@@ -290,6 +290,8 @@ kweaver agent list/get/get-by-key/create/update/delete/chat/sessions/history/pub
 kweaver trace diagnose <conversation_id> [flags]      # 单 trace 诊断
 kweaver trace diagnose --traces=<list> --out=<dir>    # 批量诊断（单 agent）
 kweaver trace diagnose rules validate <rule.yaml>     # 校验规则
+kweaver trace eval-set build --diagnosis=<dir>|--queries=<file> --out=<dir>  # 构建 eval-set yaml 目录
+kweaver trace schema validate <file> [--kind=<kind>]  # 校验 yaml 是否符合 M5/M4 zod schema
 kweaver skill list/market/get/register/status/delete/content/read-file/download/install
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader tools|resources|templates|prompts <kn-id>

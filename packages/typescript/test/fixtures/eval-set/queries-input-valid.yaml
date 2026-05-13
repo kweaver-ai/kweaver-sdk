@@ -1,0 +1,19 @@
+schema_version: trace-eval-set-input/v1
+cases:
+  - input:
+      user_message: "如何申请退款？"
+    query_id: refund_001
+    tags: ["refund"]
+    reference:
+      answer: "请在订单详情页点击申请退款。"
+    assertions:
+      - type: semantic_match
+        rubric_template_ref: builtin:answer-match-reference
+  - input:
+      user_message: "查询账户余额"
+    assertions:
+      - type: tool_call_count
+        tool: balance_query
+        op: gte
+        n: 1
+    tags: ["account"]

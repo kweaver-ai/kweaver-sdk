@@ -1,0 +1,4 @@
+schema_version: trace-eval-set-input/v1
+cases:
+  - input:
+      user_message: "应该失败：既无 reference 又无 assertions"

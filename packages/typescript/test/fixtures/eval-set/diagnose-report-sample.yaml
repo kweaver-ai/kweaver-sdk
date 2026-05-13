@@ -1,0 +1,63 @@
+schema_version: trace-diagnose-report/v1
+trace:
+  trace_id: tr_abc
+  agent_id: agt_42
+  tenant: null
+run:
+  diagnosed_at: "2026-05-12T10:00:00Z"
+  cli_version: "kweaver-sdk@0.8.3"
+  mode: symbolic-only
+  rules_applied:
+    - tool_loop_no_state_change
+  rules_skipped: []
+  synthesizer_mode: template
+summary:
+  headline: "Refund retry loop: 5 retrieval calls with identical args"
+  primary_root_cause:
+    finding_ids: [0]
+    description: "Missing termination condition"
+    target_for_fix: "decision_agent.prompt"
+  fix_priority:
+    - finding_id: 0
+      reason: "blocks user flow"
+  cross_finding_links: []
+findings:
+  - rule_id: tool_loop_no_state_change
+    judgment_kind: symbolic
+    severity: high
+    symptom: repeated_tool_call_without_state_change
+    likely_cause: missing_termination_condition_in_agent_program
+    evidence:
+      spans:
+        - sp_1
+        - sp_2
+      excerpt: "retrieval called 5 times with identical args"
+    suggested_fix:
+      target: decision_agent.prompt
+      change: "add stop condition after two equivalent failed retrievals"
+    confidence: low
+    verify_with:
+      suggested_eval_case:
+        query_id: "conv_abc"
+        query: "如何申请退款？"
+        assertions:
+          - "tool_call_count(retrieval) <= 2"
+  # Skipped finding: query is null (e.g., older trace without input.messages)
+  - rule_id: llm_response_truncated_no_continue
+    judgment_kind: symbolic
+    severity: medium
+    symptom: response_truncated
+    likely_cause: response_truncated
+    evidence:
+      spans:
+        - sp_5
+      excerpt: "finish_reason=length"
+    suggested_fix:
+      target: decision_agent.config
+      change: "enable continuation"
+    confidence: low
+    verify_with:
+      suggested_eval_case:
+        query_id: null
+        query: null
+        assertions: []

@@ -16,6 +16,8 @@ PRs / wikis). Both files are written side by side by default.
 ```
 kweaver trace diagnose <conversation_id> [flags]
 kweaver trace diagnose rules validate <rule.yaml>
+kweaver trace eval-set build --diagnosis=<dir>|--queries=<file> --out=<dir>
+kweaver trace schema validate <file> [--kind=<kind>]
 ```
 
 `<conversation_id>` is the value returned by `kweaver agent chat` /
@@ -193,3 +195,34 @@ Single-trace mode mirrors: `<stem>.artifacts/` sibling to the report file.
 Per-trace yaml on disk = ground truth. Rerunning with the same `--out`
 skips conv_ids whose `<conv_id>.yaml` is already valid; recomputes the
 rest plus Stage-4 + scan-summary.
+
+## `trace eval-set build` (M5)
+
+Builds a git-trackable eval-set yaml directory from either M4 diagnosis
+reports or a simplified queries+golden-truth input file.
+
+```bash
+kweaver trace eval-set build --diagnosis=<dir> --out=<dir>
+kweaver trace eval-set build --queries=<file> --out=<dir>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--diagnosis=<dir>` | Lift `suggested_eval_case` from M4 report findings (mutually exclusive with `--queries=`) |
+| `--queries=<file>` | Lift from simplified `trace-eval-set-input/v1` yaml (mutually exclusive with `--diagnosis=`) |
+| `--out=<dir>` | Required output directory; writes `index.yaml` + `cases.yaml` |
+| `--on-conflict=fail\|skip\|overwrite` | `query_id` conflict strategy (default: `fail`; exit 6 on conflict) |
+| `--redaction-rules=<path>` | Override `<repo>/redaction-rules/` source for PII redaction |
+| `--eval-set-id=<id>` | Override default `eval_set_id` (basename of `--out`) |
+
+## `trace schema validate` (M5)
+
+Validates a yaml file against its M5/M4 zod schema.
+
+```bash
+kweaver trace schema validate <file> [--kind=<kind>]
+```
+
+Supported kinds: `eval-set`, `eval-set-index`, `eval-set-input`, `test-report`.
+`--kind` is auto-inferred from the file path; pass explicitly if inference fails
+(exit 2 = kind required, exit 6 = schema validation failure).

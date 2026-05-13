@@ -1,3 +1,5 @@
+import path from "node:path";
+import { readFile } from "node:fs/promises";
 import yargs from "yargs";
 
 import { derivePaths, diagnose, TraceNotFoundError } from "../trace-ai/diagnose/index.js";
@@ -10,6 +12,13 @@ import { ClaudeCodeSubprocessProvider } from "../agent-providers/providers/claud
 import { runBatch } from "../trace-ai/scan/index.js";
 import { parseTracesList, TracesListError } from "../trace-ai/scan/traces-list-parser.js";
 import { SingleAgentValidationError } from "../trace-ai/scan/single-agent-validator.js";
+import { build, BuilderError } from "../trace-ai/eval-set/index.js";
+import {
+  EvalSetIndexSchema,
+  EvalSetShardSchema,
+  EvalSetInputSchema,
+  TestReportSchema,
+} from "../trace-ai/eval-set/schemas.js";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 
@@ -20,7 +29,7 @@ function ensureDefaultProviderRegistered(): void {
 }
 
 export interface ParsedTraceArgs {
-  subcommand: "diagnose" | "rules-validate" | "help";
+  subcommand: "diagnose" | "rules-validate" | "eval-set-build" | "schema-validate" | "help";
   mode?: "single" | "batch";
   conversationId?: string;       // single mode
   traces?: string;               // batch mode raw value (string or "@path") — resolved at runtime
@@ -36,6 +45,15 @@ export interface ParsedTraceArgs {
   baseUrl: string | null;
   token: string | null;
   businessDomain: string | null;
+  // ── M5 PR-A 新增字段 ────────────────────────────────────────────────
+  queriesPath?: string;
+  diagnosisPath?: string;
+  onConflict?: "fail" | "skip" | "overwrite";
+  redactionRules?: string;
+  evalSetId?: string;
+  // Task 9 schema validate
+  schemaValidatePath?: string;
+  schemaKind?: string;
 }
 
 export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
@@ -43,11 +61,48 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
     return defaults("help");
   }
   const head = argv[0];
-  if (head !== "diagnose") {
+  if (head !== "diagnose" && head !== "eval-set" && head !== "schema") {
     return defaults("help");
   }
   if (argv[1] === "rules" && argv[2] === "validate") {
     return { ...defaults("rules-validate"), rulePath: argv[3] };
+  }
+  // M5 PR-A: eval-set build
+  if (head === "eval-set" && argv[1] === "build") {
+    const parsed = yargs(argv.slice(2))
+      .option("queries", { type: "string", default: undefined })
+      .option("diagnosis", { type: "string", default: undefined })
+      .option("out", { type: "string", default: undefined })
+      .option("on-conflict", {
+        type: "string",
+        choices: ["fail", "skip", "overwrite"],
+        default: "fail",
+      })
+      .option("redaction-rules", { type: "string", default: undefined })
+      .option("eval-set-id", { type: "string", default: undefined })
+      .help(false)
+      .parseSync();
+    return {
+      ...defaults("eval-set-build"),
+      queriesPath: parsed.queries as string | undefined,
+      diagnosisPath: parsed.diagnosis as string | undefined,
+      out: (parsed.out as string | undefined) ?? null,
+      onConflict: parsed["on-conflict"] as "fail" | "skip" | "overwrite",
+      redactionRules: parsed["redaction-rules"] as string | undefined,
+      evalSetId: parsed["eval-set-id"] as string | undefined,
+    };
+  }
+  // M5 PR-A: schema validate
+  if (head === "schema" && argv[1] === "validate") {
+    const parsed = yargs(argv.slice(2))
+      .option("kind", { type: "string", default: undefined })
+      .help(false)
+      .parseSync();
+    return {
+      ...defaults("schema-validate"),
+      schemaValidatePath: String(parsed._[0] ?? ""),
+      schemaKind: parsed.kind as string | undefined,
+    };
   }
   // diagnose [<conversation_id>] [flags...]
   const parsed = yargs(argv.slice(1))
@@ -146,6 +201,25 @@ Subcommands:
 
   trace diagnose rules validate <rule.yaml>   Validate a rule yaml file (exit 0 ok, 6 fail)
 
+  trace eval-set build [--diagnosis=<dir> | --queries=<file>] --out=<dir>
+                                              Build a git-trackable eval-set yaml directory from
+                                              either M4 diagnosis reports or a simplified
+                                              queries+golden-truth input file.
+    --diagnosis=<dir>                         Lift suggested_eval_case from M4 report findings
+                                              (mutually exclusive with --queries=)
+    --queries=<file>                          Lift from simplified trace-eval-set-input/v1 yaml
+                                              (mutually exclusive with --diagnosis=)
+    --out=<dir>                               Required output directory; index.yaml + cases.yaml
+    --on-conflict=fail|skip|overwrite         query_id conflict strategy (default: fail; exit 6 on conflict)
+    --redaction-rules=<path>                  Override <repo>/redaction-rules/ source for PII redaction
+    --eval-set-id=<id>                        Override default eval_set_id (basename of --out)
+
+  trace schema validate <file> [--kind=<kind>]
+                                              Validate a yaml file against its M5/M4 zod schema
+                                              (eval-set / eval-set-index / eval-set-input / test-report).
+                                              --kind auto-inferred from file path; pass explicitly
+                                              if inference fails (exit 2 = kind required).
+
 Auth flags (any subcommand): --token, --base-url, --business-domain (-bd).
 
 Batch mode constraints:
@@ -170,6 +244,23 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
   }
   if (args.subcommand === "rules-validate") {
     return await runRulesValidate(args.rulePath ?? "");
+  }
+  if (args.subcommand === "eval-set-build") {
+    return await runEvalSetBuild(args);
+  }
+  if (args.subcommand === "schema-validate") {
+    try {
+      return await runSchemaValidate({
+        filePath: args.schemaValidatePath ?? "",
+        kind: args.schemaKind,
+      });
+    } catch (e) {
+      if (e instanceof SchemaKindRequiredError) {
+        process.stderr.write(`error: ${e.message}\n`);
+        return 2;
+      }
+      throw e;
+    }
   }
   // diagnose — batch or single
   if (args.mode !== "batch" && !args.conversationId) {
@@ -337,4 +428,137 @@ async function runRulesValidate(rulePath: string): Promise<number> {
   }
   process.stdout.write(`ok: ${rulePath} validates against diagnosis-rule/v1\n`);
   return 0;
+}
+
+export class SchemaKindRequiredError extends Error {
+  constructor(filePath: string) {
+    super(
+      `cannot infer schema kind for ${filePath}; pass --kind=<eval-set|eval-set-index|eval-set-input|test-report>`,
+    );
+    this.name = "SchemaKindRequiredError";
+  }
+}
+
+export function inferKind(filePath: string): string | null {
+  const norm = filePath.replace(/\\/g, "/");
+  const base = norm.split("/").pop() ?? "";
+  // index.yaml in an eval-set dir (absolute or relative path)
+  if (base === "index.yaml" && /(^|\/)eval-sets\/[^/]+\/index\.yaml$/.test(norm)) {
+    return "eval-set-index";
+  }
+  if (base.endsWith("-test-report.yaml") || base === "test-report.yaml" || base === "report.yaml") {
+    if (/(^|\/)test-runs\//.test(norm) || base.includes("test-report")) return "test-report";
+  }
+  if (base.endsWith("-eval-set-input.yaml") || base.includes("queries-input")) {
+    return "eval-set-input";
+  }
+  // shard inside eval-set dir (anything not index.yaml)
+  if (/(^|\/)eval-sets\/[^/]+\/[^/]+\.yaml$/.test(norm) && base !== "index.yaml") {
+    return "eval-set";
+  }
+  return null;
+}
+
+const SCHEMA_BY_KIND: Record<string, { safeParse: (x: unknown) => { success: boolean; error?: { issues: Array<{ message: string; path: PropertyKey[] }> } } }> = {
+  "eval-set": EvalSetShardSchema,
+  "eval-set-index": EvalSetIndexSchema,
+  "eval-set-input": EvalSetInputSchema,
+  "test-report": TestReportSchema,
+};
+
+export interface RunSchemaValidateOpts {
+  filePath: string;
+  kind: string | undefined;
+}
+
+export async function runSchemaValidate(opts: RunSchemaValidateOpts): Promise<number> {
+  if (!opts.filePath) {
+    process.stderr.write("error: schema validate requires a file path argument\n");
+    return 2;
+  }
+  const kind = opts.kind ?? inferKind(opts.filePath);
+  if (!kind) {
+    throw new SchemaKindRequiredError(opts.filePath);
+  }
+  const schema = SCHEMA_BY_KIND[kind];
+  if (!schema) {
+    process.stderr.write(`error: unknown --kind=${kind}; valid: ${Object.keys(SCHEMA_BY_KIND).join(", ")}\n`);
+    return 2;
+  }
+  let raw: string;
+  try {
+    raw = await readFile(opts.filePath, "utf8");
+  } catch (e) {
+    process.stderr.write(`error: cannot read ${opts.filePath}: ${(e as Error).message}\n`);
+    return 1;
+  }
+  const yamlMod = await import("js-yaml");
+  let parsed: unknown;
+  try {
+    parsed = yamlMod.default.load(raw);
+  } catch (e) {
+    process.stderr.write(`error: yaml parse failed: ${(e as Error).message}\n`);
+    return 1;
+  }
+  const result = schema.safeParse(parsed);
+  if (result.success) {
+    process.stdout.write(`✓ ${opts.filePath} valid against ${kind}\n`);
+    return 0;
+  }
+  const issue = result.error!.issues[0];
+  const where = issue.path.map(String).join(".");
+  process.stderr.write(
+    `✗ ${opts.filePath} invalid at '${where}': ${issue.message}\n`,
+  );
+  return 1;
+}
+
+async function runEvalSetBuild(args: ParsedTraceArgs): Promise<number> {
+  // 参数检查：互斥 + 必填
+  const hasQueries = !!args.queriesPath;
+  const hasDiagnosis = !!args.diagnosisPath;
+  if (hasQueries === hasDiagnosis) {
+    process.stderr.write(
+      "error: must pass exactly one of --queries=<file> | --diagnosis=<dir>\n",
+    );
+    return 2;
+  }
+  if (!args.out) {
+    process.stderr.write("error: --out=<dir> is required\n");
+    return 2;
+  }
+
+  // eval_set_id 默认 = basename(out)
+  const evalSetId = args.evalSetId ?? path.basename(args.out.replace(/\/+$/, ""));
+  const repoDir = path.join(process.cwd(), "redaction-rules");
+
+  try {
+    const result = await build({
+      source: hasQueries
+        ? { kind: "queries", path: args.queriesPath! }
+        : { kind: "diagnosis", path: args.diagnosisPath! },
+      outDir: args.out,
+      evalSetId,
+      onConflict: args.onConflict ?? "fail",
+      redactionRulesCliFlag: args.redactionRules,
+      repoDir,
+    });
+    process.stdout.write(
+      `✓ wrote ${result.cases_written} cases (${result.cases_skipped} skipped), ${result.shard_paths.length} shard(s)\n`,
+    );
+    process.stdout.write(`  redaction_rules: ${result.redaction_rules_source}\n`);
+    if (result.conflicts.length > 0) {
+      process.stdout.write(`  conflicts: ${result.conflicts.join(", ")}\n`);
+    }
+    return 0;
+  } catch (e) {
+    if (e instanceof BuilderError) {
+      process.stderr.write(`error: ${e.message}\n`);
+      // query_id 冲突 → exit 6 (spec doc §5.4)
+      if (e.message.includes("query_id conflict")) return 6;
+      return 1;
+    }
+    process.stderr.write(`error: ${(e as Error).message}\n`);
+    return 1;
+  }
 }

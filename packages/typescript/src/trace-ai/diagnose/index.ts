@@ -21,6 +21,7 @@ import {
 import { ArtifactWriter } from "../scan/artifacts/writer.js";
 import { resolveArtifactsBase } from "../scan/artifacts/paths.js";
 
+import { extractUserQueryFromTrace } from "./query-extractor.js";
 import "./builtin-rules/register.js";  // side effect: registers all builtin predicates
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -107,6 +108,10 @@ export async function diagnose(
 
   const tree = assembleTraceTree(primaryTraceId, spansForPrimary);
 
+  // ── 1b. Extract user query for suggested_eval_case population ───────────
+  const userQuery = extractUserQueryFromTrace(tree);
+  const queryId = conversationId;
+
   // ── 2. Load rules + run Stage-1 (symbolic) ──────────────────────────────
   const rules = await loadRules({
     builtinDir: BUILTIN_DIR,
@@ -116,7 +121,7 @@ export async function diagnose(
   });
 
   const hits = await runRules(rules, tree);
-  const symbolicFindings = symbolicHitsToFindings(rules, hits);
+  const symbolicFindings = symbolicHitsToFindings(rules, hits, userQuery, queryId);
 
   // ── 3. Stage-2 (rubric) — skip everything when --no-llm ─────────────────
   const haveRubric = rubricRules(rules).length > 0;
@@ -132,6 +137,8 @@ export async function diagnose(
       timeoutMs: opts.timeoutMs,
       lang: opts.lang,
       artifacts,
+      userQuery,
+      queryId,
     });
     rubricFindings = r.findings;
     rulesSkipped = r.skipped;
@@ -176,6 +183,8 @@ export async function diagnose(
     mode,
     rulesSkipped,
     synthesizerMode: synth.mode,
+    userQuery,
+    queryId,
   });
 
   // ── 6. Write run-metadata artifact ─────────────────────────────────────

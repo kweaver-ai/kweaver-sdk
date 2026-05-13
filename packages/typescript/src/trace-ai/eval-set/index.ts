@@ -16,3 +16,6 @@ export type {
   BuildResult,
   RedactionRule,
 } from "./types.js";
+
+export { build, ensureQueryId, BuilderError } from "./builder.js";
+export type { BuildOpts, BuildSource } from "./builder.js";

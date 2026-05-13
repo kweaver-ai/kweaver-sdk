@@ -11,7 +11,6 @@ export type SkillStatus = "unpublish" | "published" | "offline";
 export type SkillFileType = "zip" | "content";
 export type SkillEditableStatus = SkillStatus | "editing";
 export type SkillCategory = "other_category" | "system";
-
 export interface SkillSummary {
   id: string;
   name: string;
@@ -200,6 +199,34 @@ export interface InstallSkillArchiveOptions {
   force?: boolean;
 }
 
+export interface SkillManagementContentData {
+  skill_id: string;
+  name: string;
+  description: string;
+  version: string;
+  status: SkillEditableStatus;
+  source: string;
+  file_type: "zip" | "content";
+  url?: string;
+  content?: string;
+  files: SkillFileSummary[];
+}
+
+export interface GetSkillManagementContentOptions extends SkillApiBaseOptions {
+  skillId: string;
+  responseMode?: "url" | "content";
+}
+
+export interface ReadSkillManagementFileOptions extends SkillApiBaseOptions {
+  skillId: string;
+  relPath: string;
+}
+
+export interface DownloadSkillManagementOptions extends SkillApiBaseOptions {
+  skillId: string;
+  responseMode?: "url" | "content";
+}
+
 function baseHeaders(opts: SkillApiBaseOptions): Record<string, string> {
   return buildPlatformHeaders(opts.accessToken, opts.businessDomain ?? "bd_public");
 }
@@ -331,26 +358,24 @@ export async function updateSkillMetadata(options: UpdateSkillMetadataOptions): 
 }
 
 export async function registerSkillContent(options: RegisterSkillContentOptions): Promise<RegisterSkillResult> {
-  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills`);
-  const form = new FormData();
-  form.set("file_type", "content");
-  // Backend's gin form-binder rejects plain string field for `file`
-  // (typed json.RawMessage); needs an actual multipart file part with
-  // filename. See utils/gin.go GetBindMultipartFormRaw.
-  form.set(
-    "file",
-    new Blob([options.content], { type: "text/markdown" }),
-    "SKILL.md",
-  );
-  if (options.source) form.set("source", options.source);
-  if (options.extendInfo) form.set("extend_info", JSON.stringify(options.extendInfo));
-
-  const { body } = await fetchTextOrThrow(url, {
-    method: "POST",
-    headers: baseHeaders(options),
-    body: form,
+  // Backend's file_type=content path is half-implemented: it stores
+  // the markdown body but skips skill_file_index, so the skill is
+  // unreadable after publish (GET /skills/:id/content -> 404).
+  // Bundle the content into a 1-file SKILL.md zip and route through
+  // the zip path, which writes skill_file_index correctly.
+  const { default: JSZip } = await import("jszip");
+  const zip = new JSZip();
+  zip.file("SKILL.md", options.content);
+  const bytes = new Uint8Array(await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" }));
+  return registerSkillZip({
+    baseUrl: options.baseUrl,
+    accessToken: options.accessToken,
+    businessDomain: options.businessDomain,
+    filename: "SKILL.md.zip",
+    bytes,
+    source: options.source,
+    extendInfo: options.extendInfo,
   });
-  return normalizeSkillId(unwrapEnvelope<RegisterSkillResult>(body));
 }
 
 export async function registerSkillZip(options: RegisterSkillZipOptions): Promise<RegisterSkillResult> {
@@ -469,6 +494,42 @@ export async function publishSkillHistory(
     body: JSON.stringify({ version: options.version }),
   });
   return normalizeSkillId(unwrapEnvelope<UpdateSkillPackageResult>(body));
+}
+
+// ── Management Content (editing-state) API ───────────────────────────────────
+
+export async function getSkillManagementContent(
+  options: GetSkillManagementContentOptions
+): Promise<SkillManagementContentData> {
+  const url = new URL(buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/management/content`));
+  if (options.responseMode) url.searchParams.set("response_mode", options.responseMode);
+  const { body } = await fetchTextOrThrow(url, { headers: baseHeaders(options) });
+  return unwrapEnvelope<SkillManagementContentData>(body);
+}
+
+export async function readSkillManagementFile(
+  options: ReadSkillManagementFileOptions
+): Promise<SkillFileReadResult> {
+  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/management/files/read`);
+  const { body } = await fetchTextOrThrow(url, {
+    method: "POST",
+    headers: { ...baseHeaders(options), "content-type": "application/json" },
+    body: JSON.stringify({ rel_path: options.relPath }),
+  });
+  return normalizeSkillId(unwrapEnvelope<SkillFileReadResult>(body));
+}
+
+export async function downloadSkillManagementArchive(
+  options: DownloadSkillManagementOptions
+): Promise<DownloadedSkillArchive> {
+  const url = new URL(buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/management/download`));
+  if (options.responseMode) url.searchParams.set("response_mode", options.responseMode);
+  const { response, body } = await fetchBytesOrThrow(url, { headers: baseHeaders(options) });
+  const serverName = parseContentDisposition(response.headers.get("content-disposition"));
+  return {
+    fileName: basename(serverName || `${options.skillId}.zip`),
+    bytes: body,
+  };
 }
 
 export function installSkillArchive(options: InstallSkillArchiveOptions): { directory: string } {

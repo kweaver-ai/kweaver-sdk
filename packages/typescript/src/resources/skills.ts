@@ -2,17 +2,20 @@ import type { ClientContext } from "../client.js";
 import {
   deleteSkill,
   downloadSkill,
+  downloadSkillManagementArchive,
   fetchSkillContent,
   fetchSkillFile,
   getSkill,
   getSkillMarketDetail,
   getSkillContentIndex,
+  getSkillManagementContent,
   installSkillArchive,
   listSkillMarket,
   listSkillHistory,
   listSkills,
   publishSkillHistory,
   readSkillFile,
+  readSkillManagementFile,
   republishSkillHistory,
   registerSkillContent,
   registerSkillZip,
@@ -137,5 +140,19 @@ export class SkillsResource {
   async install(skillId: string, directory: string, opts: { force?: boolean } = {}) {
     const archive = await this.download(skillId);
     return installSkillArchive({ bytes: archive.bytes, directory, force: opts.force });
+  }
+
+  // ── Management Content ───────────────────────────────────────────────────────
+
+  async getManagementContent(skillId: string, responseMode?: "url" | "content") {
+    return getSkillManagementContent({ ...this.ctx.base(), skillId, responseMode });
+  }
+
+  async readManagementFile(skillId: string, relPath: string) {
+    return readSkillManagementFile({ ...this.ctx.base(), skillId, relPath });
+  }
+
+  async downloadManagementArchive(skillId: string, responseMode?: "url" | "content") {
+    return downloadSkillManagementArchive({ ...this.ctx.base(), skillId, responseMode });
   }
 }

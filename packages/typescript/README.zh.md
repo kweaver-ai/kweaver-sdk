@@ -206,7 +206,7 @@ kweaver bkn subgraph
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
-kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install
+kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install/management-content/management-read-file/management-download
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>

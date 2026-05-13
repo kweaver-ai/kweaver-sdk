@@ -5,17 +5,20 @@ import { resolveBusinessDomain } from "../config/store.js";
 import {
   deleteSkill,
   downloadSkill,
+  downloadSkillManagementArchive,
   fetchSkillContent,
   fetchSkillFile,
   getSkill,
   getSkillMarketDetail,
   getSkillContentIndex,
+  getSkillManagementContent,
   installSkillArchive,
   listSkillMarket,
   listSkillHistory,
   listSkills,
   publishSkillHistory,
   readSkillFile,
+  readSkillManagementFile,
   republishSkillHistory,
   registerSkillZip,
   updateSkillMetadata,
@@ -90,6 +93,26 @@ interface InstallOptions extends BaseOptions {
   skillId: string;
   directory: string;
   force: boolean;
+}
+
+interface ManagementContentOptions extends BaseOptions {
+  skillId: string;
+  responseMode?: "url" | "content";
+  fetchRaw: boolean;
+  output?: string;
+}
+
+interface ManagementReadFileOptions extends BaseOptions {
+  skillId: string;
+  relPath: string;
+  responseMode?: "url" | "content";
+  output?: string;
+}
+
+interface ManagementDownloadOptions extends BaseOptions {
+  skillId: string;
+  responseMode?: "url" | "content";
+  output?: string;
 }
 
 function printSkillHelp(subcommand?: string): void {
@@ -170,6 +193,18 @@ function printSkillHelp(subcommand?: string): void {
     console.log("kweaver skill install <skill-id> [directory] [--force] [-bd value] [--pretty|--compact]");
     return;
   }
+  if (subcommand === "management-content") {
+    console.log("kweaver skill management-content <skill-id> [--raw] [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "management-read-file") {
+    console.log("kweaver skill management-read-file <skill-id> <rel-path> [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]");
+    return;
+  }
+  if (subcommand === "management-download") {
+    console.log("kweaver skill management-download <skill-id> [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]");
+    return;
+  }
   console.log(`kweaver skill
 
 Subcommands:
@@ -190,6 +225,9 @@ Subcommands:
   read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value]
   download <skill-id> [--output file] [-bd value]
   install <skill-id> [directory] [--force] [-bd value]
+  management-content <skill-id> [--raw] [--response-mode url|content] [--output file] [-bd value]
+  management-read-file <skill-id> <rel-path> [--response-mode url|content] [--output file] [-bd value]
+  management-download <skill-id> [--response-mode url|content] [--output file] [-bd value]
 
 Examples:
   kweaver skill list --name kweaver
@@ -550,6 +588,97 @@ function parseSkillInstallArgs(args: string[]): InstallOptions {
   return { ...base.opts, skillId, directory, force };
 }
 
+function parseManagementContentArgs(args: string[]): ManagementContentOptions {
+  const skillId = args[0];
+  if (!skillId || skillId.startsWith("-")) throw new Error("Missing skill-id");
+  let responseMode: "url" | "content" | undefined;
+  let fetchRaw = false;
+  let output: string | undefined;
+  const base = parseBaseArgs(args, 1);
+  for (let i = 1; i < base.args.length; i += 1) {
+    const arg = base.args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--raw") {
+      fetchRaw = true;
+      continue;
+    }
+    if (arg === "--response-mode") {
+      const value = base.args[i + 1];
+      if (value !== "url" && value !== "content") {
+        throw new Error("Invalid --response-mode. Expected url|content");
+      }
+      responseMode = value;
+      i += 1;
+      continue;
+    }
+    if (arg === "--output" || arg === "-o") {
+      output = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    throw new Error(`Unsupported skill management-content argument: ${arg}`);
+  }
+  return { ...base.opts, skillId, responseMode, fetchRaw, output };
+}
+
+function parseManagementReadFileArgs(args: string[]): ManagementReadFileOptions {
+  const skillId = args[0];
+  const relPath = args[1];
+  if (!skillId || skillId.startsWith("-")) throw new Error("Missing skill-id");
+  if (!relPath || relPath.startsWith("-")) throw new Error("Missing rel-path");
+  let responseMode: "url" | "content" | undefined;
+  let output: string | undefined;
+  const base = parseBaseArgs(args, 2);
+  for (let i = 2; i < base.args.length; i += 1) {
+    const arg = base.args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--response-mode") {
+      const value = base.args[i + 1];
+      if (value !== "url" && value !== "content") {
+        throw new Error("Invalid --response-mode. Expected url|content");
+      }
+      responseMode = value;
+      i += 1;
+      continue;
+    }
+    if (arg === "--output" || arg === "-o") {
+      output = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    throw new Error(`Unsupported skill management-read-file argument: ${arg}`);
+  }
+  return { ...base.opts, skillId, relPath, responseMode, output };
+}
+
+function parseManagementDownloadArgs(args: string[]): ManagementDownloadOptions {
+  const skillId = args[0];
+  if (!skillId || skillId.startsWith("-")) throw new Error("Missing skill-id");
+  let responseMode: "url" | "content" | undefined;
+  let output: string | undefined;
+  const base = parseBaseArgs(args, 1);
+  for (let i = 1; i < base.args.length; i += 1) {
+    const arg = base.args[i];
+    if (arg === "--help" || arg === "-h") throw new Error("help");
+    if (arg === "--response-mode") {
+      const value = base.args[i + 1];
+      if (value !== "url" && value !== "content") {
+        throw new Error("Invalid --response-mode. Expected url|content");
+      }
+      responseMode = value;
+      i += 1;
+      continue;
+    }
+    if (arg === "--output" || arg === "-o") {
+      output = base.args[i + 1];
+      i += 1;
+      continue;
+    }
+    throw new Error(`Unsupported skill management-download argument: ${arg}`);
+  }
+  return { ...base.opts, skillId, responseMode, output };
+}
+
 function parseStatusArgs(args: string[]): { skillId: string; status: SkillStatus } & BaseOptions {
   const skillId = args[0];
   const status = args[1] as SkillStatus | undefined;
@@ -839,6 +968,61 @@ export async function runSkillCommand(args: string[]): Promise<number> {
         });
         const result = installSkillArchive({ bytes: archive.bytes, directory: opts.directory, force: opts.force });
         console.log(`Installed ${opts.skillId} to ${result.directory}`);
+        return 0;
+      }
+      if (subcommand === "management-content") {
+        const opts = parseManagementContentArgs(rest);
+        if (opts.fetchRaw || opts.responseMode === "content" || opts.output) {
+          const result = await getSkillManagementContent({
+            ...token,
+            businessDomain: opts.businessDomain,
+            skillId: opts.skillId,
+            responseMode: opts.responseMode,
+          });
+          if (opts.output && result.content) {
+            ensureDirectoryForFile(resolve(opts.output));
+            writeFileSync(resolve(opts.output), result.content, "utf8");
+            console.log(`Saved ${opts.skillId} management content to ${resolve(opts.output)}`);
+          } else if (opts.fetchRaw && result.content) {
+            process.stdout.write(result.content);
+            if (!result.content.endsWith("\n")) process.stdout.write("\n");
+          } else {
+            console.log(format(result, opts.pretty));
+          }
+          return 0;
+        }
+        const result = await getSkillManagementContent({
+          ...token,
+          businessDomain: opts.businessDomain,
+          skillId: opts.skillId,
+          responseMode: opts.responseMode,
+        });
+        console.log(format(result, opts.pretty));
+        return 0;
+      }
+      if (subcommand === "management-read-file") {
+        const opts = parseManagementReadFileArgs(rest);
+        const result = await readSkillManagementFile({
+          ...token,
+          businessDomain: opts.businessDomain,
+          skillId: opts.skillId,
+          relPath: opts.relPath,
+        });
+        console.log(format(result, opts.pretty));
+        return 0;
+      }
+      if (subcommand === "management-download") {
+        const opts = parseManagementDownloadArgs(rest);
+        const result = await downloadSkillManagementArchive({
+          ...token,
+          businessDomain: opts.businessDomain,
+          skillId: opts.skillId,
+          responseMode: opts.responseMode,
+        });
+        const output = resolve(opts.output ?? result.fileName);
+        ensureDirectoryForFile(output);
+        writeFileSync(output, result.bytes);
+        console.log(`Saved ${opts.skillId} management archive to ${output}`);
         return 0;
       }
 

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import io
+import os
 import zipfile
 
 import httpx
+import pytest
 
 from kweaver import KWeaverClient
 from kweaver.resources.skills import install_skill_archive
@@ -143,7 +145,11 @@ def test_skills_update_package_content_and_republish_history():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/package"):
             assert request.method == "PUT"
-            assert request.read() == b'{"file_type":"content","file":"# demo\\n"}'
+            assert request.headers["content-type"].startswith("multipart/form-data; boundary=")
+            body = request.content
+            assert b'name="file_type"' in body and b"\r\n\r\ncontent\r\n" in body
+            assert b'name="file"' in body and b'filename="SKILL.md"' in body
+            assert b"# demo\n" in body
             return httpx.Response(
                 200,
                 json={
@@ -342,3 +348,133 @@ def test_install_skill_archive_extracts_zip(tmp_path):
 
     assert (target / "SKILL.md").read_text(encoding="utf-8") == "# demo"
     assert (target / "refs" / "guide.md").read_text(encoding="utf-8") == "guide"
+
+
+# ── Management Content ─────────────────────────────────────────────────────────
+
+
+def test_get_management_content():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/management/content")
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "data": {
+                    "skill_id": "skill-1",
+                    "name": "demo",
+                    "description": "Demo skill",
+                    "version": "v1",
+                    "status": "editing",
+                    "source": "custom",
+                    "file_type": "zip",
+                    "url": "https://download.example/SKILL.md",
+                    "files": [{"rel_path": "SKILL.md", "file_type": "md"}],
+                },
+            },
+        )
+
+    client = KWeaverClient(base_url="https://mock", token="tok", transport=_transport(handler))
+    try:
+        result = client.skills.get_management_content("skill-1")
+        assert result["skill_id"] == "skill-1"
+        assert result["status"] == "editing"
+    finally:
+        client.close()
+
+
+def test_read_management_file():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path.endswith("/management/files/read")
+        assert request.read() == b'{"rel_path":"refs/guide.md"}'
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "data": {
+                    "skill_id": "skill-1",
+                    "rel_path": "refs/guide.md",
+                    "url": "https://download.example/guide.md",
+                },
+            },
+        )
+
+    client = KWeaverClient(base_url="https://mock", token="tok", transport=_transport(handler))
+    try:
+        result = client.skills.read_management_file("skill-1", "refs/guide.md")
+        assert result["rel_path"] == "refs/guide.md"
+    finally:
+        client.close()
+
+
+def test_download_management_archive():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/management/download")
+        return httpx.Response(200, content=b"PK")
+
+    client = KWeaverClient(base_url="https://mock", token="tok", transport=_transport(handler))
+    try:
+        filename, data = client.skills.download_management_archive("skill-1")
+        assert filename == "skill-1.zip"
+        assert data == b"PK"
+    finally:
+        client.close()
+
+
+# ── Real-server integration tests ──────────────────────────────────────────────
+
+
+def _real_server_skill_items(result):
+    """Return skill items from live servers that vary in list envelope shape."""
+    if isinstance(result, list):
+        return result
+    if isinstance(result, dict):
+        data = result.get("data")
+        if isinstance(data, list):
+            return data
+    pytest.fail(f"unexpected skills list shape: {type(result).__name__}")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("KWEAVER_BASE_URL") or not os.environ.get("KWEAVER_TOKEN"),
+    reason="set KWEAVER_BASE_URL and KWEAVER_TOKEN to run against a real server",
+)
+class TestRealServer:
+    """Smoke tests that exercise the live API via the ``client`` fixture
+    from conftest.py.
+
+    These tests do NOT use mock transports. They assert response *structure*
+    rather than specific values, so they work against any server.
+    """
+
+    def test_list_skills(self, client: KWeaverClient):
+        result = client.skills.list(page_size=5)
+        assert isinstance(_real_server_skill_items(result), list)
+
+    def test_market_skills(self, client: KWeaverClient):
+        result = client.skills.market(page_size=5)
+        assert isinstance(_real_server_skill_items(result), list)
+
+    def test_get_and_content(self, client: KWeaverClient):
+        listing = client.skills.list(page_size=1)
+        items = _real_server_skill_items(listing)
+        if not items:
+            pytest.skip("no skills available")
+        skill_id = items[0]["skill_id"]
+
+        info = client.skills.get(skill_id)
+        assert info["skill_id"] == skill_id
+
+        content = client.skills.content(skill_id)
+        assert "url" in content
+
+    def test_management_content(self, client: KWeaverClient):
+        listing = client.skills.list(page_size=1)
+        items = _real_server_skill_items(listing)
+        if not items:
+            pytest.skip("no skills available")
+        skill_id = items[0]["skill_id"]
+
+        mgmt = client.skills.get_management_content(skill_id)
+        assert "skill_id" in mgmt

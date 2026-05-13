@@ -234,6 +234,10 @@ export type {
   DownloadedSkillArchive,
   SkillReleaseHistoryInfo,
   SkillHistoryVersionOptions,
+  SkillManagementContentData,
+  GetSkillManagementContentOptions,
+  ReadSkillManagementFileOptions,
+  DownloadSkillManagementOptions,
 } from "./api/skills.js";
 export {
   listSkills,
@@ -256,6 +260,9 @@ export {
   republishSkillHistory,
   publishSkillHistory,
   installSkillArchive,
+  getSkillManagementContent,
+  readSkillManagementFile,
+  downloadSkillManagementArchive,
 } from "./api/skills.js";
 
 // ── Data views (mdl-data-model) ────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { liftFromQueriesFile, QueryPickerError } from "../src/trace-ai/eval-set/query-picker.js";
+import { liftFromQueriesFile, liftFromDiagnosis, QueryPickerError } from "../src/trace-ai/eval-set/query-picker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = (name: string) => path.join(__dirname, "fixtures", "eval-set", name);
@@ -46,4 +46,48 @@ test("liftFromQueriesFile rejects malformed yaml", async () => {
   } finally {
     await fs.unlink(tmpPath);
   }
+});
+
+test("liftFromDiagnosis lifts suggested_eval_case from M4 report findings", async () => {
+  // Use independent subdir to avoid mixing with queries-input fixtures
+  const subDir = path.join(__dirname, "fixtures", "eval-set", "diagnose-only");
+  const fs = await import("node:fs/promises");
+  await fs.mkdir(subDir, { recursive: true });
+  await fs.copyFile(
+    path.join(__dirname, "fixtures", "eval-set", "diagnose-report-sample.yaml"),
+    path.join(subDir, "diagnose-report-sample.yaml"),
+  );
+  try {
+    const result = await liftFromDiagnosis(subDir);
+    // 2 findings in fixture: 1st has query="如何申请退款？" + 1 assertion → lifted
+    //                       2nd has query=null + empty assertions → skipped
+    assert.equal(result.cases.length, 1);
+    assert.equal(result.skipped_findings_count, 1);
+    const c = result.cases[0];
+    assert.equal(c.input.user_message, "如何申请退款？");
+    assert.equal(c.query_id, "conv_abc");
+    assert.ok(c.assertions && c.assertions.length === 1);
+    assert.equal(c.assertions[0].type, "contains");
+    assert.equal(c.assertions[0].value, "tool_call_count(retrieval) <= 2");
+    assert.ok(typeof c.assertions[0]._note === "string");
+  } finally {
+    await fs.rm(subDir, { recursive: true, force: true });
+  }
+});
+
+test("liftFromDiagnosis fails fast when dir contains a non-diagnose-report yaml", async () => {
+  // The shared fixtures/eval-set dir has queries-input-*.yaml mixed in;
+  // liftFromDiagnosis must fail-fast when it sees a yaml that doesn't
+  // match the M4 ReportSchema (treat all *.yaml in dir as diagnose reports)
+  await assert.rejects(
+    liftFromDiagnosis(path.join(__dirname, "fixtures", "eval-set")),
+    (e) => e instanceof QueryPickerError && /schema validation failed/.test(e.message),
+  );
+});
+
+test("liftFromDiagnosis returns directory-not-found error for missing dir", async () => {
+  await assert.rejects(
+    liftFromDiagnosis("/nonexistent/dir/path"),
+    (e) => e instanceof QueryPickerError && /directory not found/i.test(e.message),
+  );
 });

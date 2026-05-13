@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-13
 
-Tracking issue: TBD（spec review 通过后开）
+Tracking issue: [kweaver-ai/kweaver-sdk#128](https://github.com/kweaver-ai/kweaver-sdk/issues/128)
 Vision references: `plan-traceai/vision/trace-cli-detailed-design.md` §3.2 / §3.6 / 附录 A·B；`plan-traceai/vision/trace-ai-continuous-learning-design.md` §7.M5 / §7.MX1
 Plan reference: `plan-traceai/plan/2026-05-11-m4-diagnose-issue-plan.md`（M5 issue plan 待开新文件）
 Vision review 前置: commit [`90c9f7e`](https://github.com/xforce-io/plan-traceai/commit/90c9f7e)（M5 落地前 spec 聚焦式 review：删 B2 / `schema validate` 升回 MVP-B / SSOT YAML 推后）

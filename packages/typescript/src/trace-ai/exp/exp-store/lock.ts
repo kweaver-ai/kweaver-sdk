@@ -44,8 +44,8 @@ export async function acquireLock(expDir: string): Promise<void> {
 export async function releaseLock(expDir: string): Promise<void> {
   try {
     await fs.unlink(lockPath(expDir));
-  } catch {
-    // Ignore if already gone
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 }
 
@@ -56,7 +56,7 @@ export async function updateHeartbeat(expDir: string): Promise<void> {
     const lock = JSON.parse(raw) as LockData;
     lock.last_heartbeat_ts = new Date().toISOString();
     await fs.writeFile(p, JSON.stringify(lock, null, 2), "utf8");
-  } catch {
-    // Lock removed externally — ignore
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 }

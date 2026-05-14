@@ -13,6 +13,7 @@ export interface Span {
   durationMs: number;                // computed from start/end
   status: 'ok' | 'error' | 'unset';
   attributes: SpanAttributes;
+  events?: Array<{ name?: string; time?: string; attributes?: Record<string, unknown> }>;
 }
 
 export type SpanKind = 'tool' | 'llm' | 'retrieval' | 'reasoning' | 'unknown';

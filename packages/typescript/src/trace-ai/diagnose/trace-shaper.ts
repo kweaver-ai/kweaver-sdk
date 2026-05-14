@@ -54,6 +54,7 @@ export function assembleTraceTree(traceId: string, raw: RawSpan[]): TraceTree {
       durationMs: durationMs(r.startTimeUnixNano, r.endTimeUnixNano),
       status: deriveStatus(r.status),
       attributes: attrs,
+      events: r.events,
     };
   });
 

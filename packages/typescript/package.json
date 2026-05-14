@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "dev": "tsx watch src/cli.ts",
-    "build": "node node_modules/typescript/bin/tsc -p tsconfig.json && rm -rf dist/templates && cp -R src/templates dist/templates && cp src/trace-ai/diagnose/builtin-rules/*.yaml dist/trace-ai/diagnose/builtin-rules/ && mkdir -p dist/agent-providers/prompts && cp src/agent-providers/prompts/*.prompt.md dist/agent-providers/prompts/ && cp src/trace-ai/diagnose/builtin-rules/*.prompt.md dist/trace-ai/diagnose/builtin-rules/ 2>/dev/null || true && mkdir -p dist/trace-ai/scan/prompts/builtin && cp src/trace-ai/scan/prompts/builtin/*.prompt.md dist/trace-ai/scan/prompts/builtin/",
+    "build": "node node_modules/typescript/bin/tsc -p tsconfig.json && rm -rf dist/templates && cp -R src/templates dist/templates && cp src/trace-ai/diagnose/builtin-rules/*.yaml dist/trace-ai/diagnose/builtin-rules/ && mkdir -p dist/agent-providers/prompts && cp src/agent-providers/prompts/*.prompt.md dist/agent-providers/prompts/ && cp src/trace-ai/diagnose/builtin-rules/*.prompt.md dist/trace-ai/diagnose/builtin-rules/ 2>/dev/null || true && mkdir -p dist/trace-ai/scan/prompts/builtin && cp src/trace-ai/scan/prompts/builtin/*.prompt.md dist/trace-ai/scan/prompts/builtin/ && mkdir -p dist/trace-ai/eval-set/rubric-templates && cp src/trace-ai/eval-set/rubric-templates/*.prompt.md dist/trace-ai/eval-set/rubric-templates/",
     "start": "node ./dist/cli.js",
     "lint": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test test/*.test.ts",

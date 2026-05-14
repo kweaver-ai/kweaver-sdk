@@ -2,6 +2,8 @@
 export function applyAgentConfigPatch(candidate: Record<string, unknown>, patchJson: string): Record<string, unknown> {
   const patch = JSON.parse(patchJson) as Record<string, unknown>;
   if (!patch.agent) throw new Error("agent.* patch must have an 'agent' key");
+  // Only the agent sub-tree is patched; extra top-level keys in patchJson are intentionally ignored.
+  // Callers should scope patch JSON to { agent: { ... } } only.
   const result = structuredClone(candidate) as Record<string, unknown>;
   result["agent"] = mergePatch(result["agent"] as Record<string, unknown>, patch["agent"] as Record<string, unknown>);
   return result;

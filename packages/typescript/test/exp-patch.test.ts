@@ -46,6 +46,28 @@ test("applyPatch: skill.remove", () => {
   assert.equal(result.skills.length, 0);
 });
 
+test("applyPatch: skill.swap", () => {
+  const result = applyPatch(baseCandidate, {
+    target: "skill.swap",
+    hypothesis: "swap retrieval for retrieval_v2",
+    patch: JSON.stringify({ skills: { swap: { from: "retrieval_v1", to: { name: "retrieval_v2" } } } }),
+  });
+  assert.equal(result.skills.length, 1);
+  assert.ok(result.skills.some((s: { name: string }) => s.name === "retrieval_v2"));
+  assert.ok(!result.skills.some((s: { name: string }) => s.name === "retrieval_v1"));
+});
+
+test("applyPatch: skill.swap throws when skill not found", () => {
+  assert.throws(
+    () => applyPatch(baseCandidate, {
+      target: "skill.swap",
+      hypothesis: "swap nonexistent",
+      patch: JSON.stringify({ skills: { swap: { from: "nonexistent_skill", to: { name: "new_skill" } } } }),
+    }),
+    /not found/i
+  );
+});
+
 test("applyPatch: throws for unknown target prefix", () => {
   assert.throws(
     () => applyPatch(baseCandidate, { target: "bkn.entity", hypothesis: "x", patch: "{}" }),

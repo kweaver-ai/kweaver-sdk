@@ -8,6 +8,7 @@ export function applySkillPatch(candidate: Record<string, unknown>, patchJson: s
   const result = structuredClone(candidate) as Record<string, unknown>;
   let skills: SkillEntry[] = (result["skills"] as SkillEntry[]) ?? [];
 
+  // Order is significant: remove → add → swap
   if (patch.skills.remove) {
     const toRemove = new Set(patch.skills.remove);
     skills = skills.filter(s => !toRemove.has(s.name));
@@ -17,6 +18,8 @@ export function applySkillPatch(candidate: Record<string, unknown>, patchJson: s
   }
   if (patch.skills.swap) {
     const { from, to } = patch.skills.swap;
+    const matched = skills.some(s => s.name === from);
+    if (!matched) throw new Error(`skill.swap: skill "${from}" not found in candidate`);
     skills = skills.map(s => s.name === from ? to : s);
   }
   result["skills"] = skills;

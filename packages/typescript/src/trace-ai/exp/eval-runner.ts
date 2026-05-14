@@ -43,23 +43,31 @@ export async function runEval(opts: EvalRunnerOpts): Promise<EvalRunResult> {
     const report = yaml.load(await fs.readFile(reportPath, "utf8")) as {
       cases: Array<{
         query_id: string;
-        assertion_results: Array<{ type: string; verdict: string; reason?: string }>;
+        assertion_results: Array<{ assertion: { type: string }; verdict: string; actual?: unknown }>;
         duration_ms?: number;
-        trace_id?: string;
+        trace_id?: string | null;
       }>;
     };
 
     for (const c of report.cases) {
       allResults.push({
         query_id: c.query_id,
-        assertion_results: c.assertion_results as QueryResult["assertion_results"],
+        assertion_results: (c.assertion_results as Array<{
+          assertion: { type: string };
+          verdict: string;
+          actual?: unknown;
+        }>).map(ar => ({
+          type: ar.assertion.type,
+          verdict: ar.verdict as "pass" | "fail" | "skip",
+          reason: typeof ar.actual === "string" ? ar.actual : undefined,
+        })),
         trajectory_summary: {
           tool_call_sequence: [],  // populated from trace if available
           retry_count: 0,
           latency_ms: c.duration_ms ?? 0,
           error_codes: [],
         },
-        raw_trace_id: c.trace_id,
+        raw_trace_id: c.trace_id ?? undefined,
       });
     }
   }

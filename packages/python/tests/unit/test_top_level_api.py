@@ -46,6 +46,19 @@ class TestConfigure:
         kweaver.configure("https://example.com", token="tok123")
         assert kweaver._default_client is not None
 
+    def test_configure_honors_kweaver_tls_insecure_env(self, monkeypatch):
+        """KWEAVER_TLS_INSECURE must disable TLS verification for direct clients."""
+        monkeypatch.setenv("KWEAVER_TLS_INSECURE", "1")
+        captured = {}
+
+        class FakeHttpClient:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        monkeypatch.setattr(kweaver._client, "HttpClient", FakeHttpClient)
+        kweaver.configure("https://example.com", token="tok123")
+        assert captured["verify"] is False
+
     def test_username_password_auth(self):
         kweaver.configure("https://example.com", username="user", password="pass")
         assert kweaver._default_client is not None

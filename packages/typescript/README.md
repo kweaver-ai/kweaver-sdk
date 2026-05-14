@@ -174,6 +174,12 @@ const rawTool = await cl.callTool("search_schema", { query: "hypertension treatm
 // Skills (registry + market + progressive read)
 const skills = await client.skills.market({ name: "kweaver" });
 const skillMd = await client.skills.fetchContent("skill-id");
+const draft = await client.skills.updateMetadata("skill-id", {
+  name: "Demo",
+  description: "Demo skill",
+  category: "system",
+});
+const history = await client.skills.history("skill-id");
 ```
 
 `searchSchema()` is the typed wrapper for the Context Loader MCP `search_schema` tool. It defaults `response_format` to `json` and accepts `query`, `response_format`, `search_scope`, `max_concepts`, `schema_brief`, and `enable_rerank`. `search_scope.concept_groups` limits schema discovery to BKN concept group IDs; it is not an instance-data filter. The parsed response may contain `object_types`, `relation_types`, `action_types`, and `metric_types`.
@@ -214,7 +220,7 @@ kweaver bkn subgraph / search
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
-kweaver skill list/market/get/register/status/delete/content/read-file/download/install
+kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install/management-content/management-read-file/management-download
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>

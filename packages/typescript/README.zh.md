@@ -165,6 +165,12 @@ const rawTool = await cl.callTool("search_schema", { query: "高血压 治疗" }
 // Skill（注册表/市场/渐进式读取）
 const skills = await client.skills.market({ name: "kweaver" });
 const skillMd = await client.skills.fetchContent("skill-id");
+const draft = await client.skills.updateMetadata("skill-id", {
+  name: "Demo",
+  description: "Demo skill",
+  category: "system",
+});
+const history = await client.skills.history("skill-id");
 ```
 
 `searchSchema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。`search_scope.concept_groups` 用于按 BKN 概念分组 ID 限定 Schema 发现范围，不是实例数据过滤条件。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
@@ -200,7 +206,7 @@ kweaver bkn subgraph
 kweaver bkn action-execution get
 kweaver bkn action-log list/get/cancel
 kweaver agent list/get/chat/sessions/history
-kweaver skill list/market/get/register/status/delete/content/read-file/download/install
+kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install/management-content/management-read-file/management-download
 kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
 kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>

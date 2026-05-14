@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Callable
 
 import httpx
@@ -56,3 +57,21 @@ def make_client(
 @pytest.fixture
 def capture() -> RequestCapture:
     return RequestCapture()
+
+
+@pytest.fixture
+def client() -> KWeaverClient:
+    """Integration-test fixture: connects to a real server when
+    ``KWEAVER_BASE_URL`` and ``KWEAVER_TOKEN`` are set, otherwise
+    falls back to a basic mock transport."""
+    base_url = os.environ.get("KWEAVER_BASE_URL")
+    token = os.environ.get("KWEAVER_TOKEN")
+    if base_url and token:
+        c = KWeaverClient(base_url=base_url, token=token)
+    else:
+        transport = httpx.MockTransport(
+            lambda r: httpx.Response(200, json={"code": 0, "data": {}})
+        )
+        c = KWeaverClient(base_url="https://mock", token="tok", transport=transport)
+    yield c
+    c.close()

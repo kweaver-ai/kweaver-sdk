@@ -163,10 +163,11 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | Dataflows | `client.dataflows` | `create`, `run`, `poll`, `delete`, `execute` |
 | Dataflow v2 | `client.dataflow_v2` | `list_dataflows`, `run_dataflow_with_file`, `run_dataflow_with_remote_url`, `list_dataflow_runs`, `get_dataflow_logs_page` |
 | Data Views | `client.dataviews` | `create`, `list`, `get`, `delete`, `find_by_table`, `query` (SQL via mdl-uniquery) |
-| Skills | `client.skills` | `list`, `market`, `get`, `register_content`, `register_zip`, `update_status`, `content`, `read_file`, `download`, `install` |
+| Skills | `client.skills` | `list`, `market`, `get`, `get_market`, `register_content`, `register_zip`, `update_status`, `update_metadata`, `update_package_content`, `update_package_zip`, `history`, `republish_history`, `publish_history`, `content`, `read_file`, `download`, `install` |
 | Models (mf-model-manager / mf-model-api) | `client.models` | `llm` / `small`: `list`, `get`, `add`, `edit`, `delete`, `test`; `invocation`: `chat`, `embedding`, `embeddings`, `rerank` |
 
 LLM `client.models.llm.list(model_type=...)` forwards **`model_type`** to mf-model-manager; allowed values are **`llm`**, **`rlm`** (reasoning), and **`vu`** (vision / multimodal).
+
 
 For Context Loader MCP access, use `ContextLoaderResource` directly:
 

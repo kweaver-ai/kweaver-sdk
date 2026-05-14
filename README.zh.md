@@ -292,7 +292,7 @@ kweaver trace diagnose --traces=<list> --out=<dir>    # 批量诊断（单 agent
 kweaver trace diagnose rules validate <rule.yaml>     # 校验规则
 kweaver trace eval-set build --diagnosis=<dir>|--queries=<file> --out=<dir>  # 构建 eval-set yaml 目录
 kweaver trace schema validate <file> [--kind=<kind>]  # 校验 yaml 是否符合 M5/M4 zod schema
-kweaver skill list/market/get/register/status/delete/content/read-file/download/install
+kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install/management-content/management-read-file/management-download
 kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
 kweaver context-loader help <subcommand>
 kweaver context-loader tools|resources|templates|prompts <kn-id>

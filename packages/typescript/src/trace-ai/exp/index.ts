@@ -1,5 +1,6 @@
 // src/trace-ai/exp/index.ts
 import path from "node:path";
+import fs from "node:fs/promises";
 import { ExpStore } from "./exp-store/index.js";
 import { ExperimentCoordinator } from "./coordinator.js";
 import { ClaudeCodeSynthesizer } from "./providers/synthesizer-client.js";
@@ -59,6 +60,11 @@ export async function runExpCommand(argv: string[]): Promise<number> {
 
     case "resume": {
       ensureProvider();
+      const replayed = await store.replayState();
+      if (replayed.currentState !== "Deciding") {
+        process.stderr.write(`Error: cannot resume — experiment is in state ${replayed.currentState}. Only Deciding state supports resume.\n`);
+        return 2;
+      }
       const coord = makeCoordinator(args.expDir);
       await coord.resume();
       return 0;
@@ -113,13 +119,11 @@ async function runDoctor(expDir: string, store: ExpStore): Promise<number> {
     const mission = await store.readMission();
     check("mission.md valid", true, "");
     for (const es of mission.eval_sets) {
-      const { access } = await import("node:fs/promises");
       const esPath = path.join(expDir, es.path);
-      await access(esPath).then(() => check(`eval_set ${es.path}`, true, "")).catch(() => check(`eval_set ${es.path}`, false, `not found: ${esPath}`));
+      await fs.access(esPath).then(() => check(`eval_set ${es.path}`, true, "")).catch(() => check(`eval_set ${es.path}`, false, `not found: ${esPath}`));
     }
     const candPath = path.join(expDir, mission.current_candidate.path);
-    const { access } = await import("node:fs/promises");
-    await access(candPath).then(() => check("current_candidate readable", true, "")).catch(() => check("current_candidate readable", false, `not found: ${candPath}`));
+    await fs.access(candPath).then(() => check("current_candidate readable", true, "")).catch(() => check("current_candidate readable", false, `not found: ${candPath}`));
   } catch (e) {
     check("mission.md valid", false, String(e));
   }

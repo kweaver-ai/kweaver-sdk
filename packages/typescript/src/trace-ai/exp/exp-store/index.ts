@@ -6,7 +6,7 @@ import type { ExpEvent, LineageEntry, Mission, NextChange, RoundData } from "../
 import { readMission, writeSuggestedChange } from "./mission-md.js";
 import { appendEvent, replayState, type ReplayedState } from "./events-jsonl.js";
 import { acquireLock, releaseLock, updateHeartbeat } from "./lock.js";
-import { isAborted, writeAbortSignal } from "./abort-signal.js";
+import { isAborted, writeAbortSignal, clearAbortSignal } from "./abort-signal.js";
 import { writeRound, readAllRounds } from "./round-yaml.js";
 import { appendLineage, updateLineage, readLineage } from "./candidate-lineage-yaml.js";
 import { renderReadme } from "./readme-template.js";
@@ -57,6 +57,7 @@ export class ExpStore {
   updateHeartbeat = () => updateHeartbeat(this.expDir);
   isAborted = () => isAborted(this.expDir);
   writeAbortSignal = () => writeAbortSignal(this.expDir);
+  clearAbortSignal = () => clearAbortSignal(this.expDir);
   writeRound = (n: number, data: Partial<RoundData>) => writeRound(this.expDir, n, data);
   readAllRounds = () => readAllRounds(this.expDir);
   appendLineage = (e: Omit<LineageEntry, "appended_at">) => appendLineage(this.expDir, e);

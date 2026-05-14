@@ -36,11 +36,19 @@ test("computeScores: trajectory penalized on high retry_count", () => {
 });
 
 test("computeScores: guardrail hard fail when rule violated", () => {
-  const results = [makeQueryResult()];
   const guardrails = [{ name: "no_error", kind: "hard" as const, rule: "error_codes must be empty" }];
   const resultsWithError = [
     makeQueryResult({ trajectory_summary: { tool_call_sequence: [], retry_count: 0, latency_ms: 100, error_codes: ["AUTH_FORBIDDEN"] } }),
   ];
   const scores = computeScores(resultsWithError, guardrails);
   assert.equal(scores.guardrail_hard_fail, true);
+});
+
+test("computeScores: skip verdicts are excluded from outcome", () => {
+  const results = [
+    makeQueryResult({ assertion_results: [{ type: "contains", verdict: "skip" }] }),
+  ];
+  const scores = computeScores(results, []);
+  // All assertions are skipped → totalAssertions = 0 → outcome = 1 (vacuously passing)
+  assert.equal(scores.outcome, 1);
 });

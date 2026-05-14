@@ -1,6 +1,4 @@
-import type { QueryResult, ThreeAxisScores } from "./schemas.js";
-
-interface Guardrail { name: string; kind: "hard" | "soft"; rule: string }
+import type { QueryResult, ThreeAxisScores, Guardrail } from "./schemas.js";
 
 export function computeScores(results: QueryResult[], guardrails: Guardrail[]): ThreeAxisScores {
   if (results.length === 0) {
@@ -19,16 +17,22 @@ export function computeScores(results: QueryResult[], guardrails: Guardrail[]): 
   }
   const outcome = totalAssertions === 0 ? 1 : passedAssertions / totalAssertions;
 
+  const RETRY_PENALTY_PER_RETRY = 0.15;
+  const MAX_RETRY_PENALTY = 0.6;
+  const ERROR_CODE_PENALTY = 0.3;
+
   // Trajectory: penalize retries and errors
   let trajectorySum = 0;
   for (const r of results) {
     const { retry_count, error_codes } = r.trajectory_summary;
-    const retryPenalty = Math.min(retry_count * 0.15, 0.6);
-    const errorPenalty = error_codes.length > 0 ? 0.3 : 0;
+    const retryPenalty = Math.min(retry_count * RETRY_PENALTY_PER_RETRY, MAX_RETRY_PENALTY);
+    const errorPenalty = error_codes.length > 0 ? ERROR_CODE_PENALTY : 0;
     trajectorySum += Math.max(0, 1 - retryPenalty - errorPenalty);
   }
   const trajectory = trajectorySum / results.length;
 
+  // MVP-C stub: hard guardrails fire when any result has error_codes present,
+  // regardless of the specific rule text. Soft guardrails do not affect the guardrail score yet.
   // Guardrail: check hard gates (any error_codes in results triggers hard gate if guardrail with kind="hard")
   let guardrail_hard_fail = false;
   let guardrail = 1;

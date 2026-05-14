@@ -22,5 +22,7 @@ export async function writeAbortSignal(expDir: string): Promise<void> {
 export async function clearAbortSignal(expDir: string): Promise<void> {
   try {
     await fs.unlink(signalPath(expDir));
-  } catch {}
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
 }

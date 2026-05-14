@@ -2,7 +2,8 @@
 export function renderReadme(opts: { experimentId: string; timestamp: string; goal: string }): string {
   return `# Experiment: ${opts.experimentId}
 
-Created: ${opts.timestamp}  Goal: ${opts.goal}
+Created: ${opts.timestamp}
+Goal: ${opts.goal}
 
 ## 目录说明
 - mission.md        — 实验意图（你来编辑）

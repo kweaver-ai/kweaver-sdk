@@ -20,7 +20,10 @@ export async function appendLineage(expDir: string, entry: Omit<LineageEntry, "a
 
 export async function updateLineage(expDir: string, version: number, patch: Partial<LineageEntry>): Promise<void> {
   const p = lineagePath(expDir);
-  const entries: LineageEntry[] = (yaml.load(await fs.readFile(p, "utf8")) as LineageEntry[]) ?? [];
+  let entries: LineageEntry[] = [];
+  try {
+    entries = (yaml.load(await fs.readFile(p, "utf8")) as LineageEntry[]) ?? [];
+  } catch {}
   const idx = entries.findIndex(e => e.version === version);
   if (idx >= 0) Object.assign(entries[idx], patch);
   await fs.writeFile(p, yaml.dump(entries, { lineWidth: -1 }), "utf8");

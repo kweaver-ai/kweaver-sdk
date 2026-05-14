@@ -214,6 +214,7 @@ test("sendChatRequest returns text and conversation_id from JSON response", { co
     assert.equal(body.agent_version, "v2");
     assert.equal(body.query, "hello");
     assert.equal(body.stream, false);
+    assert.equal(body.chat_option, undefined);
     assert.equal(headers.get("x-business-domain"), "bd_public");
     return new Response(
       JSON.stringify({
@@ -270,6 +271,7 @@ test("sendChatRequest includes conversation_id in body when provided", { concurr
   globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse((init?.body as string) ?? "{}");
     assert.equal(body.conversation_id, "conv_existing");
+    assert.deepEqual(body.chat_option, { is_need_history: true });
     assert.equal(body.agent_key, "agent-key-xyz");
     return new Response(
       JSON.stringify({
@@ -362,6 +364,50 @@ test("sendChatRequestStream invokes onTextDelta with full text and returns ChatR
     assert.equal(result.conversationId, "conv_tui");
     assert.equal(result.text, "Hi there!");
     assert.deepEqual(fullTexts, ["Hi", "Hi there", "Hi there!"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("sendChatRequestStream includes history option when conversation_id is provided", {
+  concurrency: false,
+}, async () => {
+  const encoder = new TextEncoder();
+  globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    assert.equal(body.conversation_id, "conv_stream_existing");
+    assert.deepEqual(body.chat_option, { is_need_history: true });
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: {"key":["conversation_id"],"content":"conv_stream_existing","action":"upsert"}\n'));
+          controller.enqueue(encoder.encode('data: {"key":["message","text"],"content":"Continued stream.","action":"append"}\n'));
+          controller.close();
+        },
+      }),
+      { headers: { "content-type": "text/event-stream" } }
+    );
+  };
+
+  try {
+    const result = await sendChatRequestStream(
+      {
+        baseUrl: "https://dip.aishu.cn",
+        accessToken: "token-abc",
+        agentId: "agent-xyz",
+        agentKey: "agent-key-xyz",
+        agentVersion: "v2",
+        query: "continue",
+        conversationId: "conv_stream_existing",
+        stream: true,
+      },
+      {
+        onTextDelta: () => undefined,
+      }
+    );
+
+    assert.equal(result.conversationId, "conv_stream_existing");
+    assert.equal(result.text, "Continued stream.");
   } finally {
     globalThis.fetch = originalFetch;
   }

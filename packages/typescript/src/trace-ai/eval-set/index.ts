@@ -19,3 +19,18 @@ export type {
 
 export { build, ensureQueryId, BuilderError } from "./builder.js";
 export type { BuildOpts, BuildSource } from "./builder.js";
+export { run as runTest } from "./test-runner.js";
+export type { RunOpts, RunnerDeps } from "./test-runner.js";
+export { evaluateAssertion } from "./assertion-evaluator.js";
+export type {
+  AssertionContext,
+  AssertionResult,
+  SemanticMatchProvider,
+  SemanticMatchVerdict,
+} from "./assertion-evaluator.js";
+export {
+  createBuiltinSemanticMatchProvider,
+  ANSWER_MATCH_REFERENCE_REF,
+  AnswerMatchOutputSchema,
+} from "./semantic-match-provider.js";
+export type { CreateSemanticMatchProviderOpts } from "./semantic-match-provider.js";

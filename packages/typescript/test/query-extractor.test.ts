@@ -15,6 +15,7 @@ function fakeTree(spans: Partial<Span>[]): TraceTree {
     durationMs: 0,
     status: "ok" as const,
     attributes: s.attributes ?? {},
+    events: s.events,
   }));
   return {
     traceId: "t",
@@ -61,6 +62,73 @@ test("extractUserQueryFromTrace returns null when no user message in input.messa
           { role: "assistant", content: "y" },
         ]),
       },
+    },
+  ]);
+  assert.equal(extractUserQueryFromTrace(tree), null);
+});
+
+// ── event path (dolphin otel_listener) ───────────────────────────────────────
+
+test("extractUserQueryFromTrace reads from event attributes (primary path)", () => {
+  const tree = fakeTree([
+    {
+      name: "chat deepseek-chat",
+      attributes: {},
+      events: [
+        {
+          name: "gen_ai.client.inference.operation.details",
+          attributes: {
+            "gen_ai.input.messages": JSON.stringify([
+              { role: "system", content: "you are an agent" },
+              { role: "user", content: "充电桩有多少家企业？" },
+            ]),
+            "gen_ai.output.messages": JSON.stringify([
+              { role: "assistant", content: "78家" },
+            ]),
+          },
+        },
+      ],
+    },
+  ]);
+  assert.equal(extractUserQueryFromTrace(tree), "充电桩有多少家企业？");
+});
+
+test("extractUserQueryFromTrace prefers event path over span.attributes fallback", () => {
+  const tree = fakeTree([
+    {
+      attributes: {
+        "gen_ai.input.messages": JSON.stringify([{ role: "user", content: "from-span-attr" }]),
+      },
+      events: [
+        {
+          name: "gen_ai.client.inference.operation.details",
+          attributes: {
+            "gen_ai.input.messages": JSON.stringify([{ role: "user", content: "from-event" }]),
+          },
+        },
+      ],
+    },
+  ]);
+  assert.equal(extractUserQueryFromTrace(tree), "from-event");
+});
+
+test("extractUserQueryFromTrace falls back to span.attributes when no events", () => {
+  const tree = fakeTree([
+    {
+      attributes: {
+        "gen_ai.input.messages": JSON.stringify([{ role: "user", content: "fallback-query" }]),
+      },
+      events: [],
+    },
+  ]);
+  assert.equal(extractUserQueryFromTrace(tree), "fallback-query");
+});
+
+test("extractUserQueryFromTrace returns null when events present but no gen_ai.input.messages", () => {
+  const tree = fakeTree([
+    {
+      attributes: {},
+      events: [{ name: "some.other.event", attributes: { "other.key": "value" } }],
     },
   ]);
   assert.equal(extractUserQueryFromTrace(tree), null);

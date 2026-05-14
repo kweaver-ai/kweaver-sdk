@@ -102,7 +102,9 @@ export async function liftFromDiagnosis(dirPath: string): Promise<LiftFromDiagno
     .filter((e) => e.endsWith(".yaml") || e.endsWith(".yml"))
     .map((e) => path.join(dirPath, e));
 
-  const cases: EvalCase[] = [];
+  // Accumulate by query_id so multiple findings from the same conversation
+  // collapse into one case with merged assertions (avoids intra-batch dup error).
+  const byQueryId = new Map<string, EvalCase>();
   let skipped = 0;
   const skippedSummary: string[] = [];
 
@@ -152,15 +154,21 @@ export async function liftFromDiagnosis(dirPath: string): Promise<LiftFromDiagno
         value: t,
         _note: "auto-lifted from M4 assertion template; convert to structured assertion manually",
       }));
-      cases.push({
-        query_id: sec.query_id ?? "",
-        input: { user_message: sec.query },
-        reference: undefined,
-        assertions: placeholderAssertions,
-        tags: undefined,
-      });
+      const queryId = sec.query_id ?? "";
+      const existing = byQueryId.get(queryId);
+      if (existing) {
+        existing.assertions = [...(existing.assertions ?? []), ...placeholderAssertions];
+      } else {
+        byQueryId.set(queryId, {
+          query_id: queryId,
+          input: { user_message: sec.query },
+          reference: undefined,
+          assertions: placeholderAssertions,
+          tags: undefined,
+        });
+      }
     }
   }
 
-  return { cases, skipped_findings_count: skipped, skipped_findings_summary: skippedSummary };
+  return { cases: [...byQueryId.values()], skipped_findings_count: skipped, skipped_findings_summary: skippedSummary };
 }

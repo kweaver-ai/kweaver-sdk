@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import yargs from "yargs";
 
 import { derivePaths, diagnose, TraceNotFoundError } from "../trace-ai/diagnose/index.js";
@@ -8,11 +9,17 @@ import { RuleProbeError } from "../trace-ai/diagnose/signal-probe.js";
 import { RuleSchema } from "../trace-ai/diagnose/schemas.js";
 import { ensureValidToken } from "../auth/oauth.js";
 import { defaultRegistry } from "../agent-providers/registry.js";
+import { PromptTemplateRegistry } from "../agent-providers/prompt-template.js";
 import { ClaudeCodeSubprocessProvider } from "../agent-providers/providers/claude-code-subprocess.js";
 import { runBatch } from "../trace-ai/scan/index.js";
 import { parseTracesList, TracesListError } from "../trace-ai/scan/traces-list-parser.js";
 import { SingleAgentValidationError } from "../trace-ai/scan/single-agent-validator.js";
 import { build, BuilderError } from "../trace-ai/eval-set/index.js";
+import { run as runEvalSetTest } from "../trace-ai/eval-set/test-runner.js";
+import { createBuiltinSemanticMatchProvider } from "../trace-ai/eval-set/semantic-match-provider.js";
+import type { SemanticMatchProvider } from "../trace-ai/eval-set/assertion-evaluator.js";
+import { fetchAgentInfo, sendChatRequest } from "../api/agent-chat.js";
+import { getTracesByConversation } from "../api/conversations.js";
 import {
   EvalSetIndexSchema,
   EvalSetShardSchema,
@@ -22,6 +29,9 @@ import {
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const EVAL_SET_RUBRIC_DIR = path.join(__dirname, "..", "trace-ai", "eval-set", "rubric-templates");
+
 /** Register the default agent provider once per CLI process. Idempotent. */
 function ensureDefaultProviderRegistered(): void {
   if (defaultRegistry.has("claude-code")) return;
@@ -29,7 +39,7 @@ function ensureDefaultProviderRegistered(): void {
 }
 
 export interface ParsedTraceArgs {
-  subcommand: "diagnose" | "rules-validate" | "eval-set-build" | "schema-validate" | "help";
+  subcommand: "diagnose" | "rules-validate" | "eval-set-build" | "eval-set-test" | "schema-validate" | "help";
   mode?: "single" | "batch";
   conversationId?: string;       // single mode
   traces?: string;               // batch mode raw value (string or "@path") — resolved at runtime
@@ -54,6 +64,10 @@ export interface ParsedTraceArgs {
   // Task 9 schema validate
   schemaValidatePath?: string;
   schemaKind?: string;
+  // M5 PR-B eval-set test
+  evalSetPath?: string;
+  candidateAgentId?: string;
+  candidateAgentVersion?: string;
 }
 
 export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
@@ -90,6 +104,29 @@ export function parseTraceArgs(argv: string[]): ParsedTraceArgs {
       onConflict: parsed["on-conflict"] as "fail" | "skip" | "overwrite",
       redactionRules: parsed["redaction-rules"] as string | undefined,
       evalSetId: parsed["eval-set-id"] as string | undefined,
+    };
+  }
+  // M5 PR-B: eval-set test
+  if (head === "eval-set" && argv[1] === "test") {
+    const parsed = yargs(argv.slice(2))
+      .option("candidate", { type: "string", default: undefined })
+      .option("out", { type: "string", default: undefined })
+      .option("max-parallel", { type: "number", default: 4 })
+      .option("lang", { type: "string", default: undefined })
+      .help(false)
+      .parseSync();
+    const candidateRaw = (parsed.candidate as string | undefined) ?? "";
+    const atIdx = candidateRaw.indexOf("@");
+    const candidateAgentId = atIdx >= 0 ? candidateRaw.slice(0, atIdx) : candidateRaw;
+    const candidateAgentVersion = atIdx >= 0 ? candidateRaw.slice(atIdx + 1) : undefined;
+    return {
+      ...defaults("eval-set-test"),
+      evalSetPath: String(parsed._[0] ?? ""),
+      candidateAgentId,
+      candidateAgentVersion,
+      out: (parsed.out as string | undefined) ?? null,
+      maxParallel: parsed["max-parallel"] as number,
+      lang: (parsed.lang as "en" | "zh" | undefined) ?? null,
     };
   }
   // M5 PR-A: schema validate
@@ -214,6 +251,14 @@ Subcommands:
     --redaction-rules=<path>                  Override <repo>/redaction-rules/ source for PII redaction
     --eval-set-id=<id>                        Override default eval_set_id (basename of --out)
 
+  trace eval-set test <eval-set-dir> --candidate=<agent_id>[@<version>] --out=<dir>
+                                              Run each case in the eval-set against a candidate agent
+                                              and write a trace-test-report/v1 yaml to --out/report.yaml.
+    --candidate=<id>[@<version>]              Agent ID to test; optional @version suffix (default: published)
+    --out=<dir>                               Required output directory; report.yaml is written here
+    --max-parallel=<n>                        Concurrency limit (default 4)
+    --lang=en|zh                              Language for semantic_match reasoning text (default en)
+
   trace schema validate <file> [--kind=<kind>]
                                               Validate a yaml file against its M5/M4 zod schema
                                               (eval-set / eval-set-index / eval-set-input / test-report).
@@ -247,6 +292,9 @@ export async function runTraceCommand(rest: string[]): Promise<number> {
   }
   if (args.subcommand === "eval-set-build") {
     return await runEvalSetBuild(args);
+  }
+  if (args.subcommand === "eval-set-test") {
+    return await runEvalSetTestCmd(args);
   }
   if (args.subcommand === "schema-validate") {
     try {
@@ -558,6 +606,117 @@ async function runEvalSetBuild(args: ParsedTraceArgs): Promise<number> {
       if (e.message.includes("query_id conflict")) return 6;
       return 1;
     }
+    process.stderr.write(`error: ${(e as Error).message}\n`);
+    return 1;
+  }
+}
+
+async function runEvalSetTestCmd(args: ParsedTraceArgs): Promise<number> {
+  if (!args.evalSetPath) {
+    process.stderr.write("error: eval-set directory is required\n");
+    return 2;
+  }
+  if (!args.candidateAgentId) {
+    process.stderr.write("error: --candidate=<agent_id> is required\n");
+    return 2;
+  }
+  if (!args.out) {
+    process.stderr.write("error: --out=<dir> is required\n");
+    return 2;
+  }
+
+  let baseUrl = args.baseUrl ?? process.env.KWEAVER_BASE_URL ?? "";
+  let token = args.token ?? process.env.KWEAVER_TOKEN ?? "";
+  const bd = args.businessDomain ?? process.env.KWEAVER_BUSINESS_DOMAIN ?? "bd_public";
+  if (!baseUrl || !token) {
+    try {
+      const t = await ensureValidToken();
+      if (!baseUrl) baseUrl = t.baseUrl;
+      if (!token) token = t.accessToken;
+    } catch (e) {
+      process.stderr.write(
+        `error: missing --base-url / --token, and no active platform in ~/.kweaver/ — ${(e as Error).message}\n`,
+      );
+      return 5;
+    }
+  }
+  if (!baseUrl || !token) {
+    process.stderr.write("error: missing --base-url / --token (or KWEAVER_BASE_URL / KWEAVER_TOKEN env)\n");
+    return 5;
+  }
+
+  // Resolve a SemanticMatchProvider for `semantic_match` assertions (D5).
+  // We register claude-code as the default agent-provider, load the builtin
+  // rubric template, and only wire the judge in if the provider reports
+  // available — otherwise semantic_match assertions skip with a clear reason
+  // rather than failing the whole run.
+  ensureDefaultProviderRegistered();
+  const promptRegistry = new PromptTemplateRegistry();
+  await promptRegistry.loadBuiltinDir(EVAL_SET_RUBRIC_DIR);
+  let semanticMatchProvider: SemanticMatchProvider | undefined;
+  try {
+    const provider = defaultRegistry.resolve({
+      requiredCapabilities: ["structured_output"],
+    });
+    if (provider && (await provider.isAvailable())) {
+      semanticMatchProvider = createBuiltinSemanticMatchProvider({
+        provider,
+        promptRegistry,
+        lang: args.lang === "zh" ? "zh" : "en",
+      });
+    } else {
+      process.stderr.write(
+        "warn: agent provider unavailable — `semantic_match` assertions will be skipped (install `claude` CLI or wire a stub provider)\n",
+      );
+    }
+  } catch (e) {
+    process.stderr.write(`warn: could not resolve agent provider — ${(e as Error).message}\n`);
+  }
+
+  try {
+    await runEvalSetTest({
+      evalSetDir: args.evalSetPath,
+      candidateAgentId: args.candidateAgentId,
+      candidateAgentVersion: args.candidateAgentVersion,
+      outDir: args.out,
+      maxParallel: args.maxParallel,
+      deps: {
+        fetchAgent: async (agentId, version) =>
+          fetchAgentInfo({
+            baseUrl,
+            accessToken: token,
+            agentId,
+            version: version ?? "latest",
+            businessDomain: bd,
+          }),
+        sendChat: async ({ agentInfo, query }) => {
+          const result = await sendChatRequest({
+            baseUrl,
+            accessToken: token,
+            agentId: agentInfo.id,
+            agentKey: agentInfo.key,
+            agentVersion: agentInfo.version,
+            query,
+            stream: false,
+            businessDomain: bd,
+          });
+          return { text: result.text, conversationId: result.conversationId };
+        },
+        fetchTrace: async (conversationId) => {
+          const r = await getTracesByConversation({
+            baseUrl,
+            accessToken: token,
+            conversationId,
+            businessDomain: bd,
+          });
+          return { spans: r.spans };
+        },
+        semanticMatchProvider,
+      },
+    });
+    process.stdout.write(`✓ wrote ${args.out}/report.yaml\n`);
+    return 0;
+  } catch (e) {
     process.stderr.write(`error: ${(e as Error).message}\n`);
     return 1;
   }

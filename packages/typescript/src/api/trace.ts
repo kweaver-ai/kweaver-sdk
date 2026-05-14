@@ -28,6 +28,7 @@ export interface RawSpan {
   endTimeUnixNano?: string;
   status?: { code?: string };
   attributes?: Record<string, unknown>;
+  events?: Array<{ name?: string; time?: string; attributes?: Record<string, unknown> }>;
   /** OTel traceId for the trace this span belongs to (when known). */
   traceId?: string;
 }
@@ -80,6 +81,9 @@ function normalizeToRawSpan(source: Record<string, unknown>): RawSpan | null {
 
   const status = source.status as RawSpan["status"] | undefined;
   const attributes = source.attributes as Record<string, unknown> | undefined;
+  const events = Array.isArray(source.events)
+    ? (source.events as RawSpan["events"])
+    : undefined;
   const name = typeof source.name === "string" ? source.name : undefined;
   const traceIdRaw = source.traceId ?? source.trace_id;
   const traceId = typeof traceIdRaw === "string" ? traceIdRaw : undefined;
@@ -92,6 +96,7 @@ function normalizeToRawSpan(source: Record<string, unknown>): RawSpan | null {
     endTimeUnixNano,
     status,
     attributes,
+    events,
     traceId,
   };
 }

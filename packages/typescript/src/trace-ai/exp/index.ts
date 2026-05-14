@@ -148,10 +148,11 @@ function makeCoordinator(expDir: string): ExperimentCoordinator {
     expDir,
     synthesizer: new ClaudeCodeSynthesizer(),
     triage: new ClaudeCodeTriageClient(),
-    runEval: ({ evalSetPaths, candidatePath }) => runEval({
+    runEval: ({ evalSetPaths, candidatePath, round }) => runEval({
       evalSetPaths,
       candidatePath,
       expDir,
+      round,
       deps: {
         fetchAgent: async (id) => ({ id, key: id, version: "latest" }),
         sendChat: async () => { throw new Error("sendChat not configured — provide RunnerDeps"); },

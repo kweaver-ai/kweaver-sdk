@@ -10,6 +10,7 @@ export interface EvalRunnerOpts {
   evalSetPaths: string[];       // paths to eval-set dirs
   candidatePath: string;        // path to candidate YAML
   expDir: string;
+  round: number;                // used to isolate eval output per round
   deps: RunnerDeps;
   maxParallel?: number;
 }
@@ -23,12 +24,15 @@ export async function runEval(opts: EvalRunnerOpts): Promise<EvalRunResult> {
   const agentId = (candidateRaw["agent_id"] as string | undefined) ?? "candidate";
   const agentVersion = (candidateRaw["candidate_version"] as string | undefined);
 
-  const outDir = path.join(opts.expDir, ".trace-state", "_eval-tmp");
-  await fs.mkdir(outDir, { recursive: true });
+  const roundEvalBase = path.join(opts.expDir, ".trace-state", "rounds", `round-${opts.round}-eval`);
 
   // Run eval for each eval-set (sequentially for MVP-C single-path)
   const allResults: QueryResult[] = [];
   for (const evalSetDir of opts.evalSetPaths) {
+    // Each eval-set gets its own subdir so outputs from multiple sets don't overwrite each other
+    const outDir = path.join(roundEvalBase, path.basename(evalSetDir));
+    await fs.mkdir(outDir, { recursive: true });
+
     await evalSetRun({
       evalSetDir,
       candidateAgentId: agentId,

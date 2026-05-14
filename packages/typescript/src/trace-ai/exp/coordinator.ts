@@ -31,7 +31,7 @@ export interface CoordinatorOpts {
   expDir: string;
   synthesizer: SynthesizerClient;
   triage: TriageClient;
-  runEval: (opts: { evalSetPaths: string[]; candidatePath: string; expDir: string }) => Promise<{ queryResults: QueryResult[] }>;
+  runEval: (opts: { evalSetPaths: string[]; candidatePath: string; expDir: string; round: number }) => Promise<{ queryResults: QueryResult[] }>;
   experimentId?: string;
 }
 
@@ -122,7 +122,7 @@ export class ExperimentCoordinator {
     let queryResults: QueryResult[];
     try {
       const result = await this.withRetry(
-        () => this.opts.runEval({ evalSetPaths, candidatePath: newCandidatePath, expDir: this.opts.expDir }),
+        () => this.opts.runEval({ evalSetPaths, candidatePath: newCandidatePath, expDir: this.opts.expDir, round }),
         "Executing"
       );
       queryResults = result.queryResults;

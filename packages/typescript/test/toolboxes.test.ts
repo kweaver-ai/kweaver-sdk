@@ -120,7 +120,7 @@ test("setToolStatuses POSTs JSON array to /tools/status", async () => {
   } finally { restore(); }
 });
 
-test("listToolboxes GETs /tool-box/list with query params", async () => {
+test("listToolboxes maps public filters to backend name/page/page_size params", async () => {
   let captured: { url: string } | null = null;
   const restore = mockFetch(async (url) => {
     captured = { url: String(url) };
@@ -129,10 +129,35 @@ test("listToolboxes GETs /tool-box/list with query params", async () => {
   try {
     await listToolboxes({ baseUrl: BASE, accessToken: TOKEN, keyword: "demo", limit: 20, offset: 0 });
     assert.match(captured!.url, /\/tool-box\/list\?/);
-    assert.match(captured!.url, /keyword=demo/);
-    assert.match(captured!.url, /limit=20/);
-    assert.match(captured!.url, /offset=0/);
+    const url = new URL(captured!.url);
+    assert.equal(url.searchParams.get("name"), "demo");
+    assert.equal(url.searchParams.get("page_size"), "20");
+    assert.equal(url.searchParams.get("page"), "1");
+    assert.equal(url.searchParams.get("keyword"), null);
+    assert.equal(url.searchParams.get("limit"), null);
+    assert.equal(url.searchParams.get("offset"), null);
   } finally { restore(); }
+});
+
+test("listToolboxes converts offset pages using limit", async () => {
+  let captured: { url: string } | null = null;
+  const restore = mockFetch(async (url) => {
+    captured = { url: String(url) };
+    return new Response(JSON.stringify({ entries: [] }), { status: 200 });
+  });
+  try {
+    await listToolboxes({ baseUrl: BASE, accessToken: TOKEN, limit: 10, offset: 20 });
+    const url = new URL(captured!.url);
+    assert.equal(url.searchParams.get("page_size"), "10");
+    assert.equal(url.searchParams.get("page"), "3");
+  } finally { restore(); }
+});
+
+test("listToolboxes rejects offsets that cannot map to backend page pagination", async () => {
+  await assert.rejects(
+    () => listToolboxes({ baseUrl: BASE, accessToken: TOKEN, limit: 10, offset: 5 }),
+    /--offset must be a multiple of --limit/,
+  );
 });
 
 test("listToolboxes with no params produces no query string", async () => {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 
 from kweaver import KWeaverClient
 
@@ -32,7 +33,37 @@ def test_list_toolboxes_uses_list_endpoint_and_unwraps_data():
         result = client.toolboxes.list(keyword="foo", limit=10, offset=0)
         assert result == {"entries": [{"box_id": "b1"}]}
         assert "/tool-box/list" in captured["url"]  # type: ignore[index]
-        assert "keyword=foo" in captured["url"]  # type: ignore[operator]
+        assert "name=foo" in captured["url"]  # type: ignore[operator]
+        assert "page_size=10" in captured["url"]  # type: ignore[operator]
+        assert "page=1" in captured["url"]  # type: ignore[operator]
+        assert "keyword=foo" not in captured["url"]  # type: ignore[operator]
+        assert "limit=10" not in captured["url"]  # type: ignore[operator]
+        assert "offset=0" not in captured["url"]  # type: ignore[operator]
+    finally:
+        client.close()
+
+
+def test_list_toolboxes_maps_offset_to_backend_page():
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        return httpx.Response(200, json={"code": 0, "data": {"entries": []}})
+
+    client = _client(handler)
+    try:
+        client.toolboxes.list(limit=10, offset=20)
+        assert "page_size=10" in captured["url"]  # type: ignore[operator]
+        assert "page=3" in captured["url"]  # type: ignore[operator]
+    finally:
+        client.close()
+
+
+def test_list_toolboxes_rejects_unmappable_offset():
+    client = _client(lambda request: httpx.Response(200, json={"code": 0, "data": {}}))
+    try:
+        with pytest.raises(ValueError, match="offset must be a multiple of limit"):
+            client.toolboxes.list(limit=10, offset=5)
     finally:
         client.close()
 

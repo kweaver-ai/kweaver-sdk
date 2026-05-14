@@ -13,7 +13,7 @@ import { buildHeaders } from "./headers.js";
 //   POST   /tool-box/{id}/tools/status     enable/disable (batch)
 //
 // Verified during Task 8 e2e against the live backend (2026-04-18):
-//   GET    /tool-box/list?keyword=&limit=&offset=  list toolboxes
+//   GET    /tool-box/list?name=&page=&page_size=   list toolboxes
 //   GET    /tool-box/{id}/tools/list               list tools
 //
 // Verified live on 2026-04-23 against dip-poc.aishu.cn:
@@ -126,9 +126,25 @@ export interface ListToolboxesOptions extends BaseOpts {
 
 export async function listToolboxes(opts: ListToolboxesOptions): Promise<string> {
   const qp = new URLSearchParams();
-  if (opts.keyword !== undefined) qp.set("keyword", opts.keyword);
-  if (opts.limit !== undefined) qp.set("limit", String(opts.limit));
-  if (opts.offset !== undefined) qp.set("offset", String(opts.offset));
+  if (opts.keyword !== undefined) qp.set("name", opts.keyword);
+  if (opts.limit !== undefined) {
+    if (!Number.isInteger(opts.limit) || opts.limit < 1) {
+      throw new Error("--limit must be a positive integer");
+    }
+    qp.set("page_size", String(opts.limit));
+  }
+  if (opts.offset !== undefined) {
+    if (!Number.isInteger(opts.offset) || opts.offset < 0) {
+      throw new Error("--offset must be a non-negative integer");
+    }
+    if (opts.limit === undefined) {
+      throw new Error("--offset requires --limit for toolbox list");
+    }
+    if (opts.offset % opts.limit !== 0) {
+      throw new Error("--offset must be a multiple of --limit for toolbox list");
+    }
+    qp.set("page", String(Math.floor(opts.offset / opts.limit) + 1));
+  }
   const suffix = `/list${qp.toString() ? `?${qp}` : ""}`;
   const { body } = await fetchTextOrThrow(url(opts.baseUrl, suffix), {
     method: "GET",

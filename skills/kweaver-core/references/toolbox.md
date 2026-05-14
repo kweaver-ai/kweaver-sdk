@@ -39,13 +39,17 @@ kweaver toolbox create \
 ### `list`
 
 - 列出当前 business domain 下的 toolbox。
-- 可选过滤：`--keyword`（透传给后端）、`--limit`、`--offset`。CLI 不设默认值，未传时由后端决定分页行为。
+- 可选过滤：`--keyword`（按 toolbox 名称搜索）、`--limit`、`--offset`。
+- CLI 兼容旧式 `--keyword` / `--limit` / `--offset` 参数；请求后端时会适配为 `name` / `page_size` / `page`。
+- 后端只支持页码分页，因此 `--offset` 必须能被 `--limit` 整除；例如 `--limit 10 --offset 20` 会请求 `page=3&page_size=10`。
+- CLI 不设默认值，未传时由后端决定分页行为。
 - `--limit` / `--offset` 必须是数字，否则报 `--limit must be a number` / `--offset must be a number` 并退出非零。
 - 输出：后端原始 JSON（典型形如 `{"entries": [...]}`），按 `--pretty`/`--compact` 格式化。
 
 ```bash
 kweaver toolbox list
 kweaver toolbox list --keyword weather --limit 10
+kweaver toolbox list --keyword contextloader工具集 --limit 1 --offset 0
 ```
 
 ### `publish` / `unpublish`

@@ -58,9 +58,16 @@ class ToolboxesResource:
 
     def list(self, *, keyword: str | None = None, limit: int = 30, offset: int = 0) -> Any:
         """List toolboxes. Returns the parsed backend payload as-is."""
-        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if limit < 1:
+            raise ValueError("limit must be a positive integer")
+        if offset < 0:
+            raise ValueError("offset must be a non-negative integer")
+        if offset % limit != 0:
+            raise ValueError("offset must be a multiple of limit for toolbox list")
+
+        params: dict[str, Any] = {"page_size": limit, "page": (offset // limit) + 1}
         if keyword:
-            params["keyword"] = keyword
+            params["name"] = keyword
         return _unwrap_data(self._http.get(f"{_PREFIX}/list", params=params))
 
     def create(self, body: dict[str, Any]) -> Any:

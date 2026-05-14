@@ -116,7 +116,7 @@ Usage:
   kweaver skill download|install <skill-id> [path] [options]
 
   kweaver toolbox create --name <n> --service-url <url> [--description <d>] [-bd value]
-  kweaver toolbox list [--keyword X] [--limit N] [--offset N] [-bd value]
+  kweaver toolbox list [--keyword X] [--limit N] [--offset N] [-bd value]  # keyword searches names
   kweaver toolbox publish|unpublish <box-id> [-bd value]
   kweaver toolbox delete <box-id> [-y] [-bd value]
   kweaver toolbox export <box-id> [-o <file>|-] [--type toolbox|mcp|operator]

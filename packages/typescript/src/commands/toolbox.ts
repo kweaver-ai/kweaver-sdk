@@ -19,7 +19,7 @@ const HELP = `kweaver toolbox
 
 Subcommands:
   create --name <n> --service-url <url> [--description <d>]   Create a new toolbox
-  list [--keyword <s>] [--limit <n>] [--offset <n>]           List toolboxes
+  list [--keyword <s>] [--limit <n>] [--offset <n>]           List toolboxes (keyword searches names)
   publish <box-id>                                            Publish a toolbox (status=published)
   unpublish <box-id>                                          Unpublish (status=draft)
   delete <box-id> [-y|--yes]                                  Delete a toolbox

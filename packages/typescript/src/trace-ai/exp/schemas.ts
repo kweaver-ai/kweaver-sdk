@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const NextChangeSchema = z.object({
+export const NextChangeSchema = z.object({
   target: z.string().min(1),
   hypothesis: z.string().min(1),
   patch: z.string(),

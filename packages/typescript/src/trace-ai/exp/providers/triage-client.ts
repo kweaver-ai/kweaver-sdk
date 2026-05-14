@@ -43,6 +43,7 @@ export class ClaudeCodeTriageClient implements TriageClient {
       .map(q => `${q.query_id}: ${q.assertion_results.filter(a => a.verdict === "fail").map(a => a.type).join(", ")}`)
       .join("\n");
 
+    // candidateConfig is available for future prompt enrichment; omitted here to keep the prompt focused on scores.
     const prompt = `You are an agent evaluation triager. Analyze the current round results and recommend next steps.
 
 ROUND ${r.round} SCORES: ${scoresSummary}

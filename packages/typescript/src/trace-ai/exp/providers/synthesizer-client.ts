@@ -1,7 +1,7 @@
 // src/trace-ai/exp/providers/synthesizer-client.ts
-import { z } from "zod";
 import yaml from "js-yaml";
 import { defaultRegistry } from "../../../agent-providers/registry.js";
+import { NextChangeSchema } from "../schemas.js";
 import type { Mission, NextChange, RoundData } from "../schemas.js";
 
 export interface SynthesizerInput {
@@ -11,12 +11,6 @@ export interface SynthesizerInput {
   prevRounds: RoundData[];
   crossRoundMemoryRef?: string;
 }
-
-const SynthesizerOutputSchema = z.object({
-  target: z.string(),
-  hypothesis: z.string(),
-  patch: z.string(),
-});
 
 export interface SynthesizerClient {
   generate(input: SynthesizerInput): Promise<NextChange>;
@@ -28,7 +22,7 @@ export class ClaudeCodeSynthesizer implements SynthesizerClient {
     if (!provider) throw new Error("claude-code provider not available");
 
     const prevSummary = input.prevRounds.map(r =>
-      `Round ${r.round}: outcome=${r.scores?.outcome.toFixed(2)}, hints=${r.triage_conclusion?.hints.join("; ") ?? "none"}`
+      `Round ${r.round}: outcome=${r.scores?.outcome.toFixed(2) ?? "?"}, hints=${r.triage_conclusion?.hints.join("; ") ?? "none"}`
     ).join("\n");
 
     const prompt = `You are an agent optimization assistant. Given an experiment goal and round results, suggest the next change to try.
@@ -55,7 +49,7 @@ Example for changing system_prompt:
 
     const response = await provider.invoke({
       prompt,
-      outputSchema: SynthesizerOutputSchema,
+      outputSchema: NextChangeSchema,
       correlationId: `synthesizer-${Date.now()}`,
     });
     return response.output;

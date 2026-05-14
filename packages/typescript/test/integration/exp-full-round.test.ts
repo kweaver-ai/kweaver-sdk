@@ -37,47 +37,54 @@ next_change:
 
 test("full round: Deciding pause after round 1", async () => {
   const dir = await makeExpDir();
-  const coord = new ExperimentCoordinator({
-    expDir: dir,
-    synthesizer: { async generate(): Promise<NextChange> { return { target: "agent.system_prompt", hypothesis: "mock", patch: '{"agent":{"system_prompt":"next"}}' }; } },
-    triage: { async triage() { return { diagnoses: ["ok"], hints: ["try x"], verdict: "continue", cross_round_memory_ref: "mem1", new_memory_token: "mem1" }; } },
-    runEval: async () => ({ queryResults: [] }),
-  });
+  try {
+    const coord = new ExperimentCoordinator({
+      expDir: dir,
+      synthesizer: { async generate(): Promise<NextChange> { return { target: "agent.system_prompt", hypothesis: "mock", patch: '{"agent":{"system_prompt":"next"}}' }; } },
+      triage: { async triage() { return { diagnoses: ["ok"], hints: ["try x"], verdict: "continue", cross_round_memory_ref: "mem1", new_memory_token: "mem1" }; } },
+      runEval: async () => ({ queryResults: [] }),
+    });
 
-  await coord.run();
+    await coord.run();
 
-  const state = await replayState(dir);
-  assert.equal(state.currentState, "Deciding");
+    const state = await replayState(dir);
+    assert.equal(state.currentState, "Deciding");
 
-  // Candidate v1 created
-  await fs.access(path.join(dir, "candidates", "candidate-v1.yaml"));
+    // Candidate v1 created
+    await fs.access(path.join(dir, "candidates", "candidate-v1.yaml"));
 
-  // round-1.yaml written
-  await fs.access(path.join(dir, ".trace-state", "rounds", "round-1.yaml"));
+    // round-1.yaml written
+    await fs.access(path.join(dir, ".trace-state", "rounds", "round-1.yaml"));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("full round: publishes at max_rounds", async () => {
   const dir = await makeExpDir();
+  try {
+    // max_rounds: 2, set verdict to continue so max_rounds triggers publish
+    const coord = new ExperimentCoordinator({
+      expDir: dir,
+      synthesizer: { async generate(): Promise<NextChange> { return { target: "agent.system_prompt", hypothesis: "m", patch: '{"agent":{"system_prompt":"p"}}' }; } },
+      triage: { async triage(input): Promise<RoundData["triage_conclusion"] & { new_memory_token: string }> {
+        // Continue for first round, publish at second
+        return { diagnoses: [], hints: [], verdict: input.currentRound.round >= 2 ? "publish" : "continue", cross_round_memory_ref: "m", new_memory_token: "m" };
+      }},
+      runEval: async () => ({ queryResults: [] }),
+    });
 
-  // max_rounds: 2, set verdict to continue so max_rounds triggers publish
-  const coord = new ExperimentCoordinator({
-    expDir: dir,
-    synthesizer: { async generate(): Promise<NextChange> { return { target: "agent.system_prompt", hypothesis: "m", patch: '{"agent":{"system_prompt":"p"}}' }; } },
-    triage: { async triage(input): Promise<RoundData["triage_conclusion"] & { new_memory_token: string }> {
-      // Continue for first round, publish at second
-      return { diagnoses: [], hints: [], verdict: input.currentRound.round >= 2 ? "publish" : "continue", cross_round_memory_ref: "m", new_memory_token: "m" };
-    }},
-    runEval: async () => ({ queryResults: [] }),
-  });
+    await coord.run();         // round 1 → Deciding
+    await coord.resume();      // round 2 → publish verdict → Published
 
-  await coord.run();         // round 1 → Deciding
-  await coord.resume();      // round 2 → publish verdict → Published
+    const state = await replayState(dir);
+    assert.equal(state.currentState, "Published");
 
-  const state = await replayState(dir);
-  assert.equal(state.currentState, "Published");
-
-  // outputs written
-  await fs.access(path.join(dir, "outputs", "bundle.yaml"));
-  await fs.access(path.join(dir, "outputs", "manifest.yaml"));
-  await fs.access(path.join(dir, "outputs", "provenance.yaml"));
+    // outputs written
+    await fs.access(path.join(dir, "outputs", "bundle.yaml"));
+    await fs.access(path.join(dir, "outputs", "manifest.yaml"));
+    await fs.access(path.join(dir, "outputs", "provenance.yaml"));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });

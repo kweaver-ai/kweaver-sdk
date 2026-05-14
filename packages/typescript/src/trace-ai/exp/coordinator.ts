@@ -70,19 +70,15 @@ export class ExperimentCoordinator {
 
   async resume(): Promise<void> {
     const replayed = await this.store.replayState();
-    if (replayed.currentState !== "Deciding" && !replayed.lastFailure) {
-      throw new Error(`Cannot resume: experiment is in state ${replayed.currentState}, not Deciding`);
+    if (replayed.currentState !== "Deciding") {
+      throw new Error(`Cannot resume: experiment is in state ${replayed.currentState}, not Deciding. Only Deciding state supports resume.`);
     }
     await this.store.acquireLock();
     this.heartbeatTimer = setInterval(() => { void this.store.updateHeartbeat(); }, 10_000);
     try {
       const mission = await this.store.readMission();
       const expId = `exp_${replayed.currentRound}`;
-      if (replayed.currentState === "Deciding") {
-        await this.runLoop(mission, replayed.currentRound, expId);
-      } else if (replayed.lastFailure) {
-        await this.runLoop(mission, replayed.currentRound, expId);
-      }
+      await this.runLoop(mission, replayed.currentRound, expId);
     } finally {
       clearInterval(this.heartbeatTimer);
       await this.store.releaseLock();
@@ -145,8 +141,6 @@ export class ExperimentCoordinator {
       await this.store.updateLineage(round, { status: "guardrail_failed" });
       await this.store.writeRound(round, { round, trial_version: round, guardrail_failed: true, scores });
       await this.store.appendEvent({ type: "state_transition", from: "Scoring", to: "Deciding", round });
-      clearInterval(this.heartbeatTimer);
-      await this.store.releaseLock();
       process.stdout.write(`\nRound ${round}: Guardrail hard gate violated. Fix the candidate and run exp resume.\n`);
       return;
     }
@@ -218,9 +212,7 @@ export class ExperimentCoordinator {
       await this.store.appendEvent({ type: "state_transition", from: "Publishing", to: "Published", round });
       process.stdout.write(`\nExperiment complete. Outputs written to ${path.join(this.opts.expDir, "outputs")}\n`);
     } else {
-      // Pause at Deciding — release lock
-      clearInterval(this.heartbeatTimer);
-      await this.store.releaseLock();
+      // Pause at Deciding — lock released by run()/resume() finally block
       process.stdout.write(`\nRound ${round} complete.\n`);
       process.stdout.write(`Scores: outcome=${scores.outcome.toFixed(2)}, trajectory=${scores.trajectory.toFixed(2)}\n`);
       process.stdout.write(`Triage: ${triageResult.diagnoses.join("; ")}\n`);
@@ -256,8 +248,6 @@ export class ExperimentCoordinator {
       error: String(lastErr),
       retryable: true,
     });
-    clearInterval(this.heartbeatTimer);
-    await this.store.releaseLock();
     throw lastErr;
   }
 }

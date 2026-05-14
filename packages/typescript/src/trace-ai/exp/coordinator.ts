@@ -50,18 +50,24 @@ export class ExperimentCoordinator {
       throw new Error(`Experiment is in terminal state ${replayed.currentState}. Use --new-run to start fresh.`);
     }
 
+    const mission = await this.store.readMission();
+    const expId = this.opts.experimentId ?? `exp_${Date.now()}`;
+
+    if (replayed.currentRound === 0) {
+      await this.store.initDir(mission);
+    }
+
     await this.store.acquireLock();
     this.heartbeatTimer = setInterval(() => { void this.store.updateHeartbeat(); }, 10_000);
 
+    // If previous run failed mid-round, retry that round (startRound = currentRound - 1)
+    const startRound = replayed.lastFailure && replayed.currentRound > 0
+      ? replayed.currentRound - 1
+      : replayed.currentRound;
+
     try {
-      const mission = await this.store.readMission();
-      const expId = this.opts.experimentId ?? `exp_${Date.now()}`;
 
-      if (replayed.currentRound === 0) {
-        await this.store.initDir(mission);
-      }
-
-      await this.runLoop(mission, replayed.currentRound, expId);
+      await this.runLoop(mission, startRound, expId);
     } finally {
       clearInterval(this.heartbeatTimer);
       await this.store.releaseLock();

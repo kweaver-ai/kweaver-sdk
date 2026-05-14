@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { ExpEvent, ExpFsmState } from "../schemas.js";
 
-type EventInput = Omit<ExpEvent, "ts">;
+export type EventInput = ExpEvent extends infer T ? T extends { ts: string } ? Omit<T, "ts"> : never : never;
 
 export async function appendEvent(expDir: string, event: EventInput): Promise<void> {
   const filePath = path.join(expDir, ".trace-state", "events.jsonl");

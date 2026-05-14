@@ -4,7 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import type { ExpEvent, LineageEntry, Mission, NextChange, RoundData } from "../schemas.js";
 import { readMission, writeSuggestedChange } from "./mission-md.js";
-import { appendEvent, replayState, type ReplayedState } from "./events-jsonl.js";
+import { appendEvent, replayState, type ReplayedState, type EventInput } from "./events-jsonl.js";
 import { acquireLock, releaseLock, updateHeartbeat } from "./lock.js";
 import { isAborted, writeAbortSignal, clearAbortSignal } from "./abort-signal.js";
 import { writeRound, readAllRounds } from "./round-yaml.js";
@@ -50,7 +50,7 @@ export class ExpStore {
 
   readMission = () => readMission(this.expDir);
   writeSuggestedChange = (c: NextChange) => writeSuggestedChange(this.expDir, c);
-  appendEvent = (e: Omit<ExpEvent, "ts">) => appendEvent(this.expDir, e);
+  appendEvent = (e: EventInput) => appendEvent(this.expDir, e);
   replayState = () => replayState(this.expDir);
   acquireLock = () => acquireLock(this.expDir);
   releaseLock = () => releaseLock(this.expDir);

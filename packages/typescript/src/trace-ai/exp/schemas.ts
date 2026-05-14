@@ -36,8 +36,8 @@ export const BundleSchema = z.object({
   bundle_id: z.string().min(1),
   best_trial_version: z.number().int().nonnegative(),
   resources: z.object({
-    agent_config: z.record(z.unknown()),
-    skills: z.array(z.record(z.unknown())),
+    agent_config: z.record(z.string(), z.unknown()),
+    skills: z.array(z.record(z.string(), z.unknown())),
   }),
   provenance: z.object({
     created_by: z.string(),

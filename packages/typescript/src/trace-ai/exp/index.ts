@@ -1,6 +1,7 @@
 // src/trace-ai/exp/index.ts
 import path from "node:path";
 import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { ExpStore } from "./exp-store/index.js";
 import { ExperimentCoordinator } from "./coordinator.js";
 import { ClaudeCodeSynthesizer } from "./providers/synthesizer-client.js";
@@ -8,6 +9,15 @@ import { ClaudeCodeTriageClient } from "./providers/triage-client.js";
 import { runEval } from "./eval-runner.js";
 import { defaultRegistry } from "../../agent-providers/registry.js";
 import { ClaudeCodeSubprocessProvider } from "../../agent-providers/providers/claude-code-subprocess.js";
+import { PromptTemplateRegistry } from "../../agent-providers/prompt-template.js";
+import { createBuiltinSemanticMatchProvider } from "../eval-set/semantic-match-provider.js";
+import type { SemanticMatchProvider } from "../eval-set/assertion-evaluator.js";
+import { ensureValidToken } from "../../auth/oauth.js";
+import { fetchAgentInfo, sendChatRequest } from "../../api/agent-chat.js";
+import { getTracesByConversation } from "../../api/conversations.js";
+
+const __expIndexDir = path.dirname(fileURLToPath(import.meta.url));
+const EVAL_SET_RUBRIC_DIR = path.join(__expIndexDir, "..", "eval-set", "rubric-templates");
 
 function ensureProvider() {
   if (!defaultRegistry.has("claude-code")) {
@@ -42,7 +52,7 @@ export async function runExpCommand(argv: string[]): Promise<number> {
     case "run": {
       ensureProvider();
       const replayed = await store.replayState();
-      if (!replayed.isTerminal && replayed.currentRound > 0) {
+      if (!replayed.isTerminal && replayed.currentRound > 0 && !replayed.lastFailure) {
         process.stderr.write(`Error: experiment in progress (state: ${replayed.currentState}). Use exp resume.\n`);
         return 2;
       }
@@ -53,7 +63,7 @@ export async function runExpCommand(argv: string[]): Promise<number> {
       if (replayed.isTerminal && args.newRun) {
         await store.archiveState();
       }
-      const coord = makeCoordinator(args.expDir);
+      const coord = await makeCoordinator(args.expDir);
       await coord.run();
       return 0;
     }
@@ -65,7 +75,7 @@ export async function runExpCommand(argv: string[]): Promise<number> {
         process.stderr.write(`Error: cannot resume — experiment is in state ${replayed.currentState}. Only Deciding state supports resume.\n`);
         return 2;
       }
-      const coord = makeCoordinator(args.expDir);
+      const coord = await makeCoordinator(args.expDir);
       await coord.resume();
       return 0;
     }
@@ -143,7 +153,29 @@ async function runDoctor(expDir: string, store: ExpStore): Promise<number> {
   return ok ? 0 : 1;
 }
 
-function makeCoordinator(expDir: string): ExperimentCoordinator {
+async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
+  let baseUrl = process.env["KWEAVER_BASE_URL"] ?? "";
+  let token = process.env["KWEAVER_TOKEN"] ?? "";
+  const bd = process.env["KWEAVER_BUSINESS_DOMAIN"] ?? "bd_public";
+  if (!baseUrl || !token) {
+    const t = await ensureValidToken();
+    if (!baseUrl) baseUrl = t.baseUrl;
+    if (!token) token = t.accessToken;
+  }
+
+  // Build semantic-match provider (zh) for answer quality scoring
+  let semanticMatchProvider: SemanticMatchProvider | undefined;
+  try {
+    const provider = defaultRegistry.resolve({ requiredCapabilities: ["structured_output"] });
+    if (provider && (await provider.isAvailable())) {
+      const promptRegistry = new PromptTemplateRegistry();
+      await promptRegistry.loadBuiltinDir(EVAL_SET_RUBRIC_DIR);
+      semanticMatchProvider = createBuiltinSemanticMatchProvider({ provider, promptRegistry, lang: "zh" });
+    }
+  } catch {
+    process.stderr.write("warn: could not create semantic-match provider — semantic_match assertions will be skipped\n");
+  }
+
   return new ExperimentCoordinator({
     expDir,
     synthesizer: new ClaudeCodeSynthesizer(),
@@ -153,10 +185,29 @@ function makeCoordinator(expDir: string): ExperimentCoordinator {
       candidatePath,
       expDir,
       round,
+      maxParallel: 2,
       deps: {
-        fetchAgent: async (id) => ({ id, key: id, version: "latest" }),
-        sendChat: async () => { throw new Error("sendChat not configured — provide RunnerDeps"); },
-        fetchTrace: async () => ({ spans: [] }),
+        // candidate_version tracks local lineage; KWeaver agent always runs at "latest"
+        fetchAgent: async (agentId) =>
+          fetchAgentInfo({ baseUrl, accessToken: token, agentId, version: "latest", businessDomain: bd }),
+        sendChat: async ({ agentInfo, query }) => {
+          const result = await sendChatRequest({
+            baseUrl,
+            accessToken: token,
+            agentId: agentInfo.id,
+            agentKey: agentInfo.key,
+            agentVersion: agentInfo.version,
+            query,
+            stream: true,
+            businessDomain: bd,
+          });
+          return { text: result.text, conversationId: result.conversationId };
+        },
+        fetchTrace: async (conversationId) => {
+          const r = await getTracesByConversation({ baseUrl, accessToken: token, conversationId, businessDomain: bd });
+          return { spans: r.spans };
+        },
+        semanticMatchProvider,
       },
     }),
   });

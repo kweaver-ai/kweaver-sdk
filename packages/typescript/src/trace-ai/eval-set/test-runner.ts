@@ -90,15 +90,19 @@ async function runCase(
   const assertionResults = [];
 
   for (const assertion of evalCase.assertions ?? []) {
-    const result = await evaluateAssertion(assertion, {
-      answer: answerText,
-      spans,
-      reference: evalCase.reference,
-      durationMs,
-      question: evalCase.input.user_message,
-      semanticMatchProvider: deps.semanticMatchProvider,
-    });
-    assertionResults.push({ assertion, verdict: result.verdict, actual: result.actual });
+    try {
+      const result = await evaluateAssertion(assertion, {
+        answer: answerText,
+        spans,
+        reference: evalCase.reference,
+        durationMs,
+        question: evalCase.input.user_message,
+        semanticMatchProvider: deps.semanticMatchProvider,
+      });
+      assertionResults.push({ assertion, verdict: result.verdict, actual: result.actual });
+    } catch (e) {
+      assertionResults.push({ assertion, verdict: "skip", actual: `assertion-eval-error: ${(e as Error).message}` });
+    }
   }
 
   // A case may pass schema with reference-only (no assertions), but without

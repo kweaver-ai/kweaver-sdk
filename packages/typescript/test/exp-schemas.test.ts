@@ -42,3 +42,23 @@ test("ManifestSchema: accepts valid manifest", () => {
   });
   assert.equal(result.success, true);
 });
+
+test("MissionSchema: rejects empty eval_sets array", () => {
+  const result = MissionSchema.safeParse({
+    schema_version: "trace-mission/v1",
+    goal: "test",
+    eval_sets: [],
+    current_candidate: { path: "candidates/baseline.yaml" },
+  });
+  assert.equal(result.success, false);
+});
+
+test("MissionSchema: rejects invalid schema_version", () => {
+  const result = MissionSchema.safeParse({
+    schema_version: "wrong-version",
+    goal: "test",
+    eval_sets: [{ path: "eval-sets/v1", role: "seed" }],
+    current_candidate: { path: "candidates/baseline.yaml" },
+  });
+  assert.equal(result.success, false);
+});

@@ -17,19 +17,24 @@ export const MissionSchema = z.object({
   goal: z.string().min(1),
   max_rounds: z.number().int().positive().optional(),
   provider: z.string().optional(),
-  eval_sets: z.array(z.object({ path: z.string(), role: z.string() })).min(1),
+  eval_sets: z.array(z.object({
+    path: z.string().min(1),
+    role: z.enum(["seed", "regression", "holdout"]),
+  })).min(1),
   current_candidate: z.object({ path: z.string() }),
   next_change: NextChangeSchema.optional(),
   guardrails: z.array(GuardrailSchema).optional(),
 });
 export type Mission = z.infer<typeof MissionSchema>;
 export type NextChange = z.infer<typeof NextChangeSchema>;
+export { GuardrailSchema };
+export type Guardrail = z.infer<typeof GuardrailSchema>;
 
 export const BundleSchema = z.object({
   schema_version: z.literal("trace-bundle/v1"),
-  experiment_id: z.string(),
-  bundle_id: z.string(),
-  best_trial_version: z.number().int(),
+  experiment_id: z.string().min(1),
+  bundle_id: z.string().min(1),
+  best_trial_version: z.number().int().nonnegative(),
   resources: z.object({
     agent_config: z.record(z.unknown()),
     skills: z.array(z.record(z.unknown())),
@@ -45,8 +50,8 @@ export type Bundle = z.infer<typeof BundleSchema>;
 
 export const ManifestSchema = z.object({
   schema_version: z.literal("trace-manifest/v1"),
-  experiment_id: z.string(),
-  trial_version: z.number().int(),
+  experiment_id: z.string().min(1),
+  trial_version: z.number().int().nonnegative(),
   predictions: z.object({
     fixes: z.array(z.object({ query_id: z.string(), reason: z.string() })),
     risks: z.array(z.object({ query_id: z.string(), reason: z.string() })),
@@ -108,6 +113,6 @@ export interface RoundData {
     diagnoses: string[];
     hints: string[];
     verdict: "continue" | "publish";
-    cross_round_memory_ref: string;
+    cross_round_memory_ref?: string;
   };
 }

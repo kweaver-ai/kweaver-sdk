@@ -31,6 +31,7 @@ export interface ParsedExpArgs {
   subcommand: "run" | "resume" | "show" | "status" | "abort" | "doctor" | "list" | "info";
   expDir: string;
   newRun?: boolean;
+  json?: boolean;
 }
 
 export function parseExpArgs(argv: string[]): ParsedExpArgs {
@@ -43,7 +44,12 @@ export function parseExpArgs(argv: string[]): ParsedExpArgs {
   const expDir = isDiscoveryCmd
     ? (dir ? path.resolve(dir) : "")
     : path.resolve(dir ?? ".");
-  return { subcommand: sub as ParsedExpArgs["subcommand"], expDir, newRun: flags.includes("--new-run") };
+  return {
+    subcommand: sub as ParsedExpArgs["subcommand"],
+    expDir,
+    newRun: flags.includes("--new-run"),
+    json: flags.includes("--json"),
+  };
 }
 
 export async function runExpCommand(argv: string[]): Promise<number> {
@@ -71,7 +77,7 @@ export async function runExpCommand(argv: string[]): Promise<number> {
         expDir = entries[0].path;
         process.stderr.write(`Using most recent: ${expDir}\n`);
       }
-      await runInfo(expDir);
+      await runInfo(expDir, { json: args.json });
       return 0;
     }
 

@@ -41,7 +41,7 @@ export async function upsertRegistry(absPath: string, ts: string): Promise<void>
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, JSON.stringify(reg, null, 2) + "\n", "utf8");
   } catch (e) {
-    process.stderr.write(`warn: exp-registry write failed: ${(e as Error).message}\n`);
+    process.stderr.write(`warn: exp-registry write failed: ${e instanceof Error ? e.message : String(e)}\n`);
   }
 }
 

@@ -182,7 +182,7 @@ test("patchAgentMembers preserves sibling config fields", async () => {
       config: {
         system_prompt: "keep me",
         llms: [{ is_default: true, llm_config: { id: "m1", name: "n", max_tokens: 1 } }],
-        data_source: { knowledge_network: [{ knowledge_network_id: "kn_x", knowledge_network_name: "" }] },
+        data_source: { knowledge_network: [{ knowledge_network_id: "kn_x" }] },
       },
     },
     updateCalls: [],

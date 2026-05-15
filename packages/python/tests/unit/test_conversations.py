@@ -38,6 +38,7 @@ def test_send_message_sync(capture: RequestCapture):
     body = capture.last_body()
     assert body["query"] == "库存情况？"
     assert body["agent_id"] == "agent_01"
+    assert body["chat_option"] == {"is_need_history": True}
     assert "/app/agent_01/chat/completion" in capture.last_url()
 
 

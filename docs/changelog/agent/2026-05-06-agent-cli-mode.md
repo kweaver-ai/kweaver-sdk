@@ -21,6 +21,7 @@ kweaver agent update <agent_id> --mode react --config-path ./agent-config.json
 - 未传 `--mode` 时，如果配置中已有合法 `config.mode`，CLI 会保留原值。
 - 未传 `--mode` 且配置中缺少 `config.mode` 时，CLI 会补齐为 `default`。
 - 如果 `--mode` 或配置中的 `config.mode` 不是 `default`、`dolphin`、`react`，CLI 会在发送 HTTP 请求前报错。
+- `agent update --config-path` 优先按配置根对象读取；如果文件是完整 Agent JSON 且包含顶层 `config` 对象，CLI 会使用该嵌套 `config`，避免把整份 Agent 元数据误写入配置。
 - `create` 继续调用通用接口 `/api/agent-factory/v3/agent`；`update` 继续调用 `/api/agent-factory/v3/agent/{agent_id}`。
 
 ## ReAct 配置
@@ -56,6 +57,7 @@ kweaver agent update <agent_id> --mode react --config-path ./agent-config.json
 
 - `config.mode` 默认补齐、合法保留、显式覆盖和非法值拒绝。
 - create/update 最终请求体中的 `config.mode`。
+- update `--config-path` 对配置根对象和完整 Agent JSON 的兼容读取。
 - create/update help 中的 `--mode` 与 `react_config` 说明。
 
 验证命令：

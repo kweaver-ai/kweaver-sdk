@@ -84,7 +84,7 @@ kweaver agent trace <conversation_id> --view <view>
 
 - `create` 需要 `--llm-id`，可通过模型工厂 API 查询可用 LLM：`GET /api/mf-model-manager/v1/llm/list?page=1&size=100`
 - `get` 的 `--save-config` 自动添加时间戳防止文件被覆盖，输出文件路径格式：`<basename>-<timestamp>.<ext>`
-- `update` 的 `--config-path` 从指定路径读取配置文件（由 `get --save-config` 生成），`--knowledge-network-id` 配置业务知识网络
+- `update` 的 `--config-path` 从指定路径读取配置文件（推荐使用 `get --save-config` 生成的 config 根对象；如果文件是完整 Agent JSON 且包含顶层 `config` 对象，也会使用该嵌套配置），`--knowledge-network-id` 配置业务知识网络
 - `create` / `update` 支持 `--mode default|dolphin|react`，用于设置 `config.mode`；未传且配置中缺少 mode 时默认为 `default`
 - `create` 的 `--config` 支持两种方式：
   - **文件路径**：`--config /path/to/config.json`（推荐，避免长度限制）
@@ -129,7 +129,7 @@ kweaver agent publish <agent_id>
 - `--save-config <path>`：保存配置到文件，自动添加时间戳防止覆盖
   - 支持目录路径（以 `/` 结尾），自动生成文件名
   - 自动创建不存在的目录
-- `--config-path <path>`：从文件读取配置（配合 `--save-config` 使用）
+- `--config-path <path>`：从文件读取配置（推荐配合 `--save-config` 使用；也兼容完整 Agent JSON 中的顶层 `config` 对象）
 - `--knowledge-network-id <id>`：配置业务知识网络ID
 
 **简写方式**（不保存文件）：

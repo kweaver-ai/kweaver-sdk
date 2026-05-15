@@ -1,7 +1,13 @@
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import { runAgentChatCommand } from "./agent-chat.js";
 import { runAgentSkillCommand } from "./agent-members.js";
-import { AGENT_MODE_HELP, type AgentMode, applyAgentModeToConfig, parseAgentMode } from "./agent/mode.js";
+import {
+  AGENT_MODE_HELP,
+  type AgentMode,
+  applyAgentModeToConfig,
+  normalizeAgentConfigInput,
+  parseAgentMode,
+} from "./agent/mode.js";
 import {
   listAgents, getAgent, getAgentByKey,
   createAgent, updateAgent, deleteAgent,
@@ -58,24 +64,24 @@ export async function resolveLlmName(options: {
 }
 
 /**
- * 生成带时间戳的文件路径
- * @param path 用户提供的路径
- * @returns 带时间戳的文件路径
+ * Generate a timestamped file path.
+ * @param path User-provided output path.
+ * @returns The timestamped file path.
  */
 function generateTimestampedPath(path: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 
-  // 如果路径以 / 结尾，视为目录，在目录下生成文件
+  // Treat paths ending in / as directories.
   if (path.endsWith("/")) {
     return join(path, `agent-config-${timestamp}.json`);
   }
 
-  // 在文件名中插入时间戳：config.json -> config-2025-01-15T12-30-45.json
+  // Insert the timestamp before the extension: config.json -> config-2025-01-15T12-30-45.json.
   const ext = extname(path);
   const base = basename(path, ext);
   const dir = dirname(path);
 
-  // 如果 dir 是 "."，说明没有目录前缀，直接返回带时间戳的文件名
+  // No directory prefix was provided, so return only the timestamped file name.
   if (dir === ".") {
     return `${base}-${timestamp}${ext}`;
   }
@@ -810,7 +816,7 @@ Options:
   --profile <text>          Agent description (max 500)
   --system-prompt <text>    System prompt
   --knowledge-network-id <id>  Business knowledge network ID to configure
-  --config-path <path>      Path to config file (read from file instead of API)
+  --config-path <path>      Path to config object file, or full agent JSON with config
 ${AGENT_MODE_HELP}`);
       return 0;
     }
@@ -1078,12 +1084,12 @@ Options:
     });
 
     if (body) {
-      // 如果指定了 --save-config，保存 config 到文件（带时间戳）
+      // Save only the agent config object when --save-config is provided.
       if (options.saveConfig) {
         const parsed = JSON.parse(body) as Record<string, unknown>;
         const config = (parsed.config as Record<string, unknown>) ?? {};
         const timestampedPath = generateTimestampedPath(options.saveConfig);
-        // 确保目录存在
+        // Ensure the output directory exists.
         const dir = dirname(timestampedPath);
         await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(timestampedPath, JSON.stringify(config, null, 2), "utf-8");
@@ -1424,7 +1430,6 @@ ${AGENT_MODE_HELP}
     avatar_type: 1,
     avatar: "icon-dip-agent-default",
     product_key: productKey,
-    product_name: "DIP",
     config,
   };
   if (key) payload.key = key;
@@ -1465,7 +1470,7 @@ Options:
   --profile <text>             Agent description
   --system-prompt <text>       System prompt
   --knowledge-network-id <id>  Knowledge network ID
-  --config-path <path>         Read full config object from file
+  --config-path <path>         Read config object from file, or full agent JSON with config
 ${AGENT_MODE_HELP}`);
     return 0;
   }
@@ -1504,11 +1509,11 @@ ${AGENT_MODE_HELP}`);
     let current: Record<string, unknown>;
     let configFromFile: Record<string, unknown> | null = null;
 
-    // 如果指定了 --config-path，从文件读取配置
+    // Read config from file before fetching the current agent so invalid local config fails early.
     if (configPath) {
       try {
         const fileContent = await fs.readFile(configPath, "utf-8");
-        configFromFile = JSON.parse(fileContent) as Record<string, unknown>;
+        configFromFile = normalizeAgentConfigInput(JSON.parse(fileContent));
         if (!explicitMode) {
           applyAgentModeToConfig(configFromFile);
         }
@@ -1522,7 +1527,7 @@ ${AGENT_MODE_HELP}`);
 
     const token = await ensureValidToken();
 
-    // 从API获取当前 agent 配置
+    // Fetch the current agent for read-modify-write updates.
     const currentRaw = await getAgent({
       baseUrl: token.baseUrl,
       accessToken: token.accessToken,
@@ -1530,7 +1535,7 @@ ${AGENT_MODE_HELP}`);
     });
     current = JSON.parse(currentRaw) as Record<string, unknown>;
 
-    // 如果从文件读取了 config，合并到 current 中
+    // Replace only current.config when a config file was provided.
     if (configFromFile) {
       current.config = configFromFile;
     }
@@ -1557,15 +1562,13 @@ ${AGENT_MODE_HELP}`);
       }
     }
 
-    // 如果指定了 --knowledge-network-id，更新 data_source.knowledge_network
+    // Update config.data_source.knowledge_network when requested.
     if (knowledgeNetworkId) {
       const config = (current.config ?? {}) as Record<string, unknown>;
       const dataSource = (config.data_source ?? {}) as Record<string, unknown>;
-      // 获取知识网络名称（如果需要的话，可以查询BKN获取）
       const knowledgeNetwork = [
         {
           knowledge_network_id: knowledgeNetworkId,
-          knowledge_network_name: "", // 可选：通过BKN API获取名称
         },
       ];
       dataSource.knowledge_network = knowledgeNetwork;
@@ -1842,12 +1845,12 @@ Options:
     });
 
     if (body) {
-      // 如果指定了 --save-config，保存 config 到文件（带时间戳）
+      // Save only the template config object when --save-config is provided.
       if (options.saveConfig) {
         const parsed = JSON.parse(body) as Record<string, unknown>;
         const config = (parsed.config as Record<string, unknown>) ?? {};
         const timestampedPath = generateTimestampedPath(options.saveConfig);
-        // 确保目录存在
+        // Ensure the output directory exists.
         const dir = dirname(timestampedPath);
         await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(timestampedPath, JSON.stringify(config, null, 2), "utf-8");

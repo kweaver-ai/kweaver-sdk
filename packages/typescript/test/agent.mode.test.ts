@@ -102,8 +102,9 @@ test("agent create fills default mode when config has no mode", { concurrency: f
 
     assert.equal(code, 0);
     assert.equal(bodies.length, 1);
-    const body = JSON.parse(bodies[0]!) as { config: { mode?: string } };
+    const body = JSON.parse(bodies[0]!) as Record<string, unknown> & { config: { mode?: string } };
     assert.equal(body.config.mode, "default");
+    assert.equal(body.product_name, undefined);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -290,6 +291,63 @@ test("agent update rejects invalid config-path mode before fetch", { concurrency
   }
 });
 
+test("agent update --config-path accepts full agent JSON and applies nested config mode", {
+  concurrency: false,
+}, async () => {
+  await primeToken();
+  const dir = createConfigDir();
+  const configPath = join(dir, "agent-full.json");
+  writeFileSync(configPath, JSON.stringify({
+    id: "ag_3",
+    name: "file name should not replace current",
+    config: baseConfig({
+      mode: "react",
+      react_config: {
+        disable_history_in_a_conversation: false,
+        disable_llm_cache: false,
+      },
+    }),
+  }), "utf-8");
+
+  const putBodies: string[] = [];
+  globalThis.fetch = async (urlInput: string | URL | Request, init?: RequestInit) => {
+    const url = typeof urlInput === "string" ? urlInput : urlInput instanceof URL ? urlInput.href : urlInput.url;
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (url.endsWith("/api/agent-factory/v3/agent/ag_3") && method === "GET") {
+      return new Response(JSON.stringify({
+        id: "ag_3",
+        name: "Current Agent",
+        profile: "Current Profile",
+        avatar_type: 1,
+        avatar: "1",
+        product_key: "dip",
+        config: baseConfig({ mode: "default" }),
+      }), { status: 200 });
+    }
+    if (url.endsWith("/api/agent-factory/v3/agent/ag_3") && method === "PUT") {
+      putBodies.push(String(init?.body ?? ""));
+      return new Response(null, { status: 204 });
+    }
+    throw new Error(`unexpected fetch ${method} ${url}`);
+  };
+
+  try {
+    const { code } = await captureConsole(() => runAgentCommand(["update", "ag_3", "--config-path", configPath]));
+    assert.equal(code, 0);
+    assert.equal(putBodies.length, 1);
+    const body = JSON.parse(putBodies[0]!) as { name?: string; config: Record<string, unknown> };
+    assert.equal(body.name, "Current Agent");
+    assert.equal(body.config.mode, "react");
+    assert.equal(body.config.config, undefined);
+    assert.deepEqual(body.config.react_config, {
+      disable_history_in_a_conversation: false,
+      disable_llm_cache: false,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("agent create help documents mode and react_config", async () => {
   const { code, stdout } = await captureConsole(() => runAgentCommand(["create", "--help"]));
   assert.equal(code, 0);
@@ -297,6 +355,19 @@ test("agent create help documents mode and react_config", async () => {
   assert.match(stdout, /default, dolphin, react/);
   assert.match(stdout, /react_config/);
   assert.match(stdout, /disable_history_in_a_conversation/);
+
+  const jsonStart = stdout.indexOf("    {\n");
+  const jsonEnd = stdout.indexOf("\n  --config <json|path>", jsonStart);
+  assert.notEqual(jsonStart, -1);
+  assert.notEqual(jsonEnd, -1);
+  const helpJson = stdout.slice(jsonStart, jsonEnd).replace(/^ {4}/gm, "").trim();
+  assert.deepEqual(JSON.parse(helpJson), {
+    mode: "react",
+    react_config: {
+      disable_history_in_a_conversation: false,
+      disable_llm_cache: false,
+    },
+  });
 });
 
 test("agent update help documents mode", async () => {
@@ -304,4 +375,5 @@ test("agent update help documents mode", async () => {
   assert.equal(code, 0);
   assert.match(stdout, /--mode <mode>/);
   assert.match(stdout, /default, dolphin, react/);
+  assert.match(stdout, /full agent JSON with config/);
 });

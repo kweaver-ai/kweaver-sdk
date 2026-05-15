@@ -2,7 +2,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
 import { ExpStore } from "./exp-store/index.js";
 import { ExperimentCoordinator } from "./coordinator.js";
 import { ClaudeCodeSynthesizer } from "./providers/synthesizer-client.js";
@@ -18,22 +17,10 @@ import { fetchAgentInfo, sendChatRequest } from "../../api/agent-chat.js";
 import { getTracesByConversation } from "../../api/conversations.js";
 import { upsertRegistry, listRegistry } from "./exp-store/exp-registry.js";
 import { runInfo, runList, getHealthChecks } from "./info.js";
+import { resolveClaudeBinary } from "./claude-binary.js";
 
 const __expIndexDir = path.dirname(fileURLToPath(import.meta.url));
 const EVAL_SET_RUBRIC_DIR = path.join(__expIndexDir, "..", "eval-set", "rubric-templates");
-
-function resolveClaudeBinary(): string {
-  if (process.env["CLAUDE_BIN"]) return process.env["CLAUDE_BIN"];
-  try {
-    const resolved = execSync("which claude", { encoding: "utf8", timeout: 3000 }).trim();
-    if (resolved && !resolved.includes(" ")) return resolved;  // reject alias expansions like "claude: aliased to ..."
-  } catch { /* fall through */ }
-  // known install locations on macOS
-  for (const p of ["/Users/" + (process.env["USER"] ?? "") + "/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]) {
-    try { execSync(`test -x "${p}"`, { timeout: 1000 }); return p; } catch { /* try next */ }
-  }
-  return "claude";
-}
 
 function ensureProvider() {
   if (!defaultRegistry.has("claude-code")) {

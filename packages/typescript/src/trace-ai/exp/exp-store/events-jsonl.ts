@@ -40,7 +40,14 @@ export async function replayState(expDir: string): Promise<ReplayedState> {
   let lastFailure: ReplayedState["lastFailure"] = null;
 
   for (const line of lines) {
-    const ev = JSON.parse(line) as ExpEvent;
+    let ev: ExpEvent;
+    try {
+      ev = JSON.parse(line) as ExpEvent;
+    } catch {
+      // Skip malformed lines (e.g. from a crash mid-write) rather than bricking replay.
+      process.stderr.write(`[warn] events.jsonl: skipping malformed line: ${line.slice(0, 120)}\n`);
+      continue;
+    }
     lastEvent = ev;
     if (ev.type === "state_transition") {
       currentState = ev.to;

@@ -1,7 +1,6 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
 import yargs from "yargs";
 
 import { derivePaths, diagnose, TraceNotFoundError } from "../trace-ai/diagnose/index.js";
@@ -30,21 +29,10 @@ import {
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 import { runExpCommand } from "../trace-ai/exp/index.js";
+import { resolveClaudeBinary } from "../trace-ai/exp/claude-binary.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EVAL_SET_RUBRIC_DIR = path.join(__dirname, "..", "trace-ai", "eval-set", "rubric-templates");
-
-function resolveClaudeBinary(): string {
-  if (process.env["CLAUDE_BIN"]) return process.env["CLAUDE_BIN"];
-  try {
-    const resolved = execSync("which claude", { encoding: "utf8", timeout: 3000 }).trim();
-    if (resolved && !resolved.includes(" ")) return resolved;
-  } catch { /* fall through */ }
-  for (const p of ["/Users/" + (process.env["USER"] ?? "") + "/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]) {
-    try { execSync(`test -x "${p}"`, { timeout: 1000 }); return p; } catch { /* try next */ }
-  }
-  return "claude";
-}
 
 /** Register the default agent provider once per CLI process. Idempotent. */
 function ensureDefaultProviderRegistered(): void {

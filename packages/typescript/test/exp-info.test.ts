@@ -170,3 +170,42 @@ test("runInfo: outputs JSON when opts.json=true", async () => {
   assert.equal(parsed.state, "Init");
   assert.equal(parsed.workspace, dir);
 });
+
+// Edge-case tests (Task 4)
+async function makeTmpDir() {
+  return fs.mkdtemp(path.join(os.tmpdir(), "exp-edge-"));
+}
+
+test("runExpCommand info: exits 1 when registry is empty and no path given", async () => {
+  const configDir = await makeTmpDir();
+  const prev = process.env["KWEAVERC_CONFIG_DIR"];
+  process.env["KWEAVERC_CONFIG_DIR"] = configDir;
+  try {
+    const { runExpCommand } = await import("../src/trace-ai/exp/index.js");
+    const code = await runExpCommand(["info"]);
+    assert.equal(code, 1);
+  } finally {
+    if (prev === undefined) delete process.env["KWEAVERC_CONFIG_DIR"];
+    else process.env["KWEAVERC_CONFIG_DIR"] = prev;
+  }
+});
+
+test("runExpCommand list: prints header even when registry is empty", async () => {
+  const configDir = await makeTmpDir();
+  const prev = process.env["KWEAVERC_CONFIG_DIR"];
+  process.env["KWEAVERC_CONFIG_DIR"] = configDir;
+  const chunks: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  (process.stdout as any).write = (chunk: string | Uint8Array): boolean => { chunks.push(String(chunk)); return true; };
+  try {
+    const { runExpCommand } = await import("../src/trace-ai/exp/index.js");
+    await runExpCommand(["list"]);
+  } finally {
+    (process.stdout as any).write = orig;
+    if (prev === undefined) delete process.env["KWEAVERC_CONFIG_DIR"];
+    else process.env["KWEAVERC_CONFIG_DIR"] = prev;
+  }
+  const output = chunks.join("");
+  assert.ok(output.includes("PATH"), `Expected PATH header in: ${output}`);
+  assert.ok(output.includes("STATE"), `Expected STATE header in: ${output}`);
+});

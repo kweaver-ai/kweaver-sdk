@@ -63,7 +63,6 @@ test("agent skill add/list/remove round-trip (e2e)", { skip: !e2eEnabled }, asyn
     avatar_type: 1,
     avatar: "icon-dip-agent-default",
     product_key: "dip",
-    product_name: "DIP",
     config: {
       input: { fields: [{ name: "user_input", type: "string", desc: "" }] },
       output: { default_format: "markdown" },

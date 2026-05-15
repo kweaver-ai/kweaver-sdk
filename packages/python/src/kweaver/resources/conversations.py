@@ -90,8 +90,10 @@ class ConversationsResource:
             if history is not None:
                 body["history"] = history
 
-        # Remove empty conversation_id — backend treats absent as "new conversation"
-        if not body.get("conversation_id"):
+        if body.get("conversation_id"):
+            body["chat_option"] = {"is_need_history": True}
+        else:
+            # Remove empty conversation_id; backend treats absent as "new conversation".
             body.pop("conversation_id", None)
 
         if not stream:

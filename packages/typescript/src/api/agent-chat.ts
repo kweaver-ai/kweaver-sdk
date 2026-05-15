@@ -72,6 +72,13 @@ export function buildAgentInfoUrl(baseUrl: string, agentId: string, version: str
   return `${base}${AGENT_INFO_PATH}/${agentId}/version/${version}?is_visit=true`;
 }
 
+function applyConversationOptions(body: Record<string, unknown>, conversationId?: string): void {
+  if (!conversationId) return;
+
+  body.conversation_id = conversationId;
+  body.chat_option = { is_need_history: true };
+}
+
 export async function fetchAgentInfo(options: {
   baseUrl: string;
   accessToken: string;
@@ -397,9 +404,7 @@ export async function sendChatRequest(options: SendChatRequestOptions): Promise<
     query,
     stream,
   };
-  if (conversationId) {
-    body.conversation_id = conversationId;
-  }
+  applyConversationOptions(body, conversationId);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -496,9 +501,7 @@ export async function sendChatRequestStream(
     query,
     stream: true,
   };
-  if (conversationId) {
-    body.conversation_id = conversationId;
-  }
+  applyConversationOptions(body, conversationId);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

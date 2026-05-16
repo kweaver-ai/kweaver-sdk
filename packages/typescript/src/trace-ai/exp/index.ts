@@ -18,8 +18,20 @@ import { getTracesByConversation } from "../../api/conversations.js";
 import { upsertRegistry, listRegistry } from "./exp-store/exp-registry.js";
 import { runInfo, runList, getHealthChecks } from "./info.js";
 import { resolveClaudeBinary } from "./claude-binary.js";
+import type { FailureAttribution } from "./schemas.js";
 
 const __expIndexDir = path.dirname(fileURLToPath(import.meta.url));
+
+export function formatFailureAttribution(attribution: FailureAttribution[]): string {
+  if (attribution.length === 0) return "";
+  const lines = attribution.map((a) => {
+    const queries = a.affected_queries.join(", ");
+    const evidence = a.evidence.length > 55 ? a.evidence.slice(0, 52) + "..." : a.evidence;
+    const layerTag = `[${a.layer}]`.padEnd(7);
+    return `  ${layerTag} ${evidence.padEnd(55)}  → ${a.suggested_target}  (${queries})`;
+  });
+  return "Failure attribution:\n" + lines.join("\n");
+}
 const EVAL_SET_RUBRIC_DIR = path.join(__expIndexDir, "..", "eval-set", "rubric-templates");
 
 function ensureProvider() {
@@ -126,6 +138,7 @@ export async function runExpCommand(argv: string[]): Promise<number> {
       const rounds = await store.readAllRounds();
       const lineage = await store.readLineage();
       const mission = await store.readMission().catch(() => null);
+      const events = await store.readAllEvents().catch(() => [] as Record<string, unknown>[]);
       process.stdout.write(`State: ${replayed.currentState}  Round: ${replayed.currentRound}\n`);
       if (mission?.next_change) {
         process.stdout.write(`Suggested next change:\n  target: ${mission.next_change.target}\n  hypothesis: ${mission.next_change.hypothesis}\n`);
@@ -136,6 +149,15 @@ export async function runExpCommand(argv: string[]): Promise<number> {
         if (last.triage_conclusion) {
           process.stdout.write(`Triage: ${last.triage_conclusion.diagnoses.join("; ")}\n`);
         }
+      }
+      // Read last TriageComplete event for failure_attribution
+      const lastTriage = events.filter((e) => e["type"] === "TriageComplete").at(-1) as Record<string, unknown> | undefined;
+      const attribution = Array.isArray(lastTriage?.["failure_attribution"])
+        ? lastTriage["failure_attribution"] as FailureAttribution[]
+        : [];
+      const attrText = formatFailureAttribution(attribution);
+      if (attrText) {
+        process.stdout.write(`${attrText}\n`);
       }
       process.stdout.write(`Lineage: ${lineage.length} versions\n`);
       return 0;

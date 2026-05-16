@@ -15,6 +15,12 @@ export interface TriageResult {
   verdict: "continue" | "publish" | "abort";
   summary: string;
   failure_attribution: FailureAttribution[];
+  /** Diagnoses extracted from the LLM response (defaults to [summary]) */
+  diagnoses: string[];
+  /** Hints extracted from the LLM response */
+  hints: string[];
+  /** Opaque memory token passed across rounds */
+  new_memory_token: string;
 }
 
 export interface TriageClient {
@@ -40,7 +46,14 @@ export function parseTriageOutput(raw: string): TriageResult {
     if (!parsed.success) throw new Error(`Invalid failure_attribution item: ${JSON.stringify(item)}`);
     return parsed.data;
   });
-  return { verdict, summary, failure_attribution };
+  const diagnoses = Array.isArray(data["diagnoses"])
+    ? (data["diagnoses"] as unknown[]).filter((d): d is string => typeof d === "string")
+    : [summary];
+  const hints = Array.isArray(data["hints"])
+    ? (data["hints"] as unknown[]).filter((h): h is string => typeof h === "string")
+    : [];
+  const new_memory_token = typeof data["new_memory_token"] === "string" ? data["new_memory_token"] : summary;
+  return { verdict, summary, failure_attribution, diagnoses, hints, new_memory_token };
 }
 
 export class ClaudeCodeTriageClient implements TriageClient {

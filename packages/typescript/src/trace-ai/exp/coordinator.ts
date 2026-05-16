@@ -6,26 +6,12 @@ import { ExpStore } from "./exp-store/index.js";
 import { applyPatch } from "./patch/index.js";
 import { computeScores } from "./scoring.js";
 import { writeBundles } from "./bundle-writer.js";
-import type { ExpFsmState, Mission, NextChange, QueryResult, RoundData } from "./schemas.js";
+import { ContextAssembler } from "./context/context-assembler.js";
+import type { TriageClient, TriageResult } from "./providers/triage-client.js";
+import type { SynthesizerClient } from "./providers/synthesizer-client.js";
+import type { ExpFsmState, FailureAttribution, Mission, NextChange, QueryResult, RoundData, SkillBinding } from "./schemas.js";
 
-export interface SynthesizerClient {
-  generate(input: {
-    mission: Mission;
-    candidateConfig: Record<string, unknown>;
-    prevRound?: RoundData;
-    prevRounds: RoundData[];
-    crossRoundMemoryRef?: string;
-  }): Promise<NextChange>;
-}
-
-export interface TriageClient {
-  triage(input: {
-    currentRound: RoundData;
-    prevRounds: RoundData[];
-    candidateConfig: Record<string, unknown>;
-    crossRoundMemoryRef?: string;
-  }): Promise<RoundData["triage_conclusion"] & { new_memory_token: string }>;
-}
+export type { SynthesizerClient, TriageClient, TriageResult };
 
 export interface CoordinatorOpts {
   expDir: string;
@@ -33,6 +19,7 @@ export interface CoordinatorOpts {
   triage: TriageClient;
   runEval: (opts: { evalSetPaths: string[]; candidatePath: string; expDir: string; round: number }) => Promise<{ queryResults: QueryResult[] }>;
   experimentId?: string;
+  contextAssembler?: ContextAssembler;
 }
 
 export class ExperimentCoordinator {
@@ -104,6 +91,14 @@ export class ExperimentCoordinator {
 
     const prevRounds = await this.store.readAllRounds();
 
+    // Read last TriageComplete event for failure_attribution and suggested_target
+    const allEvents = await this.store.readAllEvents();
+    const lastTriageEvent = allEvents.filter(e => e["type"] === "TriageComplete").at(-1) as Record<string, unknown> | undefined;
+    const failureAttribution = Array.isArray(lastTriageEvent?.["failure_attribution"])
+      ? lastTriageEvent["failure_attribution"] as FailureAttribution[]
+      : [];
+    const suggestedTarget = (failureAttribution[0]?.suggested_target ?? "agent.system_prompt") as import("./schemas.js").PatchTarget;
+
     // Load current candidate and apply patch
     const currentCandidatePath = path.join(this.opts.expDir, mission.current_candidate.path);
     const currentCandidate = yaml.load(await fs.readFile(currentCandidatePath, "utf8")) as Record<string, unknown>;
@@ -161,7 +156,7 @@ export class ExperimentCoordinator {
     const currentRoundData = (await this.store.readAllRounds()).find(r => r.round === round) ?? { round, trial_version: round };
     const prevMemory = prevRounds.at(-1)?.triage_conclusion?.cross_round_memory_ref;
 
-    let triageResult: RoundData["triage_conclusion"] & { new_memory_token: string };
+    let triageResult: TriageResult;
     try {
       triageResult = await this.withRetry(
         () => this.opts.triage.triage({
@@ -176,18 +171,36 @@ export class ExperimentCoordinator {
       return;
     }
 
+    // Normalize "abort" → "publish" for the typed triage_conclusion verdict
+    const storedVerdict: "continue" | "publish" = triageResult.verdict === "continue" ? "continue" : "publish";
     await this.store.writeRound(round, {
       triage_conclusion: {
         diagnoses: triageResult.diagnoses,
         hints: triageResult.hints,
-        verdict: triageResult.verdict,
+        verdict: storedVerdict,
         cross_round_memory_ref: triageResult.new_memory_token,
       },
     });
-    await this.store.appendEvent({ type: "round_completed", round, verdict: triageResult.verdict });
+    await this.store.appendEvent({ type: "round_completed", round, verdict: storedVerdict });
+
+    // Persist failure_attribution in a TriageComplete event for downstream use (exp show, Generating state)
+    await this.store.appendEvent({
+      type: "TriageComplete",
+      round,
+      verdict: triageResult.verdict,
+      summary: triageResult.summary,
+      failure_attribution: triageResult.failure_attribution,
+    });
 
     // Generate next suggestion if continuing
     if (triageResult.verdict === "continue" && round < maxRounds) {
+      // Phase 1: ContextAssembler pre-fetch (only if contextAssembler is available)
+      const knId = (patched["kn"] as Record<string, unknown> | undefined)?.["id"] as string | undefined;
+      const boundSkills = ((patched["agent"] as Record<string, unknown> | undefined)?.["skills"] as SkillBinding[] | undefined) ?? [];
+      const { kn_context, skill_context } = this.opts.contextAssembler
+        ? await this.opts.contextAssembler.assemble(suggestedTarget, knId, boundSkills)
+        : {};
+
       const updatedMission = await this.store.readMission();
       try {
         const suggestion = await this.withRetry(
@@ -197,6 +210,9 @@ export class ExperimentCoordinator {
             prevRound: currentRoundData,
             prevRounds,
             crossRoundMemoryRef: triageResult.new_memory_token,
+            failure_attribution: triageResult.failure_attribution,
+            kn_context,
+            skill_context,
           }),
           "Triaging"
         );

@@ -47,7 +47,8 @@ export type ExpEvent =
   | { ts: string; type: "state_transition"; from: ExpFsmState; to: ExpFsmState; round: number }
   | { ts: string; type: "round_completed"; round: number; verdict: "continue" | "publish" }
   | { ts: string; type: "step_failed"; state: ExpFsmState; error: string; retryable: boolean }
-  | { ts: string; type: "aborted"; round: number; reason: string };
+  | { ts: string; type: "aborted"; round: number; reason: string }
+  | { ts: string; type: "TriageComplete"; round: number; verdict: string; summary: string; failure_attribution: FailureAttribution[] };
 
 // three-axis scores
 export interface ThreeAxisScores {

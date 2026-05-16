@@ -152,7 +152,7 @@ export type AgentSkillsPatch = z.infer<typeof AgentSkillsPatchSchema>;
 // ── NextChange discriminated union ────────────────────────────────────────
 
 export const NextChangeSchema = z.discriminatedUnion("target", [
-  z.object({ target: z.literal("agent.system_prompt"), hypothesis: z.string().optional(), patch: z.union([z.string(), z.record(z.unknown())]) }),
+  z.object({ target: z.literal("agent.system_prompt"), hypothesis: z.string().optional(), patch: z.union([z.string(), z.record(z.string(), z.unknown())]) }),
   z.object({ target: z.literal("agent.skills"), hypothesis: z.string().optional(), patch: AgentSkillsPatchSchema }),
   z.object({ target: z.literal("kn.object_type"), hypothesis: z.string(), patch: KnPatchSchema }),
   z.object({ target: z.literal("kn.relation_type"), hypothesis: z.string(), patch: KnPatchSchema }),

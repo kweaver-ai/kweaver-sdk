@@ -7,9 +7,9 @@ export function applyPatch(candidate: Record<string, unknown>, change: NextChang
   const prefix = change.target.split(".")[0];
   switch (prefix) {
     case "agent":
-      return applyAgentConfigPatch(candidate, change.patch);
+      return applyAgentConfigPatch(candidate, change.patch as string);
     case "skill":
-      return applySkillPatch(candidate, change.patch);
+      return applySkillPatch(candidate, change.patch as string);
     default:
       throw new Error(`Unsupported target prefix "${prefix}" — only agent.* and skill.* are supported in MVP-C`);
   }

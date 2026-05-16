@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { defaultRegistry } from "../../../agent-providers/registry.js";
 import type { RoundData } from "../schemas.js";
+import { FailureAttributionSchema, type FailureAttribution } from "../schemas.js";
 
 export interface TriageInput {
   currentRound: RoundData;
@@ -11,21 +12,35 @@ export interface TriageInput {
 }
 
 export interface TriageResult {
-  diagnoses: string[];
-  hints: string[];
-  verdict: "continue" | "publish";
-  new_memory_token: string;
+  verdict: "continue" | "publish" | "abort";
+  summary: string;
+  failure_attribution: FailureAttribution[];
 }
-
-const TriageOutputSchema = z.object({
-  diagnoses: z.array(z.string()),
-  hints: z.array(z.string()),
-  verdict: z.enum(["continue", "publish"]),
-  new_memory_token: z.string(),
-});
 
 export interface TriageClient {
   triage(input: TriageInput): Promise<TriageResult>;
+}
+
+export function parseTriageOutput(raw: string): TriageResult {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    throw new Error(`Triage output is not valid JSON: ${raw.slice(0, 200)}`);
+  }
+  const data = obj as Record<string, unknown>;
+  const verdict = data["verdict"];
+  if (verdict !== "continue" && verdict !== "publish" && verdict !== "abort") {
+    throw new Error(`Invalid verdict in triage output: ${String(verdict)}`);
+  }
+  const summary = typeof data["summary"] === "string" ? data["summary"] : "";
+  const rawAttribution = Array.isArray(data["failure_attribution"]) ? data["failure_attribution"] : [];
+  const failure_attribution: FailureAttribution[] = rawAttribution.map((item) => {
+    const parsed = FailureAttributionSchema.safeParse(item);
+    if (!parsed.success) throw new Error(`Invalid failure_attribution item: ${JSON.stringify(item)}`);
+    return parsed.data;
+  });
+  return { verdict, summary, failure_attribution };
 }
 
 export class ClaudeCodeTriageClient implements TriageClient {
@@ -60,16 +75,29 @@ ${input.prevRounds.map(pr => `Round ${pr.round}: outcome=${pr.scores?.outcome.to
 ${input.crossRoundMemoryRef ? `CONTEXT FROM PREVIOUS TRIAGE: ${input.crossRoundMemoryRef}` : ""}
 
 Respond with JSON:
-- "diagnoses": list of root cause observations
-- "hints": list of specific suggestions for next change
-- "verdict": "continue" if more rounds needed, "publish" if this candidate is good enough
-- "new_memory_token": brief summary of key findings to carry forward (1-2 sentences)`;
+- "verdict": "continue" if more rounds needed, "publish" if this candidate is good enough, "abort" if the experiment cannot improve further
+- "summary": one-sentence summary of key findings
+- "failure_attribution": array of root-cause attributions (sorted by affected_queries count desc)
+
+Additionally output a "failure_attribution" array (sorted by affected_queries count desc).
+For each distinct root-cause layer, output one entry:
+{
+  "layer": "kn" | "skill" | "agent",
+  "evidence": "<one sentence citing specific tool call or return value from the trace>",
+  "affected_queries": ["<query_id>", ...],
+  "suggested_target": "kn.object_type" | "kn.relation_type" | "skill.content" | "agent.system_prompt"
+}
+Attribution rules:
+- "kn": agent queried KN but concept/relation was missing or returned empty unexpectedly
+- "skill": agent had the right intent but the tool usage pattern was wrong (no pagination, no sort_by, wrong filter)
+- "agent": agent misidentified the concept to query, or made an orchestration error
+If verdict is "publish" or "abort", output an empty array for failure_attribution.`;
 
     const response = await provider.invoke({
       prompt,
-      outputSchema: TriageOutputSchema,
+      outputSchema: z.unknown(),
       correlationId: `triage-${Date.now()}`,
     });
-    return response.output;
+    return parseTriageOutput(response.rawText);
   }
 }

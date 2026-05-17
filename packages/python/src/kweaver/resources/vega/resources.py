@@ -43,3 +43,17 @@ class VegaResourcesResource:
         result = self._http.post(f"{self._BASE}/{id}/data", json=body)
         return VegaQueryResult(**result) if isinstance(result, dict) else VegaQueryResult()
 
+    def build(self, id: str, *, mode: str = "full") -> dict[str, Any]:
+        """Trigger an index build on a catalog resource.
+
+        mode: ``full`` | ``incremental`` | ``realtime``.
+        Returns the raw response payload (typically contains a ``task_id``).
+        """
+        result = self._http.post(f"{self._BASE}/{id}/build", json={"mode": mode})
+        return result if isinstance(result, dict) else {}
+
+    def build_status(self, id: str, task_id: str) -> dict[str, Any]:
+        """Fetch the status of a previously triggered build task."""
+        result = self._http.get(f"{self._BASE}/dataset/{id}/build/{task_id}")
+        return result if isinstance(result, dict) else {}
+

@@ -19,30 +19,22 @@ export interface SynthesizerClient {
   generate(input: SynthesizerInput): Promise<NextChange>;
 }
 
-export class ClaudeCodeSynthesizer implements SynthesizerClient {
-  async generate(input: SynthesizerInput): Promise<NextChange> {
-    const provider = defaultRegistry.resolve({ preferred: "claude-code" });
-    if (!provider) throw new Error("claude-code provider not available");
+export function buildSynthesizerPrompt(input: SynthesizerInput): string {
+  const prevSummary = input.prevRounds.map(r =>
+    `Round ${r.round}: outcome=${r.scores?.outcome.toFixed(2) ?? "?"}, hints=${r.triage_conclusion?.hints.join("; ") ?? "none"}`
+  ).join("\n");
 
-    const prevSummary = input.prevRounds.map(r =>
-      `Round ${r.round}: outcome=${r.scores?.outcome.toFixed(2) ?? "?"}, hints=${r.triage_conclusion?.hints.join("; ") ?? "none"}`
-    ).join("\n");
+  let contextSection = "";
+  if (input.kn_context) contextSection += "\n\n" + buildKnContextPrompt(input.kn_context);
+  if (input.skill_context) contextSection += "\n\n" + buildSkillContextPrompt(input.skill_context);
 
-    let contextSection = "";
-    if (input.kn_context) {
-      contextSection += "\n\n" + buildKnContextPrompt(input.kn_context);
-    }
-    if (input.skill_context) {
-      contextSection += "\n\n" + buildSkillContextPrompt(input.skill_context);
-    }
+  const attributionHint = input.failure_attribution && input.failure_attribution.length > 0
+    ? `\nFAILURE ATTRIBUTION:\n${input.failure_attribution.map(fa =>
+        `  layer=${fa.layer}, suggested_target=${fa.suggested_target}, evidence="${fa.evidence}", affected=${fa.affected_queries.join(", ")}`
+      ).join("\n")}`
+    : "";
 
-    const attributionHint = input.failure_attribution && input.failure_attribution.length > 0
-      ? `\nFAILURE ATTRIBUTION:\n${input.failure_attribution.map(fa =>
-          `  layer=${fa.layer}, suggested_target=${fa.suggested_target}, evidence="${fa.evidence}", affected=${fa.affected_queries.join(", ")}`
-        ).join("\n")}`
-      : "";
-
-    const prompt = `You are an agent optimization assistant. Given an experiment goal and round results, suggest the next change to try.
+  return `You are an agent optimization assistant. Given an experiment goal and round results, suggest the next change to try.
 
 GOAL: ${input.mission.goal}
 
@@ -60,17 +52,35 @@ ${attributionHint}${contextSection}
 Respond with a JSON object with exactly these fields:
 - "target": one of "agent.system_prompt", "agent.skills", "kn.object_type", "kn.relation_type", "skill.content"
 - "hypothesis": brief explanation of why this change might help
-- "patch": a JSON object whose shape depends on the target — follow the schema exactly
+- "patch": shape depends on target — see examples below, follow exactly
 
-The "target" field MUST be one of: agent.system_prompt, agent.skills, kn.object_type, kn.relation_type, skill.content.
-Use the suggested_target from failure_attribution[0] as the target when available.
-The "patch" shape depends on the target — follow the schema exactly.
+Use the suggested_target from failure_attribution[0] when available.
 
-Example for changing system_prompt:
-{"target": "agent.system_prompt", "hypothesis": "Add explicit stop condition", "patch": "{\"agent\":{\"system_prompt\":\"New prompt here\"}}"}`;
+OUTPUT EXAMPLES (pick the one matching your chosen target):
+
+# agent.system_prompt — patch is a JSON string (escaped) or object with {agent:{system_prompt}}
+{"target":"agent.system_prompt","hypothesis":"Add explicit stop condition","patch":"{\\"agent\\":{\\"system_prompt\\":\\"New prompt here\\"}}"}
+
+# agent.skills — patch is structured {unbind:[skill_id...], bind:[{id,version}...]}
+{"target":"agent.skills","hypothesis":"Swap retrieval skill to v2","patch":{"unbind":["retrieval-v1"],"bind":[{"id":"retrieval-v2","version":"v2"}]}}
+
+# kn.object_type — patch is {kn_id, add_object_types:[{concept_name, dataview_id, primary_keys, data_properties}], add_relation_types:[]}
+{"target":"kn.object_type","hypothesis":"Add vehicle_sales concept","patch":{"kn_id":"kn-x","add_object_types":[{"concept_name":"vehicle_sales","dataview_id":"dv-001","primary_keys":["vehicle_sales_id"],"data_properties":[{"name":"sales","type":"integer"},{"name":"month","type":"string"}]}],"add_relation_types":[]}}
+
+# kn.relation_type — patch is {kn_id, add_object_types:[], add_relation_types:[{concept_name, source_object_type, target_object_type, join_key}]}
+{"target":"kn.relation_type","hypothesis":"Link sales to vehicle","patch":{"kn_id":"kn-x","add_object_types":[],"add_relation_types":[{"concept_name":"sold_for","source_object_type":"vehicle_sales","target_object_type":"vehicle","join_key":"vehicle_id"}]}}
+
+# skill.content — patch is {skill_id, append_section}
+{"target":"skill.content","hypothesis":"Document sort_by usage","patch":{"skill_id":"query-sop","append_section":"## Sort_by usage\\nPass sort_by=[{field, order}] to query_object_instance for ordering."}}`;
+}
+
+export class ClaudeCodeSynthesizer implements SynthesizerClient {
+  async generate(input: SynthesizerInput): Promise<NextChange> {
+    const provider = defaultRegistry.resolve({ preferred: "claude-code" });
+    if (!provider) throw new Error("claude-code provider not available");
 
     const response = await provider.invoke({
-      prompt,
+      prompt: buildSynthesizerPrompt(input),
       outputSchema: NextChangeSchema,
       correlationId: `synthesizer-${Date.now()}`,
     });

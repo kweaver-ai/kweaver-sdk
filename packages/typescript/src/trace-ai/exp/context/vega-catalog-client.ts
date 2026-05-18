@@ -11,6 +11,7 @@ export class KweaverVegaCatalogClient implements VegaCatalogClient {
   async listDataviews(_filter?: { knId?: string }): Promise<VegaCatalogEntry[]> {
     // TODO: GET {baseUrl}/api/vega/v1/dataviews?kn_id={filter.knId}
     // Response shape: [{ id, name, columns: [{ name, type }] }]
-    throw new Error("KweaverVegaCatalogClient.listDataviews not yet implemented — use mock in tests");
+    // Intentionally returns empty — data_probes from KnDataProber is the primary enrichment path
+    return [];
   }
 }

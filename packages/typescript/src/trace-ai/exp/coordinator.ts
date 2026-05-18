@@ -7,9 +7,11 @@ import { applyPatch } from "./patch/index.js";
 import { computeScores } from "./scoring.js";
 import { writeBundles } from "./bundle-writer.js";
 import { ContextAssembler } from "./context/context-assembler.js";
+import { analyzeFailures } from "./context/failure-analyzer.js";
 import type { TriageClient, TriageResult } from "./providers/triage-client.js";
 import type { SynthesizerClient } from "./providers/synthesizer-client.js";
 import type { ExpFsmState, FailureAttribution, Mission, NextChange, QueryResult, RoundData, SkillBinding } from "./schemas.js";
+import type { TraceSpan } from "../../api/conversations.js";
 
 export type { SynthesizerClient, TriageClient, TriageResult };
 
@@ -20,6 +22,7 @@ export interface CoordinatorOpts {
   runEval: (opts: { evalSetPaths: string[]; candidatePath: string; expDir: string; round: number }) => Promise<{ queryResults: QueryResult[] }>;
   experimentId?: string;
   contextAssembler?: ContextAssembler;
+  fetchTrace?: (conversationId: string) => Promise<{ spans: TraceSpan[] }>;
 }
 
 export class ExperimentCoordinator {
@@ -156,6 +159,11 @@ export class ExperimentCoordinator {
     const currentRoundData = (await this.store.readAllRounds()).find(r => r.round === round) ?? { round, trial_version: round };
     const prevMemory = prevRounds.at(-1)?.triage_conclusion?.cross_round_memory_ref;
 
+    const failureAnalysis = await analyzeFailures(
+      currentRoundData.per_query_results ?? [],
+      this.opts.fetchTrace,
+    );
+
     let triageResult: TriageResult;
     try {
       triageResult = await this.withRetry(
@@ -164,6 +172,7 @@ export class ExperimentCoordinator {
           prevRounds,
           candidateConfig: patched,
           crossRoundMemoryRef: prevMemory,
+          failureAnalysis,
         }),
         "Triaging"
       );
@@ -198,7 +207,7 @@ export class ExperimentCoordinator {
       const knId = (patched["kn"] as Record<string, unknown> | undefined)?.["id"] as string | undefined;
       const boundSkills = ((patched["agent"] as Record<string, unknown> | undefined)?.["skills"] as SkillBinding[] | undefined) ?? [];
       const { kn_context, skill_context } = this.opts.contextAssembler
-        ? await this.opts.contextAssembler.assemble(suggestedTarget, knId, boundSkills)
+        ? await this.opts.contextAssembler.assemble(suggestedTarget, knId, boundSkills, failureAnalysis)
         : {};
 
       const updatedMission = await this.store.readMission();

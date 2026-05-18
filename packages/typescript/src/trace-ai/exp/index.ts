@@ -19,6 +19,12 @@ import { upsertRegistry, listRegistry } from "./exp-store/exp-registry.js";
 import { runInfo, runList, getHealthChecks } from "./info.js";
 import { resolveClaudeBinary } from "./claude-binary.js";
 import type { FailureAttribution } from "./schemas.js";
+import { KweaverKnSchemaClient } from "./context/kn-schema-client.js";
+import { ContextAssembler } from "./context/context-assembler.js";
+import { probeObjectTypes } from "./context/kn-data-prober.js";
+import { queryDataView } from "../../api/dataviews.js";
+import { KweaverVegaCatalogClient } from "./context/vega-catalog-client.js";
+import type { SkillApiClient } from "./patch/skill-api-client.js";
 
 const __expIndexDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -243,10 +249,37 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     process.stderr.write("warn: could not create semantic-match provider — semantic_match assertions will be skipped\n");
   }
 
+  const knSchemaClient = new KweaverKnSchemaClient(baseUrl, token);
+  const vegaCatalogClient = new KweaverVegaCatalogClient(baseUrl, token);
+
+  // Wire probeObjectTypes with auth + businessDomain
+  const boundProbe = (
+    schema: Parameters<typeof probeObjectTypes>[0],
+    failures: Parameters<typeof probeObjectTypes>[1],
+  ) => probeObjectTypes(schema, failures, queryDataView, { baseUrl, accessToken: token });
+
+  // KweaverSkillApiClient not yet implemented — use no-op inline
+  const skillApiClient: SkillApiClient = {
+    async getSkillContent(_id: string) { return ""; },
+    async publishSkillVersion(_id: string, _content: string) { return { version: "noop", content: "" }; },
+  };
+
+  const contextAssembler = new ContextAssembler(
+    knSchemaClient,
+    vegaCatalogClient,
+    skillApiClient,
+    boundProbe,
+  );
+
   return new ExperimentCoordinator({
     expDir,
     synthesizer: new ClaudeCodeSynthesizer(),
     triage: new ClaudeCodeTriageClient(),
+    contextAssembler,
+    fetchTrace: async (conversationId) => {
+      const r = await getTracesByConversation({ baseUrl, accessToken: token, conversationId, businessDomain: bd });
+      return { spans: r.spans };
+    },
     runEval: ({ evalSetPaths, candidatePath, round }) => runEval({
       evalSetPaths,
       candidatePath,

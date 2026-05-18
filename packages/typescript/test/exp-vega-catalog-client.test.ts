@@ -7,8 +7,9 @@ test("VegaCatalogClient: interface is importable", async () => {
   assert.equal(typeof mod.KweaverVegaCatalogClient, "function");
 });
 
-test("KweaverVegaCatalogClient: throws on real call (expected — use mock in tests)", async () => {
+test("KweaverVegaCatalogClient: returns empty array (data_probes is the primary enrichment path)", async () => {
   const { KweaverVegaCatalogClient } = await import("../src/trace-ai/exp/context/vega-catalog-client.js");
   const client = new KweaverVegaCatalogClient("http://localhost", "token");
-  await assert.rejects(() => client.listDataviews(), /not yet implemented/);
+  const result = await client.listDataviews();
+  assert.deepEqual(result, []);
 });

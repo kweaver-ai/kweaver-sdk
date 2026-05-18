@@ -72,6 +72,15 @@ export interface QueryResult {
   conversation_id?: string;
 }
 
+export interface QueryFailureAnalysis {
+  query_id: string;
+  verdict: "fail" | "skip";
+  /** Assertion failure reason, truncated to 200 chars. */
+  assertion_reason: string;
+  /** Tool calls extracted from trace, e.g. ["kn_search(激光雷达)→8 records"]. Max 3 entries. */
+  tool_call_summary: string[];
+}
+
 // round.yaml content
 export interface RoundData {
   round: number;

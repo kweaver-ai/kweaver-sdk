@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { KWeaverClient } from "../src/client.js";
+import { listResources } from "../src/api/resources.js";
 
 const BASE = "https://mock.kweaver.test";
 const TOKEN = "test-token-abc";
@@ -20,7 +21,9 @@ function mockFetch(response: unknown, statusCode = 200) {
     const body = init?.body ? String(init.body) : undefined;
     calls.push({ url, method, body });
     const text = typeof response === "string" ? response : JSON.stringify(response);
-    return new Response(text, { status: statusCode });
+    // 204/205/304 are null-body statuses; Response constructor rejects a body for them
+    const nullBody = statusCode === 204 || statusCode === 205 || statusCode === 304;
+    return new Response(nullBody ? null : text, { status: statusCode });
   };
 
   return { calls, restore: () => { globalThis.fetch = orig; } };
@@ -28,10 +31,10 @@ function mockFetch(response: unknown, statusCode = 200) {
 
 // ── client exposes new resources ────────────────────────────────────────────
 
-test("KWeaverClient exposes datasources, dataviews, dataflows, vega, models resources", () => {
+test("KWeaverClient exposes datasources, resources, dataflows, vega, models resources", () => {
   const client = makeClient();
   assert.ok(client.datasources, "datasources resource exists");
-  assert.ok(client.dataviews, "dataviews resource exists");
+  assert.ok(client.resources, "resources resource exists");
   assert.ok(client.dataflows, "dataflows resource exists");
   assert.ok(client.vega, "vega resource exists");
   assert.ok(client.models, "models resource exists");
@@ -96,99 +99,128 @@ test("datasources.listTables returns array", async () => {
   }
 });
 
-// ── DataViewsResource ───────────────────────────────────────────────────────
+// ── ResourcesResource ───────────────────────────────────────────────────────
 
-test("dataviews.create returns view id", async () => {
-  const mock = mockFetch([{ id: "dv-1" }]);
+test("dataviews.create POSTs to vega-backend /resources with category=table", async () => {
+  const mock = mockFetch({ id: "dv-1", name: "test-view", catalog_id: "ds-1", category: "table" });
   try {
-    const result = await makeClient().dataviews.create({
+    const result = await makeClient().resources.create({
       name: "test-view",
       datasourceId: "ds-1",
       table: "users",
     });
     assert.ok(typeof result === "string");
+    assert.equal(result, "dv-1");
     assert.equal(mock.calls[0].method, "POST");
+    assert.ok(mock.calls[0].url.includes("/api/vega-backend/v1/resources"));
+    const body = JSON.parse(mock.calls[0].body ?? "{}");
+    assert.equal(body.catalog_id, "ds-1");
+    assert.equal(body.category, "table");
+    assert.equal(body.source_identifier, "users");
   } finally {
     mock.restore();
   }
 });
 
-test("dataviews.get returns DataView", async () => {
+test("dataviews.get GETs from vega-backend /resources/{id}", async () => {
   const mock = mockFetch({
-    id: "dv-1",
-    name: "test-view",
-    query_type: "SQL",
-    data_source_id: "ds-1",
-    fields: [],
-  });
-  try {
-    const result = await makeClient().dataviews.get("dv-1");
-    assert.deepEqual(result, {
+    entries: [{
       id: "dv-1",
       name: "test-view",
-      query_type: "SQL",
-      datasource_id: "ds-1",
-    });
+      catalog_id: "ds-1",
+      category: "table",
+      source_identifier: "users",
+      status: "active",
+      schema_definition: [],
+    }],
+  });
+  try {
+    const result = await makeClient().resources.get("dv-1");
+    assert.equal(result.id, "dv-1");
+    assert.equal(result.name, "test-view");
+    assert.equal(result.catalog_id, "ds-1");
+    assert.equal(result.category, "table");
+    assert.ok(mock.calls[0].url.includes("/api/vega-backend/v1/resources/dv-1"));
   } finally {
     mock.restore();
   }
 });
 
-test("dataviews.list returns DataView[] from entries wrapper", async () => {
+test("dataviews.list GETs from vega-backend /resources with catalog_id param", async () => {
   const mock = mockFetch({
     entries: [
       {
         id: "dv-1",
         name: "users",
-        query_type: "SQL",
-        data_source_id: "ds-1",
-        fields: [],
+        catalog_id: "ds-1",
+        category: "table",
+        source_identifier: "users",
+        status: "active",
       },
     ],
   });
   try {
-    const result = await makeClient().dataviews.list({ datasourceId: "ds-1" });
+    const result = await makeClient().resources.list({ datasourceId: "ds-1" });
     assert.equal(result.length, 1);
     assert.equal(result[0].id, "dv-1");
-    assert.equal(result[0].fields, undefined);
-    assert.ok(mock.calls[0].url.includes("data_source_id=ds-1"));
+    assert.equal(result[0].catalog_id, "ds-1");
+    assert.ok(mock.calls[0].url.includes("catalog_id=ds-1"));
+    assert.ok(!mock.calls[0].url.includes("data_source_id"));
   } finally {
     mock.restore();
   }
 });
 
-test("dataviews.delete sends DELETE request", async () => {
-  const mock = mockFetch("", 200);
+test("listResources API helper applies default limit=30", async () => {
+  const mock = mockFetch({ entries: [] });
   try {
-    await makeClient().dataviews.delete("dv-1");
-    assert.equal(mock.calls[0].method, "DELETE");
-    assert.ok(mock.calls[0].url.includes("/data-views/dv-1"));
+    await listResources({
+      baseUrl: BASE,
+      accessToken: TOKEN,
+      datasourceId: "ds-1",
+    });
+    const url = new URL(mock.calls[0].url);
+    assert.equal(url.searchParams.get("limit"), "30");
   } finally {
     mock.restore();
   }
 });
 
-test("dataviews.find exact returns match on first attempt", async () => {
+test("dataviews.delete sends DELETE to vega-backend /resources/{id}", async () => {
+  const mock = mockFetch("", 204);
+  try {
+    await makeClient().resources.delete("dv-1");
+    assert.equal(mock.calls[0].method, "DELETE");
+    assert.ok(mock.calls[0].url.includes("/api/vega-backend/v1/resources/dv-1"));
+    assert.ok(!mock.calls[0].url.includes("data-views"));
+  } finally {
+    mock.restore();
+  }
+});
+
+test("dataviews.find uses vega-backend /resources with name param", async () => {
   const mock = mockFetch({
     entries: [
       {
         id: "dv-1",
         name: "users",
-        query_type: "SQL",
-        data_source_id: "ds-1",
-        fields: [],
+        catalog_id: "ds-1",
+        category: "table",
+        source_identifier: "users",
+        status: "active",
       },
     ],
   });
   try {
-    const result = await makeClient().dataviews.find("users", {
+    const result = await makeClient().resources.find("users", {
       datasourceId: "ds-1",
       exact: true,
       wait: false,
     });
     assert.equal(result.length, 1);
     assert.equal(result[0].name, "users");
-    assert.ok(mock.calls[0].url.includes("keyword=users"));
+    assert.ok(mock.calls[0].url.includes("name=users"));
+    assert.ok(!mock.calls[0].url.includes("keyword="));
   } finally {
     mock.restore();
   }
@@ -197,12 +229,12 @@ test("dataviews.find exact returns match on first attempt", async () => {
 test("dataviews.find returns only exact matches when exact true", async () => {
   const mock = mockFetch({
     entries: [
-      { id: "dv-1", name: "users", query_type: "SQL", data_source_id: "ds-1", fields: [] },
-      { id: "dv-2", name: "users_archive", query_type: "SQL", data_source_id: "ds-1", fields: [] },
+      { id: "dv-1", name: "users", catalog_id: "ds-1", category: "table", source_identifier: "users", status: "active" },
+      { id: "dv-2", name: "users_archive", catalog_id: "ds-1", category: "table", source_identifier: "users_archive", status: "active" },
     ],
   });
   try {
-    const result = await makeClient().dataviews.find("users", {
+    const result = await makeClient().resources.find("users", {
       datasourceId: "ds-1",
       exact: true,
       wait: false,
@@ -217,7 +249,7 @@ test("dataviews.find returns only exact matches when exact true", async () => {
 test("dataviews.find exact returns empty when wait false and not found", async () => {
   const mock = mockFetch({ entries: [] });
   try {
-    const result = await makeClient().dataviews.find("missing", {
+    const result = await makeClient().resources.find("missing", {
       datasourceId: "ds-1",
       exact: true,
       wait: false,
@@ -228,12 +260,13 @@ test("dataviews.find exact returns empty when wait false and not found", async (
   }
 });
 
-test("dataviews.query sends POST to mdl-uniquery data-views path", async () => {
-  const mock = mockFetch({ columns: [], entries: [], total_count: 0 });
+test("dataviews.query POSTs to vega-backend /resources/{id}/data with override header", async () => {
+  const mock = mockFetch({ entries: [], total_count: 0 });
   try {
-    await makeClient().dataviews.query("dv-1", { limit: 10, offset: 0 });
+    await makeClient().resources.query("dv-1", { limit: 10, offset: 0 });
     assert.equal(mock.calls[0].method, "POST");
-    assert.ok(mock.calls[0].url.includes("/api/mdl-uniquery/v1/data-views/dv-1"));
+    assert.ok(mock.calls[0].url.includes("/api/vega-backend/v1/resources/dv-1/data"));
+    assert.ok(!mock.calls[0].url.includes("mdl-uniquery"));
     const body = JSON.parse(mock.calls[0].body ?? "{}");
     assert.equal(body.limit, 10);
     assert.equal(body.offset, 0);
@@ -243,15 +276,11 @@ test("dataviews.query sends POST to mdl-uniquery data-views path", async () => {
   }
 });
 
-test("dataviews.query passes sql in body when provided", async () => {
-  const mock = mockFetch({ entries: [[1, "a"]] });
+test("dataviews.query passes needTotal in body", async () => {
+  const mock = mockFetch({ entries: [], total_count: 5 });
   try {
-    await makeClient().dataviews.query("dv-2", {
-      sql: "SELECT id FROM t",
-      needTotal: true,
-    });
+    await makeClient().resources.query("dv-2", { needTotal: true });
     const body = JSON.parse(mock.calls[0].body ?? "{}");
-    assert.equal(body.sql, "SELECT id FROM t");
     assert.equal(body.need_total, true);
   } finally {
     mock.restore();
@@ -358,4 +387,3 @@ test("vega.getResource returns parsed object", async () => {
     mock.restore();
   }
 });
-

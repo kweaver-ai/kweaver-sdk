@@ -73,7 +73,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 | `bkn` | BKN 知识网络管理、Schema、查询、Action、**指标** | `bkn validate`/`push` 默认检测 `.bkn` 编码；`bkn metric` 管理/查询 BKN 指标与指标数据/试算，见 `references/metric.md`；其余见 `references/bkn.md` | `references/bkn.md`, `references/metric.md` |
 | `agent` | Agent CRUD、发布、对话、Trace、模板、分类 | `agent list`, `agent get <id>`, `agent create --name <n> --profile <p> --config <json>`, `agent publish <id> --category-id <cid>`, `agent chat <id> -m "..."`、`agent category-list`, `agent template-list`, `agent template-get <tpl_id>`、`agent sessions <agent_id>`、`agent history <conversation_id>`、`agent trace <conversation_id> [--view tree\|perf\|evidence\|reasoning\|all] [--full] [--json]` | `references/agent.md` |
 | `ds` | 数据源管理 | `ds list`, `ds get <id>`, `ds import-csv <ds_id> --files <glob> [--recreate]` | `references/ds.md` |
-| `dataview` | 数据视图（mdl-data-model / vega-backend） | `dataview list`、`find --name`、`get`、`query`、`delete`；BKN 绑定也可用 `vega resource` ID（type=resource） | `references/dataview.md` |
+| `resource` | vega-backend 资源（table / logicview） | `resource list`、`find --name`、`get`、`query`、`delete`；BKN 绑定用 type=resource | `references/resource.md` |
 | `dataflow` | Dataflow 文档流程 | `dataflow list`, `dataflow run <dagId> --file <path>`, `dataflow run <dagId> --url <remote-url> --name <filename>`, `dataflow runs <dagId> [--since <date-like>]`, `dataflow logs <dagId> <instanceId> [--detail]` | `references/dataflow.md` |
 | `model` | 模型工厂（mf-model-manager + mf-model-api） | `model llm`、`model small`、`model llm chat`、`model small embeddings` / `model small rerank`；大模型 **`model_type`**：`llm` / `rlm` / `vu`（见 `references/model.md`）；离线模版：`model llm --template` / `model small --template` | `references/model.md` |
 | `skill` | Skill 注册、市场查找、渐进式读取、下载与安装 | `skill list`、`market`、`register --zip-file`、`content`、`read-file`、`install` | `references/skill.md` |
@@ -90,7 +90,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 | 登录后确认业务域 | `config show`；若异常或列表为空 → `config list-bd` → `config set-bd <uuid>` | [references/config.md](references/config.md) |
 | 从数据库/CSV 构建 KN | 连接数据源 → CSV 导入 → 创建 KN → 构建索引 → 查询验证 → 绑定 Agent | [references/build-kn-from-db.md](references/build-kn-from-db.md) |
 | CLI 排障速查 | 权限、pull、build、import、dataview SQL 等 | [references/troubleshooting.md](references/troubleshooting.md) |
-| 列/查数据视图 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 对视图跑 SQL | [references/dataview.md](references/dataview.md) |
+| 列/查 vega-backend 资源 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 分页取数据行 | [references/resource.md](references/resource.md) |
 | 管理 Dataflow 文档流程 | `list` 看 DAG；`run` 触发本地文件或远程 URL；`runs --since` 看自然日运行记录；`logs --detail` 查步骤载荷 | [references/dataflow.md](references/dataflow.md) |
 | 模型工厂 / 小模型 adapter | TS CLI：`model llm|small …`、`model llm chat`、`model small embeddings` / `model small rerank`；Python SDK：`client.models`（CRUD/test + `invocation.chat` / `embedding` / `rerank`）；`--adapter-code-file` 注册 Python `main` 适配器 | [references/model.md](references/model.md) |
 | Python SDK（应用代码） | 使用 PyPI `kweaver-sdk`：`KWeaverClient`、认证、分页与排障；与 CLI/MCP 接入指南互补 | [docs/guides/python-sdk-guide.md](../../docs/guides/python-sdk-guide.md) · [中文版](../../docs/guides/python-sdk-guide.zh.md) |
@@ -108,7 +108,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 /kweaver-core 有哪些 Agent
 /kweaver-core 跟 Agent xxx 对话，问他"今天库存情况"
 /kweaver-core 搜索知识网络 xxx 中关于"供应链"的内容
-/kweaver-core 用 dataview find 模糊搜索名字含 BOM 的数据视图
+/kweaver-core 用 resource find 模糊搜索名字含 BOM 的资源
 /kweaver-core 列出所有 dataflow
 /kweaver-core 触发 dataflow 123，上传本地文件 ./demo.pdf
 /kweaver-core 查看 dataflow 123 在 2026-04-01 的运行记录

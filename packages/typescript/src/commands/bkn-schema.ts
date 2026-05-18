@@ -27,8 +27,8 @@ import {
   actionTypeExecute,
   actionExecutionGet,
 } from "../api/ontology-query.js";
-import { getDataView } from "../api/dataviews.js";
-import type { ViewField } from "../api/dataviews.js";
+import { getResource } from "../api/resources.js";
+import type { ViewField } from "../api/resources.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import {
@@ -316,17 +316,17 @@ export type ObjectTypeCreateParsed =
   | {
       mode: "needsDataview";
       knId: string;
-      dataviewId: string;
+      resourceId: string;
       entry: Record<string, unknown>;
       businessDomain: string;
       branch: string;
       pretty: boolean;
     };
 
-/** Parse object-type create args: --name --dataview-id --primary-key --display-key [--property '<json>' ...] */
+/** Parse object-type create args: --name --resource-id --primary-key --display-key [--property '<json>' ...] */
 export function parseObjectTypeCreateArgs(args: string[]): ObjectTypeCreateParsed {
   let name = "";
-  let dataviewId = "";
+  let resourceId = "";
   let primaryKey = "";
   let displayKey = "";
   let businessDomain = "";
@@ -342,8 +342,8 @@ export function parseObjectTypeCreateArgs(args: string[]): ObjectTypeCreateParse
       name = args[++i];
       continue;
     }
-    if (arg === "--dataview-id" && args[i + 1]) {
-      dataviewId = args[++i];
+    if (arg === "--resource-id" && args[i + 1]) {
+      resourceId = args[++i];
       continue;
     }
     if (arg === "--primary-key" && args[i + 1]) {
@@ -374,16 +374,16 @@ export function parseObjectTypeCreateArgs(args: string[]): ObjectTypeCreateParse
   }
 
   const knId = positional[0];
-  if (!knId || !name || !dataviewId || !primaryKey || !displayKey) {
+  if (!knId || !name || !resourceId || !primaryKey || !displayKey) {
     throw new Error(
-      "Usage: kweaver bkn object-type create <kn-id> --name X --dataview-id Y --primary-key Z --display-key W"
+      "Usage: kweaver bkn object-type create <kn-id> --name X --resource-id Y --primary-key Z --display-key W"
     );
   }
 
   const entry: Record<string, unknown> = {
     branch,
     name,
-    data_source: { type: "data_view", id: dataviewId },
+    data_source: { type: "resource", id: resourceId },
     primary_keys: [primaryKey],
     display_key: displayKey,
   };
@@ -399,7 +399,7 @@ export function parseObjectTypeCreateArgs(args: string[]): ObjectTypeCreateParse
   return {
     mode: "needsDataview",
     knId,
-    dataviewId,
+    resourceId,
     entry,
     businessDomain,
     branch,
@@ -413,18 +413,18 @@ export function parseObjectTypeCreateArgs(args: string[]): ObjectTypeCreateParse
 export async function finalizeObjectTypeCreateFromDataview(options: {
   baseUrl: string;
   accessToken: string;
-  dataviewId: string;
+  resourceId: string;
   entry: Record<string, unknown>;
   businessDomain: string;
 }): Promise<string> {
-  const { baseUrl, accessToken, dataviewId, entry, businessDomain } = options;
-  const dv = await getDataView({
+  const { baseUrl, accessToken, resourceId, entry, businessDomain } = options;
+  const dv = await getResource({
     baseUrl,
     accessToken,
-    id: dataviewId,
+    id: resourceId,
     businessDomain,
   });
-  const fields = dv.fields ?? [];
+  const fields = dv.schema_definition ?? [];
   const primaryKeys = Array.isArray(entry.primary_keys)
     ? (entry.primary_keys as string[])
     : [];
@@ -1183,7 +1183,7 @@ export async function runKnObjectTypeCommand(args: string[]): Promise<number> {
   if (!action || action === "--help" || action === "-h") {
     console.log(`kweaver bkn object-type list <kn-id> [--pretty] [-bd value]
 kweaver bkn object-type get <kn-id> <ot-id> [--pretty] [-bd value]
-kweaver bkn object-type create <kn-id> --name X --dataview-id Y --primary-key Z --display-key W [--property '<json>' ...]
+kweaver bkn object-type create <kn-id> --name X --resource-id Y --primary-key Z --display-key W [--property '<json>' ...]
 kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property|--update-property '<json>' ...] [--remove-property N ...] [--tags '["a","b"]'] [--comment S] [--icon I] [--color C] [--branch main]
   kweaver bkn object-type update <kn-id> <ot-id> '<full-json-body>'
 kweaver bkn object-type delete <kn-id> <ot-ids> [-y]
@@ -1229,7 +1229,7 @@ properties JSON format: {"_instance_identities":[{"<primary-key>":"<value>"}],"p
           bodyStr = await finalizeObjectTypeCreateFromDataview({
             baseUrl: token.baseUrl,
             accessToken: token.accessToken,
-            dataviewId: opts.dataviewId,
+            resourceId: opts.resourceId,
             entry: opts.entry,
             businessDomain: opts.businessDomain,
           });
@@ -1372,7 +1372,7 @@ JSON: {"_instance_identities":[{"<primary-key>":"<value>"}],"properties":["prop1
     return 1;
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn object-type create <kn-id> --name X --dataview-id Y --primary-key Z --display-key W [--property '<json>' ...]
+      console.log(`kweaver bkn object-type create <kn-id> --name X --resource-id Y --primary-key Z --display-key W [--property '<json>' ...]
 kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property|--update-property '<json>' ...] [--remove-property N ...] [--tags '["a"]'] [--comment S] [--icon I] [--color C] [--branch main]
   kweaver bkn object-type update <kn-id> <ot-id> '<full-json-body>'
 kweaver bkn object-type delete <kn-id> <ot-ids> [-y]`);

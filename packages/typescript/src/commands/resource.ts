@@ -1,40 +1,15 @@
 import { createInterface } from "node:readline";
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
 import {
-  deleteDataView,
-  findDataView,
-  getDataView,
-  listDataViews,
-  queryDataView,
-} from "../api/dataviews.js";
+  RESOURCE_LIST_DEFAULT_LIMIT,
+  deleteResource,
+  findResource,
+  getResource,
+  listResources,
+  queryResource,
+} from "../api/resources.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
-
-/**
- * Strip SQL line/block comments and leading whitespace, then return the first identifier token (lowercase).
- * Used to reject DDL/DML passed to dataview query (server applies LIMIT semantics).
- */
-export function getFirstSqlTokenAfterComments(sql: string): string {
-  let s = sql.replace(/\/\*[\s\S]*?\*\//g, " ");
-  const lines = s.split("\n").map((line) => {
-    const idx = line.indexOf("--");
-    return idx >= 0 ? line.slice(0, idx) : line;
-  });
-  s = lines.join("\n");
-  s = s.replace(/\s+/g, " ").trim();
-  if (!s) return "";
-  const match = /^([a-zA-Z_][a-zA-Z0-9_]*|"(?:[^"]|"")*")/.exec(s);
-  if (!match) return "";
-  const tok = match[1];
-  if (tok.startsWith('"')) return tok.slice(1, -1).replace(/""/g, '"').toLowerCase();
-  return tok.toLowerCase();
-}
-
-/** True if ad-hoc SQL is safe for dataview query (SELECT / WITH only). */
-export function isDataviewSelectLikeSql(sql: string): boolean {
-  const kw = getFirstSqlTokenAfterComments(sql);
-  return kw === "select" || kw === "with";
-}
 
 function confirmYes(prompt: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -47,31 +22,31 @@ function confirmYes(prompt: string): Promise<boolean> {
   });
 }
 
-export async function runDataviewCommand(args: string[]): Promise<number> {
+export async function runResourceCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(`kweaver dataview
+    console.log(`kweaver resource
 
 Subcommands:
-  list   [--datasource-id <id>] [--type <atomic|custom>] [--limit <n>] [-bd value] [--pretty]
+  list   [--datasource-id <id>] [--type <table|logicview>] [--limit <n>] [-bd value] [--pretty]
   find   --name <name> [--exact] [--datasource-id <id>] [--wait] [--no-wait] [--timeout <ms>] [-bd value] [--pretty]
   get    <id> [-bd value] [--pretty]
-  query  <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]
+  query  <id> [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]
   delete <id> [-y] [-bd value]
 
-  list  — list all data views (no keyword search)
-  find  — search by name; default fuzzy, --exact for strict match, --wait to poll
-  query — run SQL query against a data view (mdl-uniquery); omit --sql to use view default SQL; only SELECT/WITH unless --raw-sql`);
+  list   — list resources under a catalog/datasource (default limit: 30)
+  find   — search by name; default fuzzy, --exact for strict match, --wait to poll
+  query  — fetch data rows from a vega-backend resource`);
     return 0;
   }
 
   const dispatch = (): Promise<number> => {
-    if (subcommand === "list") return runDataviewListCommand(rest);
-    if (subcommand === "find") return runDataviewFindCommand(rest);
-    if (subcommand === "get") return runDataviewGetCommand(rest);
-    if (subcommand === "query") return runDataviewQueryCommand(rest);
-    if (subcommand === "delete") return runDataviewDeleteCommand(rest);
+    if (subcommand === "list") return runResourceListCommand(rest);
+    if (subcommand === "find") return runResourceFindCommand(rest);
+    if (subcommand === "get") return runResourceGetCommand(rest);
+    if (subcommand === "query") return runResourceQueryCommand(rest);
+    if (subcommand === "delete") return runResourceDeleteCommand(rest);
     return Promise.resolve(-1);
   };
 
@@ -79,7 +54,7 @@ Subcommands:
     return await with401RefreshRetry(async () => {
       const code = await dispatch();
       if (code === -1) {
-        console.error(`Unknown dataview subcommand: ${subcommand}`);
+        console.error(`Unknown resource subcommand: ${subcommand}`);
         return 1;
       }
       return code;
@@ -90,7 +65,7 @@ Subcommands:
   }
 }
 
-function parseDataviewCommonArgs(args: string[]): {
+function parseResourceCommonArgs(args: string[]): {
   businessDomain: string;
   pretty: boolean;
 } {
@@ -111,11 +86,11 @@ function parseDataviewCommonArgs(args: string[]): {
   return { businessDomain, pretty };
 }
 
-async function runDataviewListCommand(args: string[]): Promise<number> {
+async function runResourceListCommand(args: string[]): Promise<number> {
   let datasourceId: string | undefined;
   let type: string | undefined;
-  let limit: number | undefined;
-  const { businessDomain, pretty } = parseDataviewCommonArgs(args);
+  let limit = RESOURCE_LIST_DEFAULT_LIMIT;
+  const { businessDomain, pretty } = parseResourceCommonArgs(args);
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -131,25 +106,25 @@ async function runDataviewListCommand(args: string[]): Promise<number> {
   }
 
   const token = await ensureValidToken();
-  const views = await listDataViews({
+  const views = await listResources({
     baseUrl: token.baseUrl,
     accessToken: token.accessToken,
     businessDomain,
     datasourceId,
-    type,
+    category: type,
     limit,
   });
   console.log(formatCallOutput(JSON.stringify(views), pretty));
   return 0;
 }
 
-async function runDataviewFindCommand(args: string[]): Promise<number> {
+async function runResourceFindCommand(args: string[]): Promise<number> {
   let datasourceId: string | undefined;
   let name: string | undefined;
   let exact = false;
   let wait = false;
   let timeoutMs = 30_000;
-  const { businessDomain, pretty } = parseDataviewCommonArgs(args);
+  const { businessDomain, pretty } = parseResourceCommonArgs(args);
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -171,12 +146,12 @@ async function runDataviewFindCommand(args: string[]): Promise<number> {
   }
 
   if (!name) {
-    console.error("Usage: kweaver dataview find --name <name> [--exact] [--datasource-id <id>] [--wait] [--timeout <ms>] [-bd value] [--pretty]");
+    console.error("Usage: kweaver resource find --name <name> [--exact] [--datasource-id <id>] [--wait] [--timeout <ms>] [-bd value] [--pretty]");
     return 1;
   }
 
   const token = await ensureValidToken();
-  const views = await findDataView({
+  const views = await findResource({
     baseUrl: token.baseUrl,
     accessToken: token.accessToken,
     businessDomain,
@@ -190,8 +165,8 @@ async function runDataviewFindCommand(args: string[]): Promise<number> {
   return 0;
 }
 
-async function runDataviewGetCommand(args: string[]): Promise<number> {
-  const { businessDomain, pretty } = parseDataviewCommonArgs(args);
+async function runResourceGetCommand(args: string[]): Promise<number> {
+  const { businessDomain, pretty } = parseResourceCommonArgs(args);
   let id = "";
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -206,12 +181,12 @@ async function runDataviewGetCommand(args: string[]): Promise<number> {
     }
   }
   if (!id) {
-    console.error("Usage: kweaver dataview get <id> [-bd value] [--pretty]");
+    console.error("Usage: kweaver resource get <id> [-bd value] [--pretty]");
     return 1;
   }
 
   const token = await ensureValidToken();
-  const view = await getDataView({
+  const view = await getResource({
     baseUrl: token.baseUrl,
     accessToken: token.accessToken,
     businessDomain,
@@ -221,17 +196,15 @@ async function runDataviewGetCommand(args: string[]): Promise<number> {
   return 0;
 }
 
-async function runDataviewQueryCommand(args: string[]): Promise<number> {
-  const { businessDomain, pretty } = parseDataviewCommonArgs(args);
-  let sql: string | undefined;
+async function runResourceQueryCommand(args: string[]): Promise<number> {
+  const { businessDomain, pretty } = parseResourceCommonArgs(args);
   let limit = 50;
   let offset = 0;
   let needTotal = false;
-  let rawSql = false;
 
   if (args.length === 0 || args[0].startsWith("-")) {
     console.error(
-      "Usage: kweaver dataview query <id> [--sql <sql>] [--limit <n>] [--offset <n>] [--need-total] [--raw-sql] [-bd value] [--pretty]",
+      "Usage: kweaver resource query <id> [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]",
     );
     return 1;
   }
@@ -245,14 +218,6 @@ async function runDataviewQueryCommand(args: string[]): Promise<number> {
       continue;
     }
     if (arg === "--pretty") continue;
-    if (arg === "--raw-sql") {
-      rawSql = true;
-      continue;
-    }
-    if ((arg === "--sql" || arg === "-s") && tail[i + 1]) {
-      sql = tail[++i];
-      continue;
-    }
     if (arg === "--limit" && tail[i + 1]) {
       const n = Number.parseInt(tail[++i], 10);
       if (!Number.isNaN(n)) limit = n;
@@ -269,20 +234,12 @@ async function runDataviewQueryCommand(args: string[]): Promise<number> {
     }
   }
 
-  if (sql !== undefined && sql !== "" && !rawSql && !isDataviewSelectLikeSql(sql)) {
-    console.error(
-      "dataview query only supports SELECT statements (or WITH for CTEs). Use --raw-sql to send other SQL at your own risk.",
-    );
-    return 1;
-  }
-
   const token = await ensureValidToken();
-  const result = await queryDataView({
+  const result = await queryResource({
     baseUrl: token.baseUrl,
     accessToken: token.accessToken,
     businessDomain,
     id,
-    sql,
     offset,
     limit,
     needTotal,
@@ -291,7 +248,7 @@ async function runDataviewQueryCommand(args: string[]): Promise<number> {
   return 0;
 }
 
-async function runDataviewDeleteCommand(args: string[]): Promise<number> {
+async function runResourceDeleteCommand(args: string[]): Promise<number> {
   let id = "";
   let yes = false;
   let businessDomain = "";
@@ -305,7 +262,7 @@ async function runDataviewDeleteCommand(args: string[]): Promise<number> {
   }
   if (!businessDomain) businessDomain = resolveBusinessDomain();
   if (!id) {
-    console.error("Usage: kweaver dataview delete <id> [-y] [-bd value]");
+    console.error("Usage: kweaver resource delete <id> [-y] [-bd value]");
     return 1;
   }
 
@@ -318,7 +275,7 @@ async function runDataviewDeleteCommand(args: string[]): Promise<number> {
   }
 
   const token = await ensureValidToken();
-  await deleteDataView({
+  await deleteResource({
     baseUrl: token.baseUrl,
     accessToken: token.accessToken,
     businessDomain,

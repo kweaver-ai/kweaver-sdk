@@ -17,7 +17,7 @@ _PREFIX = "/api/ontology-manager/v1"
 
 
 class ObjectTypesResource:
-    """Object types for a KN: schema from dataviews, properties, index/rebuild hooks."""
+    """Object types for a KN: schema from resources, properties, index/rebuild hooks."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http
@@ -42,7 +42,7 @@ class ObjectTypesResource:
         entry: dict[str, Any] = {
             "name": name,
             "branch": "main",
-            "data_source": {"type": "data_view", "id": dataview_id},
+            "data_source": {"type": "resource", "id": dataview_id},
             "primary_keys": primary_keys,
             "display_key": display_key,
         }
@@ -53,13 +53,13 @@ class ObjectTypesResource:
         # using only pk+dk is insufficient — we need the full field list.
         if not entry.get("data_properties"):
             try:
-                from kweaver.resources.dataviews import DataViewsResource
-                dv_resource = DataViewsResource(self._http)
-                dv = dv_resource.get(dataview_id)
-                if dv.fields:
+                from kweaver.resources.resources import ResourcesResource
+                res_resource = ResourcesResource(self._http)
+                dv = res_resource.get(dataview_id)
+                if dv.schema_definition:
                     entry["data_properties"] = [
                         _auto_data_property(f.name, f.type, f.display_name)
-                        for f in dv.fields
+                        for f in dv.schema_definition
                     ]
             except Exception:
                 pass  # Fall back to minimal auto-generation below

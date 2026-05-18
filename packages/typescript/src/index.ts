@@ -242,28 +242,28 @@ export {
   installSkillArchive,
 } from "./api/skills.js";
 
-// ── Data views (mdl-data-model) ────────────────────────────────────────────────
+// ── Vega-backend Resources ─────────────────────────────────────────────────────
 export type {
   ViewField,
-  DataView,
-  CreateDataViewOptions,
-  GetDataViewOptions,
-  ListDataViewsOptions,
-  DeleteDataViewOptions,
-  FindDataViewOptions,
-  QueryDataViewOptions,
-  DataViewQueryResult,
-} from "./api/dataviews.js";
+  Resource,
+  CreateResourceOptions,
+  GetResourceOptions,
+  ListResourcesOptions,
+  DeleteResourceOptions,
+  FindResourceOptions,
+  QueryResourceOptions,
+  ResourceQueryResult,
+} from "./api/resources.js";
 export {
-  parseDataView,
-  createDataView,
-  getDataView,
-  listDataViews,
-  deleteDataView,
-  findDataView,
-  queryDataView,
-} from "./api/dataviews.js";
-export { DataViewsResource } from "./resources/dataviews.js";
+  parseResource,
+  createResource,
+  getResource,
+  listResources,
+  deleteResource,
+  findResource,
+  queryResource,
+} from "./api/resources.js";
+export { ResourcesResource } from "./resources/resources.js";
 
 // ── Model factory (mf-model-manager + mf-model-api) ─────────────────────────
 export type {

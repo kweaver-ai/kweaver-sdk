@@ -162,7 +162,7 @@ client = KWeaverClient(auth=ConfigAuth(), dry_run=True)
 | 对话 | `client.conversations` | `send_message`, `list_messages` |
 | Dataflow（旧生命周期接口） | `client.dataflows` | `create`, `run`, `poll`, `delete`, `execute` |
 | Dataflow v2 | `client.dataflow_v2` | `list_dataflows`, `run_dataflow_with_file`, `run_dataflow_with_remote_url`, `list_dataflow_runs`, `get_dataflow_logs_page` |
-| 数据视图（mdl-data-model） | `client.dataviews` | `create`, `list`, `get`, `delete`, `find_by_table`, `query`（mdl-uniquery SQL） |
+| Resources（vega-backend） | `client.resources` | `create`, `list`, `get`, `delete`, `find_by_table`, `query` |
 | Skill | `client.skills` | `list`, `market`, `get`, `register_content`, `register_zip`, `update_status`, `content`, `read_file`, `download`, `install` |
 | 模型工厂（mf-model-manager / mf-model-api） | `client.models` | `llm` / `small`: `list`, `get`, `add`, `edit`, `delete`, `test`；`invocation`: `chat`, `embedding`, `embeddings`, `rerank` |
 

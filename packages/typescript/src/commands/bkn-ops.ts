@@ -18,7 +18,7 @@ import {
   getBuildStatus,
 } from "../api/knowledge-networks.js";
 import { listTablesWithColumns, scanDatasourceMetadata } from "../api/vega.js";
-import { createDataView, findDataView } from "../api/dataviews.js";
+import { createResource, findResource } from "../api/resources.js";
 import { resolveFiles } from "./ds.js";
 import { buildTableName } from "./import-csv.js";
 import {
@@ -818,12 +818,12 @@ export async function runKnCreateFromDsCommand(
       );
     }
 
-    // Phase 1: Create DataViews for each table. findDataView is idempotent;
+    // Phase 1: Create vega-backend Resources for each table. findResource is idempotent;
     // not tracked for rollback so a retry can reuse what's already there.
-    console.error(`Creating data views for ${targetTables.length} table(s) ...`);
+    console.error(`Creating resources for ${targetTables.length} table(s) ...`);
     const viewMap: Record<string, string> = {};
     for (const t of targetTables) {
-      const found = await findDataView({
+      const found = await findResource({
         ...base,
         name: t.name,
         datasourceId: options.dsId,
@@ -832,7 +832,7 @@ export async function runKnCreateFromDsCommand(
       });
       const dvId =
         found[0]?.id ??
-        (await createDataView({
+        (await createResource({
           ...base,
           name: t.name,
           datasourceId: options.dsId,
@@ -872,7 +872,7 @@ export async function runKnCreateFromDsCommand(
         return {
           branch: "main",
           name: t.name,
-          data_source: { type: "data_view", id: viewMap[t.name] },
+          data_source: { type: "resource", id: viewMap[t.name] },
           primary_keys: [pk],
           display_key: dk,
           data_properties: t.columns.map((c) => ({

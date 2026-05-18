@@ -163,10 +163,10 @@ const graph     = await client.bkn.querySubgraph("bkn-id", { /* path spec */ });
 await client.bkn.executeAction("bkn-id", "at-id", { /* params */ });
 const logs      = await client.bkn.listActionLogs("bkn-id");
 
-// Data sources & data views
+// Data sources & vega-backend resources
 const dsList = await client.datasources.list();
 const tables = await client.datasources.listTables("ds-id");
-const viewId = await client.dataviews.create({ name: "v", datasourceId: "ds-id", table: "orders" });
+const resId  = await client.resources.create({ name: "v", datasourceId: "ds-id", table: "orders" });
 
 // Dataflow automation (CSV import pipeline, etc.)
 const result = await client.dataflows.execute({
@@ -273,7 +273,7 @@ kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 
 kweaver dataflow templates/create-dataset/create-bkn/create/list/run/runs/logs
 kweaver model llm list/get/add/edit/delete/test/chat/--template
 kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
-kweaver dataview|dv list/find/get/query/delete
+kweaver resource|res list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn build [--wait] [--timeout 300]
 kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
@@ -314,7 +314,7 @@ The two CLIs use different top-level command names for some features. The table 
 | `kweaver query kn-search <kn_id> <query>` (REST, deprecated for schema discovery) | `kweaver context-loader search-schema <kn-id> <query>` for MCP `search_schema`; `kweaver context-loader kn-search <kn-id> <query>` is deprecated compatibility only |
 | `kweaver action query …` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
 
-**Only on TypeScript CLI:** `kweaver vega`, `kweaver dataview list|find|get|delete`, `kweaver ds import-csv`, `kweaver bkn create-from-csv`, and full `kweaver agent` create/update/delete/publish (see `kweaver agent --help`). Both CLIs support `kweaver config show|list-bd|set-bd` and `kweaver dataview query` (SQL via mdl-uniquery; Python requires `pip install kweaver-sdk[cli]`).
+**Only on TypeScript CLI:** `kweaver vega`, `kweaver resource list|find|get|query|delete`, `kweaver ds import-csv`, `kweaver bkn create-from-csv`, and full `kweaver agent` create/update/delete/publish (see `kweaver agent --help`). Both CLIs support `kweaver config show|list-bd|set-bd` and `kweaver resource query` (Python requires `pip install kweaver-sdk[cli]`).
 
 ## Repository Structure (Monorepo)
 

@@ -192,7 +192,6 @@ kweaver vega sql -d '{
 | 结构化查询 | `vega query execute` | 单 Catalog 内表/JOIN、统一 filter DSL、offset 分页 |
 | 直连 SQL | `vega sql` | 复杂 SQL、聚合、或 `{{.<资源ID>}}` / `{{<资源ID>}}` 占位符 |
 | 资源数据 API | `vega resource query <id> -d {...}` | 按单个 resource 拉数（filter、sort、search_after） |
-| Dataview + `--sql` | `dataview query ... --sql` | 走 **mdl-uniquery + Trino**，需 Etrino / coordinator |
 
 ## Connector Type
 

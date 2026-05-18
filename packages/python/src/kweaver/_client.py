@@ -17,7 +17,7 @@ from kweaver.resources.conversations import ConversationsResource
 from kweaver.resources.dataflows import DataflowsResource
 from kweaver.resources.dataflow_v2 import DataflowV2Resource
 from kweaver.resources.datasources import DataSourcesResource
-from kweaver.resources.dataviews import DataViewsResource
+from kweaver.resources.resources import ResourcesResource
 from kweaver.resources.knowledge_networks import KnowledgeNetworksResource
 from kweaver.resources.object_types import ObjectTypesResource
 from kweaver.resources.action_types import ActionTypesResource
@@ -48,9 +48,9 @@ class KWeaverClient:
         dataflows: Automation service DAG APIs (create/run/poll/delete).
         dataflow_v2: Document-style dataflow (v2) workflows.
         datasources: Data-connection data sources (CRUD, probe, tables).
-        dataviews: MDL data views / atomic views over datasources.
+        resources: Vega-backend resources (table/logicview under a catalog/datasource).
         knowledge_networks: Knowledge networks (KN/BKN) lifecycle and build jobs.
-        object_types: Object type schema bound to dataviews (ontology-manager).
+        object_types: Object type schema bound to resources (ontology-manager).
         relation_types: Relation types between object types (ontology-manager).
         query: Semantic search, KN search, object queries, subgraph APIs.
         agents: Decision agents (agent-factory): list, CRUD, publish.
@@ -69,7 +69,7 @@ class KWeaverClient:
     dataflows: DataflowsResource
     dataflow_v2: DataflowV2Resource
     datasources: DataSourcesResource
-    dataviews: DataViewsResource
+    resources: ResourcesResource
     knowledge_networks: KnowledgeNetworksResource
     object_types: ObjectTypesResource
     relation_types: RelationTypesResource
@@ -158,10 +158,10 @@ class KWeaverClient:
         #: Data-connection data sources (CRUD, probe, tables).
         self.datasources = DataSourcesResource(self._http)
         #: MDL data views / atomic views over datasources.
-        self.dataviews = DataViewsResource(self._http)
+        self.resources = ResourcesResource(self._http)
         #: Knowledge networks (KN/BKN) lifecycle and build jobs.
         self.knowledge_networks = KnowledgeNetworksResource(self._http)
-        #: Object type schema bound to dataviews (ontology-manager).
+        #: Object type schema bound to resources (ontology-manager).
         self.object_types = ObjectTypesResource(self._http)
         #: Relation types between object types (ontology-manager).
         self.relation_types = RelationTypesResource(self._http)

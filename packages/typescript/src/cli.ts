@@ -9,7 +9,7 @@ import { runContextLoaderCommand } from "./commands/context-loader.js";
 import { runDataflowCommand } from "./commands/dataflow.js";
 import { runDsCommand } from "./commands/ds.js";
 import { runExploreCommand } from "./commands/explore.js";
-import { runDataviewCommand } from "./commands/dataview.js";
+import { runResourceCommand } from "./commands/resource.js";
 import { runModelCommand } from "./commands/model.js";
 import { runSkillCommand } from "./commands/skill.js";
 import { runTokenCommand } from "./commands/token.js";
@@ -77,11 +77,11 @@ Usage:
   kweaver model small list|get|add|edit|delete|test|embeddings|rerank|--template ...
   kweaver model --help
 
-  kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value]
-  kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value]
-  kweaver dataview get <id> [-bd value]
-  kweaver dataview query <id> [--sql sql] [--limit n] [--offset n] [--need-total] [--raw-sql] [-bd value]
-  kweaver dataview delete <id> [-y] [-bd value]
+  kweaver resource list [--datasource-id id] [--type table|logicview] [--limit n] [-bd value]
+  kweaver resource find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value]
+  kweaver resource get <id> [-bd value]
+  kweaver resource query <id> [--limit n] [--offset n] [--need-total] [-bd value]
+  kweaver resource delete <id> [-y] [-bd value]
 
   kweaver bkn list [options]
   kweaver bkn get <kn-id> [options]
@@ -176,7 +176,7 @@ Commands:
   ds             Manage datasources (list, get, delete, tables, connect)
   dataflow       Dataflow document workflows (list, run, runs, logs)
   model          Model factory: LLM/small-model CRUD (manager) and llm chat (OpenAI-compatible API)
-  dataview|dv    List, find, get, query (SQL), delete data views (atomic / custom)
+  resource|res   List, find, get, query, delete vega-backend resources (table / logicview)
   bkn            Knowledge network (CRUD, build, validate, export, stats, push/pull,
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
@@ -276,8 +276,8 @@ export async function run(argv: string[]): Promise<number> {
     return runModelCommand(rest);
   }
 
-  if (command === "dataview" || command === "dv") {
-    return runDataviewCommand(rest);
+  if (command === "resource" || command === "res") {
+    return runResourceCommand(rest);
   }
 
   if (command === "token") {

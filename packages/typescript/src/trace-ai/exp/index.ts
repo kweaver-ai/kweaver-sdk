@@ -4,7 +4,6 @@ import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { ExpStore } from "./exp-store/index.js";
 import { ExperimentCoordinator } from "./coordinator.js";
-import { ClaudeCodeSynthesizer } from "./providers/synthesizer-client.js";
 import { ClaudeCodeTriageClient } from "./providers/triage-client.js";
 import { runEval } from "./eval-runner.js";
 import { defaultRegistry } from "../../agent-providers/registry.js";
@@ -281,7 +280,6 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
 
   return new ExperimentCoordinator({
     expDir,
-    synthesizer: new ClaudeCodeSynthesizer(),
     triage: new ClaudeCodeTriageClient(),
     contextAssembler,
     knClient: knApiClient,

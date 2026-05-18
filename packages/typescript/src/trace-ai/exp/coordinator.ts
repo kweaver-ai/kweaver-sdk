@@ -11,15 +11,13 @@ import { writeBundles } from "./bundle-writer.js";
 import { ContextAssembler } from "./context/context-assembler.js";
 import { analyzeFailures } from "./context/failure-analyzer.js";
 import type { TriageClient, TriageResult } from "./providers/triage-client.js";
-import type { SynthesizerClient } from "./providers/synthesizer-client.js";
-import type { ExpFsmState, Mission, NextChange, PatchTarget, QueryResult, SkillBinding } from "./schemas.js";
+import type { ExpFsmState, KnContext, Mission, QueryResult, SkillBinding, SkillContext } from "./schemas.js";
 import type { TraceSpan } from "../../api/conversations.js";
 
-export type { SynthesizerClient, TriageClient, TriageResult };
+export type { TriageClient, TriageResult };
 
 export interface CoordinatorOpts {
   expDir: string;
-  synthesizer: SynthesizerClient;
   triage: TriageClient;
   runEval: (opts: { evalSetPaths: string[]; candidatePath: string; expDir: string; round: number }) => Promise<{ queryResults: QueryResult[] }>;
   experimentId?: string;
@@ -261,7 +259,7 @@ export class ExperimentCoordinator {
 
     if (await this.checkAbort(round)) return;
 
-    // === Triaging ===
+    // === Triaging (merged: diagnose + propose in one LLM call) ===
     await this.store.appendEvent({ type: "state_transition", from: "Scoring", to: "Triaging", round });
     const currentRoundData = (await this.store.readAllRounds()).find(r => r.round === round) ?? { round, trial_version: round };
     const prevMemory = prevRounds.at(-1)?.triage_conclusion?.cross_round_memory_ref;
@@ -271,6 +269,30 @@ export class ExperimentCoordinator {
       this.opts.fetchTrace,
     );
 
+    // Pre-fetch all available context so the merged planner LLM can see KN schema
+    // + bound skill content + data probes before deciding both verdict AND next_change.
+    // We call assemble() twice (kn target + skill target) since each path fetches
+    // distinct artifacts; total cost dominated by the LLM call that follows.
+    const knId = (patched["kn"] as Record<string, unknown> | undefined)?.["id"] as string | undefined;
+    const boundSkills = ((patched["agent"] as Record<string, unknown> | undefined)?.["skills"] as SkillBinding[] | undefined) ?? [];
+    let kn_context: KnContext | undefined;
+    let skill_context: SkillContext | undefined;
+    if (this.opts.contextAssembler) {
+      const assembler = this.opts.contextAssembler;
+      const empty: { kn_context?: KnContext; skill_context?: SkillContext } = {};
+      const [knRes, skillRes] = await Promise.all([
+        knId
+          ? assembler.assemble("kn.object_type", knId, boundSkills, failureAnalysis)
+          : Promise.resolve(empty),
+        boundSkills.length > 0
+          ? assembler.assemble("skill.content", knId, boundSkills, failureAnalysis)
+          : Promise.resolve(empty),
+      ]);
+      kn_context = knRes.kn_context;
+      skill_context = skillRes.skill_context;
+    }
+
+    const updatedMission = await this.store.readMission();
     let triageResult: TriageResult;
     try {
       triageResult = await this.withRetry(
@@ -280,6 +302,9 @@ export class ExperimentCoordinator {
           candidateConfig: patched,
           crossRoundMemoryRef: prevMemory,
           failureAnalysis,
+          mission: updatedMission,
+          kn_context,
+          skill_context,
         }),
         "Triaging"
       );
@@ -288,7 +313,7 @@ export class ExperimentCoordinator {
     }
 
     // Persist triage_conclusion. Only "continue"/"publish" are valid in the typed schema;
-    // "abort" is a runtime verdict that maps to "publish" for storage but follows the Aborted branch below.
+    // "abort" is a runtime verdict mapped to "publish" for storage but routed to Aborted below.
     const storedVerdict: "continue" | "publish" = triageResult.verdict === "continue" ? "continue" : "publish";
     await this.store.writeRound(round, {
       triage_conclusion: {
@@ -316,35 +341,19 @@ export class ExperimentCoordinator {
       return;
     }
 
-    // Generate next suggestion if continuing.
+    // Continue: triageResult.next_change was produced in the same LLM call; write it as suggestion.
     if (triageResult.verdict === "continue" && round < maxRounds) {
-      const suggestedTarget: PatchTarget =
-        (triageResult.failure_attribution?.[0]?.suggested_target as PatchTarget | undefined) ?? "agent.system_prompt";
-      const knId = (patched["kn"] as Record<string, unknown> | undefined)?.["id"] as string | undefined;
-      const boundSkills = ((patched["agent"] as Record<string, unknown> | undefined)?.["skills"] as SkillBinding[] | undefined) ?? [];
-      const { kn_context, skill_context } = this.opts.contextAssembler
-        ? await this.opts.contextAssembler.assemble(suggestedTarget, knId, boundSkills, failureAnalysis)
-        : {};
-
-      const updatedMission = await this.store.readMission();
-      try {
-        const suggestion = await this.withRetry(
-          () => this.opts.synthesizer.generate({
-            mission: updatedMission,
-            candidateConfig: patched,
-            prevRound: currentRoundData,
-            prevRounds,
-            crossRoundMemoryRef: triageResult.new_memory_token,
-            failure_attribution: triageResult.failure_attribution,
-            kn_context,
-            skill_context,
-          }),
-          "Triaging"
-        );
-        await this.store.writeSuggestedChange(suggestion);
-      } catch {
+      if (!triageResult.next_change) {
+        // Parser already enforces presence when verdict=continue, but guard belt-and-braces.
+        await this.store.appendEvent({
+          type: "step_failed",
+          state: "Triaging",
+          error: "verdict=continue but next_change missing in triage output",
+          retryable: true,
+        });
         return;
       }
+      await this.store.writeSuggestedChange(triageResult.next_change);
     }
 
     // === Deciding ===

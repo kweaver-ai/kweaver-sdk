@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { ExperimentCoordinator } from "../src/trace-ai/exp/coordinator.js";
-import type { SynthesizerClient, TriageClient } from "../src/trace-ai/exp/coordinator.js";
-import type { NextChange, RoundData } from "../src/trace-ai/exp/schemas.js";
+import type { TriageClient } from "../src/trace-ai/exp/coordinator.js";
+import type { TriageResult } from "../src/trace-ai/exp/providers/triage-client.js";
 
 const MISSION_CONTENT = `---
 schema_version: trace-mission/v1
@@ -38,15 +38,17 @@ async function makeExpDir(): Promise<string> {
   return dir;
 }
 
-const mockSynthesizer: SynthesizerClient = {
-  async generate(): Promise<NextChange> {
-    return { target: "agent.system_prompt", hypothesis: "mock", patch: '{"agent":{"system_prompt":"mock prompt"}}' };
-  },
-};
-
 const mockTriage: TriageClient = {
-  async triage(): Promise<RoundData["triage_conclusion"] & { new_memory_token: string }> {
-    return { diagnoses: [], hints: [], verdict: "continue", cross_round_memory_ref: "mem1", new_memory_token: "mem1" };
+  async triage(): Promise<TriageResult> {
+    return {
+      verdict: "continue",
+      summary: "mock",
+      failure_attribution: [],
+      diagnoses: [],
+      hints: [],
+      new_memory_token: "mem1",
+      next_change: { target: "agent.system_prompt", hypothesis: "mock", patch: '{"agent":{"system_prompt":"mock prompt"}}' },
+    };
   },
 };
 
@@ -56,7 +58,6 @@ test("coordinator: run transitions to Deciding after round 1", async () => {
   const dir = await makeExpDir();
   const coord = new ExperimentCoordinator({
     expDir: dir,
-    synthesizer: mockSynthesizer,
     triage: mockTriage,
     runEval: mockEvalRunner,
   });
@@ -73,7 +74,6 @@ test("coordinator: abort signal stops run", async () => {
   const dir = await makeExpDir();
   const coord = new ExperimentCoordinator({
     expDir: dir,
-    synthesizer: mockSynthesizer,
     triage: { async triage() { throw new Error("should not reach triage"); } },
     runEval: async () => {
       // Write abort signal mid-execution
@@ -102,7 +102,6 @@ test("coordinator: Layer 2 auto-recovery — stuck Executing gets step_failed an
   let runEvalCalls = 0;
   const coord = new ExperimentCoordinator({
     expDir: dir,
-    synthesizer: mockSynthesizer,
     triage: mockTriage,
     runEval: async () => { runEvalCalls++; return { queryResults: [] }; },
   });
@@ -134,7 +133,6 @@ test("coordinator: Layer 2 — does NOT inject step_failed when one already exis
 
   const coord = new ExperimentCoordinator({
     expDir: dir,
-    synthesizer: mockSynthesizer,
     triage: mockTriage,
     runEval: mockEvalRunner,
   });
@@ -154,7 +152,7 @@ test("coordinator: Layer 2 — terminal state refuses run (Aborted no longer spe
     JSON.stringify({ ts: "2026-05-18T01:00:00.000Z", type: "aborted", round: 1, reason: "user" }) + "\n"
   );
   const coord = new ExperimentCoordinator({
-    expDir: dir, synthesizer: mockSynthesizer, triage: mockTriage, runEval: mockEvalRunner,
+    expDir: dir, triage: mockTriage, runEval: mockEvalRunner,
   });
   await assert.rejects(() => coord.run(), /terminal state Aborted.*--new-run/);
 });
@@ -165,7 +163,7 @@ test("coordinator: Layer 1 — installs and uninstalls signal handlers across ru
   const before = Object.fromEntries(sigs.map(s => [s, process.listenerCount(s)]));
 
   const coord = new ExperimentCoordinator({
-    expDir: dir, synthesizer: mockSynthesizer, triage: mockTriage, runEval: mockEvalRunner,
+    expDir: dir, triage: mockTriage, runEval: mockEvalRunner,
   });
   await coord.run();
 

@@ -1,92 +1,10 @@
 // src/trace-ai/exp/providers/synthesizer-client.ts
-import yaml from "js-yaml";
-import { defaultRegistry } from "../../../agent-providers/registry.js";
-import { NextChangeSchema } from "../schemas.js";
-import type { Mission, NextChange, RoundData, KnContext, SkillContext, FailureAttribution } from "../schemas.js";
-
-export interface SynthesizerInput {
-  mission: Mission;
-  candidateConfig: Record<string, unknown>;
-  prevRound?: RoundData;
-  prevRounds: RoundData[];
-  crossRoundMemoryRef?: string;
-  failure_attribution?: FailureAttribution[];
-  kn_context?: KnContext;
-  skill_context?: SkillContext;
-}
-
-export interface SynthesizerClient {
-  generate(input: SynthesizerInput): Promise<NextChange>;
-}
-
-export function buildSynthesizerPrompt(input: SynthesizerInput): string {
-  const prevSummary = input.prevRounds.map(r =>
-    `Round ${r.round}: outcome=${r.scores?.outcome.toFixed(2) ?? "?"}, hints=${r.triage_conclusion?.hints.join("; ") ?? "none"}`
-  ).join("\n");
-
-  let contextSection = "";
-  if (input.kn_context) contextSection += "\n\n" + buildKnContextPrompt(input.kn_context);
-  if (input.skill_context) contextSection += "\n\n" + buildSkillContextPrompt(input.skill_context);
-
-  const attributionHint = input.failure_attribution && input.failure_attribution.length > 0
-    ? `\nFAILURE ATTRIBUTION:\n${input.failure_attribution.map(fa =>
-        `  layer=${fa.layer}, suggested_target=${fa.suggested_target}, evidence="${fa.evidence}", affected=${fa.affected_queries.join(", ")}`
-      ).join("\n")}`
-    : "";
-
-  return `You are an agent optimization assistant. Given an experiment goal and round results, suggest the next change to try.
-
-GOAL: ${input.mission.goal}
-
-CURRENT CANDIDATE CONFIG:
-${yaml.dump(input.candidateConfig, { lineWidth: 80 })}
-
-PREVIOUS ROUNDS:
-${prevSummary || "None (first round)"}
-
-${input.prevRound?.triage_conclusion ? `TRIAGE HINTS FROM LAST ROUND:\n${input.prevRound.triage_conclusion.hints.join("\n")}` : ""}
-
-${input.crossRoundMemoryRef ? `CROSS-ROUND CONTEXT: ${input.crossRoundMemoryRef}` : ""}
-${attributionHint}${contextSection}
-
-Respond with a JSON object with exactly these fields:
-- "target": one of "agent.system_prompt", "agent.skills", "kn.object_type", "kn.relation_type", "skill.content"
-- "hypothesis": brief explanation of why this change might help
-- "patch": shape depends on target — see examples below, follow exactly
-
-Use the suggested_target from failure_attribution[0] when available.
-
-OUTPUT EXAMPLES (pick the one matching your chosen target):
-
-# agent.system_prompt — patch is a JSON string (escaped) or object with {agent:{system_prompt}}
-{"target":"agent.system_prompt","hypothesis":"Add explicit stop condition","patch":"{\\"agent\\":{\\"system_prompt\\":\\"New prompt here\\"}}"}
-
-# agent.skills — patch is structured {unbind:[skill_id...], bind:[{id,version}...]}
-{"target":"agent.skills","hypothesis":"Swap retrieval skill to v2","patch":{"unbind":["retrieval-v1"],"bind":[{"id":"retrieval-v2","version":"v2"}]}}
-
-# kn.object_type — patch is {kn_id, add_object_types:[{concept_name, dataview_id, primary_keys, data_properties}], add_relation_types:[]}
-{"target":"kn.object_type","hypothesis":"Add vehicle_sales concept","patch":{"kn_id":"kn-x","add_object_types":[{"concept_name":"vehicle_sales","dataview_id":"dv-001","primary_keys":["vehicle_sales_id"],"data_properties":[{"name":"sales","type":"integer"},{"name":"month","type":"string"}]}],"add_relation_types":[]}}
-
-# kn.relation_type — patch is {kn_id, add_object_types:[], add_relation_types:[{concept_name, source_object_type, target_object_type, join_key}]}
-{"target":"kn.relation_type","hypothesis":"Link sales to vehicle","patch":{"kn_id":"kn-x","add_object_types":[],"add_relation_types":[{"concept_name":"sold_for","source_object_type":"vehicle_sales","target_object_type":"vehicle","join_key":"vehicle_id"}]}}
-
-# skill.content — patch is {skill_id, append_section}
-{"target":"skill.content","hypothesis":"Document sort_by usage","patch":{"skill_id":"query-sop","append_section":"## Sort_by usage\\nPass sort_by=[{field, order}] to query_object_instance for ordering."}}`;
-}
-
-export class ClaudeCodeSynthesizer implements SynthesizerClient {
-  async generate(input: SynthesizerInput): Promise<NextChange> {
-    const provider = defaultRegistry.resolve({ preferred: "claude-code" });
-    if (!provider) throw new Error("claude-code provider not available");
-
-    const response = await provider.invoke({
-      prompt: buildSynthesizerPrompt(input),
-      outputSchema: NextChangeSchema,
-      correlationId: `synthesizer-${Date.now()}`,
-    });
-    return response.output;
-  }
-}
+//
+// NOTE: The former ClaudeCodeSynthesizer + buildSynthesizerPrompt have been
+// merged into ClaudeCodeTriageClient (single LLM call per round). This file
+// now only hosts the two context sub-prompt builders, which TriageClient
+// imports when assembling its planner prompt.
+import type { KnContext, SkillContext } from "../schemas.js";
 
 export function buildKnContextPrompt(ctx: KnContext): string {
   const existingTypes = ctx.existing_schema.object_types
@@ -98,6 +16,11 @@ export function buildKnContextPrompt(ctx: KnContext): string {
   const dataviews = ctx.available_dataviews
     .map(dv => `  - id="${dv.id}" name="${dv.name}"\n    columns=[${dv.columns.map(c => `${c.name}(${c.type})`).join(", ")}]`)
     .join("\n");
+  const probes = ctx.data_probes && ctx.data_probes.length > 0
+    ? "\n## Data Probes (live record counts from KN)\n" + ctx.data_probes
+        .map(p => `  - ${p.concept_name} (data_view: ${p.data_view_id}) → ${p.total_records} records`)
+        .join("\n")
+    : "";
 
   return `
 ## Existing KN Schema (kn_id: ${ctx.kn_id})
@@ -107,7 +30,7 @@ Relation types:
 ${existingRelations}
 
 ## Available Vega Dataviews
-${dataviews}
+${dataviews}${probes}
 
 ## Instructions for generating the KN patch:
 1. Find the dataview whose name contains the missing concept_name as a suffix substring

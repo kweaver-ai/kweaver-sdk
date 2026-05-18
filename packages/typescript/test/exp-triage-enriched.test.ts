@@ -1,7 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { buildTriagePrompt } from "../src/trace-ai/exp/providers/triage-client.js";
-import type { RoundData, QueryFailureAnalysis } from "../src/trace-ai/exp/schemas.js";
+import type { RoundData, QueryFailureAnalysis, Mission, KnContext, SkillContext } from "../src/trace-ai/exp/schemas.js";
+
+const mission: Mission = {
+  schema_version: "trace-mission/v1",
+  goal: "reduce retries",
+  eval_sets: [{ path: "eval-sets/v1", role: "seed" }],
+  current_candidate: { path: "candidates/baseline.yaml" },
+};
 
 const round: RoundData = {
   round: 3,
@@ -25,17 +32,62 @@ const failureAnalysis: QueryFailureAnalysis[] = [
   },
 ];
 
-describe("buildTriagePrompt", () => {
+describe("buildTriagePrompt (merged planner)", () => {
   it("includes FAILURE ANALYSIS section when failureAnalysis provided", () => {
-    const prompt = buildTriagePrompt({ currentRound: round, prevRounds: [], candidateConfig: {}, failureAnalysis });
-    assert.ok(prompt.includes("FAILURE ANALYSIS"), "prompt should contain FAILURE ANALYSIS section");
-    assert.ok(prompt.includes("Q38"), "prompt should mention Q38");
-    assert.ok(prompt.includes("5816辆"), "prompt should include assertion reason excerpt");
-    assert.ok(prompt.includes("kn_search(vehicle_sales)"), "prompt should include tool call summary");
+    const prompt = buildTriagePrompt({ mission, currentRound: round, prevRounds: [], candidateConfig: {}, failureAnalysis });
+    assert.ok(prompt.includes("FAILURE ANALYSIS"));
+    assert.ok(prompt.includes("Q38"));
+    assert.ok(prompt.includes("5816辆"));
+    assert.ok(prompt.includes("kn_search(vehicle_sales)"));
   });
 
   it("falls back to FAILED QUERIES section when no failureAnalysis", () => {
-    const prompt = buildTriagePrompt({ currentRound: round, prevRounds: [], candidateConfig: {} });
-    assert.ok(prompt.includes("FAILED QUERIES"), "prompt should fall back to FAILED QUERIES");
+    const prompt = buildTriagePrompt({ mission, currentRound: round, prevRounds: [], candidateConfig: {} });
+    assert.ok(prompt.includes("FAILED QUERIES"));
+  });
+
+  it("asks LLM for every field the parser reads", () => {
+    const prompt = buildTriagePrompt({ mission, currentRound: round, prevRounds: [], candidateConfig: {} });
+    for (const field of ["verdict", "summary", "failure_attribution", "next_change", "hints", "new_memory_token"]) {
+      assert.match(prompt, new RegExp(`"${field}"`), `prompt must request field ${field}`);
+    }
+  });
+
+  it("includes mission goal and candidate config", () => {
+    const prompt = buildTriagePrompt({
+      mission, currentRound: round, prevRounds: [],
+      candidateConfig: { agent: { system_prompt: "the-old-prompt" } },
+    });
+    assert.match(prompt, /GOAL: reduce retries/);
+    assert.match(prompt, /the-old-prompt/);
+  });
+
+  it("renders kn_context with data_probes when provided", () => {
+    const knCtx: KnContext = {
+      kn_id: "kn-x",
+      existing_schema: { object_types: [{ concept_name: "vehicle", fields: [{ name: "id", type: "string" }] }], relation_types: [] },
+      available_dataviews: [{ id: "dv01", name: "ht_vehicle_sales", columns: [{ name: "sales", type: "int" }] }],
+      data_probes: [{ concept_name: "vehicle_sales", data_view_id: "dv01", total_records: 1453 }],
+    };
+    const prompt = buildTriagePrompt({ mission, currentRound: round, prevRounds: [], candidateConfig: {}, kn_context: knCtx });
+    assert.match(prompt, /Existing KN Schema/);
+    assert.match(prompt, /Data Probes/);
+    assert.match(prompt, /1453 records/);
+  });
+
+  it("renders skill_context when provided", () => {
+    const skillCtx: SkillContext = {
+      bound_skills: [{ id: "query-sop", version: "v1", content: "# Query SOP\nUse kn_search first." }],
+    };
+    const prompt = buildTriagePrompt({ mission, currentRound: round, prevRounds: [], candidateConfig: {}, skill_context: skillCtx });
+    assert.match(prompt, /Currently Bound Skills/);
+    assert.match(prompt, /query-sop/);
+  });
+
+  it("has output example for every NextChange target", () => {
+    const prompt = buildTriagePrompt({ mission, currentRound: round, prevRounds: [], candidateConfig: {} });
+    for (const t of ["agent.system_prompt", "agent.skills", "kn.object_type", "kn.relation_type", "skill.content"]) {
+      assert.match(prompt, new RegExp(`"target":"${t.replace(/\./g, "\\.")}"`), `missing example for ${t}`);
+    }
   });
 });

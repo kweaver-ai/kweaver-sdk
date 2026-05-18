@@ -571,7 +571,7 @@ export async function runKnPullCommand(args: string[]): Promise<number> {
 
 const KN_CREATE_FROM_DS_HELP = `kweaver bkn create-from-ds <vega-catalog-id> --name X [options]
 
-Create a knowledge network from a vega catalog datasource (dataviews + object types + optional build).
+Create a knowledge network from a vega catalog datasource (resources + object types + optional build).
 <vega-catalog-id> is a vega catalog id (use \`kweaver vega catalog list\` to find one;
 legacy data-connection datasource UUIDs are no longer accepted).
 
@@ -679,7 +679,7 @@ export function generateObjectTypeBkn(
   const safeId = sanitizeBknId(tableName);
   const header = `## ObjectType: ${safeId}\n\n**${tableName}**\n`;
 
-  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| data_view | ${dvId} | ${tableName} |\n`;
+  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| resource | ${dvId} | ${tableName} |\n`;
 
   const dpHeader = `### Data Properties\n\n| Property | Display Name | Type | Primary Key | Display Key |\n|----------|-------------|------|-------------|-------------|\n`;
   const dpRows = columns.map((c) => {

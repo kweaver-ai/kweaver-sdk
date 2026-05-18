@@ -83,7 +83,7 @@ class ObjectType(BaseModel):
     id: str
     name: str
     kn_id: str
-    dataview_id: str
+    resource_id: str
     primary_keys: list[str]
     display_key: str
     incremental_key: str | None = None

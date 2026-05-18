@@ -267,7 +267,7 @@ async function runResourceDeleteCommand(args: string[]): Promise<number> {
   }
 
   if (!yes) {
-    const confirmed = await confirmYes("Are you sure you want to delete this data view?");
+    const confirmed = await confirmYes("Are you sure you want to delete this resource?");
     if (!confirmed) {
       console.error("Aborted.");
       return 1;

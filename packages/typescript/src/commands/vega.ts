@@ -172,7 +172,12 @@ export async function runVegaCommand(args: string[]): Promise<number> {
 
 async function runVegaHealthCommand(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega health\n\nCheck Vega service health.");
+    console.log(
+      renderHelp({
+        tagline: "Check Vega service health.",
+        usage: "kweaver vega health [flags]",
+      }),
+    );
     return 0;
   }
 
@@ -193,7 +198,12 @@ async function runVegaHealthCommand(args: string[]): Promise<number> {
 
 async function runVegaStatsCommand(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega stats\n\nShow catalog statistics.");
+    console.log(
+      renderHelp({
+        tagline: "Show catalog statistics.",
+        usage: "kweaver vega stats [flags]",
+      }),
+    );
     return 0;
   }
 
@@ -226,7 +236,12 @@ async function runVegaStatsCommand(args: string[]): Promise<number> {
 
 async function runVegaInspectCommand(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega inspect\n\nHealth + catalog summary.");
+    console.log(
+      renderHelp({
+        tagline: "Health + catalog summary.",
+        usage: "kweaver vega inspect [flags]",
+      }),
+    );
     return 0;
   }
 
@@ -268,18 +283,28 @@ async function runVegaCatalogCommand(args: string[]): Promise<number> {
   const [sub, ...rest] = args;
 
   if (!sub || sub === "--help" || sub === "-h") {
-    console.log(`kweaver vega catalog
-
-Subcommands:
-  list [--status X] [--limit N] [--offset N]
-  get <id>
-  health <ids...> | --all
-  test-connection <id>
-  discover <id> [--wait]
-  resources <id> [--category X] [--limit N]
-  create --name <name> --connector-type <type> --connector-config <json> [--tags t1,t2] [--description X]
-  update <id> [--name X] [--connector-type X] [--tags X] [--description X] [--connector-config X]
-  delete <ids...> [-y]`);
+    console.log(
+      renderHelp({
+        tagline: "Manage Vega catalogs.",
+        usage: "kweaver vega catalog <subcommand> [flags]",
+        sections: [
+          {
+            title: "AVAILABLE COMMANDS",
+            items: [
+              { name: "list", desc: "List catalogs (filter by status, paginate)" },
+              { name: "get", desc: "Get catalog by id" },
+              { name: "health", desc: "Health-check one or more catalogs (or --all)" },
+              { name: "test-connection", desc: "Test catalog connectivity" },
+              { name: "discover", desc: "Trigger discovery for a catalog" },
+              { name: "resources", desc: "List resources within a catalog" },
+              { name: "create", desc: "Create a catalog (name + connector-type + config)" },
+              { name: "update", desc: "Update catalog fields" },
+              { name: "delete", desc: "Delete one or more catalogs (-y to skip confirm)" },
+            ],
+          },
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -303,14 +328,19 @@ Subcommands:
 
 async function runCatalogList(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega catalog list [options]
-
-Options:
-  --status <s>    Filter by status
-  --limit <n>     Max results (default: 30)
-  --offset <n>    Offset
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty         Pretty-print JSON (default)`);
+    console.log(
+      renderHelp({
+        tagline: "List Vega catalogs.",
+        usage: "kweaver vega catalog list [flags]",
+        flags: [
+          { name: "--status <s>", desc: "Filter by status" },
+          { name: "--limit <n>", desc: "Max results (default: 30)" },
+          { name: "--offset <n>", desc: "Offset" },
+          { name: "-bd, --biz-domain", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON (default)" },
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -354,7 +384,12 @@ Options:
 
 async function runCatalogGet(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega catalog get <id>");
+    console.log(
+      renderHelp({
+        tagline: "Get a Vega catalog by ID.",
+        usage: "kweaver vega catalog get <id> [flags]",
+      }),
+    );
     return 0;
   }
 
@@ -382,10 +417,20 @@ async function runCatalogGet(args: string[]): Promise<number> {
 
 async function runCatalogHealth(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega catalog health <ids...> | --all
-
-Options:
-  --all   Check health of all catalogs`);
+    console.log(
+      renderHelp({
+        tagline: "Check health of one or more Vega catalogs.",
+        usage: "kweaver vega catalog health <ids...> | --all",
+        flags: [
+          { name: "--all", desc: "Check health of all catalogs" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver vega catalog health c-123 c-456",
+          "kweaver vega catalog health --all",
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -427,7 +472,14 @@ Options:
 
 async function runCatalogTestConnection(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega catalog test-connection <id>");
+    console.log(
+      renderHelp({
+        tagline: "Test catalog connector connectivity.",
+        usage: "kweaver vega catalog test-connection <id>",
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver vega catalog test-connection c-123"],
+      }),
+    );
     return 0;
   }
 
@@ -455,10 +507,20 @@ async function runCatalogTestConnection(args: string[]): Promise<number> {
 
 async function runCatalogDiscover(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega catalog discover <id> [--wait]
-
-Options:
-  --wait   Wait for discovery to complete`);
+    console.log(
+      renderHelp({
+        tagline: "Trigger catalog resource discovery.",
+        usage: "kweaver vega catalog discover <id> [--wait]",
+        flags: [
+          { name: "--wait", desc: "Wait for discovery to complete" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver vega catalog discover c-123",
+          "kweaver vega catalog discover c-123 --wait",
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -488,11 +550,21 @@ Options:
 
 async function runCatalogResources(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega catalog resources <id> [options]
-
-Options:
-  --category <s>   Filter by category
-  --limit <n>      Max results (default: 30)`);
+    console.log(
+      renderHelp({
+        tagline: "List resources for a catalog.",
+        usage: "kweaver vega catalog resources <id> [flags]",
+        flags: [
+          { name: "--category <s>", desc: "Filter by category" },
+          { name: "--limit <n>", desc: "Max results (default: 30)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver vega catalog resources c-123",
+          "kweaver vega catalog resources c-123 --category table --limit 50",
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -541,14 +613,23 @@ Options:
 
 async function runCatalogCreate(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega catalog create [options]
-
-Options:
-  --name <s>              Catalog name (required)
-  --connector-type <s>    Connector type (required)
-  --connector-config <j>  Connector config JSON (required)
-  --tags <t1,t2>          Comma-separated tags
-  --description <s>       Description`);
+    console.log(
+      renderHelp({
+        tagline: "Create a Vega catalog.",
+        usage: "kweaver vega catalog create [flags]",
+        flags: [
+          { name: "--name <s>", desc: "Catalog name (required)" },
+          { name: "--connector-type <s>", desc: "Connector type (required)" },
+          { name: "--connector-config <j>", desc: "Connector config JSON (required)" },
+          { name: "--tags <t1,t2>", desc: "Comma-separated tags" },
+          { name: "--description <s>", desc: "Description" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver vega catalog create --name my-cat --connector-type mysql --connector-config '{\"host\":\"...\"}'",
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -613,14 +694,24 @@ Options:
 
 async function runCatalogUpdate(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega catalog update <id> [options]
-
-Options:
-  --name <s>              New name
-  --connector-type <t>    Connector type (e.g. mysql, opensearch)
-  --tags <t1,t2>          Comma-separated tags
-  --description <s>       Description
-  --connector-config <j>  Connector config JSON`);
+    console.log(
+      renderHelp({
+        tagline: "Update a Vega catalog.",
+        usage: "kweaver vega catalog update <id> [flags]",
+        flags: [
+          { name: "--name <s>", desc: "New name" },
+          { name: "--connector-type <t>", desc: "Connector type (e.g. mysql, opensearch)" },
+          { name: "--tags <t1,t2>", desc: "Comma-separated tags" },
+          { name: "--description <s>", desc: "Description" },
+          { name: "--connector-config <j>", desc: "Connector config JSON" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver vega catalog update c-123 --name new-name",
+          "kweaver vega catalog update c-123 --tags prod,critical",
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -690,10 +781,20 @@ Options:
 
 async function runCatalogDelete(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega catalog delete <ids...> [-y]
-
-Options:
-  -y, --yes   Skip confirmation`);
+    console.log(
+      renderHelp({
+        tagline: "Delete one or more Vega catalogs.",
+        usage: "kweaver vega catalog delete <ids...> [-y]",
+        flags: [
+          { name: "-y, --yes", desc: "Skip confirmation" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver vega catalog delete c-123",
+          "kweaver vega catalog delete c-123 c-456 -y",
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -743,16 +844,27 @@ async function runVegaResourceCommand(args: string[]): Promise<number> {
   const [sub, ...rest] = args;
 
   if (!sub || sub === "--help" || sub === "-h") {
-    console.log(`kweaver vega resource
-
-Subcommands:
-  list [--catalog-id X] [--category X] [--status X] [--limit N] [--offset N]
-  list-all [--limit N] [--offset N]
-  get <id>
-  query <id> -d <json-body>
-  create --catalog-id <cid> --name <name> --category <cat>
-  update <id> [--name X] [--status X] [--tags X] [-d json]
-  delete <ids...> [-y]`);
+    console.log(
+      renderHelp({
+        tagline: "Manage Vega resources.",
+        usage: "kweaver vega resource <subcommand> [flags]",
+        sections: [
+          {
+            title: "AVAILABLE COMMANDS",
+            items: [
+              { name: "list", desc: "List resources (filter by catalog / category / status)" },
+              { name: "list-all", desc: "List all resources across catalogs" },
+              { name: "get", desc: "Get resource by id" },
+              { name: "query", desc: "Query resource data (JSON body)" },
+              { name: "create", desc: "Create a resource (--catalog-id --name --category)" },
+              { name: "update", desc: "Update resource fields" },
+              { name: "delete", desc: "Delete one or more resources (-y to skip confirm)" },
+            ],
+          },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -774,16 +886,22 @@ Subcommands:
 
 async function runResourceList(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega resource list [options]
-
-Options:
-  --catalog-id <s>  Filter by catalog
-  --category <s>    Filter by category
-  --status <s>      Filter by status
-  --limit <n>       Max results (default: 30)
-  --offset <n>      Offset
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON (default)`);
+    console.log(
+      renderHelp({
+        tagline: "List Vega resources.",
+        usage: "kweaver vega resource list [flags]",
+        flags: [
+          { name: "--catalog-id <s>", desc: "Filter by catalog" },
+          { name: "--category <s>", desc: "Filter by category" },
+          { name: "--status <s>", desc: "Filter by status" },
+          { name: "--limit <n>", desc: "Max results (default: 30)" },
+          { name: "--offset <n>", desc: "Offset" },
+          { name: "-bd, --biz-domain", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -839,13 +957,19 @@ Options:
 
 async function runResourceListAll(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega resource list-all [options]
-
-Options:
-  --limit <n>       Max results (default: 30)
-  --offset <n>      Offset
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON (default)`);
+    console.log(
+      renderHelp({
+        tagline: "List all Vega resources.",
+        usage: "kweaver vega resource list-all [flags]",
+        flags: [
+          { name: "--limit <n>", desc: "Max results (default: 30)" },
+          { name: "--offset <n>", desc: "Offset" },
+          { name: "-bd, --biz-domain", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -883,7 +1007,13 @@ Options:
 
 async function runResourceGet(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega resource get <id>");
+    console.log(
+      renderHelp({
+        tagline: "Get a Vega resource by id.",
+        usage: "kweaver vega resource get <id> [flags]",
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -911,10 +1041,16 @@ async function runResourceGet(args: string[]): Promise<number> {
 
 async function runResourceQuery(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega resource query <id> -d <json-body>
-
-Options:
-  -d, --data <json>   Request body (JSON string)`);
+    console.log(
+      renderHelp({
+        tagline: "Query a Vega resource.",
+        usage: "kweaver vega resource query <id> -d <json-body> [flags]",
+        flags: [
+          { name: "-d, --data <json>", desc: "Request body (JSON string)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -957,15 +1093,21 @@ Options:
 
 async function runResourceCreate(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega resource create [options]
-
-Options:
-  --catalog-id <cid>          Catalog ID (required)
-  --name <name>               Resource name (required)
-  --category <cat>            Category (required)
-  --source-identifier <si>    Source identifier
-  --database <db>             Database name
-  -d, --data <json>           Additional fields as JSON`);
+    console.log(
+      renderHelp({
+        tagline: "Create a Vega resource.",
+        usage: "kweaver vega resource create [flags]",
+        flags: [
+          { name: "--catalog-id <cid>", desc: "Catalog ID (required)" },
+          { name: "--name <name>", desc: "Resource name (required)" },
+          { name: "--category <cat>", desc: "Category (required)" },
+          { name: "--source-identifier <si>", desc: "Source identifier" },
+          { name: "--database <db>", desc: "Database name" },
+          { name: "-d, --data <json>", desc: "Additional fields as JSON" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1014,13 +1156,19 @@ Options:
 
 async function runResourceUpdate(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega resource update <id> [options]
-
-Options:
-  --name <name>       Resource name
-  --status <s>        Status
-  --tags <t1,t2>      Comma-separated tags
-  -d, --data <json>   Additional fields as JSON`);
+    console.log(
+      renderHelp({
+        tagline: "Update a Vega resource.",
+        usage: "kweaver vega resource update <id> [flags]",
+        flags: [
+          { name: "--name <name>", desc: "Resource name" },
+          { name: "--status <s>", desc: "Status" },
+          { name: "--tags <t1,t2>", desc: "Comma-separated tags" },
+          { name: "-d, --data <json>", desc: "Additional fields as JSON" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1070,10 +1218,16 @@ Options:
 
 async function runResourceDelete(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega resource delete <ids...> [-y]
-
-Options:
-  -y, --yes   Skip confirmation prompt`);
+    console.log(
+      renderHelp({
+        tagline: "Delete Vega resources.",
+        usage: "kweaver vega resource delete <ids...> [flags]",
+        flags: [
+          { name: "-y, --yes", desc: "Skip confirmation prompt" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1116,15 +1270,26 @@ async function runVegaDatasetCommand(args: string[]): Promise<number> {
   const [sub, ...rest] = args;
 
   if (!sub || sub === "--help" || sub === "-h") {
-    console.log(`kweaver vega dataset
-
-Subcommands:
-  create-docs <resource-id> -d <json-array>
-  update-docs <resource-id> -d <json-array>
-  delete-docs <resource-id> <doc-ids...>
-  delete-docs-query <resource-id> -d <filter-json>
-  build <resource-id> [--mode full|incremental|realtime]
-  build-status <resource-id> <task-id>`);
+    console.log(
+      renderHelp({
+        tagline: "Manage Vega dataset documents and builds.",
+        usage: "kweaver vega dataset <subcommand> [flags]",
+        sections: [
+          {
+            title: "AVAILABLE COMMANDS",
+            items: [
+              { name: "create-docs", desc: "Create documents in a dataset resource" },
+              { name: "update-docs", desc: "Update documents (by id) in a dataset resource" },
+              { name: "delete-docs", desc: "Delete documents by id" },
+              { name: "delete-docs-query", desc: "Delete documents by filter query" },
+              { name: "build", desc: "Build a dataset (full / incremental / realtime)" },
+              { name: "build-status", desc: "Get build task status" },
+            ],
+          },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1145,10 +1310,16 @@ Subcommands:
 
 async function runDatasetCreateDocs(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega dataset create-docs <resource-id> -d <json-array>
-
-Options:
-  -d, --data <json>   Array of documents (JSON string)`);
+    console.log(
+      renderHelp({
+        tagline: "Create dataset documents.",
+        usage: "kweaver vega dataset create-docs <resource-id> -d <json-array>",
+        flags: [
+          { name: "-d, --data <json>", desc: "Array of documents (JSON string)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1186,10 +1357,16 @@ Options:
 
 async function runDatasetUpdateDocs(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega dataset update-docs <resource-id> -d <json-array>
-
-Options:
-  -d, --data <json>   Array of documents with ids (JSON string)`);
+    console.log(
+      renderHelp({
+        tagline: "Update dataset documents.",
+        usage: "kweaver vega dataset update-docs <resource-id> -d <json-array>",
+        flags: [
+          { name: "-d, --data <json>", desc: "Array of documents with ids (JSON string)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1227,11 +1404,22 @@ Options:
 
 async function runDatasetDeleteDocs(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega dataset delete-docs <resource-id> <doc-ids...>
-
-Positional args:
-  resource-id   The dataset resource ID
-  doc-ids       One or more document IDs (comma-joined)`);
+    console.log(
+      renderHelp({
+        tagline: "Delete dataset documents by id.",
+        usage: "kweaver vega dataset delete-docs <resource-id> <doc-ids...>",
+        sections: [
+          {
+            title: "Positional args",
+            items: [
+              { name: "resource-id", desc: "The dataset resource ID" },
+              { name: "doc-ids", desc: "One or more document IDs (comma-joined)" },
+            ],
+          },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1263,10 +1451,16 @@ Positional args:
 
 async function runDatasetDeleteDocsQuery(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega dataset delete-docs-query <resource-id> -d <filter-json>
-
-Options:
-  -d, --data <json>   Filter condition (JSON string)`);
+    console.log(
+      renderHelp({
+        tagline: "Delete dataset documents matching a filter.",
+        usage: "kweaver vega dataset delete-docs-query <resource-id> -d <filter-json>",
+        flags: [
+          { name: "-d, --data <json>", desc: "Filter condition (JSON string)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1304,10 +1498,16 @@ Options:
 
 async function runDatasetBuild(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega dataset build <resource-id> [options]
-
-Options:
-  --mode <mode>   Build mode: full, incremental, realtime (default: full)`);
+    console.log(
+      renderHelp({
+        tagline: "Build a Vega dataset.",
+        usage: "kweaver vega dataset build <resource-id> [options]",
+        flags: [
+          { name: "--mode <mode>", desc: "Build mode: full, incremental, realtime (default: full)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1345,7 +1545,13 @@ Options:
 
 async function runDatasetBuildStatus(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega dataset build-status <resource-id> <task-id>`);
+    console.log(
+      renderHelp({
+        tagline: "Get dataset build status.",
+        usage: "kweaver vega dataset build-status <resource-id> <task-id>",
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1379,10 +1585,21 @@ async function runVegaQueryCommand(args: string[]): Promise<number> {
   const [sub, ...rest] = args;
 
   if (!sub || sub === "--help" || sub === "-h") {
-    console.log(`kweaver vega query
-
-Subcommands:
-  execute -d <json>   Execute a query`);
+    console.log(
+      renderHelp({
+        tagline: "Execute structured Vega queries.",
+        usage: "kweaver vega query <subcommand> [flags]",
+        sections: [
+          {
+            title: "AVAILABLE COMMANDS",
+            items: [
+              { name: "execute", desc: "Execute a structured query (-d <json>)" },
+            ],
+          },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1398,10 +1615,16 @@ Subcommands:
 
 async function runQueryExecute(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega query execute -d <json>
-
-Options:
-  -d, --data <json>   Query body (tables, joins, output_fields, filter_condition, sort, limit, ...)`);
+    console.log(
+      renderHelp({
+        tagline: "Execute a Vega query.",
+        usage: "kweaver vega query execute -d <json>",
+        flags: [
+          { name: "-d, --data <json>", desc: "Query body (tables, joins, output_fields, filter_condition, sort, limit, ...)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1435,43 +1658,61 @@ Options:
 
 async function runVegaSql(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega sql --resource-type <type> --query "<sql-or-dsl>"
-kweaver vega sql -d <json>
-
-POST /api/vega-backend/v1/resources/query — execute SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL.
-
-Simple mode (no JSON escaping for query + type):
-  --resource-type <t>   Required with --query unless using -d
-  --query <string>      One shell argument: the full SQL (or DSL string). Always quote it.
-
-Advanced mode (full request body, optional fields):
-  -d, --data <json>     Raw JSON body. When present, this mode is used and any --query / --resource-type are ignored.
-
-Resource placeholders (how to reference Vega tables in SQL):
-  {{<resource_id>}}     Required token form: double braces around the Vega resource id (from vega resource list / get).
-  {{.<resource_id>}}    Alternate form with a dot after {{ ; same replacement and routing.
-
-  The backend swaps each placeholder for that resource's physical SourceIdentifier and picks the catalog connector.
-  Without at least one placeholder, queries often fail (e.g. connector config is incomplete) unless a default connector exists.
-
-  Shell (simple mode) — wrap the whole SQL so braces are not interpreted by the shell:
-    kweaver vega sql --resource-type mysql --query "SELECT * FROM {{abc123xyz}} LIMIT 5"
-
-  Shell (-d mode) — placeholders live inside the JSON string value; use single quotes around the JSON so inner double quotes work:
-    kweaver vega sql -d '{"resource_type":"mysql","query":"SELECT * FROM {{abc123xyz}} LIMIT 5"}'
-
-Body fields (JSON / simple mode mapping):
-  query          (required) SQL string or OpenSearch DSL object
-  resource_type  (required) e.g. mysql, mariadb, postgresql, opensearch (see vega connector-type list)
-  stream_size    optional batch size for streaming (100–10000, default 10000)
-  query_timeout  optional seconds (1–3600, default 60)
-  query_id       optional cursor session id
-
-Do not use --type; use --resource-type.
-
-Common flags:
-  -bd, --biz-domain <s>   Business domain (default: bd_public)
-  --pretty               Pretty-print JSON (default)`);
+    console.log(
+      renderHelp({
+        tagline: "POST /api/vega-backend/v1/resources/query — execute SQL (MySQL/MariaDB/PostgreSQL) or OpenSearch DSL.",
+        usage: [
+          "kweaver vega sql --resource-type <type> --query \"<sql-or-dsl>\"",
+          "kweaver vega sql -d <json>",
+        ].join("\n"),
+        sections: [
+          {
+            title: "Simple mode (no JSON escaping for query + type)",
+            items: [
+              { name: "--resource-type <t>", desc: "Required with --query unless using -d" },
+              { name: "--query <string>", desc: "One shell argument: the full SQL (or DSL string). Always quote it." },
+            ],
+          },
+          {
+            title: "Advanced mode (full request body, optional fields)",
+            items: [
+              { name: "-d, --data <json>", desc: "Raw JSON body. When present, this mode is used and any --query / --resource-type are ignored." },
+            ],
+          },
+          {
+            title: "Resource placeholders (how to reference Vega tables in SQL)",
+            items: [
+              { name: "{{<resource_id>}}", desc: "Required token form: double braces around the Vega resource id (from vega resource list / get)." },
+              { name: "{{.<resource_id>}}", desc: "Alternate form with a dot after {{ ; same replacement and routing." },
+            ],
+          },
+          {
+            title: "Body fields (JSON / simple mode mapping)",
+            items: [
+              { name: "query", desc: "(required) SQL string or OpenSearch DSL object" },
+              { name: "resource_type", desc: "(required) e.g. mysql, mariadb, postgresql, opensearch (see vega connector-type list)" },
+              { name: "stream_size", desc: "optional batch size for streaming (100–10000, default 10000)" },
+              { name: "query_timeout", desc: "optional seconds (1–3600, default 60)" },
+              { name: "query_id", desc: "optional cursor session id" },
+            ],
+          },
+        ],
+        flags: [
+          { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver vega sql --resource-type mysql --query \"SELECT * FROM {{abc123xyz}} LIMIT 5\"",
+          "kweaver vega sql -d '{\"resource_type\":\"mysql\",\"query\":\"SELECT * FROM {{abc123xyz}} LIMIT 5\"}'",
+        ],
+        learnMore: [
+          "The backend swaps each placeholder for that resource's physical SourceIdentifier and picks the catalog connector.",
+          "Without at least one placeholder, queries often fail (e.g. connector config is incomplete) unless a default connector exists.",
+          "Do not use --type; use --resource-type.",
+        ],
+      }),
+    );
     return 0;
   }
 
@@ -1539,15 +1780,26 @@ async function runVegaConnectorTypeCommand(args: string[]): Promise<number> {
   const [sub, ...rest] = args;
 
   if (!sub || sub === "--help" || sub === "-h") {
-    console.log(`kweaver vega connector-type
-
-Subcommands:
-  list                            List connector types
-  get <type>                      Get connector type details
-  register -d <json>              Register a new connector type
-  update <type> -d <json>         Update connector type
-  delete <type> [-y]              Delete connector type
-  enable <type> --enabled <bool>  Enable/disable connector type`);
+    console.log(
+      renderHelp({
+        tagline: "Manage Vega connector types.",
+        usage: "kweaver vega connector-type <subcommand> [flags]",
+        sections: [
+          {
+            title: "AVAILABLE COMMANDS",
+            items: [
+              { name: "list", desc: "List connector types" },
+              { name: "get", desc: "Get connector type details" },
+              { name: "register", desc: "Register a new connector type" },
+              { name: "update", desc: "Update connector type" },
+              { name: "delete", desc: "Delete connector type" },
+              { name: "enable", desc: "Enable/disable connector type" },
+            ],
+          },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1568,7 +1820,13 @@ Subcommands:
 
 async function runConnectorTypeList(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega connector-type list");
+    console.log(
+      renderHelp({
+        tagline: "List Vega connector types.",
+        usage: "kweaver vega connector-type list",
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1589,7 +1847,13 @@ async function runConnectorTypeList(args: string[]): Promise<number> {
 
 async function runConnectorTypeGet(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("kweaver vega connector-type get <type>");
+    console.log(
+      renderHelp({
+        tagline: "Get connector type details.",
+        usage: "kweaver vega connector-type get <type>",
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1617,10 +1881,16 @@ async function runConnectorTypeGet(args: string[]): Promise<number> {
 
 async function runConnectorTypeRegister(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega connector-type register -d <json>
-
-Options:
-  -d, --data <json>   Connector type definition (JSON string)`);
+    console.log(
+      renderHelp({
+        tagline: "Register a new connector type.",
+        usage: "kweaver vega connector-type register -d <json>",
+        flags: [
+          { name: "-d, --data <json>", desc: "Connector type definition (JSON string)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1654,10 +1924,16 @@ Options:
 
 async function runConnectorTypeUpdate(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega connector-type update <type> -d <json>
-
-Options:
-  -d, --data <json>   Updated fields (JSON string)`);
+    console.log(
+      renderHelp({
+        tagline: "Update a connector type.",
+        usage: "kweaver vega connector-type update <type> -d <json>",
+        flags: [
+          { name: "-d, --data <json>", desc: "Updated fields (JSON string)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1695,10 +1971,16 @@ Options:
 
 async function runConnectorTypeDelete(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega connector-type delete <type> [-y]
-
-Options:
-  -y, --yes   Skip confirmation prompt`);
+    console.log(
+      renderHelp({
+        tagline: "Delete a connector type.",
+        usage: "kweaver vega connector-type delete <type> [-y]",
+        flags: [
+          { name: "-y, --yes", desc: "Skip confirmation prompt" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 
@@ -1739,7 +2021,16 @@ Options:
 
 async function runConnectorTypeEnable(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`kweaver vega connector-type enable <type> --enabled <true|false>`);
+    console.log(
+      renderHelp({
+        tagline: "Enable or disable a connector type.",
+        usage: "kweaver vega connector-type enable <type> --enabled <true|false>",
+        flags: [
+          { name: "--enabled <true|false>", desc: "Whether to enable the connector type" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }),
+    );
     return 0;
   }
 

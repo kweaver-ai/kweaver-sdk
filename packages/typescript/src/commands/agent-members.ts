@@ -7,6 +7,7 @@ import { getAgent, updateAgent } from "../api/agent-list.js";
 import { getSkill } from "../api/skills.js";
 import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { renderHelp } from "../help/format.js";
 
 export interface MutationReport {
   finalIds: string[];
@@ -461,17 +462,32 @@ async function runSkillList(args: string[]): Promise<number> {
 export async function runAgentSkillCommand(args: string[]): Promise<number> {
   const [verb, ...rest] = args;
   if (!verb || verb === "--help" || verb === "-h") {
-    console.log(`kweaver agent skill
-
-Subcommands:
-  add <agent-id> <skill-id>... [--strict] [-bd <bd>]      Attach skills to an agent
-  remove <agent-id> <skill-id>... [-bd <bd>]              Detach skills from an agent
-  list <agent-id> [--pretty|--compact] [-bd <bd>]         List skills attached to an agent
-
-Notes:
-  --strict         On add, reject skills that exist but are not in 'published' status.
-                   Default behaviour: warn and continue.
-  Dedupe is automatic for add; remove silently skips not-attached ids.`);
+    console.log(renderHelp({
+      tagline: "Manage skills attached to an agent",
+      usage: "kweaver agent skill <subcommand> [flags]",
+      sections: [{
+        title: "AVAILABLE COMMANDS",
+        items: [
+          { name: "add", desc: "Attach skills to an agent" },
+          { name: "remove", desc: "Detach skills from an agent" },
+          { name: "list", desc: "List skills attached to an agent" },
+        ],
+      }],
+      flags: [
+        { name: "--strict", desc: "On add, reject skills that exist but are not in 'published' status. Default behaviour: warn and continue." },
+        { name: "-bd <bd>", desc: "Business domain" },
+        { name: "--pretty|--compact", desc: "Output formatting for list" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver agent skill add <agent-id> <skill-id>... [--strict] [-bd <bd>]",
+        "kweaver agent skill remove <agent-id> <skill-id>... [-bd <bd>]",
+        "kweaver agent skill list <agent-id> [--pretty|--compact] [-bd <bd>]",
+      ],
+      learnMore: [
+        "Dedupe is automatic for add; remove silently skips not-attached ids.",
+      ],
+    }));
     return 0;
   }
   try {

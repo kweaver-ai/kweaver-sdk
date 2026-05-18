@@ -810,17 +810,7 @@ async function runConfigCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
 
   if (!action || action === "--help" || action === "-h") {
-    console.log(`kweaver context-loader config  [deprecated]
-
-Subcommands:
-  set --kn-id <id> [--name <name>]   Add or update kn config (default name: default)
-  use <name>                         Switch current config
-  list                               List all configs and current
-  remove <name>                      Remove a config
-  show                               Show current config (knId + mcpUrl)
-
-Note: this command group is deprecated and will be removed in a future release.
-      It is disabled entirely in stateless mode (\`--token\`).`);
+    console.log(CONTEXT_LOADER_CONFIG_HELP);
     return 0;
   }
 

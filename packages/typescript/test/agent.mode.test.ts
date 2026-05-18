@@ -356,11 +356,19 @@ test("agent create help documents mode and react_config", async () => {
   assert.match(stdout, /react_config/);
   assert.match(stdout, /disable_history_in_a_conversation/);
 
-  const jsonStart = stdout.indexOf("    {\n");
-  const jsonEnd = stdout.indexOf("\n  --config <json|path>", jsonStart);
-  assert.notEqual(jsonStart, -1);
-  assert.notEqual(jsonEnd, -1);
-  const helpJson = stdout.slice(jsonStart, jsonEnd).replace(/^ {4}/gm, "").trim();
+  // Extract the JSON example block by locating the brace pair after "for example:".
+  // Format is gh-style — JSON appears indented under the LEARN MORE block; we just
+  // need to verify the example parses to the documented shape.
+  const marker = "for example:";
+  const markerIdx = stdout.indexOf(marker);
+  assert.notEqual(markerIdx, -1, "help should reference a config example");
+  const tail = stdout.slice(markerIdx + marker.length);
+  const braceStart = tail.indexOf("{");
+  assert.notEqual(braceStart, -1, "help should embed JSON example block");
+  // Match the JSON object spanning balanced braces (only one nested object expected).
+  const m = tail.slice(braceStart).match(/\{[\s\S]*?\n {4}\}/);
+  assert.ok(m, "help should embed a complete JSON example");
+  const helpJson = m![0].replace(/^ {4}/gm, "").trim();
   assert.deepEqual(JSON.parse(helpJson), {
     mode: "react",
     react_config: {
@@ -375,5 +383,7 @@ test("agent update help documents mode", async () => {
   assert.equal(code, 0);
   assert.match(stdout, /--mode <mode>/);
   assert.match(stdout, /default, dolphin, react/);
-  assert.match(stdout, /full agent JSON with config/);
+  // gh-style help wraps long flag descs; "full agent JSON with config" may be
+  // split across two lines. Allow either inline or wrapped form.
+  assert.match(stdout, /full agent JSON\s+with config/);
 });

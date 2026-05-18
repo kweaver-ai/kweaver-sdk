@@ -26,9 +26,18 @@ export async function runKnSubgraphCommand(args: string[]): Promise<number> {
     businessDomain = parsed.businessDomain;
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn subgraph <kn-id> '<json>' [--pretty] [-bd value]
-
-Query subgraph via ontology-query API. JSON body format see references/json-formats.md#subgraph.`);
+      console.log(renderHelp({
+        tagline: "Query subgraph via ontology-query API. JSON body format see references/json-formats.md#subgraph.",
+        usage: "kweaver bkn subgraph <kn-id> '<json>' [flags]",
+        flags: [
+          { name: "--pretty", desc: "Pretty-print JSON output" },
+          { name: "-bd, --biz-domain <s>", desc: "Override x-business-domain" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver bkn subgraph kn-123 '{\"source_object_type_id\":\"ot-1\"}'",
+        ],
+      }));
       return 0;
     }
     throw error;
@@ -91,9 +100,18 @@ export async function runKnActionExecutionCommand(args: string[]): Promise<numbe
     businessDomain = parsed.businessDomain;
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn action-execution get <kn-id> <execution-id> [--pretty] [-bd value]
-
-Get action execution status.`);
+      console.log(renderHelp({
+        tagline: "Get action execution status.",
+        usage: "kweaver bkn action-execution get <kn-id> <execution-id> [flags]",
+        flags: [
+          { name: "--pretty", desc: "Pretty-print JSON output" },
+          { name: "-bd, --biz-domain <s>", desc: "Override x-business-domain" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver bkn action-execution get kn-123 exec-456",
+        ],
+      }));
       return 0;
     }
     throw error;
@@ -127,12 +145,29 @@ Get action execution status.`);
 export async function runKnActionLogCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
   if (!action || action === "--help" || action === "-h") {
-    console.log(`kweaver bkn action-log list <kn-id> [options]
-kweaver bkn action-log get <kn-id> <log-id> [options]
-kweaver bkn action-log cancel <kn-id> <log-id> [options]
-
-List/get execution logs. cancel has side effects - only use when explicitly requested.
-Options for list: --limit, --need-total, --action-type-id, --status, --trigger-type, --search-after`);
+    console.log(renderHelp({
+      tagline: "List/get execution logs. cancel has side effects - only use when explicitly requested.",
+      usage: [
+        "kweaver bkn action-log list <kn-id> [flags]",
+        "kweaver bkn action-log get <kn-id> <log-id> [flags]",
+        "kweaver bkn action-log cancel <kn-id> <log-id> [flags]",
+      ],
+      flags: [
+        { name: "--limit <n>", desc: "Max log entries (list, default: 30)" },
+        { name: "--need-total <bool>", desc: "Include total count (list)" },
+        { name: "--action-type-id <s>", desc: "Filter by action type id (list)" },
+        { name: "--status <s>", desc: "Filter by status (list)" },
+        { name: "--trigger-type <s>", desc: "Filter by trigger type (list)" },
+        { name: "--search-after <s>", desc: "Pagination cursor (list)" },
+        { name: "--pretty", desc: "Pretty-print JSON output" },
+        { name: "-bd, --biz-domain <s>", desc: "Override x-business-domain" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver bkn action-log list kn-123 --limit 10",
+        "kweaver bkn action-log get kn-123 log-456",
+      ],
+    }));
     return 0;
   }
 
@@ -357,9 +392,18 @@ export async function runKnRelationTypePathsCommand(args: string[]): Promise<num
     parsed = parseOntologyQueryFlags(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn relation-type-paths <kn-id> '<json>' [--pretty] [-bd value]
-
-Query relation type paths between object types.`);
+      console.log(renderHelp({
+        tagline: "Query relation type paths between object types.",
+        usage: "kweaver bkn relation-type-paths <kn-id> '<json>' [flags]",
+        flags: [
+          { name: "--pretty", desc: "Pretty-print JSON output" },
+          { name: "-bd, --biz-domain <s>", desc: "Override x-business-domain" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver bkn relation-type-paths kn-123 '{...}'",
+        ],
+      }));
       return 0;
     }
     throw error;
@@ -367,9 +411,18 @@ Query relation type paths between object types.`);
   const [knId, body] = parsed.filteredArgs;
 
   if (!knId || !body) {
-    console.log(`kweaver bkn relation-type-paths <kn-id> '<json>' [--pretty] [-bd value]
-
-Query relation type paths between object types.`);
+    console.log(renderHelp({
+      tagline: "Query relation type paths between object types.",
+      usage: "kweaver bkn relation-type-paths <kn-id> '<json>' [flags]",
+      flags: [
+        { name: "--pretty", desc: "Pretty-print JSON output" },
+        { name: "-bd, --biz-domain <s>", desc: "Override x-business-domain" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver bkn relation-type-paths kn-123 '{...}'",
+      ],
+    }));
     return knId && !body ? 1 : 0;
   }
 
@@ -393,9 +446,18 @@ export async function runKnResourcesCommand(args: string[]): Promise<number> {
     parsed = parseOntologyQueryFlags(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn resources [--pretty] [-bd value]
-
-List available resources.`);
+      console.log(renderHelp({
+        tagline: "List available resources.",
+        usage: "kweaver bkn resources [flags]",
+        flags: [
+          { name: "--pretty", desc: "Pretty-print JSON output" },
+          { name: "-bd, --biz-domain <s>", desc: "Override x-business-domain" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver bkn resources --pretty",
+        ],
+      }));
       return 0;
     }
     throw error;

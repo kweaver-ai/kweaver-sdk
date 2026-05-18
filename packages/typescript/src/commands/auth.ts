@@ -657,11 +657,15 @@ function resolvePlatformArg(args: string[]): string | null {
 
 function runAuthUsersCommand(args: string[]): number {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth users [platform-url|alias]
-
-List all user profiles stored for a platform.
-Each line shows: userId (username) where username is decoded from the id_token.
-You can use either userId or username with --user in switch/logout/delete.`);
+    console.log(renderHelp({
+      tagline: "List all user profiles stored for a platform. Each line shows: userId (username) where username is decoded from the id_token. You can use either userId or username with --user in switch/logout/delete.",
+      usage: "kweaver auth users [platform-url|alias]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth users",
+        "kweaver auth users my-platform",
+      ],
+    }));
     return 0;
   }
 
@@ -689,10 +693,19 @@ You can use either userId or username with --user in switch/logout/delete.`);
 
 function runAuthSwitchCommand(args: string[]): number {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth switch [--global] [platform-url|alias] --user <userId|username>
-
-Switch the active user for a platform.
-You can specify either the userId (sub claim) or the username (preferred_username from id_token).`);
+    console.log(renderHelp({
+      tagline: "Switch the active user for a platform. You can specify either the userId (sub claim) or the username (preferred_username from id_token).",
+      usage: "kweaver auth switch [--global] [platform-url|alias] --user <userId|username>",
+      flags: [
+        { name: "--global", desc: "Apply switch to the global profile" },
+        { name: "--user <userId|username>", desc: "Target user (userId or username)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth switch --user alice",
+        "kweaver auth switch --global my-platform --user alice",
+      ],
+    }));
     return 0;
   }
 
@@ -745,14 +758,18 @@ You can specify either the userId (sub claim) or the username (preferred_usernam
 
 async function runAuthWhoamiCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth whoami [platform-url|alias] [--json]
-
-Show current user identity. For env-token mode (KWEAVER_TOKEN), the bound
-identity is resolved live from EACP /api/eacp/v1/user/get; for saved sessions
-it is decoded from the local id_token.
-
-Options:
-  --json   Output as JSON (machine-readable)`);
+    console.log(renderHelp({
+      tagline: "Show current user identity. For env-token mode (KWEAVER_TOKEN), the bound identity is resolved live from EACP /api/eacp/v1/user/get; for saved sessions it is decoded from the local id_token.",
+      usage: "kweaver auth whoami [platform-url|alias] [--json]",
+      flags: [
+        { name: "--json", desc: "Output as JSON (machine-readable)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth whoami",
+        "kweaver auth whoami my-platform --json",
+      ],
+    }));
     return 0;
   }
 
@@ -866,13 +883,18 @@ Options:
 
 async function runAuthExportCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth export [platform-url|alias] [--json]
-
-Export OAuth2 credentials for copying to a headless host (no browser there).
-Prints clientId, clientSecret, refreshToken, and a command to run on that machine.
-
-Options:
-  --json   Output as JSON (machine-readable)`);
+    console.log(renderHelp({
+      tagline: "Export OAuth2 credentials for copying to a headless host (no browser there). Prints clientId, clientSecret, refreshToken, and a command to run on that machine.",
+      usage: "kweaver auth export [platform-url|alias] [--json]",
+      flags: [
+        { name: "--json", desc: "Output as JSON (machine-readable)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth export",
+        "kweaver auth export my-platform --json",
+      ],
+    }));
     return 0;
   }
 
@@ -1041,20 +1063,21 @@ async function loginWithInitialPasswordRecovery(
 
 async function runAuthChangePasswordCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth change-password [<platform-url>] [options]
-
-Change the EACP account password via POST /api/eacp/v1/auth1/modifypassword.
-No saved OAuth token is required.
-
-Options:
-  -u, --account <name>       Account / login name. On TTY, defaults to the current active user
-                             after a confirmation prompt. Required in non-interactive mode.
-  -o, --old-password <pwd>   Current password (omit on TTY to be prompted)
-  -n, --new-password <pwd>   New password, 6-100 characters (omit on TTY to be prompted)
-  --insecure, -k             Skip TLS certificate verification (defaults to the platform's saved
-                             preference set at login with -k; pass to override per-call)
-
-Platform URL is optional; defaults to the current active platform (kweaver auth use).`);
+    console.log(renderHelp({
+      tagline: "Change the EACP account password via POST /api/eacp/v1/auth1/modifypassword. No saved OAuth token is required. Platform URL is optional; defaults to the current active platform (kweaver auth use).",
+      usage: "kweaver auth change-password [<platform-url>] [options]",
+      flags: [
+        { name: "-u, --account <name>", desc: "Account / login name. On TTY, defaults to the current active user after a confirmation prompt. Required in non-interactive mode." },
+        { name: "-o, --old-password <pwd>", desc: "Current password (omit on TTY to be prompted)" },
+        { name: "-n, --new-password <pwd>", desc: "New password, 6-100 characters (omit on TTY to be prompted)" },
+        { name: "--insecure, -k", desc: "Skip TLS certificate verification (defaults to the platform's saved preference set at login with -k; pass to override per-call)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth change-password",
+        "kweaver auth change-password https://example.com -u alice -o old -n new",
+      ],
+    }));
     return 0;
   }
 

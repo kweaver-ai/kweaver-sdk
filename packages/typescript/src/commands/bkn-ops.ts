@@ -1242,15 +1242,30 @@ export async function runKnActionScheduleCommand(args: string[]): Promise<number
     parsed = parseActionScheduleArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn action-schedule <action> <kn-id> [args] [--pretty] [-bd value]
-
-Actions:
-  list <kn-id>                                    List action schedules
-  get <kn-id> <schedule-id>                       Get schedule details
-  create <kn-id> '<json>'                         Create schedule
-  update <kn-id> <schedule-id> '<json>'           Update schedule
-  set-status <kn-id> <schedule-id> <status>       Enable/disable schedule (enabled|disabled)
-  delete <kn-id> <schedule-ids> [-y]              Delete schedule(s) (comma-separated)`);
+      console.log(renderHelp({
+        tagline: "Manage action schedules for a KN",
+        usage: "kweaver bkn action-schedule <action> <kn-id> [args] [--pretty] [-bd value]",
+        sections: [{
+          title: "AVAILABLE COMMANDS",
+          items: [
+            { name: "list", desc: "List action schedules" },
+            { name: "get", desc: "Get schedule details" },
+            { name: "create", desc: "Create schedule" },
+            { name: "update", desc: "Update schedule" },
+            { name: "set-status", desc: "Enable/disable schedule (enabled|disabled)" },
+            { name: "delete", desc: "Delete schedule(s) (comma-separated)" },
+          ],
+        }],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver bkn action-schedule list <kn-id>",
+          "kweaver bkn action-schedule get <kn-id> <schedule-id>",
+          "kweaver bkn action-schedule create <kn-id> '<json>'",
+          "kweaver bkn action-schedule update <kn-id> <schedule-id> '<json>'",
+          "kweaver bkn action-schedule set-status <kn-id> <schedule-id> <status>",
+          "kweaver bkn action-schedule delete <kn-id> <schedule-ids> [-y]",
+        ],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1345,13 +1360,26 @@ export async function runKnJobCommand(args: string[]): Promise<number> {
     parsed = parseJobArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn job <action> <kn-id> [args] [--pretty] [-bd value]
-
-Actions:
-  list <kn-id>                    List jobs
-  get <kn-id> <job-id>            Get job details
-  tasks <kn-id> <job-id>          List tasks within a job
-  delete <kn-id> <job-ids> [-y]   Delete job(s) (comma-separated)`);
+      console.log(renderHelp({
+        tagline: "Manage jobs for a KN",
+        usage: "kweaver bkn job <action> <kn-id> [args] [--pretty] [-bd value]",
+        sections: [{
+          title: "AVAILABLE COMMANDS",
+          items: [
+            { name: "list", desc: "List jobs" },
+            { name: "get", desc: "Get job details" },
+            { name: "tasks", desc: "List tasks within a job" },
+            { name: "delete", desc: "Delete job(s) (comma-separated)" },
+          ],
+        }],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver bkn job list <kn-id>",
+          "kweaver bkn job get <kn-id> <job-id>",
+          "kweaver bkn job tasks <kn-id> <job-id>",
+          "kweaver bkn job delete <kn-id> <job-ids> [-y]",
+        ],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));

@@ -151,13 +151,17 @@ async function runDsListCommand(args: string[]): Promise<number> {
     return 0;
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver ds list [options]
-
-Options:
-  --keyword <s>   Filter by keyword
-  --type <s>      Filter by database type
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty         Pretty-print JSON (default)`);
+      console.log(renderHelp({
+        tagline: "List datasources",
+        usage: "kweaver ds list [options]",
+        flags: [
+          { name: "--keyword <s>", desc: "Filter by keyword" },
+          { name: "--type <s>", desc: "Filter by database type" },
+          { name: "-bd, --biz-domain", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }));
       return 0;
     }
     throw error;

@@ -175,92 +175,203 @@ interface ManagementDownloadOptions extends BaseOptions {
 
 function printSkillHelp(subcommand?: string): void {
   if (subcommand === "list") {
-    console.log(`kweaver skill list [--name kw] [--source src] [--status status] [--create-user user]
-                   [--page N] [--page-size N|--limit N] [--all] [-bd value] [--pretty|--compact]`);
+    console.log(renderHelp({
+      tagline: "List installed skills.",
+      usage: "kweaver skill list [--name kw] [--source src] [--status status] [--create-user user] [--page N] [--page-size N|--limit N] [--all] [-bd value] [--pretty|--compact]",
+      flags: [
+        { name: "--name kw", desc: "Filter by name keyword." },
+        { name: "--source src", desc: "Filter by source." },
+        { name: "--status status", desc: "Filter by status." },
+        { name: "--create-user user", desc: "Filter by creator." },
+        { name: "--page N", desc: "Page number." },
+        { name: "--page-size N", desc: "Page size (alias: --limit)." },
+        { name: "--all", desc: "Fetch all pages." },
+        { name: "-bd value", desc: "Override base URL." },
+        { name: "--pretty|--compact", desc: "Toggle pretty JSON output." },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "market") {
-    console.log(`kweaver skill market [--name kw] [--source src] [--page N] [--page-size N|--limit N]
-                     [--all] [-bd value] [--pretty|--compact]`);
+    console.log(renderHelp({
+      tagline: "Browse the skill marketplace.",
+      usage: "kweaver skill market [--name kw] [--source src] [--page N] [--page-size N|--limit N] [--all] [-bd value] [--pretty|--compact]",
+      flags: [
+        { name: "--name kw", desc: "Filter by name keyword." },
+        { name: "--source src", desc: "Filter by source." },
+        { name: "--page N", desc: "Page number." },
+        { name: "--page-size N", desc: "Page size (alias: --limit)." },
+        { name: "--all", desc: "Fetch all pages." },
+        { name: "-bd value", desc: "Override base URL." },
+        { name: "--pretty|--compact", desc: "Toggle pretty JSON output." },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "get") {
-    console.log("kweaver skill get <skill-id> [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Show installed skill details.",
+      usage: "kweaver skill get <skill-id> [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "market-get") {
-    console.log("kweaver skill market-get <skill-id> [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Show marketplace skill details.",
+      usage: "kweaver skill market-get <skill-id> [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "register") {
-    console.log(`kweaver skill register (--content-file <path> | --zip-file <path>)
-                       [--source src] [--extend-info json] [-bd value] [--pretty|--compact]
-
-  --content-file accepts either:
-    - a single file named SKILL.md (auto-bundled into a 1-file zip)
-    - a skill directory containing SKILL.md (bundled into a zip)
-  Both paths upload as multipart zip; the backend's file_type=content
-  registration is unreliable (publish-then-read returns 404) so the CLI
-  always goes through zip.
-  --zip-file accepts a pre-built .zip with SKILL.md at the archive root.`);
+    console.log(renderHelp({
+      tagline: "Register a new skill (multipart zip upload).",
+      usage: "kweaver skill register (--content-file <path> | --zip-file <path>) [--source src] [--extend-info json] [-bd value] [--pretty|--compact]",
+      flags: [
+        { name: "--content-file <path>", desc: "SKILL.md file or skill directory containing SKILL.md (auto-bundled into a zip)." },
+        { name: "--zip-file <path>", desc: "Pre-built .zip with SKILL.md at the archive root." },
+        { name: "--source src", desc: "Source tag." },
+        { name: "--extend-info json", desc: "Extra metadata as JSON object." },
+        { name: "-bd value", desc: "Override base URL." },
+        { name: "--pretty|--compact", desc: "Toggle pretty JSON output." },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      learnMore: [
+        "Both --content-file and --zip-file upload as multipart zip; the backend's",
+        "file_type=content registration is unreliable (publish-then-read returns 404)",
+        "so the CLI always goes through zip.",
+      ],
+    }));
     return;
   }
   if (subcommand === "set-status" || subcommand === "status") {
-    console.log("kweaver skill set-status <skill-id> <unpublish|published|offline> [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Set skill publish status.",
+      usage: "kweaver skill set-status <skill-id> <unpublish|published|offline> [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "delete") {
-    console.log("kweaver skill delete <skill-id> [-y|--yes] [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Delete a skill.",
+      usage: "kweaver skill delete <skill-id> [-y|--yes] [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "update-metadata") {
-    console.log(`kweaver skill update-metadata <skill-id> --name <name> --description <text> --category <other_category|system>
-                         [--source <custom|internal>] [--extend-info json] [-bd value] [--pretty|--compact]`);
+    console.log(renderHelp({
+      tagline: "Update skill metadata fields.",
+      usage: "kweaver skill update-metadata <skill-id> --name <name> --description <text> --category <other_category|system> [--source <custom|internal>] [--extend-info json] [-bd value] [--pretty|--compact]",
+      flags: [
+        { name: "--name <name>", desc: "Skill name." },
+        { name: "--description <text>", desc: "Skill description." },
+        { name: "--category <other_category|system>", desc: "Skill category." },
+        { name: "--source <custom|internal>", desc: "Source tag." },
+        { name: "--extend-info json", desc: "Extra metadata as JSON object." },
+        { name: "-bd value", desc: "Override base URL." },
+        { name: "--pretty|--compact", desc: "Toggle pretty JSON output." },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "update-package") {
-    console.log(`kweaver skill update-package <skill-id> (--content-file <path> | --zip-file <path>)
-                        [-bd value] [--pretty|--compact]`);
+    console.log(renderHelp({
+      tagline: "Replace skill package contents.",
+      usage: "kweaver skill update-package <skill-id> (--content-file <path> | --zip-file <path>) [-bd value] [--pretty|--compact]",
+      flags: [
+        { name: "--content-file <path>", desc: "SKILL.md file or skill directory (auto-bundled into a zip)." },
+        { name: "--zip-file <path>", desc: "Pre-built .zip with SKILL.md at the archive root." },
+        { name: "-bd value", desc: "Override base URL." },
+        { name: "--pretty|--compact", desc: "Toggle pretty JSON output." },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "history") {
-    console.log("kweaver skill history <skill-id> [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Show skill edit history.",
+      usage: "kweaver skill history <skill-id> [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "republish") {
-    console.log("kweaver skill republish <skill-id> --version <version> [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Republish a previous skill version.",
+      usage: "kweaver skill republish <skill-id> --version <version> [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "publish-history") {
-    console.log("kweaver skill publish-history <skill-id> --version <version> [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Show publish history for a version.",
+      usage: "kweaver skill publish-history <skill-id> --version <version> [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "content") {
-    console.log("kweaver skill content <skill-id> [--raw] [--output file] [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Fetch installed skill SKILL.md content.",
+      usage: "kweaver skill content <skill-id> [--raw] [--output file] [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "read-file") {
-    console.log("kweaver skill read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Read a file from an installed skill.",
+      usage: "kweaver skill read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "download") {
-    console.log("kweaver skill download <skill-id> [--output file] [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Download an installed skill package.",
+      usage: "kweaver skill download <skill-id> [--output file] [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "install") {
-    console.log("kweaver skill install <skill-id> [directory] [--force] [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Install a skill locally.",
+      usage: "kweaver skill install <skill-id> [directory] [--force] [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "management-content") {
-    console.log("kweaver skill management-content <skill-id> [--raw] [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Fetch management-side skill SKILL.md content.",
+      usage: "kweaver skill management-content <skill-id> [--raw] [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "management-read-file") {
-    console.log("kweaver skill management-read-file <skill-id> <rel-path> [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Read a file via management API.",
+      usage: "kweaver skill management-read-file <skill-id> <rel-path> [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   if (subcommand === "management-download") {
-    console.log("kweaver skill management-download <skill-id> [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]");
+    console.log(renderHelp({
+      tagline: "Download a skill via management API.",
+      usage: "kweaver skill management-download <skill-id> [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return;
   }
   console.log(SKILL_HELP);

@@ -696,73 +696,91 @@ async function runKnListCommand(args: string[]): Promise<number> {
   }
 }
 
-const KN_LIST_HELP = `kweaver bkn list [options]
+const KN_LIST_HELP = renderHelp({
+  tagline: "List business knowledge networks (ontology-manager API)",
+  usage: "kweaver bkn list [flags]",
+  flags: [
+    { name: "--offset <n>", desc: "Offset (default: 0)" },
+    { name: "--limit <n>", desc: "Limit (default: 30)" },
+    { name: "--sort <key>", desc: "Sort field (default: update_time)" },
+    { name: "--direction <asc|desc>", desc: "Sort direction (default: desc)" },
+    { name: "--name-pattern <s>", desc: "Filter by name pattern" },
+    { name: "--tag <s>", desc: "Filter by tag" },
+    { name: "--detail", desc: "Include the detail field in simplified output" },
+    { name: "--verbose, -v", desc: "Show full JSON response" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON output (applies to both modes)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: ["kweaver bkn list --limit 50 --tag analytics"],
+});
 
-List business knowledge networks from the ontology-manager API.
+const KN_GET_HELP = renderHelp({
+  tagline: "Get knowledge network detail",
+  usage: "kweaver bkn get <kn-id> [flags]",
+  flags: [
+    { name: "--stats", desc: "Include statistics" },
+    { name: "--export", desc: "Export mode (include sub-types)" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON output" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: ["kweaver bkn get kn-123 --stats"],
+});
 
-Options:
-  --offset <n>       Offset (default: 0)
-  --limit <n>        Limit (default: 30)
-  --sort <key>       Sort field (default: update_time)
-  --direction <asc|desc>  Sort direction (default: desc)
-  --name-pattern <s> Filter by name pattern
-  --tag <s>          Filter by tag
-  --detail           Include the detail field in simplified output
-  --verbose, -v      Show full JSON response
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output (applies to both modes)`;
+const KN_CREATE_HELP = renderHelp({
+  tagline: "Create a knowledge network (empty or from --body-file)",
+  usage: "kweaver bkn create [flags]",
+  flags: [
+    { name: "--name <s>", desc: "Name (required unless --body-file)" },
+    { name: "--comment <s>", desc: "Comment" },
+    { name: "--tags <t1,t2>", desc: "Comma-separated tags" },
+    { name: "--icon <s>", desc: "Icon" },
+    { name: "--color <s>", desc: "Color" },
+    { name: "--branch <s>", desc: "Branch (default: main)" },
+    { name: "--base-branch <s>", desc: "Base branch (default: empty for main)" },
+    { name: "--body-file <path>", desc: "Read full JSON body from file (cannot combine with flags above)" },
+    { name: "--import-mode <normal|ignore|overwrite>", desc: "Import mode (default: normal)" },
+    { name: "--validate-dependency <true|false>", desc: "Validate dependency (default: true)" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON output" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn create --name my-kn --tags a,b",
+    "kweaver bkn create --body-file ./kn.json",
+  ],
+});
 
-const KN_GET_HELP = `kweaver bkn get <kn-id> [options]
+const KN_UPDATE_HELP = renderHelp({
+  tagline: "Update a knowledge network",
+  usage: "kweaver bkn update <kn-id> [flags]",
+  flags: [
+    { name: "--name <s>", desc: "Name (required unless --body-file)" },
+    { name: "--comment <s>", desc: "Comment" },
+    { name: "--tags <t1,t2>", desc: "Comma-separated tags" },
+    { name: "--icon <s>", desc: "Icon" },
+    { name: "--color <s>", desc: "Color" },
+    { name: "--branch <s>", desc: "Branch (default: main)" },
+    { name: "--base-branch <s>", desc: "Base branch (default: empty for main)" },
+    { name: "--body-file <path>", desc: "Read full JSON body from file (cannot combine with flags above)" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON output" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: ["kweaver bkn update kn-123 --name renamed"],
+});
 
-Get knowledge network detail.
-
-Options:
-  --stats            Include statistics
-  --export           Export mode (include sub-types)
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output`;
-
-const KN_CREATE_HELP = `kweaver bkn create [options]
-
-Create a knowledge network.
-
-Options:
-  --name <s>         Name (required unless --body-file)
-  --comment <s>      Comment
-  --tags <t1,t2>     Comma-separated tags
-  --icon <s>         Icon
-  --color <s>        Color
-  --branch <s>       Branch (default: main)
-  --base-branch <s>  Base branch (default: empty for main)
-  --body-file <path> Read full JSON body from file (cannot combine with flags above)
-  --import-mode <normal|ignore|overwrite>  Import mode (default: normal)
-  --validate-dependency <true|false>  Validate dependency (default: true)
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output`;
-
-const KN_UPDATE_HELP = `kweaver bkn update <kn-id> [options]
-
-Update a knowledge network.
-
-Options:
-  --name <s>         Name (required unless --body-file)
-  --comment <s>      Comment
-  --tags <t1,t2>     Comma-separated tags
-  --icon <s>         Icon
-  --color <s>        Color
-  --branch <s>       Branch (default: main)
-  --base-branch <s>  Base branch (default: empty for main)
-  --body-file <path> Read full JSON body from file (cannot combine with flags above)
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output`;
-
-const KN_DELETE_HELP = `kweaver bkn delete <kn-id>
-
-Delete a knowledge network and its object types, relation types, action types, and concept groups.
-
-Options:
-  --yes, -y          Skip confirmation prompt
-  -bd, --biz-domain <value>  Business domain (default: bd_public)`;
+const KN_DELETE_HELP = renderHelp({
+  tagline: "Delete a KN and its object/relation/action types and concept groups",
+  usage: "kweaver bkn delete <kn-id> [flags]",
+  flags: [
+    { name: "--yes, -y", desc: "Skip confirmation prompt" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: ["kweaver bkn delete kn-123 -y"],
+});
 
 async function runKnGetCommand(args: string[]): Promise<number> {
   let options: KnGetOptions;

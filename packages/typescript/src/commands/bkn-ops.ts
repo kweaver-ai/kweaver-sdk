@@ -604,23 +604,30 @@ export async function runKnPullCommand(args: string[]): Promise<number> {
 
 // ── Create from datasource ──────────────────────────────────────────────────
 
-const KN_CREATE_FROM_DS_HELP = `kweaver bkn create-from-ds <vega-catalog-id> --name X [options]
-
-Create a knowledge network from a vega catalog datasource (resources + object types + optional build).
-<vega-catalog-id> is a vega catalog id (use \`kweaver vega catalog list\` to find one;
-legacy data-connection datasource UUIDs are no longer accepted).
-
-Options:
-  --name <s>       Knowledge network name (required)
-  --tables <a,b>   Comma-separated table names (default: all)
-  --pk-map <s>     Explicit primary keys: <table>:<field>[,<table>:<field>...]
-                   Required when auto-detection fails (no unique column in sample)
-  --build (default)  Build after creation
-  --no-build       Skip build after creation
-  --timeout <n>    Build timeout in seconds (default: 300)
-  --no-rollback    Keep partially-created KN on failure (debug; default: rollback)
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty         Pretty-print output (default)`;
+const KN_CREATE_FROM_DS_HELP = renderHelp({
+  tagline: "Create a knowledge network from a vega catalog datasource (resources + object types + optional build)",
+  usage: "kweaver bkn create-from-ds <vega-catalog-id> --name X [flags]",
+  flags: [
+    { name: "--name <s>", desc: "Knowledge network name (required)" },
+    { name: "--tables <a,b>", desc: "Comma-separated table names (default: all)" },
+    { name: "--pk-map <s>", desc: "Explicit primary keys <table>:<field>[,...]; required when auto-detection fails" },
+    { name: "--build", desc: "Build after creation (default)" },
+    { name: "--no-build", desc: "Skip build after creation" },
+    { name: "--timeout <n>", desc: "Build timeout in seconds (default: 300)" },
+    { name: "--no-rollback", desc: "Keep partially-created KN on failure (debug; default: rollback)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print output (default)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn create-from-ds vcat-123 --name customers",
+    "kweaver bkn create-from-ds vcat-123 --name orders --tables orders,items --no-build",
+  ],
+  learnMore: [
+    "<vega-catalog-id> is a vega catalog id (use `kweaver vega catalog list` to find one)",
+    "Legacy data-connection datasource UUIDs are no longer accepted",
+  ],
+});
 
 export function parseKnCreateFromDsArgs(args: string[]): {
   dsId: string;
@@ -1003,24 +1010,32 @@ export async function runKnCreateFromDsCommand(
 
 // ── Create from CSV ─────────────────────────────────────────────────────────
 
-const KN_CREATE_FROM_CSV_HELP = `kweaver bkn create-from-csv <vega-catalog-id> --files <glob> --name X [options]
-
-Import CSV files into a vega catalog datasource, then create a knowledge network.
-<vega-catalog-id> is a vega catalog id (use \`kweaver vega catalog list\` to find one;
-legacy data-connection datasource UUIDs are no longer accepted).
-
-Options:
-  --files <s>          CSV file paths (comma-separated or glob, required)
-  --name <s>           Knowledge network name (required)
-  --table-prefix <s>   Table name prefix (default: none)
-  --batch-size <n>     Rows per batch (default: 500)
-  --tables <a,b>       Tables to include in KN (default: all imported)
-  --build (default)    Build after creation
-  --no-build           Skip build
-  --pk-map <s>         Explicit primary keys: <table>:<field>[,<table>:<field>...]
-  --timeout <n>        Build timeout in seconds (default: 300)
-  --no-rollback        Keep partially-created KN on failure (debug; default: rollback)
-  -bd, --biz-domain    Business domain (default: bd_public)`;
+const KN_CREATE_FROM_CSV_HELP = renderHelp({
+  tagline: "Import CSV files into a vega catalog datasource, then create a knowledge network",
+  usage: "kweaver bkn create-from-csv <vega-catalog-id> --files <glob> --name X [flags]",
+  flags: [
+    { name: "--files <s>", desc: "CSV file paths (comma-separated or glob, required)" },
+    { name: "--name <s>", desc: "Knowledge network name (required)" },
+    { name: "--table-prefix <s>", desc: "Table name prefix (default: none)" },
+    { name: "--batch-size <n>", desc: "Rows per batch (default: 500)" },
+    { name: "--tables <a,b>", desc: "Tables to include in KN (default: all imported)" },
+    { name: "--build", desc: "Build after creation (default)" },
+    { name: "--no-build", desc: "Skip build" },
+    { name: "--pk-map <s>", desc: "Explicit primary keys <table>:<field>[,...]" },
+    { name: "--timeout <n>", desc: "Build timeout in seconds (default: 300)" },
+    { name: "--no-rollback", desc: "Keep partially-created KN on failure (debug; default: rollback)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn create-from-csv vcat-123 --files './data/*.csv' --name imports",
+    "kweaver bkn create-from-csv vcat-123 --files ./a.csv,./b.csv --name two --table-prefix raw_",
+  ],
+  learnMore: [
+    "<vega-catalog-id> is a vega catalog id (use `kweaver vega catalog list` to find one)",
+    "Legacy data-connection datasource UUIDs are no longer accepted",
+  ],
+});
 
 export function parseKnCreateFromCsvArgs(args: string[]): {
   dsId: string;

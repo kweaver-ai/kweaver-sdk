@@ -116,34 +116,29 @@ const CONTEXT_LOADER_HELP = renderHelp({
   ],
 });
 
-const CONTEXT_LOADER_CONFIG_HELP = `kweaver context-loader config  [deprecated]
-
-Usage:
-  kweaver context-loader config set --kn-id <id> [--name <name>]
-  kweaver context-loader config use <name>
-  kweaver context-loader config list
-  kweaver context-loader config remove <name>
-  kweaver context-loader config show
-
-Description:
-  Manage the deprecated saved context-loader KN selection. Runtime commands should pass
-  <kn-id> as the first positional or use --kn-id <id> / -k <id> instead.
-
-Arguments:
-  <name>          Saved config name.
-
-Options:
-  --kn-id <id>    KN ID to save for config set.
-  --name <name>   Saved config name for config set. Default: default.
-  --help, -h      Show this help and exit before auth/config/network checks.
-
-Examples:
-  kweaver context-loader tools d5iv6c9818p72mpje8pg
-  kweaver context-loader tools --kn-id d5iv6c9818p72mpje8pg
-
-Notes:
-  This command group is deprecated and will be removed in a future release.
-  It is disabled in stateless mode (--token).`;
+const CONTEXT_LOADER_CONFIG_HELP = renderHelp({
+  tagline: "[deprecated] Manage the saved context-loader KN selection",
+  usage: [
+    "kweaver context-loader config set --kn-id <id> [--name <name>]",
+    "kweaver context-loader config use <name>",
+    "kweaver context-loader config list",
+    "kweaver context-loader config remove <name>",
+    "kweaver context-loader config show",
+  ],
+  flags: [
+    { name: "--kn-id <id>", desc: "KN id to save (for `config set`)" },
+    { name: "--name <name>", desc: "Saved config name (for `config set`; default: default)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver context-loader tools d5iv6c9818p72mpje8pg",
+    "kweaver context-loader tools --kn-id d5iv6c9818p72mpje8pg",
+  ],
+  learnMore: [
+    "Deprecated: runtime commands should pass <kn-id> as the first positional or use --kn-id/-k",
+    "Disabled in stateless mode (--token); will be removed in a future release",
+  ],
+});
 
 const CONTEXT_LOADER_SUBCOMMAND_HELP: Record<string, string> = {
   tools: `kweaver context-loader tools

@@ -11,6 +11,7 @@ import { semanticSearch } from "../api/semantic-search.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { parseOntologyQueryFlags } from "./bkn-utils.js";
+import { renderHelp } from "../help/format.js";
 
 // ── subgraph ─────────────────────────────────────────────────────────────────
 
@@ -254,16 +255,21 @@ Options for list: --limit, --need-total, --action-type-id, --status, --trigger-t
 
 // ── search ───────────────────────────────────────────────────────────────────
 
-const KN_SEARCH_HELP = `kweaver bkn search <kn-id> <query> [--max-concepts <n>] [--mode <mode>] [--pretty] [-bd value]
-
-Semantic search within a knowledge network via agent-retrieval API.
-Returns matched concepts (object types, relation types, action types).
-
-Options:
-  --max-concepts <n>   Max concepts to return (default: 10)
-  --mode <mode>        Search mode (default: keyword_vector_retrieval)
-  --pretty             Pretty-print JSON output
-  -bd, --biz-domain    Override x-business-domain`;
+const KN_SEARCH_HELP = renderHelp({
+  tagline: "Semantic search within a knowledge network — matches object/relation/action types (agent-retrieval API)",
+  usage: "kweaver bkn search <kn-id> <query> [flags]",
+  flags: [
+    { name: "--max-concepts <n>", desc: "Max concepts to return (default: 10)" },
+    { name: "--mode <mode>", desc: "Search mode (default: keyword_vector_retrieval)" },
+    { name: "--pretty", desc: "Pretty-print JSON output" },
+    { name: "-bd, --biz-domain <s>", desc: "Override x-business-domain" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn search kn-123 'customer churn'",
+    "kweaver bkn search kn-123 'revenue by region' --max-concepts 20",
+  ],
+});
 
 export function parseKnSearchArgs(args: string[]): {
   knId: string;

@@ -176,6 +176,64 @@ test("run dv alias dispatches to resource command", async () => {
   assert.equal(await run(["res", "--help"]), 0);
 });
 
+// §8 spec: every --help block (top-level, 2-level, 3-level) must render via
+// the shared formatter — surface USAGE / FLAGS section titles. These tests
+// guard against regressions to hardcoded template-literal help.
+test("renderHelp section titles present across help levels", async () => {
+  const cases: Array<{ args: string[]; needs: string[] }> = [
+    { args: ["--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["auth", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
+    { args: ["auth", "login", "--help"], needs: ["USAGE", "FLAGS", "EXAMPLES"] },
+    { args: ["agent", "--help"], needs: ["USAGE", "DISCOVERY"] },
+    { args: ["agent", "chat", "--help"], needs: ["USAGE", "FLAGS", "EXAMPLES"] },
+    { args: ["bkn", "--help"], needs: ["USAGE", "LIFECYCLE"] },
+    { args: ["bkn", "list", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["bkn", "get", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["bkn", "create", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["bkn", "update", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["bkn", "delete", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["bkn", "build", "--help"], needs: ["USAGE", "FLAGS", "EXAMPLES"] },
+    { args: ["bkn", "push", "--help"], needs: ["USAGE", "FLAGS", "EXAMPLES"] },
+    { args: ["bkn", "pull", "--help"], needs: ["USAGE", "FLAGS", "EXAMPLES"] },
+    { args: ["bkn", "search", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["bkn", "metric", "--help"], needs: ["USAGE", "MANAGEMENT"] },
+    { args: ["bkn", "create-from-ds", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["bkn", "create-from-csv", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["call", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["config", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
+    { args: ["context-loader", "--help"], needs: ["USAGE", "RECOMMENDED FLOW"] },
+    { args: ["context-loader", "config", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["ds", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
+    { args: ["ds", "import-csv", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["dataview", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
+    { args: ["explore", "--help"], needs: ["USAGE", "FLAGS"] },
+    { args: ["model", "--help"], needs: ["USAGE", "LLM"] },
+    { args: ["skill", "--help"], needs: ["USAGE", "REGISTRY"] },
+    { args: ["token", "--help"], needs: ["USAGE"] },
+    { args: ["toolbox", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
+    { args: ["tool", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
+    { args: ["vega", "--help"], needs: ["USAGE", "SERVICE"] },
+  ];
+
+  for (const { args, needs } of cases) {
+    const lines: string[] = [];
+    const orig = console.log;
+    console.log = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+    try {
+      assert.equal(await run(args), 0, `help should exit 0: ${args.join(" ")}`);
+      const out = lines.join("\n");
+      for (const need of needs) {
+        assert.ok(
+          out.includes(need),
+          `\`${args.join(" ")}\` should include "${need}" section`,
+        );
+      }
+    } finally {
+      console.log = orig;
+    }
+  }
+});
+
 test("help text shows dv alias", async () => {
   const lines: string[] = [];
   const orig = console.log;

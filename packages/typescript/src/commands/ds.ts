@@ -504,15 +504,21 @@ async function printDsConnectOutput(
 
 // ── import-csv ────────────────────────────────────────────────────────────────
 
-const IMPORT_CSV_HELP = `kweaver ds import-csv <ds-id> --files <glob_or_list> [options]
-
-Import CSV files into datasource tables via dataflow API.
-
-Options:
-  --files <s>          CSV file paths (comma-separated or glob pattern, required)
-  --table-prefix <s>   Table name prefix (default: none)
-  --batch-size <n>     Rows per batch (default: 500, range: 1-10000)
-  -bd, --biz-domain    Business domain (default: bd_public)`;
+const IMPORT_CSV_HELP = renderHelp({
+  tagline: "Import CSV files into datasource tables via dataflow API",
+  usage: "kweaver ds import-csv <ds-id> --files <glob_or_list> [flags]",
+  flags: [
+    { name: "--files <s>", desc: "CSV file paths — comma-separated or glob pattern (required)" },
+    { name: "--table-prefix <s>", desc: "Table name prefix (default: none)" },
+    { name: "--batch-size <n>", desc: "Rows per batch (default: 500, range: 1-10000)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver ds import-csv ds-123 --files './data/*.csv'",
+    "kweaver ds import-csv ds-123 --files ./a.csv,./b.csv --table-prefix raw_ --batch-size 1000",
+  ],
+});
 
 export function parseImportCsvArgs(args: string[]): {
   datasourceId: string;

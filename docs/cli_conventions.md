@@ -89,8 +89,10 @@ KWeaver SDK — operate KWeaver platform from CLI
 USAGE
   kweaver <command> <subcommand> [flags]
 
-AUTHENTICATION
+AUTHENTICATION & CONFIG
   auth:        一行简介
+  token:       一行简介
+  config:      一行简介
 
 DECISION AGENT
   agent:       一行简介
@@ -105,8 +107,7 @@ TRACE AI
   trace:       一行简介
 
 FOUNDATION
-  token:       一行简介
-  config:      一行简介
+  call:        一行简介
   ...
 
 FLAGS

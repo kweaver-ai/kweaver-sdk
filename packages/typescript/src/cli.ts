@@ -29,9 +29,11 @@ function printHelp(): void {
       ],
       sections: [
         {
-          title: "AUTHENTICATION",
+          title: "AUTHENTICATION & CONFIG",
           items: [
             { name: "auth", desc: "Login / switch / list saved platform credentials" },
+            { name: "token", desc: "Print current access token (auto-refresh)" },
+            { name: "config", desc: "Per-platform business-domain config" },
           ],
         },
         {
@@ -62,8 +64,6 @@ function printHelp(): void {
         {
           title: "FOUNDATION",
           items: [
-            { name: "token", desc: "Print current access token (auto-refresh)" },
-            { name: "config", desc: "Per-platform business-domain config" },
             { name: "call (curl)", desc: "curl-style API call with auto-injected auth headers" },
             { name: "explore", desc: "Interactive web UI" },
             { name: "model", desc: "Model factory — LLM / small-model CRUD + chat" },

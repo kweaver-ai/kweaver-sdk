@@ -190,11 +190,11 @@ kweaver <command> <subcommand> --help     # 动作级 flag + 示例
 顶层命令分组：
 
 ```text
-AUTHENTICATION    auth
-DECISION AGENT    agent · toolbox · tool
-AI DATA PLATFORM  bkn · ds · resource · dataflow · vega · context-loader
-TRACE AI          trace
-FOUNDATION        token · config · call · explore · model · skill · help
+AUTHENTICATION & CONFIG  auth · token · config
+DECISION AGENT           agent · toolbox · tool
+AI DATA PLATFORM         bkn · ds · resource · dataflow · vega · context-loader
+TRACE AI                 trace
+FOUNDATION               call · explore · model · skill · help
 ```
 
 需要查阅每个动作的完整签名（可浏览 / 可 grep）时，运行 `kweaver help all`。

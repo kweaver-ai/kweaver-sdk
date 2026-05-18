@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from kweaver._errors import KWeaverError
@@ -17,7 +18,7 @@ _PREFIX = "/api/ontology-manager/v1"
 
 
 class ObjectTypesResource:
-    """Object types for a KN: schema from dataviews, properties, index/rebuild hooks."""
+    """Object types for a KN: schema from resources, properties, index/rebuild hooks."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http
@@ -27,12 +28,24 @@ class ObjectTypesResource:
         kn_id: str,
         *,
         name: str,
-        dataview_id: str,
+        resource_id: str | None = None,
+        dataview_id: str | None = None,
         primary_keys: list[str] | None = None,
         primary_key: str | None = None,
         display_key: str,
         properties: list[Property] | None = None,
     ) -> ObjectType:
+        if resource_id is None:
+            if dataview_id is not None:
+                warnings.warn(
+                    "dataview_id is deprecated, use resource_id instead",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                resource_id = dataview_id
+            else:
+                raise TypeError("resource_id is required")
+
         if primary_keys is None:
             if primary_key is not None:
                 primary_keys = [primary_key]
@@ -42,7 +55,7 @@ class ObjectTypesResource:
         entry: dict[str, Any] = {
             "name": name,
             "branch": "main",
-            "data_source": {"type": "data_view", "id": dataview_id},
+            "data_source": {"type": "resource", "id": resource_id},
             "primary_keys": primary_keys,
             "display_key": display_key,
         }
@@ -53,13 +66,13 @@ class ObjectTypesResource:
         # using only pk+dk is insufficient — we need the full field list.
         if not entry.get("data_properties"):
             try:
-                from kweaver.resources.dataviews import DataViewsResource
-                dv_resource = DataViewsResource(self._http)
-                dv = dv_resource.get(dataview_id)
-                if dv.fields:
+                from kweaver.resources.resources import ResourcesResource
+                res_resource = ResourcesResource(self._http)
+                dv = res_resource.get(resource_id)
+                if dv.schema_definition:
                     entry["data_properties"] = [
                         _auto_data_property(f.name, f.type, f.display_name)
-                        for f in dv.fields
+                        for f in dv.schema_definition
                     ]
             except Exception:
                 pass  # Fall back to minimal auto-generation below
@@ -195,7 +208,7 @@ def _property_to_rest(p: Property) -> dict[str, Any]:
 
 def _parse_object_type(d: dict[str, Any], kn_id: str) -> ObjectType:
     ds = d.get("data_source", {})
-    dataview_id = ds.get("id", "") if isinstance(ds, dict) else ""
+    resource_id = ds.get("id", "") if isinstance(ds, dict) else ""
 
     props: list[DataProperty] = []
     for p in d.get("data_properties", d.get("properties", [])):
@@ -237,7 +250,7 @@ def _parse_object_type(d: dict[str, Any], kn_id: str) -> ObjectType:
         id=str(d.get("id", "")),
         name=d.get("name", ""),
         kn_id=kn_id,
-        dataview_id=dataview_id,
+        resource_id=resource_id,
         primary_keys=d.get("primary_keys", []),
         display_key=d.get("display_key", ""),
         incremental_key=d.get("incremental_key"),

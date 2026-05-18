@@ -163,10 +163,10 @@ const graph     = await client.bkn.querySubgraph("bkn-id", { /* path spec */ });
 await client.bkn.executeAction("bkn-id", "at-id", { /* params */ });
 const logs      = await client.bkn.listActionLogs("bkn-id");
 
-// 数据源 & 数据视图
+// 数据源 & vega-backend 资源
 const dsList = await client.datasources.list();
 const tables = await client.datasources.listTables("ds-id");
-const viewId = await client.dataviews.create({ name: "v", datasourceId: "ds-id", table: "orders" });
+const resId  = await client.resources.create({ name: "v", datasourceId: "ds-id", table: "orders" });
 
 // 数据流自动化（CSV 导入管线等）
 const result = await client.dataflows.execute({
@@ -273,7 +273,7 @@ kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 
 kweaver dataflow templates/create-dataset/create-bkn/create/list/run/runs/logs
 kweaver model llm list/get/add/edit/delete/test/chat/--template
 kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
-kweaver dataview|dv list/find/get/query/delete
+kweaver resource|res list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn build [--wait] [--timeout 300]
 kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
@@ -314,7 +314,7 @@ kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
 | `kweaver query kn-search <kn_id> <query>`（REST；Schema 发现已不推荐） | 推荐 `kweaver context-loader search-schema <kn-id> <query>`（MCP `search_schema`）；`kweaver context-loader kn-search <kn-id> <query>` 仅作 deprecated 兼容入口 |
 | `kweaver action query` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
 
-**仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver model`、`kweaver dataview`（别名 `dv`）、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。
+**仅 TypeScript CLI：** `kweaver config`、`kweaver vega`、`kweaver model`、`kweaver resource`（别名 `res`）、`kweaver ds import-csv`、`kweaver bkn create-from-csv`，以及完整的 `kweaver agent` 创建/更新/删除/发布等（见 `kweaver agent --help`）。
 
 ## 项目结构（Monorepo）
 

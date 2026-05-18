@@ -18,7 +18,7 @@ import {
   getBuildStatus,
 } from "../api/knowledge-networks.js";
 import { listTablesWithColumns, scanDatasourceMetadata } from "../api/vega.js";
-import { createDataView, findDataView } from "../api/dataviews.js";
+import { createResource, findResource } from "../api/resources.js";
 import { resolveFiles } from "./ds.js";
 import { buildTableName } from "./import-csv.js";
 import {
@@ -571,7 +571,7 @@ export async function runKnPullCommand(args: string[]): Promise<number> {
 
 const KN_CREATE_FROM_DS_HELP = `kweaver bkn create-from-ds <vega-catalog-id> --name X [options]
 
-Create a knowledge network from a vega catalog datasource (dataviews + object types + optional build).
+Create a knowledge network from a vega catalog datasource (resources + object types + optional build).
 <vega-catalog-id> is a vega catalog id (use \`kweaver vega catalog list\` to find one;
 legacy data-connection datasource UUIDs are no longer accepted).
 
@@ -679,7 +679,7 @@ export function generateObjectTypeBkn(
   const safeId = sanitizeBknId(tableName);
   const header = `## ObjectType: ${safeId}\n\n**${tableName}**\n`;
 
-  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| data_view | ${dvId} | ${tableName} |\n`;
+  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| resource | ${dvId} | ${tableName} |\n`;
 
   const dpHeader = `### Data Properties\n\n| Property | Display Name | Type | Primary Key | Display Key |\n|----------|-------------|------|-------------|-------------|\n`;
   const dpRows = columns.map((c) => {
@@ -818,12 +818,12 @@ export async function runKnCreateFromDsCommand(
       );
     }
 
-    // Phase 1: Create DataViews for each table. findDataView is idempotent;
+    // Phase 1: Create vega-backend Resources for each table. findResource is idempotent;
     // not tracked for rollback so a retry can reuse what's already there.
-    console.error(`Creating data views for ${targetTables.length} table(s) ...`);
+    console.error(`Creating resources for ${targetTables.length} table(s) ...`);
     const viewMap: Record<string, string> = {};
     for (const t of targetTables) {
-      const found = await findDataView({
+      const found = await findResource({
         ...base,
         name: t.name,
         datasourceId: options.dsId,
@@ -832,7 +832,7 @@ export async function runKnCreateFromDsCommand(
       });
       const dvId =
         found[0]?.id ??
-        (await createDataView({
+        (await createResource({
           ...base,
           name: t.name,
           datasourceId: options.dsId,
@@ -872,7 +872,7 @@ export async function runKnCreateFromDsCommand(
         return {
           branch: "main",
           name: t.name,
-          data_source: { type: "data_view", id: viewMap[t.name] },
+          data_source: { type: "resource", id: viewMap[t.name] },
           primary_keys: [pk],
           display_key: dk,
           data_properties: t.columns.map((c) => ({

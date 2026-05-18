@@ -38,8 +38,8 @@
 
 | 类型 | 默认 limit | 适用命令 |
 |------|-----------|---------|
-| 列表类（list） | **30** | `bkn list`、`agent list`、`agent sessions`、`agent history`、`dataview list`、`vega catalog list`、`vega catalog resources`、`vega resource list`、`bkn action-log list`、`ds list` |
-| 查询类（query / preview） | **50** | `bkn object-type query`、`dataview query`、`vega resource preview` |
+| 列表类（list） | **30** | `bkn list`、`agent list`、`agent sessions`、`agent history`、`resource list`、`vega catalog list`、`vega catalog resources`、`vega resource list`、`bkn action-log list`、`ds list` |
+| 查询类（query / preview） | **50** | `bkn object-type query`、`resource query`、`vega resource preview` |
 
 - 新增列表类命令默认 limit 设为 **30**，查询类命令设为 **50**
 - TypeScript 和 Python 两端保持一致

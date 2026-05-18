@@ -172,8 +172,8 @@ test("run fails for unknown commands", async () => {
   assert.equal(await run(["missing-command"]), 1);
 });
 
-test("run dv alias dispatches to dataview command", async () => {
-  assert.equal(await run(["dv", "--help"]), 0);
+test("run dv alias dispatches to resource command", async () => {
+  assert.equal(await run(["res", "--help"]), 0);
 });
 
 test("help text shows dv alias", async () => {
@@ -183,7 +183,7 @@ test("help text shows dv alias", async () => {
   try {
     await run(["--help"]);
     const text = lines.join("\n");
-    assert.ok(text.includes("dataview|dv"), "help should mention dv alias");
+    assert.ok(text.includes("resource|res"), "help should mention dv alias");
     assert.ok(text.includes("skill"), "help should mention skill command");
     assert.ok(text.includes("dataflow"), "help should mention dataflow command");
   } finally {
@@ -1946,7 +1946,7 @@ test("run bkn object-type create --help shows create usage", async () => {
     const help = lines.join("\n");
     assert.ok(help.includes("object-type create"));
     assert.ok(help.includes("--name"));
-    assert.ok(help.includes("--dataview-id"));
+    assert.ok(help.includes("--resource-id"));
     assert.ok(help.includes("--primary-key"));
     assert.ok(help.includes("--display-key"));
   } finally {

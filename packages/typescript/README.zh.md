@@ -124,22 +124,18 @@ const graph     = await client.bkn.querySubgraph("bkn-id", { /* 路径规格 */ 
 await client.bkn.executeAction("bkn-id", "at-id", { /* 参数 */ });
 const logs      = await client.bkn.listActionLogs("bkn-id");
 
-// 数据源与数据视图
-const dsList = await client.datasources.list();
-const viewId = await client.dataviews.create({ name: "v", datasourceId: "ds-id", table: "orders" });
-const views = await client.dataviews.list({ datasourceId: "ds-id" });
-const fuzzy = await client.dataviews.find("BOM", { wait: false });
-const exact = await client.dataviews.find("orders", {
+// 数据源 & vega-backend 资源
+const dsList    = await client.datasources.list();
+const resId     = await client.resources.create({ name: "v", datasourceId: "ds-id", table: "orders" });
+const resList   = await client.resources.list({ datasourceId: "ds-id" });
+const fuzzy     = await client.resources.find("BOM", { wait: false });
+const exact     = await client.resources.find("orders", {
   datasourceId: "ds-id",
   exact: true,
   wait: true,
 });
-const dv = await client.dataviews.get(viewId);
-const queryRows = await client.dataviews.query(viewId, {
-  sql: "SELECT id, name FROM orders LIMIT 10",
-  limit: 10,
-  needTotal: true,
-});
+const res       = await client.resources.get(resId);
+const queryRows = await client.resources.query(resId, { limit: 10, needTotal: true });
 
 // Vega — 可观测性与查询
 const catalogs = await client.vega.listCatalogs();
@@ -196,7 +192,7 @@ kweaver ds list/get/delete/tables/connect
 kweaver dataflow list/run/runs/logs
 kweaver model llm list/get/add/edit/delete/test/chat/--template
 kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
-kweaver dataview list/find/get/query/delete
+kweaver resource|res list/find/get/query/delete
 kweaver bkn list/get/stats/export/create/update/delete
 kweaver bkn object-type list/get/create/update/delete/query/properties
 kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run

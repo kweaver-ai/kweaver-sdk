@@ -546,7 +546,7 @@ Subcommands:
   search <kn-id> <query> [options]   Semantic search within a knowledge network
   object-type list <kn-id>   List object types (schema)
   object-type get <kn-id> <ot-id>   Get object type details
-  object-type create <kn-id> [options]   Create object type (--name --dataview-id --primary-key --display-key)
+  object-type create <kn-id> [options]   Create object type (--name --resource-id --primary-key --display-key)
   object-type update <kn-id> <ot-id> [options]   Update object type
   object-type delete <kn-id> <ot-ids> [-y]   Delete object type(s)
   object-type query <kn-id> <ot-id> ['<json>']   Query object instances (ontology-query; supports --limit/--search-after)

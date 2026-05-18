@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from kweaver._auth import AuthProvider, ConfigAuth, TokenAuth
+from kweaver._auth import AuthProvider, ConfigAuth, TokenAuth, _env_tls_insecure
 from kweaver._http import HttpClient
 from kweaver._middleware import Middleware
 from kweaver._middleware.debug import DebugMiddleware
@@ -108,6 +108,9 @@ class KWeaverClient:
             if token is None:
                 raise ValueError("Either 'token' or 'auth' must be provided")
             auth = TokenAuth(token)
+
+        if not tls_insecure and _env_tls_insecure():
+            tls_insecure = True
 
         # ConfigAuth carries its own base_url + saved tlsInsecure flag
         if isinstance(auth, ConfigAuth):

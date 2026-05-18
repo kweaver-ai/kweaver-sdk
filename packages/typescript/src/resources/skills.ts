@@ -2,17 +2,28 @@ import type { ClientContext } from "../client.js";
 import {
   deleteSkill,
   downloadSkill,
+  downloadSkillManagementArchive,
   fetchSkillContent,
   fetchSkillFile,
   getSkill,
+  getSkillMarketDetail,
   getSkillContentIndex,
+  getSkillManagementContent,
   installSkillArchive,
   listSkillMarket,
+  listSkillHistory,
   listSkills,
+  publishSkillHistory,
   readSkillFile,
+  readSkillManagementFile,
+  republishSkillHistory,
   registerSkillContent,
   registerSkillZip,
+  updateSkillMetadata,
+  updateSkillPackageContent,
+  updateSkillPackageZip,
   updateSkillStatus,
+  type SkillCategory,
   type SkillListResult,
   type SkillStatus,
 } from "../api/skills.js";
@@ -50,6 +61,10 @@ export class SkillsResource {
     return getSkill({ ...this.ctx.base(), skillId });
   }
 
+  async getMarket(skillId: string) {
+    return getSkillMarketDetail({ ...this.ctx.base(), skillId });
+  }
+
   async registerContent(content: string, opts: {
     source?: string;
     extendInfo?: Record<string, unknown>;
@@ -70,6 +85,36 @@ export class SkillsResource {
 
   async updateStatus(skillId: string, status: SkillStatus) {
     return updateSkillStatus({ ...this.ctx.base(), skillId, status });
+  }
+
+  async updateMetadata(skillId: string, metadata: {
+    name: string;
+    description: string;
+    category: SkillCategory;
+    source?: string;
+    extendInfo?: Record<string, unknown>;
+  }) {
+    return updateSkillMetadata({ ...this.ctx.base(), skillId, ...metadata });
+  }
+
+  async updatePackageContent(skillId: string, content: string) {
+    return updateSkillPackageContent({ ...this.ctx.base(), skillId, content });
+  }
+
+  async updatePackageZip(skillId: string, filename: string, bytes: Uint8Array) {
+    return updateSkillPackageZip({ ...this.ctx.base(), skillId, filename, bytes });
+  }
+
+  async history(skillId: string) {
+    return listSkillHistory({ ...this.ctx.base(), skillId });
+  }
+
+  async republishHistory(skillId: string, version: string) {
+    return republishSkillHistory({ ...this.ctx.base(), skillId, version });
+  }
+
+  async publishHistory(skillId: string, version: string) {
+    return publishSkillHistory({ ...this.ctx.base(), skillId, version });
   }
 
   async content(skillId: string) {
@@ -95,5 +140,19 @@ export class SkillsResource {
   async install(skillId: string, directory: string, opts: { force?: boolean } = {}) {
     const archive = await this.download(skillId);
     return installSkillArchive({ bytes: archive.bytes, directory, force: opts.force });
+  }
+
+  // ── Management Content ───────────────────────────────────────────────────────
+
+  async getManagementContent(skillId: string, responseMode?: "url" | "content") {
+    return getSkillManagementContent({ ...this.ctx.base(), skillId, responseMode });
+  }
+
+  async readManagementFile(skillId: string, relPath: string) {
+    return readSkillManagementFile({ ...this.ctx.base(), skillId, relPath });
+  }
+
+  async downloadManagementArchive(skillId: string, responseMode?: "url" | "content") {
+    return downloadSkillManagementArchive({ ...this.ctx.base(), skillId, responseMode });
   }
 }

@@ -232,6 +232,45 @@ test("run skill subcommand help does not require auth", async () => {
   }
 });
 
+test("run skill update-metadata help shows new edit command usage", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["skill", "update-metadata", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("kweaver skill update-metadata"), "help should show update-metadata usage");
+    assert.ok(help.includes("--category"), "help should mention category");
+  } finally {
+    console.log = orig;
+  }
+});
+
+test("run skill top-level help includes edit and history subcommands", async () => {
+  const configDir = createConfigDir();
+  process.env.KWEAVERC_CONFIG_DIR = configDir;
+
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(await run(["skill", "--help"]), 0);
+    const help = lines.join("\n");
+    assert.ok(help.includes("update-metadata"), "help should include update-metadata");
+    assert.ok(help.includes("update-package"), "help should include update-package");
+    assert.ok(help.includes("publish-history"), "help should include publish-history");
+  } finally {
+    console.log = orig;
+  }
+});
+
 test("run context-loader help includes standard MCP short commands", async () => {
   const lines: string[] = [];
   const originalLog = console.log;

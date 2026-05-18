@@ -28,6 +28,8 @@ import {
 } from "../trace-ai/eval-set/schemas.js";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
+import { runExpCommand } from "../trace-ai/exp/index.js";
+import { resolveClaudeBinary } from "../trace-ai/exp/claude-binary.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EVAL_SET_RUBRIC_DIR = path.join(__dirname, "..", "trace-ai", "eval-set", "rubric-templates");
@@ -35,7 +37,10 @@ const EVAL_SET_RUBRIC_DIR = path.join(__dirname, "..", "trace-ai", "eval-set", "
 /** Register the default agent provider once per CLI process. Idempotent. */
 function ensureDefaultProviderRegistered(): void {
   if (defaultRegistry.has("claude-code")) return;
-  defaultRegistry.register(new ClaudeCodeSubprocessProvider(), { setAsDefault: true });
+  defaultRegistry.register(new ClaudeCodeSubprocessProvider({
+    binary: resolveClaudeBinary(),
+    defaultTimeoutMs: 120_000,
+  }), { setAsDefault: true });
 }
 
 export interface ParsedTraceArgs {
@@ -282,6 +287,11 @@ produced.
 }
 
 export async function runTraceCommand(rest: string[]): Promise<number> {
+  // exp subcommand — dispatch before other checks (no platform auth needed)
+  if (rest[0] === "exp") {
+    return runExpCommand(rest.slice(1));
+  }
+
   const args = parseTraceArgs(rest);
   if (args.subcommand === "help") {
     printHelp();

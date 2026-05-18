@@ -200,6 +200,7 @@ export type VegaCatalogEntry = z.infer<typeof VegaCatalogEntrySchema>;
 export const KnSchemaSnapshotSchema = z.object({
   object_types: z.array(z.object({
     concept_name: z.string(),
+    data_view_id: z.string().optional(),
     fields: z.array(z.object({ name: z.string(), type: z.string() })),
   })),
   relation_types: z.array(z.object({

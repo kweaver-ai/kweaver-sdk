@@ -216,6 +216,11 @@ export const KnContextSchema = z.object({
   kn_id: z.string(),
   existing_schema: KnSchemaSnapshotSchema,
   available_dataviews: z.array(VegaCatalogEntrySchema),
+  data_probes: z.array(z.object({
+    concept_name: z.string(),
+    data_view_id: z.string(),
+    total_records: z.number(),
+  })).optional(),
 });
 export type KnContext = z.infer<typeof KnContextSchema>;
 

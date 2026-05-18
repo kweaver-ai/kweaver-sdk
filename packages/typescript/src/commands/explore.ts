@@ -11,6 +11,7 @@ import { registerVegaRoutes } from "./explore-vega.js";
 import { listKnowledgeNetworks } from "../api/knowledge-networks.js";
 import { listAgents } from "../api/agent-list.js";
 import { listVegaCatalogs } from "../api/vega.js";
+import { renderHelp } from "../help/format.js";
 
 export interface ExploreOptions {
   knId: string;
@@ -41,21 +42,25 @@ export function parseExploreArgs(args: string[]): ExploreOptions {
 }
 
 function printExploreHelp(): void {
-  console.log(`kweaver explore
-
-Launch an interactive web UI for exploring KWeaver resources.
-
-Usage:
-  kweaver explore [options]
-
-Options:
-  --kn <id>          Open directly to BKN tab with specified KN
-  --agent <id>       Open directly to Chat tab with specified Agent
-  --port <n>         HTTP server port (default: 3721)
-  --no-open          Don't auto-open browser
-  -bd <value>        Business domain override
-  -h, --help         Show this help
-`);
+  console.log(
+    renderHelp({
+      tagline: "Launch interactive web UI for exploring KWeaver resources",
+      usage: "kweaver explore [flags]",
+      flags: [
+        { name: "--kn <id>", desc: "Open directly to BKN tab with specified KN" },
+        { name: "--agent <id>", desc: "Open directly to Chat tab with specified Agent" },
+        { name: "--port <n>", desc: "HTTP server port (default: 3721)" },
+        { name: "--no-open", desc: "Don't auto-open browser" },
+        { name: "-bd, --biz-domain <s>", desc: "Business domain override" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver explore",
+        "kweaver explore --kn <kn-id> --port 4000",
+        "kweaver explore --agent <agent-id> --no-open",
+      ],
+    }),
+  );
 }
 
 // MIME map for static files

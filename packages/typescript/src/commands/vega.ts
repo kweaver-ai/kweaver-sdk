@@ -35,52 +35,54 @@ import {
 } from "../api/vega.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { renderHelp } from "../help/format.js";
 
 // ---------------------------------------------------------------------------
 // Help
 // ---------------------------------------------------------------------------
 
-function printVegaHelp(): void {
-  console.log(`kweaver vega
+const VEGA_HELP = renderHelp({
+  tagline: "Vega observability — catalogs, resources, datasets, queries, connector types",
+  usage: "kweaver vega <subcommand> [<action>] [flags]",
+  sections: [
+    {
+      title: "SERVICE",
+      items: [
+        { name: "health", desc: "Check Vega service health" },
+        { name: "stats", desc: "Show catalog statistics" },
+        { name: "inspect", desc: "Health + catalog summary + running tasks" },
+      ],
+    },
+    {
+      title: "RESOURCES",
+      items: [
+        { name: "catalog", desc: "list / get / health / test-connection / discover / resources / create / update / delete" },
+        { name: "resource", desc: "list / get / query / create / update / delete / list-all" },
+        { name: "dataset", desc: "create-docs / update-docs / delete-docs / delete-docs-query / build / build-status" },
+        { name: "query", desc: "execute — structured query (tables, joins, filters)" },
+        { name: "sql", desc: "Direct SQL / DSL; use {{<resource_id>}} in SQL (quoted)" },
+        { name: "connector-type", desc: "list / get / register / update / delete / enable" },
+      ],
+    },
+  ],
+  flags: [
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON (default)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver vega health",
+    "kweaver vega catalog list --status active",
+    "kweaver vega sql --resource-type elasticsearch --query 'SELECT * FROM {{r-123}} LIMIT 10'",
+  ],
+  learnMore: [
+    "Use `kweaver help all` for full per-action signatures",
+    "Use `kweaver vega <subcommand> --help` for action-level details (where supported)",
+  ],
+});
 
-Subcommands:
-  health                              Check Vega service health
-  stats                               Show catalog statistics
-  inspect                             Health + catalog summary + running tasks
-  catalog list [--status X] [--limit N] [--offset N]
-  catalog get <id>
-  catalog health <ids...> | --all     Health-check catalogs
-  catalog test-connection <id>        Test catalog connectivity
-  catalog discover <id> [--wait]      Trigger discovery
-  catalog resources <id> [--category X] [--limit N]
-  catalog create --name <n> --connector-type <t> --connector-config <json>
-  catalog update <id> [--name X] [--connector-type X] [--tags X] [--description X]
-  catalog delete <ids...> [-y]
-  resource list [--catalog-id X] [--category X] [--status X] [--limit N] [--offset N]
-  resource get <id>
-  resource query <id> -d <json-body>  Query resource data
-  resource create --catalog-id <cid> --name <n> --category <cat>
-  resource update <id> [--name X] [--status X] [--tags X] [-d json]
-  resource delete <ids...> [-y]
-  resource list-all [--limit N] [--offset N]
-  dataset create-docs <resource-id> -d <json-array>
-  dataset update-docs <resource-id> -d <json-array>
-  dataset delete-docs <resource-id> <doc-ids...>
-  dataset delete-docs-query <resource-id> -d <filter-json>
-  dataset build <resource-id> [--mode full|incremental|realtime]
-  dataset build-status <resource-id> <task-id>
-  query execute -d <json>               Structured query (tables, joins, filters)
-  sql --resource-type <t> --query <sql>  Direct SQL / DSL; use {{<resource_id>}} in SQL (quoted)
-  sql -d <json>                         Same API with full JSON body (advanced)
-  connector-type list                 List connector types
-  connector-type get <type>           Get connector type details
-  connector-type register -d <json>   Register a new connector type
-  connector-type update <type> -d <json>  Update connector type
-  connector-type delete <type> [-y]   Delete connector type
-  connector-type enable <type> --enabled <bool>  Enable/disable connector type
-Common flags:
-  -bd, --biz-domain <s>   Business domain (default: bd_public)
-  --pretty                Pretty-print JSON (default)`);
+function printVegaHelp(): void {
+  console.log(VEGA_HELP);
 }
 
 // ---------------------------------------------------------------------------

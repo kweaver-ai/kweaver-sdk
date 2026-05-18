@@ -38,6 +38,7 @@ import {
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { runDsImportCsv } from "./ds.js";
+import { renderHelp } from "../help/format.js";
 import {
   pollWithBackoff,
   detectDisplayKey,
@@ -75,15 +76,22 @@ export function assertValidBknObjectNames(names: string[], context: string): voi
 
 // ── Build ───────────────────────────────────────────────────────────────────
 
-const KN_BUILD_HELP = `kweaver bkn build <kn-id> [options]
-
-Trigger a full build for a knowledge network.
-
-Options:
-  --wait (default)     Poll until build completes
-  --no-wait            Return immediately after triggering
-  --timeout <seconds>  Max wait time when --wait (default: 300)
-  -bd, --biz-domain    Business domain (default: bd_public)`;
+const KN_BUILD_HELP = renderHelp({
+  tagline: "Trigger a full build for a knowledge network",
+  usage: "kweaver bkn build <kn-id> [flags]",
+  flags: [
+    { name: "--wait", desc: "Poll until build completes (default)" },
+    { name: "--no-wait", desc: "Return immediately after triggering" },
+    { name: "--timeout <seconds>", desc: "Max wait time when --wait (default: 300)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn build kn-123",
+    "kweaver bkn build kn-123 --no-wait",
+    "kweaver bkn build kn-123 --wait --timeout 600",
+  ],
+});
 
 export function parseKnBuildArgs(args: string[]): {
   knId: string;
@@ -441,26 +449,53 @@ export function extractTarToDirectory(tarBuffer: Buffer, dirPath: string): void 
   }
 }
 
-const KN_PUSH_HELP = `kweaver bkn push <directory> [options]
+const KN_PUSH_HELP = renderHelp({
+  tagline: "Pack a BKN directory into a tar and upload to import as a knowledge network",
+  usage: "kweaver bkn push <directory> [flags]",
+  flags: [
+    {
+      title: "Target",
+      flags: [
+        { name: "--branch <s>", desc: "Branch name (default: main)" },
+        { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+      ],
+    },
+    {
+      title: "Encoding",
+      flags: [
+        { name: "--detect-encoding", desc: "Detect .bkn encoding and normalize to UTF-8 (default: on)" },
+        { name: "--no-detect-encoding", desc: "Do not detect; require UTF-8 .bkn files" },
+        { name: "--source-encoding <name>", desc: "Decode all .bkn files with this encoding, e.g. gb18030 (overrides detection)" },
+      ],
+    },
+    {
+      title: "Output",
+      flags: [{ name: "--pretty", desc: "Pretty-print JSON output" }],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn push ./my-network",
+    "kweaver bkn push ./my-network --branch feature/v2",
+    "kweaver bkn push ./legacy --source-encoding gb18030",
+  ],
+});
 
-Pack a BKN directory into a tar and upload to import as a knowledge network.
-
-Options:
-  --branch <s>       Branch name (default: main)
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output
-  --detect-encoding  Detect .bkn encoding and normalize to UTF-8 (default: on)
-  --no-detect-encoding  Do not detect; require UTF-8 .bkn files
-  --source-encoding <name>  Decode all .bkn files with this encoding (e.g. gb18030); overrides detection`;
-
-const KN_PULL_HELP = `kweaver bkn pull <kn-id> [<directory>] [options]
-
-Download a BKN tar from a knowledge network and extract to a local directory.
-
-Options:
-  <directory>        Output directory (default: <kn-id>)
-  --branch <s>       Branch name (default: main)
-  -bd, --biz-domain  Business domain (default: bd_public)`;
+const KN_PULL_HELP = renderHelp({
+  tagline: "Download a BKN tar from a knowledge network and extract to a local directory",
+  usage: "kweaver bkn pull <kn-id> [<directory>] [flags]",
+  flags: [
+    { name: "<directory>", desc: "Output directory (default: <kn-id>)" },
+    { name: "--branch <s>", desc: "Branch name (default: main)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn pull kn-123",
+    "kweaver bkn pull kn-123 ./out",
+    "kweaver bkn pull kn-123 ./out --branch feature/v2",
+  ],
+});
 
 export async function runKnPushCommand(args: string[]): Promise<number> {
   let options: KnPushOptions;

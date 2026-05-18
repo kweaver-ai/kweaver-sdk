@@ -186,49 +186,25 @@ Use `callTool(name, args)` when you need native MCP `tools/call` access for newl
 
 ## CLI Reference
 
+`kweaver` follows a `gh`-style help layout (see [docs/cli_conventions.md §8](../../docs/cli_conventions.md#8-help-文本格式must)):
+
+```text
+kweaver [--help|-h]                       # gh-style top-level overview
+kweaver help <command>                    # forward to <command> --help
+kweaver help all                          # full per-action signatures (migration fallback)
+kweaver <command> [--help|-h]             # subcommand overview + actions
+kweaver <command> <subcommand> [--help|-h]  # action-level flags + examples
 ```
-kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
-# -u/-p (with or without --http-signin): HTTP POST /oauth2/signin (yields refresh_token). Missing -u/-p are prompted from stdin (password hidden when TTY).
-# If the server returns error 401001017 (initial password), TTY users get a prompt to set a new password; non-interactive scripts must pass --new-password <pwd>.
-kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
-# EACP POST /api/eacp/v1/auth1/modifypassword — no OAuth token required. Omit -o/-n on a TTY to be prompted.
-kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless login)
-kweaver auth export [url|alias] [--json]   (export command to run on a headless host)
-kweaver auth status / whoami [url|alias] [--json]   # whoami: --json; with KWEAVER_BASE_URL+KWEAVER_TOKEN when no ~/.kweaver/ platform
-kweaver auth list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # platform business domain — show/list-bd work with KWEAVER_BASE_URL (+ KWEAVER_TOKEN for list-bd)
-kweaver token
-kweaver ds list/get/delete/tables/connect
-kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
-kweaver dataflow list/run/runs/logs
-kweaver model llm list/get/add/edit/delete/test/chat/--template
-kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
-kweaver resource|res list/find/get/query/delete
-kweaver bkn list/get/stats/export/create/update/delete
-kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
-kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]
-kweaver bkn validate/push/pull
-kweaver bkn object-type list/get/create/update/delete/query/properties
-kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run
-kweaver bkn relation-type list/get/create/update/delete
-kweaver bkn action-type list/query/execute
-kweaver bkn subgraph / search
-kweaver bkn action-execution get
-kweaver bkn action-log list/get/cancel
-kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
-kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install/management-content/management-read-file/management-download
-kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
-kweaver context-loader help <subcommand>
-kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
-kweaver context-loader tool-call <kn-id> <name> --args '<json>'
-kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  (deprecated; use search-schema)
-kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
-kweaver context-loader config set/use/list/show                       (deprecated; <kn-id> may be omitted to fall back to saved config)
-kweaver toolbox create/list/publish/unpublish/delete
-kweaver tool upload/list/enable/disable/execute/debug (execute and debug accept --path for OpenAPI path params)
-kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-F key=value]
+
+Top-level command groups:
+
+```text
+CORE        auth · token · call · agent · bkn · dataflow · ds · resource
+PLATFORM    model · skill · toolbox · tool · vega · context-loader
+ADDITIONAL  config · explore · trace · help
 ```
+
+For a structured browsable index of every action and flag, run `kweaver help all`.
 
 ### Dataflow CLI examples
 

@@ -29,6 +29,64 @@ import {
   type SkillStatus,
 } from "../api/skills.js";
 import { bundleSkillDirectoryToZip, bundleSkillFileToZip } from "../utils/skill-bundle.js";
+import { renderHelp } from "../help/format.js";
+
+const SKILL_HELP = renderHelp({
+  tagline: "Skill registry and market — register, market, content, lifecycle",
+  usage: "kweaver skill <subcommand> [flags]",
+  sections: [
+    {
+      title: "REGISTRY",
+      items: [
+        { name: "list", desc: "List skills (filter by --name / --status / --source / --create-user)" },
+        { name: "get", desc: "Get a skill by id" },
+        { name: "register", desc: "Register a skill (--content-file <SKILL.md|dir> | --zip-file <path>)" },
+        { name: "set-status", desc: "Change status: unpublish | published | offline" },
+        { name: "delete", desc: "Delete a skill" },
+      ],
+    },
+    {
+      title: "MARKET",
+      items: [
+        { name: "market", desc: "Browse the skill market" },
+        { name: "market-get", desc: "Get a market skill by id" },
+        { name: "download", desc: "Download a skill package archive" },
+        { name: "install", desc: "Install a skill locally" },
+      ],
+    },
+    {
+      title: "CONTENT",
+      items: [
+        { name: "content", desc: "Read SKILL.md content" },
+        { name: "read-file", desc: "Read a file inside a skill (progressive)" },
+        { name: "management-content", desc: "Read SKILL.md via management endpoint" },
+        { name: "management-read-file", desc: "Read file inside skill via management endpoint" },
+        { name: "management-download", desc: "Download via management endpoint" },
+      ],
+    },
+    {
+      title: "LIFECYCLE",
+      items: [
+        { name: "update-metadata", desc: "Update metadata (name / description / category / source)" },
+        { name: "update-package", desc: "Update package content or zip" },
+        { name: "history", desc: "Show version history" },
+        { name: "republish", desc: "Republish a specific historical version" },
+        { name: "publish-history", desc: "Publish a historical version" },
+      ],
+    },
+  ],
+  flags: [
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty / --compact", desc: "JSON output style (default: pretty)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver skill list --name kweaver",
+    "kweaver skill register --zip-file ./demo-skill.zip --source upload_zip",
+    "kweaver skill install skill-123 ./skills/demo-skill --force",
+  ],
+  learnMore: ["Use `kweaver skill <subcommand> --help` for flag details"],
+});
 
 interface BaseOptions {
   businessDomain: string;
@@ -205,39 +263,7 @@ function printSkillHelp(subcommand?: string): void {
     console.log("kweaver skill management-download <skill-id> [--response-mode url|content] [--output file] [-bd value] [--pretty|--compact]");
     return;
   }
-  console.log(`kweaver skill
-
-Subcommands:
-  list [--name kw] [--status status] [--page N] [--page-size N] [-bd value]
-  market [--name kw] [--source src] [--page N] [--page-size N] [-bd value]
-  get <skill-id> [-bd value]
-  market-get <skill-id> [-bd value]
-  register --content-file <path> | --zip-file <path> [--source src] [--extend-info json]
-           (--content-file accepts a file named SKILL.md or a directory; both auto-zip)
-  set-status <skill-id> <unpublish|published|offline> [-bd value]
-  delete <skill-id> [-y] [-bd value]
-  update-metadata <skill-id> --name <name> --description <text> --category <other_category|system> [--source <custom|internal>] [--extend-info json]
-  update-package <skill-id> (--content-file <path> | --zip-file <path>) [-bd value]
-  history <skill-id> [-bd value]
-  republish <skill-id> --version <version> [-bd value]
-  publish-history <skill-id> --version <version> [-bd value]
-  content <skill-id> [--raw] [--output file] [-bd value]
-  read-file <skill-id> <rel-path> [--raw] [--output file] [-bd value]
-  download <skill-id> [--output file] [-bd value]
-  install <skill-id> [directory] [--force] [-bd value]
-  management-content <skill-id> [--raw] [--response-mode url|content] [--output file] [-bd value]
-  management-read-file <skill-id> <rel-path> [--response-mode url|content] [--output file] [-bd value]
-  management-download <skill-id> [--response-mode url|content] [--output file] [-bd value]
-
-Examples:
-  kweaver skill list --name kweaver
-  kweaver skill register --zip-file ./demo-skill.zip --source upload_zip
-  kweaver skill update-metadata skill-123 --name "Demo" --description "Demo skill" --category system
-  kweaver skill update-package skill-123 --content-file ./SKILL.md
-  kweaver skill history skill-123
-  kweaver skill content skill-123 --raw
-  kweaver skill read-file skill-123 references/guide.md --output ./guide.md
-  kweaver skill install skill-123 ./skills/demo-skill --force`);
+  console.log(SKILL_HELP);
 }
 
 function format(value: unknown, pretty: boolean): string {

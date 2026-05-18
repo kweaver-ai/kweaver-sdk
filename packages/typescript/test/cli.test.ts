@@ -183,7 +183,8 @@ test("help text shows dv alias", async () => {
   try {
     await run(["--help"]);
     const text = lines.join("\n");
-    assert.ok(text.includes("resource|res"), "help should mention dv alias");
+    assert.ok(text.includes("resource"), "help should mention resource command");
+    assert.ok(text.includes("res"), "help should mention res alias");
     assert.ok(text.includes("skill"), "help should mention skill command");
     assert.ok(text.includes("dataflow"), "help should mention dataflow command");
   } finally {
@@ -280,14 +281,14 @@ test("run context-loader help includes standard MCP short commands", async () =>
   try {
     await run(["context-loader"]);
     const help = lines.join("\n");
-    assert.ok(help.includes("ADVANCED MCP COMMANDS"), "help should include advanced MCP commands");
-    assert.ok(help.includes("tools:"), "help should include tools");
-    assert.ok(help.includes("resources:"), "help should include resources");
-    assert.ok(help.includes("resource:"), "help should include resource");
-    assert.ok(help.includes("templates:"), "help should include templates");
-    assert.ok(help.includes("prompts:"), "help should include prompts");
-    assert.ok(help.includes("prompt:"), "help should include prompt");
-    assert.ok(help.includes("tool-call:"), "help should include generic tool-call");
+    assert.ok(help.includes("ADVANCED MCP"), "help should include advanced MCP commands");
+    assert.ok(help.includes("tools"), "help should include tools");
+    assert.ok(help.includes("resources"), "help should include resources");
+    assert.ok(help.includes("resource"), "help should include resource");
+    assert.ok(help.includes("templates"), "help should include templates");
+    assert.ok(help.includes("prompts"), "help should include prompts");
+    assert.ok(help.includes("prompt"), "help should include prompt");
+    assert.ok(help.includes("tool-call"), "help should include generic tool-call");
     assert.equal(help.includes("resource <kn-id> <uri>"), false, "top-level help should omit resource arguments");
     assert.equal(help.includes("prompt <kn-id> <name>"), false, "top-level help should omit prompt arguments");
     assert.equal(help.includes("tool-call <kn-id> <name>"), false, "top-level help should omit tool-call arguments");
@@ -305,80 +306,62 @@ test("run context-loader help groups commands by task-oriented capability", asyn
   try {
     assert.equal(await run(["context-loader", "--help"]), 0);
     const help = lines.join("\n");
+    // §8 spec: gh-style top-level help. Section titles dropped "COMMANDS"
+    // suffix; "KN SELECTION" moved into LEARN MORE block.
     assert.equal(help.includes("Discovery:"), false, "help should avoid ambiguous Discovery grouping");
     assert.ok(help.includes("USAGE"), "help should include a standard usage section");
     assert.ok(
       help.includes("kweaver context-loader <subcommand> [flags]"),
       "usage should show the context-loader subcommand shape",
     );
-    assert.ok(help.includes("KN SELECTION"), "help should describe shared KN selection");
     assert.ok(help.includes("RECOMMENDED FLOW"), "help should describe the recommended command flow");
+    assert.ok(help.includes("search-schema"), "recommended flow should include schema discovery");
+    assert.ok(help.includes("query-*"), "recommended flow should point instance reads to query-*");
+    assert.ok(help.includes("get-* / find-skills"), "recommended flow should mention enrichment/actions");
+    assert.ok(help.includes("tool-call"), "recommended flow should mention raw MCP fallback");
+    assert.ok(help.includes("SCHEMA DISCOVERY"), "help should group schema discovery commands");
     assert.ok(
-      help.includes("search-schema:       Discover schema concepts"),
-      "recommended flow should start with schema discovery",
-    );
-    assert.ok(
-      help.includes("query-*:             Query instances using discovered schema IDs"),
-      "recommended flow should point instance reads to query-* commands",
-    );
-    assert.ok(
-      help.includes("get-*/find-skills:   Enrich instances or inspect actions"),
-      "recommended flow should position enrichment/action commands after query",
-    );
-    assert.ok(
-      help.includes("tool-call:           Raw MCP debugging or unsupported tools only"),
-      "recommended flow should keep raw MCP calls as the last resort",
-    );
-    assert.ok(help.includes("SCHEMA DISCOVERY COMMANDS"), "help should group schema discovery commands");
-    assert.ok(
-      help.includes("search-schema:       Search object/relation/action/metric schemas"),
+      help.includes("Search object/relation/action/metric schemas"),
       "schema discovery should list command descriptions without arguments",
     );
-    assert.ok(help.includes("INSTANCE QUERY COMMANDS"), "help should group instance query commands");
+    assert.ok(help.includes("INSTANCE QUERY"), "help should group instance query commands");
+    assert.ok(help.includes("Query object instances"), "instance query should show description");
     assert.ok(
-      help.includes("query-object-instance:    Query object instances"),
-      "instance query should list command descriptions without arguments",
-    );
-    assert.ok(
-      help.includes("INSTANCE ENRICHMENT AND ACTION COMMANDS"),
+      help.includes("INSTANCE ENRICHMENT / ACTION"),
       "help should use a user-facing enrichment/actions group name",
     );
     assert.equal(help.includes("Instance enrichment and actions (Layer 3):"), false, "Layer 3 should not be in the group title");
     assert.ok(
-      help.includes("get-logic-properties: Get calculated logic property values"),
+      help.includes("Get calculated logic-property values"),
       "enrichment/action commands should list command descriptions without arguments",
     );
-    assert.ok(help.includes("ADVANCED MCP COMMANDS"), "help should group MCP interface wrappers");
+    assert.ok(help.includes("ADVANCED MCP"), "help should group MCP interface wrappers");
     assert.ok(
-      help.includes("tool-call:   Call any MCP tool directly"),
+      help.includes("Call any MCP tool directly"),
       "advanced MCP commands should list command descriptions without arguments",
     );
-    assert.ok(help.includes("DEPRECATED CONFIGURATION COMMANDS"), "help should group deprecated config separately");
+    assert.ok(help.includes("DEPRECATED"), "help should group deprecated config separately");
     assert.ok(help.includes("FLAGS"), "help should include shared flags");
     assert.ok(help.includes("-k, --kn-id <id>"), "help should document the shared KN selector flag");
     assert.ok(help.includes("LEARN MORE"), "help should point to subcommand help for details");
     assert.ok(
-      help.includes("Use `kweaver context-loader <subcommand> --help` for arguments, JSON shapes, and examples."),
+      help.includes("kweaver context-loader <subcommand> --help"),
       "help should point to subcommand help",
     );
-    assert.equal(help.includes("Examples:"), false, "top-level help should avoid detailed examples");
-    assert.equal(help.includes("Advanced MCP example:"), false, "raw MCP examples belong in subcommand help");
     assert.equal(help.includes("search-schema <kn-id>"), false, "top-level help should omit search-schema arguments");
     assert.equal(help.includes("query-object-instance <kn-id>"), false, "top-level help should omit query arguments");
     assert.equal(help.includes("kn-search <kn-id>"), false, "top-level help should omit deprecated command arguments");
 
     const usageIdx = help.indexOf("USAGE");
-    const knIdx = help.indexOf("KN SELECTION");
     const flowIdx = help.indexOf("RECOMMENDED FLOW");
-    const schemaIdx = help.indexOf("SCHEMA DISCOVERY COMMANDS");
-    const instanceIdx = help.indexOf("INSTANCE QUERY COMMANDS");
-    const layer3Idx = help.indexOf("INSTANCE ENRICHMENT AND ACTION COMMANDS");
-    const mcpIdx = help.indexOf("ADVANCED MCP COMMANDS");
-    const configIdx = help.indexOf("DEPRECATED CONFIGURATION COMMANDS");
+    const schemaIdx = help.indexOf("SCHEMA DISCOVERY");
+    const instanceIdx = help.indexOf("INSTANCE QUERY");
+    const layer3Idx = help.indexOf("INSTANCE ENRICHMENT / ACTION");
+    const mcpIdx = help.indexOf("ADVANCED MCP");
+    const configIdx = help.indexOf("DEPRECATED");
     const flagsIdx = help.indexOf("FLAGS");
     const learnMoreIdx = help.indexOf("LEARN MORE");
-    assert.ok(usageIdx < knIdx, "usage should appear before shared KN selection");
-    assert.ok(knIdx < flowIdx, "KN selection should appear before recommended flow");
+    assert.ok(usageIdx < flowIdx, "usage should appear before recommended flow");
     assert.ok(flowIdx < schemaIdx, "recommended flow should appear before the command groups");
     assert.ok(schemaIdx < instanceIdx, "schema discovery should be the first task group");
     assert.ok(instanceIdx < layer3Idx, "instance query should come before enrichment/actions");
@@ -387,11 +370,8 @@ test("run context-loader help groups commands by task-oriented capability", asyn
     assert.ok(configIdx < flagsIdx, "flags should appear after command groups");
     assert.ok(flagsIdx < learnMoreIdx, "learn more should appear last");
 
-    const toolCallIdx = help.indexOf("tool-call:", mcpIdx);
-    assert.ok(toolCallIdx > mcpIdx && toolCallIdx < configIdx, "tool-call should be under Advanced MCP interface");
-
-    const knSearchIdx = help.indexOf("kn-search:");
-    const knSchemaSearchIdx = help.indexOf("kn-schema-search:");
+    const knSearchIdx = help.indexOf("kn-search");
+    const knSchemaSearchIdx = help.indexOf("kn-schema-search");
     assert.ok(knSearchIdx > schemaIdx && knSearchIdx < instanceIdx, "kn-search should stay under schema discovery");
     assert.ok(
       knSchemaSearchIdx > schemaIdx && knSchemaSearchIdx < instanceIdx,
@@ -1717,11 +1697,14 @@ test("run bkn --help shows subcommand help", async () => {
   try {
     assert.equal(await run(["bkn", "--help"]), 0);
     const help = lines.join("\n");
-    assert.ok(help.includes("list [options]"));
-    assert.ok(help.includes("export <kn-id>"));
-    assert.ok(help.includes("push <directory>"));
-    assert.ok(help.includes("pull <kn-id>"));
-    assert.ok(help.includes("object-type query"));
+    // gh-style top-level help lists command names only; detailed signatures
+    // are moved to `kweaver help all` per docs/cli_conventions.md §8.
+    assert.ok(help.includes("USAGE"));
+    assert.ok(help.includes("list"));
+    assert.ok(help.includes("export"));
+    assert.ok(help.includes("push"));
+    assert.ok(help.includes("pull"));
+    assert.ok(help.includes("object-type"));
     assert.ok(help.includes("subgraph"));
     assert.ok(help.includes("action-type"));
     assert.ok(help.includes("action-log"));
@@ -2570,19 +2553,15 @@ test("run vega --help shows all subcommands", async () => {
   try {
     assert.equal(await run(["vega", "--help"]), 0);
     const help = lines.join("\n");
-    assert.ok(help.includes("catalog list"));
-    assert.ok(help.includes("catalog create"));
-    assert.ok(help.includes("catalog update"));
-    assert.ok(help.includes("catalog delete"));
-    assert.ok(help.includes("resource list"));
-    assert.ok(help.includes("resource create"));
-    assert.ok(help.includes("resource update"));
-    assert.ok(help.includes("resource delete"));
-    assert.ok(help.includes("connector-type list"));
-    assert.ok(help.includes("connector-type register"));
-    assert.ok(help.includes("connector-type update"));
-    assert.ok(help.includes("connector-type delete"));
-    assert.ok(help.includes("connector-type enable"));
+    // gh-style top-level help lists subcommand groups + actions inline;
+    // detailed signatures are in `kweaver help all` per cli_conventions.md §8.
+    assert.ok(help.includes("USAGE"));
+    assert.ok(help.includes("catalog"));
+    assert.ok(help.includes("resource"));
+    assert.ok(help.includes("dataset"));
+    assert.ok(help.includes("query"));
+    assert.ok(help.includes("sql"));
+    assert.ok(help.includes("connector-type"));
   } finally {
     console.log = originalLog;
   }

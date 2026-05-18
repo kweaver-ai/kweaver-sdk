@@ -25,6 +25,7 @@ import {
   setCurrentContextLoader,
 } from "../config/store.js";
 import { assertNotStatelessForWrite } from "../config/stateless.js";
+import { renderHelp } from "../help/format.js";
 
 const CONTEXT_LOADER_CONFIG_DEPRECATION =
   "[deprecated] `kweaver context-loader config ...` will be removed in a future release. " +
@@ -41,59 +42,79 @@ const DEPRECATED_KN_SEARCH_MESSAGE =
 const DEPRECATED_KN_SCHEMA_SEARCH_MESSAGE =
   "[deprecated] context-loader kn-schema-search is deprecated. Use context-loader search-schema instead.";
 
-const CONTEXT_LOADER_HELP = `kweaver context-loader
-
-USAGE
-  kweaver context-loader <subcommand> [flags]
-  kweaver context-loader help <subcommand>
-  kweaver context-loader --help
-  kweaver context-loader <subcommand> --help
-
-KN SELECTION
-  Most runtime subcommands require a KN. Pass it as the first positional
-  argument or use --kn-id <id> / -k <id>. Omitting KN falls back to the
-  deprecated saved config managed by kweaver context-loader config.
-
-RECOMMENDED FLOW
-  search-schema:       Discover schema concepts
-  query-*:             Query instances using discovered schema IDs
-  get-*/find-skills:   Enrich instances or inspect actions
-  tool-call:           Raw MCP debugging or unsupported tools only
-
-SCHEMA DISCOVERY COMMANDS
-  search-schema:       Search object/relation/action/metric schemas
-  kn-search:           [deprecated] Use search-schema
-  kn-schema-search:    [deprecated] Use search-schema
-
-INSTANCE QUERY COMMANDS
-  query-object-instance:    Query object instances
-  query-instance-subgraph:  Query instance subgraphs
-
-INSTANCE ENRICHMENT AND ACTION COMMANDS
-  get-logic-properties: Get calculated logic property values
-  get-action-info:      Get action metadata and executable info
-  find-skills:          Recall skills for an object type
-
-ADVANCED MCP COMMANDS
-  tools:       List MCP tools
-  resources:   List MCP resources
-  resource:    Read an MCP resource by URI
-  templates:   List MCP resource templates
-  prompts:     List MCP prompts
-  prompt:      Get an MCP prompt by name
-  tool-call:   Call any MCP tool directly
-
-DEPRECATED CONFIGURATION COMMANDS
-  config:      Manage legacy saved KN selection
-
-FLAGS
-  -k, --kn-id <id>   KN selector for runtime subcommands
-  --pretty           Pretty-print JSON output
-  --compact          Print compact JSON output
-  -h, --help         Show help
-
-LEARN MORE
-  Use \`kweaver context-loader <subcommand> --help\` for arguments, JSON shapes, and examples.`;
+const CONTEXT_LOADER_HELP = renderHelp({
+  tagline: "MCP / HTTP context-loader — schema discovery, instance query, action info, skill recall",
+  usage: [
+    "kweaver context-loader <subcommand> [flags]",
+    "kweaver context-loader help <subcommand>",
+  ],
+  sections: [
+    {
+      title: "RECOMMENDED FLOW",
+      items: [
+        { name: "1. search-schema", desc: "Discover schema concepts" },
+        { name: "2. query-*", desc: "Query instances using discovered schema IDs" },
+        { name: "3. get-* / find-skills", desc: "Enrich instances or inspect actions" },
+        { name: "—  tool-call", desc: "Raw MCP debugging or unsupported tools only" },
+      ],
+    },
+    {
+      title: "SCHEMA DISCOVERY",
+      items: [
+        { name: "search-schema", desc: "Search object/relation/action/metric schemas" },
+        { name: "kn-search", desc: "[deprecated] Use search-schema" },
+        { name: "kn-schema-search", desc: "[deprecated] Use search-schema" },
+      ],
+    },
+    {
+      title: "INSTANCE QUERY",
+      items: [
+        { name: "query-object-instance", desc: "Query object instances" },
+        { name: "query-instance-subgraph", desc: "Query instance subgraphs" },
+      ],
+    },
+    {
+      title: "INSTANCE ENRICHMENT / ACTION",
+      items: [
+        { name: "get-logic-properties", desc: "Get calculated logic-property values" },
+        { name: "get-action-info", desc: "Get action metadata and executable info" },
+        { name: "find-skills", desc: "Recall skills for an object type" },
+      ],
+    },
+    {
+      title: "ADVANCED MCP",
+      items: [
+        { name: "tools", desc: "List MCP tools" },
+        { name: "resources", desc: "List MCP resources" },
+        { name: "resource", desc: "Read an MCP resource by URI" },
+        { name: "templates", desc: "List MCP resource templates" },
+        { name: "prompts", desc: "List MCP prompts" },
+        { name: "prompt", desc: "Get an MCP prompt by name" },
+        { name: "tool-call", desc: "Call any MCP tool directly" },
+      ],
+    },
+    {
+      title: "DEPRECATED",
+      items: [{ name: "config", desc: "Manage legacy saved KN selection (set/use/list/remove/show)" }],
+    },
+  ],
+  flags: [
+    { name: "-k, --kn-id <id>", desc: "KN selector for runtime subcommands" },
+    { name: "--pretty", desc: "Pretty-print JSON output" },
+    { name: "--compact", desc: "Compact JSON output" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver context-loader search-schema <id> 'customer churn'",
+    "kweaver context-loader query-object-instance <id> --object-type-id <ot> --limit 10",
+    "kweaver context-loader find-skills <id> <ot-id>",
+  ],
+  learnMore: [
+    "Alias: `kweaver context ...`",
+    "Use `kweaver context-loader <subcommand> --help` for arguments, JSON shapes, examples",
+    "Most runtime subcommands require a KN — first positional or --kn-id / -k",
+  ],
+});
 
 const CONTEXT_LOADER_CONFIG_HELP = `kweaver context-loader config  [deprecated]
 

@@ -22,6 +22,32 @@ import {
   buildDagBody,
 } from "./import-csv.js";
 import { executeDataflow } from "../api/dataflow.js";
+import { renderHelp } from "../help/format.js";
+
+const DS_HELP = renderHelp({
+  tagline: "Manage datasources — list, get, delete, tables, connect, import-csv",
+  usage: "kweaver ds <subcommand> [flags]",
+  sections: [
+    {
+      title: "AVAILABLE COMMANDS",
+      items: [
+        { name: "list", desc: "List datasources" },
+        { name: "get", desc: "Get datasource details" },
+        { name: "delete", desc: "Delete a datasource" },
+        { name: "tables", desc: "List tables with columns" },
+        { name: "connect", desc: "Test, register and discover; reuses by (type,host,port,db,account) unless --force-new" },
+        { name: "import-csv", desc: "Import CSV files into datasource tables via dataflow API" },
+      ],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver ds list --keyword mysql",
+    "kweaver ds connect mysql 127.0.0.1 3306 mydb --account root --password ******",
+    "kweaver ds tables <id> --keyword users",
+  ],
+  learnMore: ["Use `kweaver ds <subcommand> --help` for flag details"],
+});
 
 function confirmYes(prompt: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -46,20 +72,7 @@ export async function runDsCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(`kweaver ds
-
-Subcommands:
-  list [--keyword X] [--type Y]     List datasources
-  get <id>                          Get datasource details
-  delete <id> [-y]                  Delete a datasource
-  tables <id> [--keyword X]         List tables with columns
-  connect <db_type> <host> <port> <database> --account X --password Y [--schema Z] [--name N]
-                                              [--reuse-existing|--force-new]
-    Test connectivity, register datasource, and discover tables.
-    By default reuses an existing ds with the same (type, host, port, database, account)
-    instead of creating a duplicate. --force-new always creates a new entry.
-  import-csv <ds-id> --files <glob_or_list> [--table-prefix X] [--batch-size N]
-    Import CSV files into datasource tables via dataflow API.`);
+    console.log(DS_HELP);
     return 0;
   }
 

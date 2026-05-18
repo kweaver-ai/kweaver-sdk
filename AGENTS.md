@@ -125,10 +125,11 @@
 
 每次新增、修改或删除 CLI 命令或参数时，必须同步更新以下位置（同一 PR / 同一变更内完成）：
 
-1. **子命令 help text** — [`packages/typescript/src/commands/*.ts`](packages/typescript/src/commands/) 中的 help 字符串（例如 `KN_HELP`、`runKnObjectTypeCommand` / `runCallCommand` 等子命令内的 `--help` 输出）。
-2. **Skill reference** — [`skills/kweaver-core/references/`](skills/kweaver-core/references/) 下对应 `<command>.md`（如 `bkn.md`、`call.md`、`agent.md`）；[`skills/kweaver-core/SKILL.md`](skills/kweaver-core/SKILL.md) 若引用总览表，按需调整。
-3. **顶层 help**（若改动影响命令组或主入口展示）— [`packages/typescript/src/cli.ts`](packages/typescript/src/cli.ts) 的 `printHelp()`。
-4. **README** — [`packages/typescript/README.md`](packages/typescript/README.md) / [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md)（若涉及用法示例或命令列表）；根目录 [`README.md`](README.md) / [`README.zh.md`](README.zh.md) 若同步列举 CLI 时一并更新。
+1. **Help 文本格式合规** — 所有 `--help` 输出必须通过 [`packages/typescript/src/help/format.ts`](packages/typescript/src/help/format.ts) 的 formatter 渲染，结构遵循 [`docs/cli_conventions.md` §8](docs/cli_conventions.md#8-help-文本格式must)。**禁止硬编码大段 help 字符串。**
+2. **子命令 help text** — [`packages/typescript/src/commands/*.ts`](packages/typescript/src/commands/) 中各子命令的 `--help` 分支。
+3. **顶层 help**（若改动影响命令组或主入口展示）— [`packages/typescript/src/cli.ts`](packages/typescript/src/cli.ts) 的 `printHelp()`，并同步 `kweaver help all` 兜底输出。
+4. **Skill reference** — [`skills/kweaver-core/references/`](skills/kweaver-core/references/) 下对应 `<command>.md`（如 `bkn.md`、`call.md`、`agent.md`）；[`skills/kweaver-core/SKILL.md`](skills/kweaver-core/SKILL.md) 若引用总览表，按需调整。
+5. **README** — [`packages/typescript/README.md`](packages/typescript/README.md) / [`packages/typescript/README.zh.md`](packages/typescript/README.zh.md)（若涉及用法示例或命令列表）；根目录 [`README.md`](README.md) / [`README.zh.md`](README.zh.md) 若同步列举 CLI 时一并更新。
 
 若 Python CLI 存在对等能力，同步其 help 与用户可见文档（`packages/python`）。
 

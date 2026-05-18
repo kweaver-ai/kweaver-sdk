@@ -1,4 +1,51 @@
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
+import { renderHelp } from "../help/format.js";
+
+const AGENT_HELP = renderHelp({
+  tagline: "Agent CRUD, chat, sessions, history, publish/unpublish",
+  usage: "kweaver agent <subcommand> [flags]",
+  sections: [
+    {
+      title: "DISCOVERY",
+      items: [
+        { name: "list", desc: "List published agents" },
+        { name: "personal-list", desc: "List personal-space agents" },
+        { name: "category-list", desc: "List agent categories" },
+        { name: "template-list", desc: "List published agent templates" },
+        { name: "template-get", desc: "Get published agent template details" },
+      ],
+    },
+    {
+      title: "CRUD",
+      items: [
+        { name: "get", desc: "Get agent details" },
+        { name: "get-by-key", desc: "Get agent by key" },
+        { name: "create", desc: "Create a new agent" },
+        { name: "update", desc: "Update an existing agent" },
+        { name: "delete", desc: "Delete an agent" },
+        { name: "publish", desc: "Publish an agent" },
+        { name: "unpublish", desc: "Unpublish an agent" },
+      ],
+    },
+    {
+      title: "RUNTIME",
+      items: [
+        { name: "chat", desc: "Interactive chat (or single message with -m)" },
+        { name: "sessions", desc: "List conversations for an agent" },
+        { name: "history", desc: "Show message history for a conversation" },
+        { name: "trace", desc: "Get trace data for a conversation (--view tree|perf|evidence|reasoning|all)" },
+        { name: "skill", desc: "Manage skills attached to an agent (add / remove / list)" },
+      ],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver agent list --limit 20",
+    "kweaver agent chat <agent_id> -m \"hello\"",
+    "kweaver agent trace <conversation_id> --view all",
+  ],
+  learnMore: ["Use `kweaver agent <subcommand> --help` for flag details"],
+});
 import { runAgentChatCommand } from "./agent-chat.js";
 import { runAgentSkillCommand } from "./agent-members.js";
 import {
@@ -713,30 +760,7 @@ export async function runAgentCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(`kweaver agent
-
-Subcommands:
-  list [options]                     List published agents
-  personal-list [options]            List personal space agents
-  category-list [options]            List agent categories
-  template-list [options]            List published agent templates
-  template-get <tpl_id>              Get published agent template details
-  get <agent_id> [--verbose]         Get agent details
-  get-by-key <key>                   Get agent by key
-  create --name <n> --profile <p>    Create a new agent
-       [--key <key>] [--product-key <pk>] [--system-prompt <sp>]
-       [--llm-id <id>] [--llm-max-tokens <n>] [--mode <mode>]
-  update <agent_id> [options]        Update an existing agent
-  delete <agent_id> [-y]             Delete an agent
-  publish <agent_id>                 Publish an agent
-  unpublish <agent_id>               Unpublish an agent
-  chat <agent_id>                    Start interactive chat with an agent
-  chat <agent_id> -m "message"       Send a single message (non-interactive)
-  skill <verb> ...                   Manage skills attached to an agent (add/remove/list)
-  sessions <agent_id>                List all conversations for an agent
-  history <agent_id> <conversation_id> Show message history for a conversation
-  trace <conversation_id> [--view tree|perf|evidence|reasoning|all] [--json]
-                                       Get trace data for a conversation`);
+    console.log(AGENT_HELP);
     return Promise.resolve(0);
   }
 
@@ -764,27 +788,48 @@ Subcommands:
   // Show subcommand-specific help inline (no retry needed)
   if (subcommand === "chat") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent chat <agent_id> [-m "message"] [options]
-
-Interactive mode (default when -m is omitted):
-  kweaver agent chat <agent_id>
-  Type your message and press Enter. Type 'exit', 'quit', or 'q' to quit.
-
-Non-interactive mode:
-  kweaver agent chat <agent_id> -m "your message"
-  kweaver agent chat <agent_id> -m "continue" --conversation-id <id>
-
-Options:
-  -m, --message <text>       Single message (non-interactive)
-  --conversation-id <id>     Continue existing conversation
-  -cid <id>                  Short alias for --conversation-id
-  --session-id <id>          Alias for --conversation-id
-  -conversation_id <id>      Compatibility alias for reference examples
-  --version <value>          Agent version used to resolve the agent key (default: v0)
-  --stream                   Enable streaming (default in interactive)
-  --no-stream                Disable streaming (default with -m)
-  --verbose, -v              Print request details to stderr
-  -bd, --biz-domain <value>  Override x-business-domain (default: bd_public)`);
+      console.log(
+        renderHelp({
+          tagline: "Chat with an agent — interactive (default) or single-shot (-m)",
+          usage: [
+            "kweaver agent chat <agent_id>                       (interactive)",
+            "kweaver agent chat <agent_id> -m \"message\"          (single-shot)",
+            "kweaver agent chat <agent_id> -m \"...\" --conversation-id <id>",
+          ],
+          flags: [
+            {
+              title: "Message",
+              flags: [
+                { name: "-m, --message <text>", desc: "Single message (non-interactive)" },
+                { name: "--conversation-id <id>", desc: "Continue existing conversation (aliases: -cid, --session-id, -conversation_id)" },
+                { name: "--version <value>", desc: "Agent version used to resolve agent key (default: v0)" },
+              ],
+            },
+            {
+              title: "Streaming",
+              flags: [
+                { name: "--stream", desc: "Enable streaming (default in interactive)" },
+                { name: "--no-stream", desc: "Disable streaming (default with -m)" },
+              ],
+            },
+            {
+              title: "Common",
+              flags: [
+                { name: "--verbose, -v", desc: "Print request details to stderr" },
+                { name: "-bd, --biz-domain <value>", desc: "Override x-business-domain (default: bd_public)" },
+              ],
+            },
+          ],
+          inheritedFlags: "--base-url, --token, --user, --help",
+          examples: [
+            "kweaver agent chat agt-123",
+            "kweaver agent chat agt-123 -m \"hello\"",
+            "kweaver agent chat agt-123 -m \"continue\" --conversation-id conv-456",
+            "kweaver agent chat agt-123 -m \"hello\" --no-stream --verbose",
+          ],
+          learnMore: ["Interactive mode: type 'exit', 'quit', or 'q' to quit"],
+        }),
+      );
       return Promise.resolve(0);
     }
     return runAgentChatCommand(rest);

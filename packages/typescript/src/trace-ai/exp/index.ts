@@ -24,7 +24,10 @@ import { ContextAssembler } from "./context/context-assembler.js";
 import { probeObjectTypes } from "./context/kn-data-prober.js";
 import { queryDataView } from "../../api/dataviews.js";
 import { KweaverVegaCatalogClient } from "./context/vega-catalog-client.js";
-import type { SkillApiClient } from "./patch/skill-api-client.js";
+import { KweaverKnApiClient } from "./patch/kn-api-client.js";
+import { KweaverSkillApiClient, type SkillApiClient } from "./patch/skill-api-client.js";
+
+const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 
 const __expIndexDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -249,7 +252,8 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     process.stderr.write("warn: could not create semantic-match provider — semantic_match assertions will be skipped\n");
   }
 
-  const knSchemaClient = new KweaverKnSchemaClient(baseUrl, token);
+  const mcpUrl = baseUrl.replace(/\/+$/, "") + MCP_PATH;
+  const knSchemaClient = new KweaverKnSchemaClient(mcpUrl, token);
   const vegaCatalogClient = new KweaverVegaCatalogClient(baseUrl, token);
 
   // Wire probeObjectTypes with auth + businessDomain
@@ -258,16 +262,20 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     failures: Parameters<typeof probeObjectTypes>[1],
   ) => probeObjectTypes(schema, failures, queryDataView, { baseUrl, accessToken: token });
 
-  // KweaverSkillApiClient not yet implemented — use no-op inline
-  const skillApiClient: SkillApiClient = {
+  // SkillApiClient: real impl throws — fall back to no-op so ContextAssembler.assemble("skill.content", ...)
+  // can still pre-fetch bound_skill stubs. PatchApplier receives the real client (which will surface a
+  // clear "not yet implemented" error if Synthesizer emits a skill.content patch).
+  const realSkillClient = new KweaverSkillApiClient(baseUrl, token);
+  const noopSkillContextClient: SkillApiClient = {
     async getSkillContent(_id: string) { return ""; },
     async publishSkillVersion(_id: string, _content: string) { return { version: "noop", content: "" }; },
   };
+  const knApiClient = new KweaverKnApiClient(baseUrl, token);
 
   const contextAssembler = new ContextAssembler(
     knSchemaClient,
     vegaCatalogClient,
-    skillApiClient,
+    noopSkillContextClient,
     boundProbe,
   );
 
@@ -276,6 +284,8 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     synthesizer: new ClaudeCodeSynthesizer(),
     triage: new ClaudeCodeTriageClient(),
     contextAssembler,
+    knClient: knApiClient,
+    skillClient: realSkillClient,
     fetchTrace: async (conversationId) => {
       const r = await getTracesByConversation({ baseUrl, accessToken: token, conversationId, businessDomain: bd });
       return { spans: r.spans };

@@ -3,14 +3,16 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import yaml from "js-yaml";
 import { ExpStore } from "./exp-store/index.js";
-import { applyPatch } from "./patch/index.js";
+import { PatchApplier } from "./patch/index.js";
+import type { KnApiClient } from "./patch/kn-api-client.js";
+import type { SkillApiClient } from "./patch/skill-api-client.js";
 import { computeScores } from "./scoring.js";
 import { writeBundles } from "./bundle-writer.js";
 import { ContextAssembler } from "./context/context-assembler.js";
 import { analyzeFailures } from "./context/failure-analyzer.js";
 import type { TriageClient, TriageResult } from "./providers/triage-client.js";
 import type { SynthesizerClient } from "./providers/synthesizer-client.js";
-import type { ExpFsmState, FailureAttribution, Mission, NextChange, QueryResult, RoundData, SkillBinding } from "./schemas.js";
+import type { ExpFsmState, Mission, NextChange, PatchTarget, QueryResult, SkillBinding } from "./schemas.js";
 import type { TraceSpan } from "../../api/conversations.js";
 
 export type { SynthesizerClient, TriageClient, TriageResult };
@@ -23,6 +25,8 @@ export interface CoordinatorOpts {
   experimentId?: string;
   contextAssembler?: ContextAssembler;
   fetchTrace?: (conversationId: string) => Promise<{ spans: TraceSpan[] }>;
+  knClient?: KnApiClient;
+  skillClient?: SkillApiClient;
 }
 
 export class ExperimentCoordinator {
@@ -36,8 +40,11 @@ export class ExperimentCoordinator {
   async run(): Promise<void> {
     const replayed = await this.store.replayState();
 
-    if (replayed.isTerminal && !replayed.currentState.includes("Aborted")) {
-      throw new Error(`Experiment is in terminal state ${replayed.currentState}. Use --new-run to start fresh.`);
+    if (replayed.isTerminal) {
+      throw new Error(
+        `Experiment is in terminal state ${replayed.currentState}. ` +
+        `Use --new-run to start a fresh experiment in this directory.`
+      );
     }
 
     const mission = await this.store.readMission();
@@ -49,16 +56,38 @@ export class ExperimentCoordinator {
 
     await this.store.acquireLock();
     this.heartbeatTimer = setInterval(() => { void this.store.updateHeartbeat(); }, 10_000);
+    const uninstallSignals = this.installSignalHandlers();
 
-    // If previous run failed mid-round, retry that round (startRound = currentRound - 1)
-    const startRound = replayed.lastFailure && replayed.currentRound > 0
+    // Layer 2 auto-recovery: prior holder died mid-round without writing step_failed
+    // (typically SIGKILL/OOM/power — signal handlers can't help with these). FSM is
+    // stuck in an executing-side phase with no lastFailure. Synthesize step_failed so
+    // the startRound calc below rewinds to redo the round.
+    const stuckMidRound = !replayed.lastFailure
+      && replayed.currentRound > 0
+      && replayed.currentState !== "Init"
+      && replayed.currentState !== "Deciding"
+      && !replayed.isTerminal;
+    if (stuckMidRound) {
+      await this.store.appendEvent({
+        type: "step_failed",
+        state: replayed.currentState,
+        error: `auto-recovered: prior holder died mid-${replayed.currentState} at round ${replayed.currentRound}`,
+        retryable: true,
+      });
+      process.stderr.write(
+        `Recovered stale ${replayed.currentState} at round ${replayed.currentRound}; redoing round.\n`
+      );
+    }
+
+    // If previous run failed mid-round (real failure OR auto-recovered above), retry that round.
+    const startRound = (replayed.lastFailure || stuckMidRound) && replayed.currentRound > 0
       ? replayed.currentRound - 1
       : replayed.currentRound;
 
     try {
-
       await this.runLoop(mission, startRound, expId);
     } finally {
+      uninstallSignals();
       clearInterval(this.heartbeatTimer);
       await this.store.releaseLock();
     }
@@ -71,14 +100,82 @@ export class ExperimentCoordinator {
     }
     await this.store.acquireLock();
     this.heartbeatTimer = setInterval(() => { void this.store.updateHeartbeat(); }, 10_000);
+    const uninstallSignals = this.installSignalHandlers();
     try {
       const mission = await this.store.readMission();
       const expId = `exp_${replayed.currentRound}`;
       await this.runLoop(mission, replayed.currentRound, expId);
     } finally {
+      uninstallSignals();
       clearInterval(this.heartbeatTimer);
       await this.store.releaseLock();
     }
+  }
+
+  /**
+   * Install SIGINT/SIGHUP/SIGTERM handlers that flush a final event and release
+   * the lock before exit. Returns an uninstaller that MUST be called in the
+   * caller's finally block (otherwise normal exit would still fire the handler).
+   *
+   * Semantics:
+   *   SIGINT  → user-intent abort       → emit `aborted` event (terminal)
+   *   SIGHUP  → terminal closed         → emit `step_failed` retryable
+   *   SIGTERM → external kill (ambig.)  → emit `step_failed` retryable
+   *
+   * SIGKILL / OOM / power loss can't be caught here — Layer 2 auto-recovery in
+   * run() handles that case on the next start.
+   */
+  private installSignalHandlers(): () => void {
+    let firing = false;
+    const handler = (signal: NodeJS.Signals) => {
+      if (firing) return;
+      firing = true;
+      // Process exits in the IIFE — Node won't await the handler itself, so we
+      // must drive the async flow and then `process.exit` ourselves.
+      void (async () => {
+        try {
+          const replayed = await this.store.replayState();
+          if (signal === "SIGINT") {
+            await this.store.appendEvent({
+              type: "aborted",
+              round: replayed.currentRound,
+              reason: `interrupted by ${signal}`,
+            });
+          } else {
+            // For non-terminal states only — if FSM was already Deciding/Init/terminal,
+            // a step_failed would be a lie. Skip the event but still release the lock.
+            const recoverable = !replayed.isTerminal
+              && replayed.currentState !== "Init"
+              && replayed.currentState !== "Deciding";
+            if (recoverable) {
+              await this.store.appendEvent({
+                type: "step_failed",
+                state: replayed.currentState,
+                error: `process interrupted by ${signal}`,
+                retryable: true,
+              });
+            }
+          }
+        } catch (err) {
+          process.stderr.write(`signal handler: failed to append event: ${String(err)}\n`);
+        }
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        try { await this.store.releaseLock(); } catch { /* best-effort */ }
+        // Exit codes per shell convention (128 + signal number).
+        const code = signal === "SIGINT" ? 130 : signal === "SIGHUP" ? 129 : 143;
+        process.exit(code);
+      })();
+    };
+
+    process.on("SIGINT", handler);
+    process.on("SIGHUP", handler);
+    process.on("SIGTERM", handler);
+
+    return () => {
+      process.off("SIGINT", handler);
+      process.off("SIGHUP", handler);
+      process.off("SIGTERM", handler);
+    };
   }
 
   private async runLoop(mission: Mission, startRound: number, expId: string): Promise<void> {
@@ -94,18 +191,28 @@ export class ExperimentCoordinator {
 
     const prevRounds = await this.store.readAllRounds();
 
-    // Read last TriageComplete event for failure_attribution and suggested_target
-    const allEvents = await this.store.readAllEvents();
-    const lastTriageEvent = allEvents.filter(e => e["type"] === "TriageComplete").at(-1) as Record<string, unknown> | undefined;
-    const failureAttribution = Array.isArray(lastTriageEvent?.["failure_attribution"])
-      ? lastTriageEvent["failure_attribution"] as FailureAttribution[]
-      : [];
-    const suggestedTarget = (failureAttribution[0]?.suggested_target ?? "agent.system_prompt") as import("./schemas.js").PatchTarget;
-
-    // Load current candidate and apply patch
+    // Load current candidate and apply patch via PatchApplier (handles agent.*/kn.*/skill.content).
+    // PatchApplier may call external APIs (KN/skill) that throw on stubs or transient failures;
+    // surface those as Generating-phase step_failed so the FSM stays observable and lineage
+    // doesn't get stuck in "running". No auto-retry: patch side-effects (KN writes, skill version
+    // publish) are not safe to blindly retry — user inspects step_failed and resumes manually.
     const currentCandidatePath = path.join(this.opts.expDir, mission.current_candidate.path);
     const currentCandidate = yaml.load(await fs.readFile(currentCandidatePath, "utf8")) as Record<string, unknown>;
-    const patched = applyPatch(currentCandidate, nextChange);
+    const patchApplier = new PatchApplier(this.opts.expDir, this.opts.knClient, this.opts.skillClient);
+    let patched: Record<string, unknown>;
+    try {
+      const result = await patchApplier.apply(currentCandidate, nextChange);
+      patched = result.candidate;
+    } catch (err) {
+      await this.store.appendEvent({
+        type: "step_failed",
+        state: "Generating",
+        error: String(err),
+        retryable: false,
+      });
+      process.stderr.write(`\nGenerating failed for target ${nextChange.target}: ${String(err)}\n`);
+      return;
+    }
     patched["candidate_version"] = `v${round}`;
 
     const newCandidatePath = path.join(this.opts.expDir, "candidates", `candidate-v${round}.yaml`);
@@ -180,7 +287,8 @@ export class ExperimentCoordinator {
       return;
     }
 
-    // Normalize "abort" → "publish" for the typed triage_conclusion verdict
+    // Persist triage_conclusion. Only "continue"/"publish" are valid in the typed schema;
+    // "abort" is a runtime verdict that maps to "publish" for storage but follows the Aborted branch below.
     const storedVerdict: "continue" | "publish" = triageResult.verdict === "continue" ? "continue" : "publish";
     await this.store.writeRound(round, {
       triage_conclusion: {
@@ -192,7 +300,7 @@ export class ExperimentCoordinator {
     });
     await this.store.appendEvent({ type: "round_completed", round, verdict: storedVerdict });
 
-    // Persist failure_attribution in a TriageComplete event for downstream use (exp show, Generating state)
+    // Persist failure_attribution in a TriageComplete event for downstream consumers (exp show, etc.)
     await this.store.appendEvent({
       type: "TriageComplete",
       round,
@@ -201,9 +309,17 @@ export class ExperimentCoordinator {
       failure_attribution: triageResult.failure_attribution,
     });
 
-    // Generate next suggestion if continuing
+    // Abort: terminal state — no suggestion, no Deciding pause.
+    if (triageResult.verdict === "abort") {
+      await this.store.appendEvent({ type: "aborted", round, reason: `triage_abort: ${triageResult.summary ?? "no summary"}` });
+      process.stdout.write(`\nExperiment aborted by triage: ${triageResult.summary ?? "(no reason)"}\n`);
+      return;
+    }
+
+    // Generate next suggestion if continuing.
     if (triageResult.verdict === "continue" && round < maxRounds) {
-      // Phase 1: ContextAssembler pre-fetch (only if contextAssembler is available)
+      const suggestedTarget: PatchTarget =
+        (triageResult.failure_attribution?.[0]?.suggested_target as PatchTarget | undefined) ?? "agent.system_prompt";
       const knId = (patched["kn"] as Record<string, unknown> | undefined)?.["id"] as string | undefined;
       const boundSkills = ((patched["agent"] as Record<string, unknown> | undefined)?.["skills"] as SkillBinding[] | undefined) ?? [];
       const { kn_context, skill_context } = this.opts.contextAssembler

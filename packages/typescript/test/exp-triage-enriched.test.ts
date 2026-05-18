@@ -8,6 +8,7 @@ const mission: Mission = {
   goal: "reduce retries",
   eval_sets: [{ path: "eval-sets/v1", role: "seed" }],
   current_candidate: { path: "candidates/baseline.yaml" },
+  enabled_targets: ["agent.system_prompt", "agent.skills", "kn.object_type", "kn.relation_type", "skill.content"],
 };
 
 const round: RoundData = {
@@ -89,5 +90,14 @@ describe("buildTriagePrompt (merged planner)", () => {
     for (const t of ["agent.system_prompt", "agent.skills", "kn.object_type", "kn.relation_type", "skill.content"]) {
       assert.match(prompt, new RegExp(`"target":"${t.replace(/\./g, "\\.")}"`), `missing example for ${t}`);
     }
+  });
+
+  it("restricts output examples + suggested_target enum to enabled_targets", () => {
+    const restricted: Mission = { ...mission, enabled_targets: ["agent.system_prompt"] };
+    const prompt = buildTriagePrompt({ mission: restricted, currentRound: round, prevRounds: [], candidateConfig: {} });
+    assert.match(prompt, /"target":"agent\.system_prompt"/, "enabled example must appear");
+    assert.doesNotMatch(prompt, /"target":"kn\.object_type"/, "disabled kn example must NOT appear");
+    assert.doesNotMatch(prompt, /"target":"skill\.content"/, "disabled skill example must NOT appear");
+    assert.match(prompt, /enabled_targets = \[agent\.system_prompt\]/);
   });
 });

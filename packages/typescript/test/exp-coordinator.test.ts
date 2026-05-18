@@ -157,6 +157,36 @@ test("coordinator: Layer 2 — terminal state refuses run (Aborted no longer spe
   await assert.rejects(() => coord.run(), /terminal state Aborted.*--new-run/);
 });
 
+test("coordinator: rejects next_change.target not in enabled_targets", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "coord-test-"));
+  await fs.mkdir(path.join(dir, ".trace-state", "rounds"), { recursive: true });
+  await fs.mkdir(path.join(dir, "candidates"), { recursive: true });
+  await fs.mkdir(path.join(dir, "eval-sets", "v1"), { recursive: true });
+  await fs.mkdir(path.join(dir, "outputs"), { recursive: true });
+  await fs.writeFile(path.join(dir, ".trace-state", "events.jsonl"), "");
+  await fs.writeFile(path.join(dir, "mission.md"), `---
+schema_version: trace-mission/v1
+goal: x
+max_rounds: 1
+enabled_targets: [skill.content]
+eval_sets:
+  - path: eval-sets/v1
+    role: seed
+current_candidate:
+  path: candidates/baseline.yaml
+next_change:
+  target: agent.system_prompt
+  hypothesis: x
+  patch: '{"agent":{"system_prompt":"x"}}'
+---
+`);
+  await fs.writeFile(path.join(dir, "candidates", "baseline.yaml"), "candidate_version: v0\nagent:\n  system_prompt: old\nskills: []\n");
+  await fs.writeFile(path.join(dir, "eval-sets", "v1", "index.yaml"), "schema_version: trace-eval-set-index/v1\neval_set_id: x\nshards: []\n");
+
+  const coord = new ExperimentCoordinator({ expDir: dir, triage: mockTriage, runEval: mockEvalRunner });
+  await assert.rejects(() => coord.run(), /agent\.system_prompt.*enabled_targets.*skill\.content/);
+});
+
 test("coordinator: Layer 1 — installs and uninstalls signal handlers across run()", async () => {
   const dir = await makeExpDir();
   const sigs: NodeJS.Signals[] = ["SIGINT", "SIGHUP", "SIGTERM"];

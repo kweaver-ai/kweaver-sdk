@@ -185,7 +185,14 @@ export class ExperimentCoordinator {
     // === Generating (Apply Phase) ===
     await this.store.appendEvent({ type: "state_transition", from: "Deciding", to: "Generating", round });
     const nextChange = mission.next_change;
-    if (!nextChange) throw new Error("mission.md has no next_change — add one or let Synthesizer suggest");
+    if (!nextChange) throw new Error("mission.md has no next_change — add one or let the planner suggest");
+
+    if (!mission.enabled_targets.includes(nextChange.target)) {
+      throw new Error(
+        `next_change.target=${nextChange.target} is not in mission.enabled_targets=[${mission.enabled_targets.join(", ")}]. ` +
+        `Either add the target to enabled_targets in mission.md, or change next_change to use an enabled target.`
+      );
+    }
 
     const prevRounds = await this.store.readAllRounds();
 

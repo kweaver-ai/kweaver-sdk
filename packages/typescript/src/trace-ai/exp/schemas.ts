@@ -185,6 +185,14 @@ export const MissionSchema = z.object({
   current_candidate: z.object({ path: z.string() }),
   next_change: NextChangeSchema.optional(),
   guardrails: z.array(GuardrailSchema).optional(),
+  /**
+   * Patch targets this experiment is allowed to iterate on. Limits the planner
+   * LLM's choices, gates KN/Skill client construction, and shapes prompt
+   * examples. Default = ["agent.system_prompt"] — safest for missions that
+   * predate the multilayer rollout. Opt-in to other layers as their backing
+   * API clients become production-ready.
+   */
+  enabled_targets: z.array(PatchTargetSchema).min(1).default(["agent.system_prompt"]),
 });
 export type Mission = z.infer<typeof MissionSchema>;
 

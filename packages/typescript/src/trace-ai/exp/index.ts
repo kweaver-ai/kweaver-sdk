@@ -251,6 +251,15 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     process.stderr.write("warn: could not create semantic-match provider — semantic_match assertions will be skipped\n");
   }
 
+  // Read mission upfront so KN/Skill clients are only constructed when the
+  // experiment actually enables those layers. Avoids exposing stub clients
+  // (KweaverKnApiClient, KweaverSkillApiClient — both throw "not yet implemented")
+  // to missions that don't need them.
+  const mission = await new ExpStore(expDir).readMission();
+  const enabled = new Set(mission.enabled_targets);
+  const needsKn = enabled.has("kn.object_type") || enabled.has("kn.relation_type");
+  const needsSkill = enabled.has("skill.content");
+
   const mcpUrl = baseUrl.replace(/\/+$/, "") + MCP_PATH;
   const knSchemaClient = new KweaverKnSchemaClient(mcpUrl, token);
   const vegaCatalogClient = new KweaverVegaCatalogClient(baseUrl, token);
@@ -261,15 +270,12 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     failures: Parameters<typeof probeObjectTypes>[1],
   ) => probeObjectTypes(schema, failures, queryDataView, { baseUrl, accessToken: token });
 
-  // SkillApiClient: real impl throws — fall back to no-op so ContextAssembler.assemble("skill.content", ...)
-  // can still pre-fetch bound_skill stubs. PatchApplier receives the real client (which will surface a
-  // clear "not yet implemented" error if Synthesizer emits a skill.content patch).
-  const realSkillClient = new KweaverSkillApiClient(baseUrl, token);
+  // No-op SkillApiClient lets ContextAssembler pre-fetch bound_skill stubs even when
+  // skill.content isn't enabled (the bound list is informational for the planner).
   const noopSkillContextClient: SkillApiClient = {
     async getSkillContent(_id: string) { return ""; },
     async publishSkillVersion(_id: string, _content: string) { return { version: "noop", content: "" }; },
   };
-  const knApiClient = new KweaverKnApiClient(baseUrl, token);
 
   const contextAssembler = new ContextAssembler(
     knSchemaClient,
@@ -282,8 +288,8 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     expDir,
     triage: new ClaudeCodeTriageClient(),
     contextAssembler,
-    knClient: knApiClient,
-    skillClient: realSkillClient,
+    knClient: needsKn ? new KweaverKnApiClient(baseUrl, token) : undefined,
+    skillClient: needsSkill ? new KweaverSkillApiClient(baseUrl, token) : undefined,
     fetchTrace: async (conversationId) => {
       const r = await getTracesByConversation({ baseUrl, accessToken: token, conversationId, businessDomain: bd });
       return { spans: r.spans };

@@ -114,6 +114,27 @@ export function buildTriagePrompt(input: TriageInput): string {
   if (input.kn_context) contextSection += "\n\n" + buildKnContextPrompt(input.kn_context);
   if (input.skill_context) contextSection += "\n\n" + buildSkillContextPrompt(input.skill_context);
 
+  // Restrict suggested_target choices + output examples to layers this mission opted into.
+  // Empty / missing enabled_targets defaults to ["agent.system_prompt"] (handled by MissionSchema).
+  const enabled = new Set(input.mission.enabled_targets);
+  const targetEnumLine = [...enabled].map(t => `"${t}"`).join(" | ");
+  const allExamples: Array<[string, string]> = [
+    ["agent.system_prompt", `# agent.system_prompt — patch is a JSON string (escaped) or object with {agent:{system_prompt}}
+{"target":"agent.system_prompt","hypothesis":"Add explicit stop condition","patch":"{\\"agent\\":{\\"system_prompt\\":\\"New prompt here\\"}}"}`],
+    ["agent.skills", `# agent.skills — patch is structured {unbind:[skill_id...], bind:[{id,version}...]}
+{"target":"agent.skills","hypothesis":"Swap retrieval skill to v2","patch":{"unbind":["retrieval-v1"],"bind":[{"id":"retrieval-v2","version":"v2"}]}}`],
+    ["kn.object_type", `# kn.object_type — patch is {kn_id, add_object_types:[{concept_name, dataview_id, primary_keys, data_properties}], add_relation_types:[]}
+{"target":"kn.object_type","hypothesis":"Add vehicle_sales concept","patch":{"kn_id":"kn-x","add_object_types":[{"concept_name":"vehicle_sales","dataview_id":"dv-001","primary_keys":["vehicle_sales_id"],"data_properties":[{"name":"sales","type":"integer"},{"name":"month","type":"string"}]}],"add_relation_types":[]}}`],
+    ["kn.relation_type", `# kn.relation_type — patch is {kn_id, add_object_types:[], add_relation_types:[{concept_name, source_object_type, target_object_type, join_key}]}
+{"target":"kn.relation_type","hypothesis":"Link sales to vehicle","patch":{"kn_id":"kn-x","add_object_types":[],"add_relation_types":[{"concept_name":"sold_for","source_object_type":"vehicle_sales","target_object_type":"vehicle","join_key":"vehicle_id"}]}}`],
+    ["skill.content", `# skill.content — patch is {skill_id, append_section}
+{"target":"skill.content","hypothesis":"Document sort_by usage","patch":{"skill_id":"query-sop","append_section":"## Sort_by usage\\nPass sort_by=[{field, order}] to query_object_instance for ordering."}}`],
+  ];
+  const examplesBlock = allExamples
+    .filter(([target]) => enabled.has(target as never))
+    .map(([, body]) => body)
+    .join("\n\n");
+
   return `You are an agent evaluation planner. Analyze the current round results, decide whether to continue/publish/abort, and (if continuing) propose the next change to try in one pass.
 
 GOAL: ${input.mission.goal}
@@ -146,9 +167,10 @@ Respond with a single JSON object containing these fields:
     "layer": "kn" | "skill" | "agent",
     "evidence": "<one sentence citing specific tool call or return value>",
     "affected_queries": ["<query_id>", ...],
-    "suggested_target": "kn.object_type" | "kn.relation_type" | "skill.content" | "agent.system_prompt" | "agent.skills"
+    "suggested_target": ${targetEnumLine}
   }
 - "next_change": REQUIRED when verdict=continue, omit/null otherwise. Use failure_attribution[0].suggested_target.
+  This mission has enabled_targets = [${[...enabled].join(", ")}]; do NOT propose any other target.
 - "hints": array of short actionable hints for the next round (carried forward to future PREVIOUS ROUND HISTORY); use [] if none.
 - "new_memory_token": short string (≤ 200 chars) summarizing what to remember across rounds; will appear as CROSS-ROUND CONTEXT next round.
 
@@ -159,20 +181,7 @@ Attribution rules:
 
 NEXT_CHANGE OUTPUT EXAMPLES (pick the one matching your chosen target):
 
-# agent.system_prompt — patch is a JSON string (escaped) or object with {agent:{system_prompt}}
-{"target":"agent.system_prompt","hypothesis":"Add explicit stop condition","patch":"{\\"agent\\":{\\"system_prompt\\":\\"New prompt here\\"}}"}
-
-# agent.skills — patch is structured {unbind:[skill_id...], bind:[{id,version}...]}
-{"target":"agent.skills","hypothesis":"Swap retrieval skill to v2","patch":{"unbind":["retrieval-v1"],"bind":[{"id":"retrieval-v2","version":"v2"}]}}
-
-# kn.object_type — patch is {kn_id, add_object_types:[{concept_name, dataview_id, primary_keys, data_properties}], add_relation_types:[]}
-{"target":"kn.object_type","hypothesis":"Add vehicle_sales concept","patch":{"kn_id":"kn-x","add_object_types":[{"concept_name":"vehicle_sales","dataview_id":"dv-001","primary_keys":["vehicle_sales_id"],"data_properties":[{"name":"sales","type":"integer"},{"name":"month","type":"string"}]}],"add_relation_types":[]}}
-
-# kn.relation_type — patch is {kn_id, add_object_types:[], add_relation_types:[{concept_name, source_object_type, target_object_type, join_key}]}
-{"target":"kn.relation_type","hypothesis":"Link sales to vehicle","patch":{"kn_id":"kn-x","add_object_types":[],"add_relation_types":[{"concept_name":"sold_for","source_object_type":"vehicle_sales","target_object_type":"vehicle","join_key":"vehicle_id"}]}}
-
-# skill.content — patch is {skill_id, append_section}
-{"target":"skill.content","hypothesis":"Document sort_by usage","patch":{"skill_id":"query-sop","append_section":"## Sort_by usage\\nPass sort_by=[{field, order}] to query_object_instance for ordering."}}`;
+${examplesBlock}`;
 }
 
 export class ClaudeCodeTriageClient implements TriageClient {

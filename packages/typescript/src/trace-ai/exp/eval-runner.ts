@@ -50,6 +50,7 @@ export async function runEval(opts: EvalRunnerOpts): Promise<EvalRunResult> {
         assertion_results: Array<{ assertion: { type: string }; verdict: string; actual?: unknown }>;
         duration_ms?: number;
         trace_id?: string | null;
+        conversation_id?: string;
       }>;
     };
 
@@ -72,6 +73,7 @@ export async function runEval(opts: EvalRunnerOpts): Promise<EvalRunResult> {
           error_codes: [],
         },
         raw_trace_id: c.trace_id ?? undefined,
+        conversation_id: c.conversation_id ?? undefined,
       });
     }
   }

@@ -69,6 +69,7 @@ export interface QueryResult {
     error_codes: string[];
   };
   raw_trace_id?: string;
+  conversation_id?: string;
 }
 
 // round.yaml content

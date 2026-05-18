@@ -11,6 +11,7 @@ import {
   SkillContextSchema,
   CandidateSchema,
   LineageEntrySchema,
+  QueryResult,
 } from "../src/trace-ai/exp/schemas.js";
 
 test("PatchTargetSchema: accepts all five targets", () => {
@@ -128,4 +129,14 @@ test("LineageEntrySchema: accepts skill_set and kn_patch_log", () => {
     kn_patch_log: [{ op: "add_object_type", concept_name: "vehicle_sales", dataview_id: "dv01", applied_at: "2026-05-16T00:00:00Z" }],
   });
   assert.equal(r.success, true);
+});
+
+test("QueryResult accepts conversation_id", () => {
+  const r: QueryResult = {
+    query_id: "Q1",
+    assertion_results: [],
+    trajectory_summary: { tool_call_sequence: [], retry_count: 0, latency_ms: 0, error_codes: [] },
+    conversation_id: "conv-abc",
+  };
+  assert.strictEqual(r.conversation_id, "conv-abc");
 });

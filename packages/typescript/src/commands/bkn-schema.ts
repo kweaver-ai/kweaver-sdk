@@ -1192,7 +1192,7 @@ kweaver bkn object-type properties <kn-id> <ot-id> '<json>' [--pretty] [-bd valu
 
 list: List object types (schema) from ontology-manager.
 get: Get single object type details.
-create/update/delete: Schema CRUD (create requires dataview-id). update: merge flags (--add-property / --update-property / --remove-property, etc.) GET-merge-PUT; or full JSON as third arg.
+create/update/delete: Schema CRUD (create requires resource-id). update: merge flags (--add-property / --update-property / --remove-property, etc.) GET-merge-PUT; or full JSON as third arg.
 query: Query via ontology-query API. Default limit is 50 if not specified. Use --search-after for pagination.
 properties: Query instance properties by primary key.
 

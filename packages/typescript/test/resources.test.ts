@@ -101,7 +101,7 @@ test("datasources.listTables returns array", async () => {
 
 // ── ResourcesResource ───────────────────────────────────────────────────────
 
-test("dataviews.create POSTs to vega-backend /resources with category=table", async () => {
+test("resources.create POSTs to vega-backend /resources with category=table", async () => {
   const mock = mockFetch({ id: "dv-1", name: "test-view", catalog_id: "ds-1", category: "table" });
   try {
     const result = await makeClient().resources.create({
@@ -122,7 +122,7 @@ test("dataviews.create POSTs to vega-backend /resources with category=table", as
   }
 });
 
-test("dataviews.get GETs from vega-backend /resources/{id}", async () => {
+test("resources.get GETs from vega-backend /resources/{id}", async () => {
   const mock = mockFetch({
     entries: [{
       id: "dv-1",
@@ -146,7 +146,7 @@ test("dataviews.get GETs from vega-backend /resources/{id}", async () => {
   }
 });
 
-test("dataviews.list GETs from vega-backend /resources with catalog_id param", async () => {
+test("resources.list GETs from vega-backend /resources with catalog_id param", async () => {
   const mock = mockFetch({
     entries: [
       {
@@ -186,7 +186,7 @@ test("listResources API helper applies default limit=30", async () => {
   }
 });
 
-test("dataviews.delete sends DELETE to vega-backend /resources/{id}", async () => {
+test("resources.delete sends DELETE to vega-backend /resources/{id}", async () => {
   const mock = mockFetch("", 204);
   try {
     await makeClient().resources.delete("dv-1");
@@ -198,7 +198,7 @@ test("dataviews.delete sends DELETE to vega-backend /resources/{id}", async () =
   }
 });
 
-test("dataviews.find uses vega-backend /resources with name param", async () => {
+test("resources.find uses vega-backend /resources with name param", async () => {
   const mock = mockFetch({
     entries: [
       {
@@ -226,7 +226,7 @@ test("dataviews.find uses vega-backend /resources with name param", async () => 
   }
 });
 
-test("dataviews.find returns only exact matches when exact true", async () => {
+test("resources.find returns only exact matches when exact true", async () => {
   const mock = mockFetch({
     entries: [
       { id: "dv-1", name: "users", catalog_id: "ds-1", category: "table", source_identifier: "users", status: "active" },
@@ -246,7 +246,7 @@ test("dataviews.find returns only exact matches when exact true", async () => {
   }
 });
 
-test("dataviews.find exact returns empty when wait false and not found", async () => {
+test("resources.find exact returns empty when wait false and not found", async () => {
   const mock = mockFetch({ entries: [] });
   try {
     const result = await makeClient().resources.find("missing", {
@@ -260,7 +260,7 @@ test("dataviews.find exact returns empty when wait false and not found", async (
   }
 });
 
-test("dataviews.query POSTs to vega-backend /resources/{id}/data with override header", async () => {
+test("resources.query POSTs to vega-backend /resources/{id}/data with override header", async () => {
   const mock = mockFetch({ entries: [], total_count: 0 });
   try {
     await makeClient().resources.query("dv-1", { limit: 10, offset: 0 });
@@ -276,7 +276,7 @@ test("dataviews.query POSTs to vega-backend /resources/{id}/data with override h
   }
 });
 
-test("dataviews.query passes needTotal in body", async () => {
+test("resources.query passes needTotal in body", async () => {
   const mock = mockFetch({ entries: [], total_count: 5 });
   try {
     await makeClient().resources.query("dv-2", { needTotal: true });

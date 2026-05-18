@@ -89,7 +89,7 @@ kweaver [--base-url <url>] [--token <access-token>] [--user <userId|username>] <
 |------|------|---------|
 | 登录后确认业务域 | `config show`；若异常或列表为空 → `config list-bd` → `config set-bd <uuid>` | [references/config.md](references/config.md) |
 | 从数据库/CSV 构建 KN | 连接数据源 → CSV 导入 → 创建 KN → 构建索引 → 查询验证 → 绑定 Agent | [references/build-kn-from-db.md](references/build-kn-from-db.md) |
-| CLI 排障速查 | 权限、pull、build、import、dataview SQL 等 | [references/troubleshooting.md](references/troubleshooting.md) |
+| CLI 排障速查 | 权限、pull、build、import、resource query 等 | [references/troubleshooting.md](references/troubleshooting.md) |
 | 列/查 vega-backend 资源 | `list` 浏览；`find --name` 按名搜索（`--exact`/`--wait`）；`query` 分页取数据行 | [references/resource.md](references/resource.md) |
 | 管理 Dataflow 文档流程 | `list` 看 DAG；`run` 触发本地文件或远程 URL；`runs --since` 看自然日运行记录；`logs --detail` 查步骤载荷 | [references/dataflow.md](references/dataflow.md) |
 | 模型工厂 / 小模型 adapter | TS CLI：`model llm|small …`、`model llm chat`、`model small embeddings` / `model small rerank`；Python SDK：`client.models`（CRUD/test + `invocation.chat` / `embedding` / `rerank`）；`--adapter-code-file` 注册 Python `main` 适配器 | [references/model.md](references/model.md) |

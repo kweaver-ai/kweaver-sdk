@@ -67,7 +67,7 @@ test("applyObjectTypeMerge sets tags and comment", () => {
 
 // --- parseObjectTypeCreateArgs / parseRelationTypeCreateArgs ---
 
-test("parseObjectTypeCreateArgs without --property defers data_properties to dataview fetch", () => {
+test("parseObjectTypeCreateArgs without --property defers data_properties to resource fetch", () => {
   const opts = parseObjectTypeCreateArgs([
     "kn-001",
     "--name", "Player",

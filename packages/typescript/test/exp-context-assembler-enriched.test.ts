@@ -40,4 +40,23 @@ describe("ContextAssembler with data probes", () => {
     assert.ok(kn_context);
     assert.strictEqual(kn_context.data_probes, undefined);
   });
+
+  it("omits data_probes when failureAnalysis is empty array", async () => {
+    const mockProbe = async () => [{ concept_name: "vehicle_sales", data_view_id: "dv-sales", total_records: 1453 }];
+    const assembler = new ContextAssembler(mockKnSchema, mockVega, mockSkill, mockProbe as never);
+    const { kn_context } = await assembler.assemble("kn.object_type", "kn-x", [], []);
+    assert.ok(kn_context);
+    assert.strictEqual(kn_context.data_probes, undefined);
+  });
+
+  it("omits data_probes when probe fn throws (best-effort)", async () => {
+    const failingProbe = async () => { throw new Error("probe failed"); };
+    const assembler = new ContextAssembler(mockKnSchema, mockVega, mockSkill, failingProbe as never);
+    const failureAnalysis: QueryFailureAnalysis[] = [
+      { query_id: "Q1", verdict: "fail", assertion_reason: "err", tool_call_summary: [] },
+    ];
+    const { kn_context } = await assembler.assemble("kn.object_type", "kn-x", [], failureAnalysis);
+    assert.ok(kn_context);
+    assert.strictEqual(kn_context.data_probes, undefined);
+  });
 });

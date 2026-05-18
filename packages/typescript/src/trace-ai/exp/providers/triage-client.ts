@@ -1,14 +1,15 @@
 // src/trace-ai/exp/providers/triage-client.ts
 import { z } from "zod";
 import { defaultRegistry } from "../../../agent-providers/registry.js";
-import type { RoundData } from "../schemas.js";
-import { FailureAttributionSchema, type FailureAttribution } from "../schemas.js";
+import type { RoundData, FailureAttribution, QueryFailureAnalysis } from "../schemas.js";
+import { FailureAttributionSchema } from "../schemas.js";
 
 export interface TriageInput {
   currentRound: RoundData;
   prevRounds: RoundData[];
   candidateConfig: Record<string, unknown>;
   crossRoundMemoryRef?: string;
+  failureAnalysis?: QueryFailureAnalysis[];
 }
 
 export interface TriageResult {
@@ -56,28 +57,36 @@ export function parseTriageOutput(raw: string): TriageResult {
   return { verdict, summary, failure_attribution, diagnoses, hints, new_memory_token };
 }
 
-export class ClaudeCodeTriageClient implements TriageClient {
-  async triage(input: TriageInput): Promise<TriageResult> {
-    const provider = defaultRegistry.resolve({ preferred: "claude-code" });
-    if (!provider) throw new Error("claude-code provider not available");
+export function buildTriagePrompt(input: TriageInput): string {
+  const r = input.currentRound;
+  const scoresSummary = r.scores
+    ? `outcome=${r.scores.outcome.toFixed(2)}, trajectory=${r.scores.trajectory.toFixed(2)}, guardrail=${r.scores.guardrail.toFixed(2)}`
+    : "no scores";
 
-    const r = input.currentRound;
-    const scoresSummary = r.scores
-      ? `outcome=${r.scores.outcome.toFixed(2)}, trajectory=${r.scores.trajectory.toFixed(2)}, guardrail=${r.scores.guardrail.toFixed(2)}`
-      : "no scores";
-
+  let failureSection: string;
+  if (input.failureAnalysis && input.failureAnalysis.length > 0) {
+    const lines = input.failureAnalysis.map(fa => {
+      let entry = `${fa.query_id} [${fa.verdict}]: ${fa.assertion_reason}`;
+      if (fa.tool_call_summary.length > 0) {
+        entry += `\n  Tools: ${fa.tool_call_summary.join("; ")}`;
+      }
+      return entry;
+    }).join("\n");
+    failureSection = `FAILURE ANALYSIS:\n${lines}`;
+  } else {
     const failedQueries = (r.per_query_results ?? [])
       .filter(q => q.assertion_results.some(a => a.verdict === "fail"))
       .map(q => `${q.query_id}: ${q.assertion_results.filter(a => a.verdict === "fail").map(a => a.type).join(", ")}`)
       .join("\n");
+    failureSection = `FAILED QUERIES:\n${failedQueries || "None"}`;
+  }
 
-    // candidateConfig is available for future prompt enrichment; omitted here to keep the prompt focused on scores.
-    const prompt = `You are an agent evaluation triager. Analyze the current round results and recommend next steps.
+  // candidateConfig is available for future prompt enrichment; omitted here to keep the prompt focused on scores.
+  return `You are an agent evaluation triager. Analyze the current round results and recommend next steps.
 
 ROUND ${r.round} SCORES: ${scoresSummary}
 
-FAILED QUERIES:
-${failedQueries || "None"}
+${failureSection}
 
 TRAJECTORY ISSUES:
 ${(r.per_query_results ?? []).filter(q => q.trajectory_summary.retry_count > 1).map(q => `${q.query_id}: ${q.trajectory_summary.retry_count} retries`).join("\n") || "None"}
@@ -105,6 +114,14 @@ Attribution rules:
 - "skill": agent had the right intent but the tool usage pattern was wrong (no pagination, no sort_by, wrong filter)
 - "agent": agent misidentified the concept to query, or made an orchestration error
 If verdict is "publish" or "abort", output an empty array for failure_attribution.`;
+}
+
+export class ClaudeCodeTriageClient implements TriageClient {
+  async triage(input: TriageInput): Promise<TriageResult> {
+    const provider = defaultRegistry.resolve({ preferred: "claude-code" });
+    if (!provider) throw new Error("claude-code provider not available");
+
+    const prompt = buildTriagePrompt(input);
 
     const response = await provider.invoke({
       prompt,

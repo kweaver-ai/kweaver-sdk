@@ -29,35 +29,45 @@ function printHelp(): void {
       ],
       sections: [
         {
-          title: "CORE COMMANDS",
+          title: "AUTHENTICATION",
           items: [
             { name: "auth", desc: "Login / switch / list saved platform credentials" },
-            { name: "token", desc: "Print current access token (auto-refresh)" },
-            { name: "call (curl)", desc: "curl-style API call with auto-injected auth headers" },
-            { name: "agent", desc: "Agent CRUD, chat, sessions, publish" },
-            { name: "bkn", desc: "Knowledge network — build, query, action, metric" },
-            { name: "dataflow", desc: "Dataflow document workflows (run, runs, logs)" },
-            { name: "ds", desc: "Datasource (list, get, connect, tables)" },
-            { name: "resource (res)", desc: "Resources — list, find, get, query, delete" },
           ],
         },
         {
-          title: "PLATFORM COMMANDS",
+          title: "DECISION AGENT",
           items: [
-            { name: "model", desc: "Model factory — LLM / small model CRUD + chat" },
-            { name: "skill", desc: "Skill registry / market" },
+            { name: "agent", desc: "Agent CRUD, chat, sessions, publish" },
             { name: "toolbox", desc: "Agent toolbox lifecycle" },
             { name: "tool", desc: "Tools inside toolbox" },
-            { name: "vega", desc: "Vega observability — catalog, resource, query" },
-            { name: "context-loader (context)", desc: "MCP/HTTP context loader" },
           ],
         },
         {
-          title: "ADDITIONAL COMMANDS",
+          title: "AI DATA PLATFORM",
           items: [
+            { name: "bkn", desc: "Knowledge network — build, query, action, metric" },
+            { name: "ds", desc: "Datasource (list, get, connect, tables)" },
+            { name: "resource (res)", desc: "Resources — list, find, get, query, delete" },
+            { name: "dataflow", desc: "Dataflow document workflows (run, runs, logs)" },
+            { name: "vega", desc: "Vega observability — catalog, resource, query" },
+            { name: "context-loader (context)", desc: "MCP/HTTP context loader (reads BKN schema/instances)" },
+          ],
+        },
+        {
+          title: "TRACE AI",
+          items: [
+            { name: "trace", desc: "Diagnose conversations / build eval-sets / schema validate" },
+          ],
+        },
+        {
+          title: "FOUNDATION",
+          items: [
+            { name: "token", desc: "Print current access token (auto-refresh)" },
             { name: "config", desc: "Per-platform business-domain config" },
-            { name: "explore", desc: "Interactive exploration" },
-            { name: "trace", desc: "Diagnose single trace" },
+            { name: "call (curl)", desc: "curl-style API call with auto-injected auth headers" },
+            { name: "explore", desc: "Interactive web UI" },
+            { name: "model", desc: "Model factory — LLM / small-model CRUD + chat" },
+            { name: "skill", desc: "Skill registry / market" },
             { name: "help", desc: "Show help — use `help all` for full signatures" },
           ],
         },

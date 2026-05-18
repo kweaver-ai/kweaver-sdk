@@ -89,16 +89,23 @@ KWeaver SDK — operate KWeaver platform from CLI
 USAGE
   kweaver <command> <subcommand> [flags]
 
-CORE COMMANDS
+AUTHENTICATION
   auth:        一行简介
+
+DECISION AGENT
   agent:       一行简介
+  toolbox:     一行简介
   ...
 
-PLATFORM COMMANDS
-  model:       一行简介
+AI DATA PLATFORM
+  bkn:         一行简介
   ...
 
-ADDITIONAL COMMANDS
+TRACE AI
+  trace:       一行简介
+
+FOUNDATION
+  token:       一行简介
   config:      一行简介
   ...
 

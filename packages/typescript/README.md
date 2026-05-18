@@ -199,9 +199,11 @@ kweaver <command> <subcommand> [--help|-h]  # action-level flags + examples
 Top-level command groups:
 
 ```text
-CORE        auth · token · call · agent · bkn · dataflow · ds · resource
-PLATFORM    model · skill · toolbox · tool · vega · context-loader
-ADDITIONAL  config · explore · trace · help
+AUTHENTICATION    auth
+DECISION AGENT    agent · toolbox · tool
+AI DATA PLATFORM  bkn · ds · resource · dataflow · vega · context-loader
+TRACE AI          trace
+FOUNDATION        token · config · call · explore · model · skill · help
 ```
 
 For a structured browsable index of every action and flag, run `kweaver help all`.

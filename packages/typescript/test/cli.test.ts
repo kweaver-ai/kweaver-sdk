@@ -247,11 +247,11 @@ test("renderHelp section titles present across ALL --help paths", async () => {
     { args: ["bkn", "relation-type-paths", "--help"], needs: ["USAGE"] },
     { args: ["bkn", "resources", "--help"], needs: ["USAGE"] },
 
-    // ── AI Data Platform: ds / dataview / dataflow / vega / context-loader
+    // ── AI Data Platform: ds / resource / dataflow / vega / context-loader
     { args: ["ds", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
     { args: ["ds", "list", "--help"], needs: ["USAGE"] },
     { args: ["ds", "import-csv", "--help"], needs: ["USAGE", "FLAGS"] },
-    { args: ["dataview", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
+    { args: ["resource", "--help"], needs: ["USAGE", "AVAILABLE COMMANDS"] },
     { args: ["vega", "--help"], needs: ["USAGE", "SERVICE"] },
     { args: ["vega", "health", "--help"], needs: ["USAGE"] },
     { args: ["vega", "stats", "--help"], needs: ["USAGE"] },

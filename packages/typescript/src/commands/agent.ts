@@ -1,4 +1,51 @@
 import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/oauth.js";
+import { renderHelp } from "../help/format.js";
+
+const AGENT_HELP = renderHelp({
+  tagline: "Agent CRUD, chat, sessions, history, publish/unpublish",
+  usage: "kweaver agent <subcommand> [flags]",
+  sections: [
+    {
+      title: "DISCOVERY",
+      items: [
+        { name: "list", desc: "List published agents" },
+        { name: "personal-list", desc: "List personal-space agents" },
+        { name: "category-list", desc: "List agent categories" },
+        { name: "template-list", desc: "List published agent templates" },
+        { name: "template-get", desc: "Get published agent template details" },
+      ],
+    },
+    {
+      title: "CRUD",
+      items: [
+        { name: "get", desc: "Get agent details" },
+        { name: "get-by-key", desc: "Get agent by key" },
+        { name: "create", desc: "Create a new agent" },
+        { name: "update", desc: "Update an existing agent" },
+        { name: "delete", desc: "Delete an agent" },
+        { name: "publish", desc: "Publish an agent" },
+        { name: "unpublish", desc: "Unpublish an agent" },
+      ],
+    },
+    {
+      title: "RUNTIME",
+      items: [
+        { name: "chat", desc: "Interactive chat (or single message with -m)" },
+        { name: "sessions", desc: "List conversations for an agent" },
+        { name: "history", desc: "Show message history for a conversation" },
+        { name: "trace", desc: "Get trace data for a conversation (--view tree|perf|evidence|reasoning|all)" },
+        { name: "skill", desc: "Manage skills attached to an agent (add / remove / list)" },
+      ],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver agent list --limit 20",
+    "kweaver agent chat <agent_id> -m \"hello\"",
+    "kweaver agent trace <conversation_id> --view all",
+  ],
+  learnMore: ["Use `kweaver agent <subcommand> --help` for flag details"],
+});
 import { runAgentChatCommand } from "./agent-chat.js";
 import { runAgentSkillCommand } from "./agent-members.js";
 import {
@@ -713,30 +760,7 @@ export async function runAgentCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(`kweaver agent
-
-Subcommands:
-  list [options]                     List published agents
-  personal-list [options]            List personal space agents
-  category-list [options]            List agent categories
-  template-list [options]            List published agent templates
-  template-get <tpl_id>              Get published agent template details
-  get <agent_id> [--verbose]         Get agent details
-  get-by-key <key>                   Get agent by key
-  create --name <n> --profile <p>    Create a new agent
-       [--key <key>] [--product-key <pk>] [--system-prompt <sp>]
-       [--llm-id <id>] [--llm-max-tokens <n>] [--mode <mode>]
-  update <agent_id> [options]        Update an existing agent
-  delete <agent_id> [-y]             Delete an agent
-  publish <agent_id>                 Publish an agent
-  unpublish <agent_id>               Unpublish an agent
-  chat <agent_id>                    Start interactive chat with an agent
-  chat <agent_id> -m "message"       Send a single message (non-interactive)
-  skill <verb> ...                   Manage skills attached to an agent (add/remove/list)
-  sessions <agent_id>                List all conversations for an agent
-  history <agent_id> <conversation_id> Show message history for a conversation
-  trace <conversation_id> [--view tree|perf|evidence|reasoning|all] [--json]
-                                       Get trace data for a conversation`);
+    console.log(AGENT_HELP);
     return Promise.resolve(0);
   }
 
@@ -764,27 +788,48 @@ Subcommands:
   // Show subcommand-specific help inline (no retry needed)
   if (subcommand === "chat") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent chat <agent_id> [-m "message"] [options]
-
-Interactive mode (default when -m is omitted):
-  kweaver agent chat <agent_id>
-  Type your message and press Enter. Type 'exit', 'quit', or 'q' to quit.
-
-Non-interactive mode:
-  kweaver agent chat <agent_id> -m "your message"
-  kweaver agent chat <agent_id> -m "continue" --conversation-id <id>
-
-Options:
-  -m, --message <text>       Single message (non-interactive)
-  --conversation-id <id>     Continue existing conversation
-  -cid <id>                  Short alias for --conversation-id
-  --session-id <id>          Alias for --conversation-id
-  -conversation_id <id>      Compatibility alias for reference examples
-  --version <value>          Agent version used to resolve the agent key (default: v0)
-  --stream                   Enable streaming (default in interactive)
-  --no-stream                Disable streaming (default with -m)
-  --verbose, -v              Print request details to stderr
-  -bd, --biz-domain <value>  Override x-business-domain (default: bd_public)`);
+      console.log(
+        renderHelp({
+          tagline: "Chat with an agent — interactive (default) or single-shot (-m)",
+          usage: [
+            "kweaver agent chat <agent_id>                       (interactive)",
+            "kweaver agent chat <agent_id> -m \"message\"          (single-shot)",
+            "kweaver agent chat <agent_id> -m \"...\" --conversation-id <id>",
+          ],
+          flags: [
+            {
+              title: "Message",
+              flags: [
+                { name: "-m, --message <text>", desc: "Single message (non-interactive)" },
+                { name: "--conversation-id <id>", desc: "Continue existing conversation (aliases: -cid, --session-id, -conversation_id)" },
+                { name: "--version <value>", desc: "Agent version used to resolve agent key (default: v0)" },
+              ],
+            },
+            {
+              title: "Streaming",
+              flags: [
+                { name: "--stream", desc: "Enable streaming (default in interactive)" },
+                { name: "--no-stream", desc: "Disable streaming (default with -m)" },
+              ],
+            },
+            {
+              title: "Common",
+              flags: [
+                { name: "--verbose, -v", desc: "Print request details to stderr" },
+                { name: "-bd, --biz-domain <value>", desc: "Override x-business-domain (default: bd_public)" },
+              ],
+            },
+          ],
+          inheritedFlags: "--base-url, --token, --user, --help",
+          examples: [
+            "kweaver agent chat agt-123",
+            "kweaver agent chat agt-123 -m \"hello\"",
+            "kweaver agent chat agt-123 -m \"continue\" --conversation-id conv-456",
+            "kweaver agent chat agt-123 -m \"hello\" --no-stream --verbose",
+          ],
+          learnMore: ["Interactive mode: type 'exit', 'quit', or 'q' to quit"],
+        }),
+      );
       return Promise.resolve(0);
     }
     return runAgentChatCommand(rest);
@@ -792,160 +837,193 @@ Options:
 
   if (subcommand === "get") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent get <agent_id> [options]
-
-Get agent details from the agent-factory API.
-
-Options:
-  --verbose, -v             Show full JSON response
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty                   Pretty-print JSON output (default)
-  --save-config <path>       Save config to file with timestamp (output: <path-with-timestamp>)`);
+      console.log(renderHelp({
+        tagline: "Get agent details from the agent-factory API.",
+        usage: "kweaver agent get <agent_id> [options]",
+        flags: [
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+          { name: "--save-config <path>", desc: "Save config to file with timestamp (output: <path-with-timestamp>)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent get <agent_id>"],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "update") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent update <agent_id> [options]
-
-Update an existing agent.
-
-Options:
-  --name <text>             Agent name (max 50)
-  --profile <text>          Agent description (max 500)
-  --system-prompt <text>    System prompt
-  --knowledge-network-id <id>  Business knowledge network ID to configure
-  --config-path <path>      Path to config object file, or full agent JSON with config
-${AGENT_MODE_HELP}`);
+      console.log(renderHelp({
+        tagline: "Update an existing agent.",
+        usage: "kweaver agent update <agent_id> [options]",
+        flags: [
+          { name: "--name <text>", desc: "Agent name (max 50)" },
+          { name: "--profile <text>", desc: "Agent description (max 500)" },
+          { name: "--system-prompt <text>", desc: "System prompt" },
+          { name: "--knowledge-network-id <id>", desc: "Business knowledge network ID to configure" },
+          { name: "--config-path <path>", desc: "Path to config object file, or full agent JSON with config" },
+          { name: "--mode <mode>", desc: "Agent mode: default, dolphin, react (default: default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent update <agent_id> --name MyAgent"],
+        learnMore: [AGENT_MODE_HELP],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "list") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent list [options]
-
-List published agents from the agent-factory API.
-
-Options:
-  --name <text>             Filter by name
-  --offset <n>              Pagination offset (default: 0)
-  --limit <n>               Max items to return (default: 30)
-  --category-id <id>        Filter by category
-  --custom-space-id <id>    Filter by custom space
-  --is-to-square <0|1>      Is to square (default: 1)
-  --verbose, -v             Show full JSON response
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty                  Pretty-print JSON output (applies to both modes)`);
+      console.log(renderHelp({
+        tagline: "List published agents from the agent-factory API.",
+        usage: "kweaver agent list [options]",
+        flags: [
+          { name: "--name <text>", desc: "Filter by name" },
+          { name: "--offset <n>", desc: "Pagination offset (default: 0)" },
+          { name: "--limit <n>", desc: "Max items to return (default: 30)" },
+          { name: "--category-id <id>", desc: "Filter by category" },
+          { name: "--custom-space-id <id>", desc: "Filter by custom space" },
+          { name: "--is-to-square <0|1>", desc: "Is to square (default: 1)" },
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (applies to both modes)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent list --limit 10"],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "personal-list") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent personal-list [options]
-
-List personal space agents from the agent-factory API.
-
-Options:
-  --name <text>                 Filter by name
-  --pagination-marker <str>     Pagination marker
-  --publish-status <status>     Filter by publish status
-  --publish-to-be <value>       Publish to be filter
-  --size <n>                    Max items to return (default: 48)
-  --verbose, -v                 Show full JSON response
-  -bd, --biz-domain <value>     Business domain (default: bd_public)
-  --pretty                      Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "List personal space agents from the agent-factory API.",
+        usage: "kweaver agent personal-list [options]",
+        flags: [
+          { name: "--name <text>", desc: "Filter by name" },
+          { name: "--pagination-marker <str>", desc: "Pagination marker" },
+          { name: "--publish-status <status>", desc: "Filter by publish status" },
+          { name: "--publish-to-be <value>", desc: "Publish to be filter" },
+          { name: "--size <n>", desc: "Max items to return (default: 48)" },
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent personal-list --size 20"],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "category-list") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent category-list [options]
-
-List agent categories from the agent-factory API.
-
-Options:
-  --verbose, -v             Show full JSON response
-  -bd, --biz-domain <value> Business domain (default: bd_public)
-  --pretty                  Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "List agent categories from the agent-factory API.",
+        usage: "kweaver agent category-list [options]",
+        flags: [
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent category-list"],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "template-list") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent template-list [options]
-
-List published agent templates from the agent-factory API.
-
-Options:
-  --category-id <id>            Filter by category
-  --name <text>                 Filter by name
-  --pagination-marker <str>     Pagination marker
-  --size <n>                    Max items to return (default: 48)
-  --verbose, -v                 Show full JSON response
-  -bd, --biz-domain <value>     Business domain (default: bd_public)
-  --pretty                      Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "List published agent templates from the agent-factory API.",
+        usage: "kweaver agent template-list [options]",
+        flags: [
+          { name: "--category-id <id>", desc: "Filter by category" },
+          { name: "--name <text>", desc: "Filter by name" },
+          { name: "--pagination-marker <str>", desc: "Pagination marker" },
+          { name: "--size <n>", desc: "Max items to return (default: 48)" },
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent template-list --size 20"],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "template-get") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent template-get <template_id> [options]
-
-Get published agent template details from the agent-factory API.
-
-Options:
-  --verbose, -v             Show full JSON response
-  -bd, --biz-domain <value> Business domain (default: bd_public)
-  --pretty                   Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "Get published agent template details from the agent-factory API.",
+        usage: "kweaver agent template-get <template_id> [options]",
+        flags: [
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent template-get <template_id>"],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "sessions") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent sessions <agent_id> [options]
-
-List all conversations for an agent.
-
-Options:
-  --limit <n>              Max conversations to return (default: 30)
-  -bd, --biz-domain <value> Business domain (default: bd_public)
-  --pretty                  Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "List all conversations for an agent.",
+        usage: "kweaver agent sessions <agent_id> [options]",
+        flags: [
+          { name: "--limit <n>", desc: "Max conversations to return (default: 30)" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent sessions <agent_id>"],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "history") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent history <agent_id> <conversation_id> [options]
-
-Show conversation detail (messages) for an agent.
-
-Options:
-  -bd, --biz-domain <value> Business domain (default: bd_public)
-  --pretty                  Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "Show conversation detail (messages) for an agent.",
+        usage: "kweaver agent history <agent_id> <conversation_id> [options]",
+        flags: [
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent history <agent_id> <conversation_id>"],
+      }));
       return 0;
     }
   }
 
   if (subcommand === "trace") {
     if (rest.length === 1 && (rest[0] === "--help" || rest[0] === "-h")) {
-      console.log(`kweaver agent trace <conversation_id> [options]
-       kweaver agent trace <agent_id> <conversation_id> [options]   (legacy)
-
-Get trace data for a conversation.
-
-Options:
-  --view tree|perf|evidence|reasoning|all   Render style (default: tree)
-  --json                          Emit raw TracesByConversationResult JSON
-  --pretty                        Pretty-print JSON output (default)
-  --compact                       Compact JSON output`);
+      console.log(renderHelp({
+        tagline: "Get trace data for a conversation.",
+        usage: [
+          "kweaver agent trace <conversation_id> [options]",
+          "kweaver agent trace <agent_id> <conversation_id> [options]   (legacy)",
+        ],
+        flags: [
+          { name: "--view tree|perf|evidence|reasoning|all", desc: "Render style (default: tree)" },
+          { name: "--json", desc: "Emit raw TracesByConversationResult JSON" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+          { name: "--compact", desc: "Compact JSON output" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent trace <conversation_id>"],
+      }));
       return 0;
     }
   }
@@ -1059,15 +1137,18 @@ async function runAgentGetCommand(args: string[]): Promise<number> {
     options = parseAgentGetArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent get <agent_id> [options]
-
-Get agent details from the agent-factory API.
-
-Options:
-  --verbose, -v             Show full JSON response
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty                   Pretty-print JSON output (default)
-  --save-config <path>       Save config to file with timestamp (output: <path-with-timestamp>)`);
+      console.log(renderHelp({
+        tagline: "Get agent details from the agent-factory API.",
+        usage: "kweaver agent get <agent_id> [options]",
+        flags: [
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+          { name: "--save-config <path>", desc: "Save config to file with timestamp (output: <path-with-timestamp>)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent get <agent_id>"],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1113,20 +1194,23 @@ async function runAgentListCommand(args: string[]): Promise<number> {
     options = parseAgentListArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent list [options]
-
-List published agents from the agent-factory API.
-
-Options:
-  --name <text>             Filter by name
-  --offset <n>              Pagination offset (default: 0)
-  --limit <n>               Max items to return (default: 30)
-  --category-id <id>        Filter by category
-  --custom-space-id <id>    Filter by custom space
-  --is-to-square <0|1>      Is to square (default: 1)
-  --verbose, -v             Show full JSON response
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty                  Pretty-print JSON output (applies to both modes)`);
+      console.log(renderHelp({
+        tagline: "List published agents from the agent-factory API.",
+        usage: "kweaver agent list [options]",
+        flags: [
+          { name: "--name <text>", desc: "Filter by name" },
+          { name: "--offset <n>", desc: "Pagination offset (default: 0)" },
+          { name: "--limit <n>", desc: "Max items to return (default: 30)" },
+          { name: "--category-id <id>", desc: "Filter by category" },
+          { name: "--custom-space-id <id>", desc: "Filter by custom space" },
+          { name: "--is-to-square <0|1>", desc: "Is to square (default: 1)" },
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (applies to both modes)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent list"],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1163,14 +1247,17 @@ async function runAgentSessionsCommand(args: string[]): Promise<number> {
     options = parseAgentSessionsArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent sessions <agent_id> [options]
-
-List all conversations for an agent.
-
-Options:
-  --limit <n>              Max conversations to return (default: 30)
-  -bd, --biz-domain <value> Business domain (default: bd_public)
-  --pretty                  Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "List all conversations for an agent.",
+        usage: "kweaver agent sessions <agent_id> [options]",
+        flags: [
+          { name: "--limit <n>", desc: "Max conversations to return (default: 30)" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent sessions <agent_id>"],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1215,13 +1302,16 @@ async function runAgentHistoryCommand(args: string[]): Promise<number> {
     options = parseAgentHistoryArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent history <agent_id> <conversation_id> [options]
-
-Show conversation detail (messages) for an agent.
-
-Options:
-  -bd, --biz-domain <value> Business domain (default: bd_public)
-  --pretty                  Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "Show conversation detail (messages) for an agent.",
+        usage: "kweaver agent history <agent_id> <conversation_id> [options]",
+        flags: [
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent history <agent_id> <conversation_id>"],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1267,18 +1357,21 @@ async function runAgentTraceCommand(args: string[]): Promise<number> {
     options = parseAgentTraceArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent trace <conversation_id> [options]
-       kweaver agent trace <agent_id> <conversation_id> [options]   (legacy)
-
-Get trace data for a conversation. Spans are fetched from trace-ai via a 2-jump
-lookup that recovers pipeline spans (HTTP entry, internal RPCs, prompt-build)
-which the simpler /by-conversation endpoint omits.
-
-Options:
-  --view tree|perf|evidence|reasoning|all   Render style (default: tree)
-  --json                          Emit raw TracesByConversationResult JSON
-  --pretty                        Pretty-print JSON output (default)
-  --compact                       Compact JSON output`);
+      console.log(renderHelp({
+        tagline: "Get trace data for a conversation. Spans are fetched from trace-ai via a 2-jump lookup that recovers pipeline spans (HTTP entry, internal RPCs, prompt-build) which the simpler /by-conversation endpoint omits.",
+        usage: "kweaver agent trace <conversation_id> [options]",
+        flags: [
+          { name: "--view tree|perf|evidence|reasoning|all", desc: "Render style (default: tree)" },
+          { name: "--json", desc: "Emit raw TracesByConversationResult JSON" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+          { name: "--compact", desc: "Compact JSON output" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver agent trace <conversation_id>",
+          "kweaver agent trace <agent_id> <conversation_id>   (legacy)",
+        ],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1346,23 +1439,25 @@ async function runAgentCreateCommand(args: string[]): Promise<number> {
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === "--help" || arg === "-h") {
-      console.log(`kweaver agent create --name <name> --profile <profile> [options]
-
-Create a new agent.
-
-Required (when --config is not provided):
-  --name <text>            Agent name (max 50)
-  --profile <text>         Agent description (max 500)
-
-Optional:
-  --key <text>             Agent unique key (auto-generated if omitted)
-  --product-key <text>     Product key: dip, AnyShare, ChatBI (default: dip)
-  --system-prompt <text>   System prompt
-  --llm-id <id>            LLM model ID (required for public API)
-  --llm-max-tokens <n>     LLM max tokens (default: 4096)
-${AGENT_MODE_HELP}
-  --config <json|path>     Full config object as JSON string or file path (overrides individual config options)
-  -bd, --biz-domain <val>  Business domain (default: bd_public)`);
+      console.log(renderHelp({
+        tagline: "Create a new agent.",
+        usage: "kweaver agent create --name <name> --profile <profile> [options]",
+        flags: [
+          { name: "--name <text>", desc: "Agent name (max 50) [required when --config not provided]" },
+          { name: "--profile <text>", desc: "Agent description (max 500) [required when --config not provided]" },
+          { name: "--key <text>", desc: "Agent unique key (auto-generated if omitted)" },
+          { name: "--product-key <text>", desc: "Product key: dip, AnyShare, ChatBI (default: dip)" },
+          { name: "--system-prompt <text>", desc: "System prompt" },
+          { name: "--llm-id <id>", desc: "LLM model ID (required for public API)" },
+          { name: "--llm-max-tokens <n>", desc: "LLM max tokens (default: 4096)" },
+          { name: "--mode <mode>", desc: "Agent mode: default, dolphin, react (default: default)" },
+          { name: "--config <json|path>", desc: "Full config object as JSON string or file path (overrides individual config options)" },
+          { name: "-bd, --biz-domain <val>", desc: "Business domain (default: bd_public)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent create --name MyAgent --profile \"desc\""],
+        learnMore: [AGENT_MODE_HELP],
+      }));
       return 0;
     }
     if (arg === "--name") { name = args[++i] ?? ""; continue; }
@@ -1461,17 +1556,21 @@ ${AGENT_MODE_HELP}
 async function runAgentUpdateCommand(args: string[]): Promise<number> {
   const agentId = args[0];
   if (agentId === "--help" || agentId === "-h") {
-    console.log(`kweaver agent update <agent_id> [options]
-
-Update an existing agent.
-
-Options:
-  --name <text>                Agent name
-  --profile <text>             Agent description
-  --system-prompt <text>       System prompt
-  --knowledge-network-id <id>  Knowledge network ID
-  --config-path <path>         Read config object from file, or full agent JSON with config
-${AGENT_MODE_HELP}`);
+    console.log(renderHelp({
+      tagline: "Update an existing agent.",
+      usage: "kweaver agent update <agent_id> [options]",
+      flags: [
+        { name: "--name <text>", desc: "Agent name" },
+        { name: "--profile <text>", desc: "Agent description" },
+        { name: "--system-prompt <text>", desc: "System prompt" },
+        { name: "--knowledge-network-id <id>", desc: "Knowledge network ID" },
+        { name: "--config-path <path>", desc: "Read config object from file, or full agent JSON with config" },
+        { name: "--mode <mode>", desc: "Agent mode: default, dolphin, react (default: default)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: ["kweaver agent update <agent_id> --name MyAgent"],
+      learnMore: [AGENT_MODE_HELP],
+    }));
     return 0;
   }
   if (!agentId || agentId.startsWith("-")) {
@@ -1663,13 +1762,16 @@ async function runAgentPublishCommand(args: string[]): Promise<number> {
       continue;
     }
     if (arg === "--help" || arg === "-h") {
-      console.log(`kweaver agent publish <agent_id> [options]
-
-Publish an agent.
-
-Options:
-  --category-id <id>    Category ID for the agent
-  -bd, --biz-domain <value> Business domain (default: bd_public)`);
+      console.log(renderHelp({
+        tagline: "Publish an agent.",
+        usage: "kweaver agent publish <agent_id> [options]",
+        flags: [
+          { name: "--category-id <id>", desc: "Category ID for the agent" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent publish <agent_id>"],
+      }));
       return 0;
     }
   }
@@ -1722,19 +1824,22 @@ async function runAgentPersonalListCommand(args: string[]): Promise<number> {
     options = parseAgentPersonalListArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent personal-list [options]
-
-List personal space agents from the agent-factory API.
-
-Options:
-  --name <text>                 Filter by name
-  --pagination-marker <str>     Pagination marker
-  --publish-status <status>     Filter by publish status
-  --publish-to-be <value>       Publish to be filter
-  --size <n>                    Max items to return (default: 48)
-  --verbose, -v                 Show full JSON response
-  -bd, --biz-domain <value>     Business domain (default: bd_public)
-  --pretty                      Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "List personal space agents from the agent-factory API.",
+        usage: "kweaver agent personal-list [options]",
+        flags: [
+          { name: "--name <text>", desc: "Filter by name" },
+          { name: "--pagination-marker <str>", desc: "Pagination marker" },
+          { name: "--publish-status <status>", desc: "Filter by publish status" },
+          { name: "--publish-to-be <value>", desc: "Publish to be filter" },
+          { name: "--size <n>", desc: "Max items to return (default: 48)" },
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent personal-list"],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1772,18 +1877,21 @@ async function runAgentTemplateListCommand(args: string[]): Promise<number> {
     options = parseAgentTemplateListArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent template-list [options]
-
-List published agent templates from the agent-factory API.
-
-Options:
-  --category-id <id>            Filter by category
-  --name <text>                 Filter by name
-  --pagination-marker <str>     Pagination marker
-  --size <n>                    Max items to return (default: 48)
-  --verbose, -v                 Show full JSON response
-  -bd, --biz-domain <value>     Business domain (default: bd_public)
-  --pretty                      Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "List published agent templates from the agent-factory API.",
+        usage: "kweaver agent template-list [options]",
+        flags: [
+          { name: "--category-id <id>", desc: "Filter by category" },
+          { name: "--name <text>", desc: "Filter by name" },
+          { name: "--pagination-marker <str>", desc: "Pagination marker" },
+          { name: "--size <n>", desc: "Max items to return (default: 48)" },
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent template-list"],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1820,15 +1928,18 @@ async function runAgentTemplateGetCommand(args: string[]): Promise<number> {
     options = parseAgentTemplateGetArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver agent template-get <template_id> [options]
-
-Get published agent template details from the agent-factory API.
-
-Options:
-  --verbose, -v             Show full JSON response
-  -bd, --biz-domain <value> Business domain (default: bd_public)
-  --pretty                   Pretty-print JSON output (default)
-  --save-config <path>       Save config to file with timestamp (output: <path-with-timestamp>)`);
+      console.log(renderHelp({
+        tagline: "Get published agent template details from the agent-factory API.",
+        usage: "kweaver agent template-get <template_id> [options]",
+        flags: [
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+          { name: "--save-config <path>", desc: "Save config to file with timestamp (output: <path-with-timestamp>)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent template-get <template_id>"],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1877,14 +1988,17 @@ async function runAgentCategoryListCommand(args: string[]): Promise<number> {
     const arg = args[i];
 
     if (arg === "--help" || arg === "-h") {
-      console.log(`kweaver agent category-list [options]
-
-List agent categories from the agent-factory API.
-
-Options:
-  --verbose, -v             Show full JSON response
-  -bd, --biz-domain <value> Business domain (default: bd_public)
-  --pretty                  Pretty-print JSON output (default)`);
+      console.log(renderHelp({
+        tagline: "List agent categories from the agent-factory API.",
+        usage: "kweaver agent category-list [options]",
+        flags: [
+          { name: "--verbose, -v", desc: "Show full JSON response" },
+          { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: ["kweaver agent category-list"],
+      }));
       return 0;
     }
 

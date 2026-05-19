@@ -4,6 +4,29 @@ import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/
 import { isNoAuth } from "../config/no-auth.js";
 import { HttpError } from "../utils/http.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { renderHelp } from "../help/format.js";
+
+const CALL_HELP = renderHelp({
+  tagline: "Call an API with curl-style flags and auto-injected auth headers",
+  usage: "kweaver call <url> [-X METHOD] [-H \"Name: value\"] [-d BODY|-F key=val] [flags]",
+  flags: [
+    { name: "<url>", desc: "API path, e.g. /api/ontology-manager/v1/knowledge-networks" },
+    { name: "-X, --request", desc: "HTTP method (default: GET)" },
+    { name: "-H, --header", desc: "Extra header (repeatable)" },
+    { name: "-d, --data, --data-raw", desc: "JSON request body (sets Content-Type: application/json if unset)" },
+    { name: "-F, --form", desc: "Multipart form field: key=value or key=@/path/to/file. Repeatable. Mutually exclusive with -d" },
+    { name: "-bd, --biz-domain", desc: "Override x-business-domain (default: bd_public)" },
+    { name: "-v, --verbose", desc: "Print request info to stderr" },
+    { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver call /api/ontology-manager/v1/knowledge-networks",
+    "kweaver call -X POST /api/agents -d '{\"name\":\"demo\"}'",
+    "kweaver call -F file=@./spec.yaml /api/toolboxes/{id}/tools/upload",
+  ],
+  learnMore: ["Alias: `kweaver curl ...`"],
+});
 
 export type FormField =
   | { name: string; kind: "string"; value: string }
@@ -195,19 +218,7 @@ export function formatVerboseRequest(invocation: CallInvocation): string[] {
 
 export async function runCallCommand(args: string[]): Promise<number> {
   if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver call <url> [-X METHOD] [-H "Name: value"] [-d BODY] [-F key=value] [--pretty] [--verbose] [-bd value]
-
-Call an API with curl-style flags and auto-injected token headers.
-
-Options:
-  <url>              API path (e.g. /api/ontology-manager/v1/knowledge-networks)
-  -X, --request      HTTP method (default: GET)
-  -H, --header       Extra header (repeatable)
-  -d, --data, --data-raw   JSON request body (sets Content-Type: application/json if not set)
-  -F, --form         Multipart form field. -F key=value or -F key=@/path/to/file. Repeatable. Mutually exclusive with -d.
-  -bd, --biz-domain  Override x-business-domain (default: bd_public)
-  -v, --verbose      Print request info to stderr
-  --pretty           Pretty-print JSON output (default)`);
+    console.log(CALL_HELP);
     return 0;
   }
 

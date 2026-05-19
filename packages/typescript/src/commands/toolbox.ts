@@ -12,24 +12,40 @@ import {
 } from "../api/toolboxes.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { renderHelp } from "../help/format.js";
 
 const VALID_IMPEX_TYPES: ReadonlySet<ImpexType> = new Set(["toolbox", "mcp", "operator"]);
 
-const HELP = `kweaver toolbox
-
-Subcommands:
-  create --name <n> --service-url <url> [--description <d>]   Create a new toolbox
-  list [--keyword <s>] [--limit <n>] [--offset <n>]           List toolboxes
-  publish <box-id>                                            Publish a toolbox (status=published)
-  unpublish <box-id>                                          Unpublish (status=draft)
-  delete <box-id> [-y|--yes]                                  Delete a toolbox
-  export <box-id> [-o <file>|-] [--type toolbox|mcp|operator] Export toolbox config (.adp JSON)
-  import <file> [--type toolbox|mcp|operator]                 Import a previously exported config
-
-Options:
-  -bd, --biz-domain <s>   Business domain (default: bd_public)
-  --pretty                Pretty-print JSON (default)
-  --compact               Single-line JSON (pipeline-friendly)`;
+const HELP = renderHelp({
+  tagline: "Agent toolbox lifecycle — create, list, publish, delete, export/import",
+  usage: "kweaver toolbox <subcommand> [flags]",
+  sections: [
+    {
+      title: "AVAILABLE COMMANDS",
+      items: [
+        { name: "create", desc: "Create a new toolbox" },
+        { name: "list", desc: "List toolboxes" },
+        { name: "publish", desc: "Publish a toolbox (status=published)" },
+        { name: "unpublish", desc: "Unpublish (status=draft)" },
+        { name: "delete", desc: "Delete a toolbox" },
+        { name: "export", desc: "Export toolbox config (.adp JSON)" },
+        { name: "import", desc: "Import a previously exported config" },
+      ],
+    },
+  ],
+  flags: [
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON (default)" },
+    { name: "--compact", desc: "Single-line JSON (pipeline-friendly)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver toolbox create --name MyBox --service-url https://svc.example.com",
+    "kweaver toolbox list --keyword analytics",
+    "kweaver toolbox export <box-id> -o box.adp",
+  ],
+  learnMore: ["Use `kweaver toolbox <subcommand> --help` for flag details"],
+});
 
 export async function runToolboxCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;

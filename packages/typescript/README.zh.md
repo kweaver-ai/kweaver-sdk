@@ -177,42 +177,27 @@ const history = await client.skills.history("skill-id");
 
 ## 命令速查
 
+`kweaver` 采用 `gh` 风格 help 布局（详见 [docs/cli_conventions.md §8](../../docs/cli_conventions.md#8-help-文本格式must)）：
+
+```text
+kweaver --help                            # gh 风格顶层概览
+kweaver help <command>                    # 转发到 `<command> --help`
+kweaver help all                          # 完整 per-action 签名（迁移期兜底）
+kweaver <command> --help                  # 子命令概览 + 动作列表
+kweaver <command> <subcommand> --help     # 动作级 flag + 示例
 ```
-kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
-# -u/-p（无论是否带 --http-signin）：HTTP POST /oauth2/signin（可拿 refresh_token）；缺失的用户名/密码会从 stdin 提示输入（TTY 下密码隐藏）
-# 若服务端返回 401001017（初始密码），交互终端会引导修改；非交互请使用 --new-password <pwd>。
-kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
-kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (无浏览器登录)
-kweaver auth export [url|alias] [--json]   (导出在无浏览器机器上运行的命令)
-kweaver auth status / whoami [url|alias] [--json]   # whoami 支持 --json；无 ~/.kweaver/ 当前平台时可配 KWEAVER_BASE_URL+KWEAVER_TOKEN
-kweaver auth list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # 业务域；show/list-bd 在无已保存平台时可与 env 配对
-kweaver token
-kweaver ds list/get/delete/tables/connect
-kweaver dataflow list/run/runs/logs
-kweaver model llm list/get/add/edit/delete/test/chat/--template
-kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
-kweaver resource|res list/find/get/query/delete
-kweaver bkn list/get/stats/export/create/update/delete
-kweaver bkn object-type list/get/create/update/delete/query/properties
-kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run
-kweaver bkn relation-type list/get/create/update/delete
-kweaver bkn action-type list/query/execute
-kweaver bkn subgraph
-kweaver bkn action-execution get
-kweaver bkn action-log list/get/cancel
-kweaver agent list/get/chat/sessions/history
-kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install/management-content/management-read-file/management-download
-kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
-kweaver context-loader help <subcommand>
-kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
-kweaver context-loader tool-call <kn-id> <name> --args '<json>'
-kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  （deprecated；请使用 search-schema）
-kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
-kweaver context-loader config set/use/list/show                       （deprecated；省略 <kn-id> 时回退到已保存配置）
-kweaver call <path> [-X METHOD] [-d BODY] [-H header]
+
+顶层命令分组：
+
+```text
+AUTHENTICATION & CONFIG  auth · token · config
+DECISION AGENT           agent · toolbox · tool
+AI DATA PLATFORM         bkn · ds · resource · dataflow · vega · context-loader
+TRACE AI                 trace
+FOUNDATION               call · explore · model · skill · help
 ```
+
+需要查阅每个动作的完整签名（可浏览 / 可 grep）时，运行 `kweaver help all`。
 
 ### Dataflow CLI 示例
 

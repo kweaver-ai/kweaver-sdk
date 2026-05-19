@@ -10,6 +10,7 @@ import {
 } from "../api/knowledge-networks.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { renderHelp } from "../help/format.js";
 import {
   runKnObjectTypeCommand,
   runKnRelationTypeCommand,
@@ -526,57 +527,77 @@ export function parseKnDeleteArgs(args: string[]): KnDeleteOptions {
   return { knId, businessDomain, yes };
 }
 
-const KN_HELP = `kweaver bkn
-
-Subcommands:
-  list [options]       List business knowledge networks
-  get <kn-id> [options]   Get knowledge network detail (use --stats or --export)
-  create [options]     Create a knowledge network (empty or from --body-file)
-  create-from-ds <ds-id> --name X [--tables a,b] [--build]   Create KN from datasource
-  create-from-csv <ds-id> --files <glob> --name X [--table-prefix P] [--build]
-    Import CSVs then create knowledge network
-  update <kn-id> [options]  Update a knowledge network
-  delete <kn-id>       Delete a knowledge network
-  build <kn-id> [--wait|--no-wait] [--timeout n]   Trigger full build
-  validate <directory> [--detect-encoding|--no-detect-encoding] [--source-encoding n]   Validate local BKN (no upload)
-  push <directory> [--branch main] [--detect-encoding|--no-detect-encoding] [--source-encoding n]   Upload BKN as tar
-  pull <kn-id> [<directory>] [--branch main]   Download BKN tar and extract
-  export <kn-id>       Export knowledge network (alias for get --export)
-  stats <kn-id>        Get statistics (alias for get --stats)
-  search <kn-id> <query> [options]   Semantic search within a knowledge network
-  object-type list <kn-id>   List object types (schema)
-  object-type get <kn-id> <ot-id>   Get object type details
-  object-type create <kn-id> [options]   Create object type (--name --resource-id --primary-key --display-key)
-  object-type update <kn-id> <ot-id> [options]   Update object type
-  object-type delete <kn-id> <ot-ids> [-y]   Delete object type(s)
-  object-type query <kn-id> <ot-id> ['<json>']   Query object instances (ontology-query; supports --limit/--search-after)
-  object-type properties <kn-id> <ot-id> '<json>'   Query instance properties (json: {"_instance_identities":[{pk:val}],"properties":[...]})
-  relation-type list <kn-id>   List relation types (schema)
-  relation-type get <kn-id> <rt-id>   Get relation type details
-  relation-type create <kn-id> [options]   Create relation type (--name --source --target [--mapping src:tgt])
-  relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X] [--type direct|data_view] [--mapping src:tgt ...]   Update relation type
-  relation-type delete <kn-id> <rt-ids> [-y]   Delete relation type(s)
-  subgraph <kn-id> '<json>'   Query subgraph
-  action-type list <kn-id>   List action types (schema)
-  action-type get <kn-id> <at-id>   Get action type details
-  action-type create <kn-id> '<json>'   Create action type
-  action-type update <kn-id> <at-id> '<json>'   Update action type
-  action-type delete <kn-id> <at-ids> [-y]   Delete action type(s)
-  action-type query <kn-id> <at-id> '<json>'   Query action info
-  action-type inputs <kn-id> <at-id>   List value_from=input params + dynamic_params template
-  action-type execute <kn-id> <at-id> '<envelope-json>' | --dynamic-params '<json>' [--instance '<json>']... [--trigger-type <v>]   Execute action (has side effects)
-  action-execution get <kn-id> <execution-id>   Get execution status
-  action-log list <kn-id> [options]   List action execution logs
-  action-log get <kn-id> <log-id>   Get single execution log
-  action-log cancel <kn-id> <log-id>   Cancel running execution (has side effects)
-  concept-group list|get|create|update|delete|add-members|remove-members <kn-id> ...
-  action-schedule list|get|create|update|set-status|delete <kn-id> ...
-  job list|get|tasks|delete <kn-id> ...
-  relation-type-paths <kn-id> '<json>'   Query relation type paths between OTs
-  resources                              List available resources
-  metric list|get|create|search|validate|update|delete|query|dry-run <kn-id> ...   BKN metrics (definitions + data)
-
-Use 'kweaver bkn <subcommand> --help' for subcommand options.`;
+const KN_HELP = renderHelp({
+  tagline: "Knowledge network — build, validate, push/pull, schema, instances, actions, metrics",
+  usage: "kweaver bkn <subcommand> [args] [flags]",
+  sections: [
+    {
+      title: "LIFECYCLE",
+      items: [
+        { name: "list", desc: "List knowledge networks" },
+        { name: "get", desc: "Get KN detail (use --stats or --export)" },
+        { name: "create", desc: "Create a KN (empty or from --body-file)" },
+        { name: "create-from-ds", desc: "Create KN from datasource (--name --tables --build)" },
+        { name: "create-from-csv", desc: "Import CSVs then create KN (--files glob --name --build)" },
+        { name: "update", desc: "Update a KN" },
+        { name: "delete", desc: "Delete a KN" },
+        { name: "build", desc: "Trigger full build (--wait / --timeout)" },
+        { name: "stats", desc: "Get statistics (alias for `get --stats`)" },
+        { name: "export", desc: "Export KN (alias for `get --export`)" },
+      ],
+    },
+    {
+      title: "LOCAL DIRECTORY",
+      items: [
+        { name: "validate", desc: "Validate local BKN directory (no upload)" },
+        { name: "push", desc: "Upload BKN directory as tar" },
+        { name: "pull", desc: "Download BKN tar and extract" },
+      ],
+    },
+    {
+      title: "SCHEMA",
+      items: [
+        { name: "object-type", desc: "list / get / create / update / delete / query / properties" },
+        { name: "relation-type", desc: "list / get / create / update / delete" },
+        { name: "relation-type-paths", desc: "Query relation-type paths between object types" },
+        { name: "action-type", desc: "list / get / create / update / delete / query / inputs / execute" },
+        { name: "concept-group", desc: "list / get / create / update / delete / add-members / remove-members" },
+        { name: "metric", desc: "list / get / create / search / validate / update / delete / query / dry-run" },
+      ],
+    },
+    {
+      title: "INSTANCES / SEARCH",
+      items: [
+        { name: "search", desc: "Semantic search within a KN" },
+        { name: "subgraph", desc: "Query subgraph (JSON body)" },
+      ],
+    },
+    {
+      title: "EXECUTION / JOBS",
+      items: [
+        { name: "action-execution", desc: "get — execution status" },
+        { name: "action-log", desc: "list / get / cancel" },
+        { name: "action-schedule", desc: "list / get / create / update / set-status / delete" },
+        { name: "job", desc: "list / get / tasks / delete" },
+      ],
+    },
+    {
+      title: "MISC",
+      items: [{ name: "resources", desc: "List available resources" }],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, -bd, --help",
+  examples: [
+    "kweaver bkn list",
+    "kweaver bkn build <kn-id> --wait",
+    "kweaver bkn push ./my-network --branch main",
+    "kweaver bkn search <kn-id> 'customer churn'",
+  ],
+  learnMore: [
+    "Use `kweaver bkn <subcommand> --help` for action-level options",
+    "Use `kweaver help all` for full per-action signatures",
+  ],
+});
 
 export async function runKnCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
@@ -675,73 +696,91 @@ async function runKnListCommand(args: string[]): Promise<number> {
   }
 }
 
-const KN_LIST_HELP = `kweaver bkn list [options]
+const KN_LIST_HELP = renderHelp({
+  tagline: "List business knowledge networks (ontology-manager API)",
+  usage: "kweaver bkn list [flags]",
+  flags: [
+    { name: "--offset <n>", desc: "Offset (default: 0)" },
+    { name: "--limit <n>", desc: "Limit (default: 30)" },
+    { name: "--sort <key>", desc: "Sort field (default: update_time)" },
+    { name: "--direction <asc|desc>", desc: "Sort direction (default: desc)" },
+    { name: "--name-pattern <s>", desc: "Filter by name pattern" },
+    { name: "--tag <s>", desc: "Filter by tag" },
+    { name: "--detail", desc: "Include the detail field in simplified output" },
+    { name: "--verbose, -v", desc: "Show full JSON response" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON output (applies to both modes)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: ["kweaver bkn list --limit 50 --tag analytics"],
+});
 
-List business knowledge networks from the ontology-manager API.
+const KN_GET_HELP = renderHelp({
+  tagline: "Get knowledge network detail",
+  usage: "kweaver bkn get <kn-id> [flags]",
+  flags: [
+    { name: "--stats", desc: "Include statistics" },
+    { name: "--export", desc: "Export mode (include sub-types)" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON output" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: ["kweaver bkn get kn-123 --stats"],
+});
 
-Options:
-  --offset <n>       Offset (default: 0)
-  --limit <n>        Limit (default: 30)
-  --sort <key>       Sort field (default: update_time)
-  --direction <asc|desc>  Sort direction (default: desc)
-  --name-pattern <s> Filter by name pattern
-  --tag <s>          Filter by tag
-  --detail           Include the detail field in simplified output
-  --verbose, -v      Show full JSON response
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output (applies to both modes)`;
+const KN_CREATE_HELP = renderHelp({
+  tagline: "Create a knowledge network (empty or from --body-file)",
+  usage: "kweaver bkn create [flags]",
+  flags: [
+    { name: "--name <s>", desc: "Name (required unless --body-file)" },
+    { name: "--comment <s>", desc: "Comment" },
+    { name: "--tags <t1,t2>", desc: "Comma-separated tags" },
+    { name: "--icon <s>", desc: "Icon" },
+    { name: "--color <s>", desc: "Color" },
+    { name: "--branch <s>", desc: "Branch (default: main)" },
+    { name: "--base-branch <s>", desc: "Base branch (default: empty for main)" },
+    { name: "--body-file <path>", desc: "Read full JSON body from file (cannot combine with flags above)" },
+    { name: "--import-mode <normal|ignore|overwrite>", desc: "Import mode (default: normal)" },
+    { name: "--validate-dependency <true|false>", desc: "Validate dependency (default: true)" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON output" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn create --name my-kn --tags a,b",
+    "kweaver bkn create --body-file ./kn.json",
+  ],
+});
 
-const KN_GET_HELP = `kweaver bkn get <kn-id> [options]
+const KN_UPDATE_HELP = renderHelp({
+  tagline: "Update a knowledge network",
+  usage: "kweaver bkn update <kn-id> [flags]",
+  flags: [
+    { name: "--name <s>", desc: "Name (required unless --body-file)" },
+    { name: "--comment <s>", desc: "Comment" },
+    { name: "--tags <t1,t2>", desc: "Comma-separated tags" },
+    { name: "--icon <s>", desc: "Icon" },
+    { name: "--color <s>", desc: "Color" },
+    { name: "--branch <s>", desc: "Branch (default: main)" },
+    { name: "--base-branch <s>", desc: "Base branch (default: empty for main)" },
+    { name: "--body-file <path>", desc: "Read full JSON body from file (cannot combine with flags above)" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print JSON output" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: ["kweaver bkn update kn-123 --name renamed"],
+});
 
-Get knowledge network detail.
-
-Options:
-  --stats            Include statistics
-  --export           Export mode (include sub-types)
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output`;
-
-const KN_CREATE_HELP = `kweaver bkn create [options]
-
-Create a knowledge network.
-
-Options:
-  --name <s>         Name (required unless --body-file)
-  --comment <s>      Comment
-  --tags <t1,t2>     Comma-separated tags
-  --icon <s>         Icon
-  --color <s>        Color
-  --branch <s>       Branch (default: main)
-  --base-branch <s>  Base branch (default: empty for main)
-  --body-file <path> Read full JSON body from file (cannot combine with flags above)
-  --import-mode <normal|ignore|overwrite>  Import mode (default: normal)
-  --validate-dependency <true|false>  Validate dependency (default: true)
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output`;
-
-const KN_UPDATE_HELP = `kweaver bkn update <kn-id> [options]
-
-Update a knowledge network.
-
-Options:
-  --name <s>         Name (required unless --body-file)
-  --comment <s>      Comment
-  --tags <t1,t2>     Comma-separated tags
-  --icon <s>         Icon
-  --color <s>        Color
-  --branch <s>       Branch (default: main)
-  --base-branch <s>  Base branch (default: empty for main)
-  --body-file <path> Read full JSON body from file (cannot combine with flags above)
-  -bd, --biz-domain <value>  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output`;
-
-const KN_DELETE_HELP = `kweaver bkn delete <kn-id>
-
-Delete a knowledge network and its object types, relation types, action types, and concept groups.
-
-Options:
-  --yes, -y          Skip confirmation prompt
-  -bd, --biz-domain <value>  Business domain (default: bd_public)`;
+const KN_DELETE_HELP = renderHelp({
+  tagline: "Delete a KN and its object/relation/action types and concept groups",
+  usage: "kweaver bkn delete <kn-id> [flags]",
+  flags: [
+    { name: "--yes, -y", desc: "Skip confirmation prompt" },
+    { name: "-bd, --biz-domain <value>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: ["kweaver bkn delete kn-123 -y"],
+});
 
 async function runKnGetCommand(args: string[]): Promise<number> {
   let options: KnGetOptions;

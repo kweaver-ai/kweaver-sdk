@@ -22,6 +22,32 @@ import {
   buildDagBody,
 } from "./import-csv.js";
 import { executeDataflow } from "../api/dataflow.js";
+import { renderHelp } from "../help/format.js";
+
+const DS_HELP = renderHelp({
+  tagline: "Manage datasources — list, get, delete, tables, connect, import-csv",
+  usage: "kweaver ds <subcommand> [flags]",
+  sections: [
+    {
+      title: "AVAILABLE COMMANDS",
+      items: [
+        { name: "list", desc: "List datasources" },
+        { name: "get", desc: "Get datasource details" },
+        { name: "delete", desc: "Delete a datasource" },
+        { name: "tables", desc: "List tables with columns" },
+        { name: "connect", desc: "Test, register and discover; reuses by (type,host,port,db,account) unless --force-new" },
+        { name: "import-csv", desc: "Import CSV files into datasource tables via dataflow API" },
+      ],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver ds list --keyword mysql",
+    "kweaver ds connect mysql 127.0.0.1 3306 mydb --account root --password ******",
+    "kweaver ds tables <id> --keyword users",
+  ],
+  learnMore: ["Use `kweaver ds <subcommand> --help` for flag details"],
+});
 
 function confirmYes(prompt: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -46,20 +72,7 @@ export async function runDsCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(`kweaver ds
-
-Subcommands:
-  list [--keyword X] [--type Y]     List datasources
-  get <id>                          Get datasource details
-  delete <id> [-y]                  Delete a datasource
-  tables <id> [--keyword X]         List tables with columns
-  connect <db_type> <host> <port> <database> --account X --password Y [--schema Z] [--name N]
-                                              [--reuse-existing|--force-new]
-    Test connectivity, register datasource, and discover tables.
-    By default reuses an existing ds with the same (type, host, port, database, account)
-    instead of creating a duplicate. --force-new always creates a new entry.
-  import-csv <ds-id> --files <glob_or_list> [--table-prefix X] [--batch-size N]
-    Import CSV files into datasource tables via dataflow API.`);
+    console.log(DS_HELP);
     return 0;
   }
 
@@ -138,13 +151,17 @@ async function runDsListCommand(args: string[]): Promise<number> {
     return 0;
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver ds list [options]
-
-Options:
-  --keyword <s>   Filter by keyword
-  --type <s>      Filter by database type
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty         Pretty-print JSON (default)`);
+      console.log(renderHelp({
+        tagline: "List datasources",
+        usage: "kweaver ds list [options]",
+        flags: [
+          { name: "--keyword <s>", desc: "Filter by keyword" },
+          { name: "--type <s>", desc: "Filter by database type" },
+          { name: "-bd, --biz-domain", desc: "Business domain (default: bd_public)" },
+          { name: "--pretty", desc: "Pretty-print JSON (default)" },
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }));
       return 0;
     }
     throw error;
@@ -491,15 +508,21 @@ async function printDsConnectOutput(
 
 // ── import-csv ────────────────────────────────────────────────────────────────
 
-const IMPORT_CSV_HELP = `kweaver ds import-csv <ds-id> --files <glob_or_list> [options]
-
-Import CSV files into datasource tables via dataflow API.
-
-Options:
-  --files <s>          CSV file paths (comma-separated or glob pattern, required)
-  --table-prefix <s>   Table name prefix (default: none)
-  --batch-size <n>     Rows per batch (default: 500, range: 1-10000)
-  -bd, --biz-domain    Business domain (default: bd_public)`;
+const IMPORT_CSV_HELP = renderHelp({
+  tagline: "Import CSV files into datasource tables via dataflow API",
+  usage: "kweaver ds import-csv <ds-id> --files <glob_or_list> [flags]",
+  flags: [
+    { name: "--files <s>", desc: "CSV file paths — comma-separated or glob pattern (required)" },
+    { name: "--table-prefix <s>", desc: "Table name prefix (default: none)" },
+    { name: "--batch-size <n>", desc: "Rows per batch (default: 500, range: 1-10000)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver ds import-csv ds-123 --files './data/*.csv'",
+    "kweaver ds import-csv ds-123 --files ./a.csv,./b.csv --table-prefix raw_ --batch-size 1000",
+  ],
+});
 
 export function parseImportCsvArgs(args: string[]): {
   datasourceId: string;

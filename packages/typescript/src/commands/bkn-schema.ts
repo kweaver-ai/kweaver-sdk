@@ -1,4 +1,5 @@
 import { ensureValidToken, formatHttpError } from "../auth/oauth.js";
+import { renderHelp } from "../help/format.js";
 import {
   listConceptGroups, getConceptGroup, createConceptGroup, updateConceptGroup,
   deleteConceptGroup, addConceptGroupMembers, removeConceptGroupMembers,
@@ -1181,22 +1182,33 @@ export function parseRelationTypeDeleteArgs(args: string[]): {
 export async function runKnObjectTypeCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
   if (!action || action === "--help" || action === "-h") {
-    console.log(`kweaver bkn object-type list <kn-id> [--pretty] [-bd value]
-kweaver bkn object-type get <kn-id> <ot-id> [--pretty] [-bd value]
-kweaver bkn object-type create <kn-id> --name X --resource-id Y --primary-key Z --display-key W [--property '<json>' ...]
-kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property|--update-property '<json>' ...] [--remove-property N ...] [--tags '["a","b"]'] [--comment S] [--icon I] [--color C] [--branch main]
-  kweaver bkn object-type update <kn-id> <ot-id> '<full-json-body>'
-kweaver bkn object-type delete <kn-id> <ot-ids> [-y]
-kweaver bkn object-type query <kn-id> <ot-id> ['<json>'] [--limit <n>] [--search-after '<json-array>'] [--pretty] [-bd value]
-kweaver bkn object-type properties <kn-id> <ot-id> '<json>' [--pretty] [-bd value]
-
-list: List object types (schema) from ontology-manager.
-get: Get single object type details.
-create/update/delete: Schema CRUD (create requires resource-id). update: merge flags (--add-property / --update-property / --remove-property, etc.) GET-merge-PUT; or full JSON as third arg.
-query: Query via ontology-query API. Default limit is 50 if not specified. Use --search-after for pagination.
-properties: Query instance properties by primary key.
-
-properties JSON format: {"_instance_identities":[{"<primary-key>":"<value>"}],"properties":["prop1","prop2"]}`);
+    console.log(renderHelp({
+      tagline: "Manage object types (schema) in a knowledge network.",
+      usage: [
+        "kweaver bkn object-type list <kn-id> [--pretty] [-bd value]",
+        "kweaver bkn object-type get <kn-id> <ot-id> [--pretty] [-bd value]",
+        "kweaver bkn object-type create <kn-id> --name X --resource-id Y --primary-key Z --display-key W [--property '<json>' ...]",
+        "kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property|--update-property '<json>' ...] [--remove-property N ...] [--tags '[\"a\",\"b\"]'] [--comment S] [--icon I] [--color C] [--branch main]",
+        "kweaver bkn object-type update <kn-id> <ot-id> '<full-json-body>'",
+        "kweaver bkn object-type delete <kn-id> <ot-ids> [-y]",
+        "kweaver bkn object-type query <kn-id> <ot-id> ['<json>'] [--limit <n>] [--search-after '<json-array>'] [--pretty] [-bd value]",
+        "kweaver bkn object-type properties <kn-id> <ot-id> '<json>' [--pretty] [-bd value]",
+      ],
+      sections: [{
+        title: "AVAILABLE COMMANDS",
+        items: [
+          { name: "list", desc: "List object types (schema) from ontology-manager." },
+          { name: "get", desc: "Get single object type details." },
+          { name: "create/update/delete", desc: "Schema CRUD (create requires resource-id). update: merge flags (--add-property / --update-property / --remove-property, etc.) GET-merge-PUT; or full JSON as third arg." },
+          { name: "query", desc: "Query via ontology-query API. Default limit is 50 if not specified. Use --search-after for pagination." },
+          { name: "properties", desc: "Query instance properties by primary key." },
+        ],
+      }],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      learnMore: [
+        "properties JSON format: {\"_instance_identities\":[{\"<primary-key>\":\"<value>\"}],\"properties\":[\"prop1\",\"prop2\"]}",
+      ],
+    }));
     return 0;
   }
 
@@ -1372,10 +1384,16 @@ JSON: {"_instance_identities":[{"<primary-key>":"<value>"}],"properties":["prop1
     return 1;
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn object-type create <kn-id> --name X --resource-id Y --primary-key Z --display-key W [--property '<json>' ...]
-kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property|--update-property '<json>' ...] [--remove-property N ...] [--tags '["a"]'] [--comment S] [--icon I] [--color C] [--branch main]
-  kweaver bkn object-type update <kn-id> <ot-id> '<full-json-body>'
-kweaver bkn object-type delete <kn-id> <ot-ids> [-y]`);
+      console.log(renderHelp({
+        tagline: "Object-type create / update / delete usage.",
+        usage: [
+          "kweaver bkn object-type create <kn-id> --name X --resource-id Y --primary-key Z --display-key W [--property '<json>' ...]",
+          "kweaver bkn object-type update <kn-id> <ot-id> [--name X] [--display-key Y] [--add-property|--update-property '<json>' ...] [--remove-property N ...] [--tags '[\"a\"]'] [--comment S] [--icon I] [--color C] [--branch main]",
+          "kweaver bkn object-type update <kn-id> <ot-id> '<full-json-body>'",
+          "kweaver bkn object-type delete <kn-id> <ot-ids> [-y]",
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1386,15 +1404,25 @@ kweaver bkn object-type delete <kn-id> <ot-ids> [-y]`);
 export async function runKnRelationTypeCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
   if (!action || action === "--help" || action === "-h") {
-    console.log(`kweaver bkn relation-type list <kn-id> [--pretty] [-bd value]
-kweaver bkn relation-type get <kn-id> <rt-id> [--pretty] [-bd value]
-kweaver bkn relation-type create <kn-id> --name X --source <ot-id> --target <ot-id> [--mapping src:tgt ...]
-kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X] [--type direct|data_view] [--mapping src:tgt ...]
-kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]
-
-list: List relation types (schema) from ontology-manager.
-get: Get single relation type details.
-create/update/delete: Schema CRUD.`);
+    console.log(renderHelp({
+      tagline: "Manage relation types (schema) in a knowledge network.",
+      usage: [
+        "kweaver bkn relation-type list <kn-id> [--pretty] [-bd value]",
+        "kweaver bkn relation-type get <kn-id> <rt-id> [--pretty] [-bd value]",
+        "kweaver bkn relation-type create <kn-id> --name X --source <ot-id> --target <ot-id> [--mapping src:tgt ...]",
+        "kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X] [--type direct|data_view] [--mapping src:tgt ...]",
+        "kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]",
+      ],
+      sections: [{
+        title: "AVAILABLE COMMANDS",
+        items: [
+          { name: "list", desc: "List relation types (schema) from ontology-manager." },
+          { name: "get", desc: "Get single relation type details." },
+          { name: "create/update/delete", desc: "Schema CRUD." },
+        ],
+      }],
+      inheritedFlags: "--base-url, --token, --user, --help",
+    }));
     return 0;
   }
 
@@ -1491,9 +1519,15 @@ create/update/delete: Schema CRUD.`);
     return 1;
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn relation-type create <kn-id> --name X --source <ot-id> --target <ot-id> [--mapping src:tgt ...]
-kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X] [--type direct|data_view] [--mapping src:tgt ...]
-kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]`);
+      console.log(renderHelp({
+        tagline: "Relation-type create / update / delete usage.",
+        usage: [
+          "kweaver bkn relation-type create <kn-id> --name X --source <ot-id> --target <ot-id> [--mapping src:tgt ...]",
+          "kweaver bkn relation-type update <kn-id> <rt-id> --source <ot-id> --target <ot-id> [--name X] [--type direct|data_view] [--mapping src:tgt ...]",
+          "kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]",
+        ],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1504,36 +1538,36 @@ kweaver bkn relation-type delete <kn-id> <rt-ids> [-y]`);
 export async function runKnActionTypeCommand(args: string[]): Promise<number> {
   const [action, ...rest] = args;
   if (!action || action === "--help" || action === "-h") {
-    console.log(`kweaver bkn action-type list <kn-id> [--pretty] [-bd value]
-kweaver bkn action-type get <kn-id> <at-id> [--pretty] [-bd value]
-kweaver bkn action-type create <kn-id> '<json>' [--pretty] [-bd value]
-kweaver bkn action-type update <kn-id> <at-id> '<json>' [--pretty] [-bd value]
-kweaver bkn action-type delete <kn-id> <at-ids> [-y] [--pretty] [-bd value]
-kweaver bkn action-type query <kn-id> <at-id> '<json>' [--pretty] [-bd value]
-kweaver bkn action-type inputs <kn-id> <at-id> [--json|--template] [-bd value]
-kweaver bkn action-type execute <kn-id> <at-id> [<json>|--dynamic-params '<json>' --instance '<json>' --trigger-type <v>] [--pretty] [-bd value] [--wait|--no-wait] [--timeout n]
-
-list: List action types (schema) from ontology-manager.
-get: Get a single action type by ID.
-create: Create action type(s) (POST JSON body).
-update: Update an action type (PUT JSON body).
-delete: Delete action type(s) by ID(s).
-query: Query actions backing this action type.
-inputs: List parameters with value_from=input that the caller MUST supply.
-        Default prints a table + a starter dynamic_params template.
-        --json     dump filtered parameters as raw JSON
-        --template print only the dynamic_params template object
-execute: Run an action (has side effects - only use when explicitly requested).
-  Body forms (mutually exclusive):
-    1. Positional envelope JSON: '{"trigger_type":"manual","_instance_identities":[],"dynamic_params":{...}}'
-    2. Flag form (CLI assembles the envelope):
-         --dynamic-params '<json object>'   parameters with value_from=input
-         --instance '<json object>'         repeatable; one per identity
-         --trigger-type <value>             defaults to "manual"
-  --wait (default)    Poll until execution completes
-  --no-wait           Return immediately after starting execution
-  --timeout <seconds> Max wait time when --wait (default: 300)
-See skills/kweaver-core/references/bkn.md for the full payload contract.`);
+    console.log(renderHelp({
+      tagline: "Manage action types (schema) in a knowledge network.",
+      usage: [
+        "kweaver bkn action-type list <kn-id> [--pretty] [-bd value]",
+        "kweaver bkn action-type get <kn-id> <at-id> [--pretty] [-bd value]",
+        "kweaver bkn action-type create <kn-id> '<json>' [--pretty] [-bd value]",
+        "kweaver bkn action-type update <kn-id> <at-id> '<json>' [--pretty] [-bd value]",
+        "kweaver bkn action-type delete <kn-id> <at-ids> [-y] [--pretty] [-bd value]",
+        "kweaver bkn action-type query <kn-id> <at-id> '<json>' [--pretty] [-bd value]",
+        "kweaver bkn action-type inputs <kn-id> <at-id> [--json|--template] [-bd value]",
+        "kweaver bkn action-type execute <kn-id> <at-id> [<json>|--dynamic-params '<json>' --instance '<json>' --trigger-type <v>] [--pretty] [-bd value] [--wait|--no-wait] [--timeout n]",
+      ],
+      sections: [{
+        title: "AVAILABLE COMMANDS",
+        items: [
+          { name: "list", desc: "List action types (schema) from ontology-manager." },
+          { name: "get", desc: "Get a single action type by ID." },
+          { name: "create", desc: "Create action type(s) (POST JSON body)." },
+          { name: "update", desc: "Update an action type (PUT JSON body)." },
+          { name: "delete", desc: "Delete action type(s) by ID(s)." },
+          { name: "query", desc: "Query actions backing this action type." },
+          { name: "inputs", desc: "List parameters with value_from=input that the caller MUST supply.\nDefault prints a table + a starter dynamic_params template.\n--json     dump filtered parameters as raw JSON\n--template print only the dynamic_params template object" },
+          { name: "execute", desc: "Run an action (has side effects - only use when explicitly requested).\nBody forms (mutually exclusive):\n  1. Positional envelope JSON: '{\"trigger_type\":\"manual\",\"_instance_identities\":[],\"dynamic_params\":{...}}'\n  2. Flag form (CLI assembles the envelope):\n       --dynamic-params '<json object>'   parameters with value_from=input\n       --instance '<json object>'         repeatable; one per identity\n       --trigger-type <value>             defaults to \"manual\"\n--wait (default)    Poll until execution completes\n--no-wait           Return immediately after starting execution\n--timeout <seconds> Max wait time when --wait (default: 300)" },
+        ],
+      }],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      learnMore: [
+        "See skills/kweaver-core/references/bkn.md for the full payload contract.",
+      ],
+    }));
     return 0;
   }
 
@@ -1835,16 +1869,23 @@ export async function runKnConceptGroupCommand(args: string[]): Promise<number> 
     parsed = parseConceptGroupArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn concept-group <action> <kn-id> [args] [--pretty] [-bd value]
-
-Actions:
-  list <kn-id>                              List concept groups
-  get <kn-id> <cg-id>                       Get concept group details
-  create <kn-id> '<json>'                   Create concept group
-  update <kn-id> <cg-id> '<json>'           Update concept group
-  delete <kn-id> <cg-id> [-y]              Delete concept group
-  add-members <kn-id> <cg-id> <ot-ids>     Add object type members (comma-separated)
-  remove-members <kn-id> <cg-id> <ot-ids> [-y]  Remove object type members`);
+      console.log(renderHelp({
+        tagline: "Manage concept groups in a knowledge network.",
+        usage: "kweaver bkn concept-group <action> <kn-id> [args] [--pretty] [-bd value]",
+        sections: [{
+          title: "AVAILABLE COMMANDS",
+          items: [
+            { name: "list <kn-id>", desc: "List concept groups" },
+            { name: "get <kn-id> <cg-id>", desc: "Get concept group details" },
+            { name: "create <kn-id> '<json>'", desc: "Create concept group" },
+            { name: "update <kn-id> <cg-id> '<json>'", desc: "Update concept group" },
+            { name: "delete <kn-id> <cg-id> [-y]", desc: "Delete concept group" },
+            { name: "add-members <kn-id> <cg-id> <ot-ids>", desc: "Add object type members (comma-separated)" },
+            { name: "remove-members <kn-id> <cg-id> <ot-ids> [-y]", desc: "Remove object type members" },
+          ],
+        }],
+        inheritedFlags: "--base-url, --token, --user, --help",
+      }));
       return 0;
     }
     console.error(formatHttpError(error));

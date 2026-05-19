@@ -10,6 +10,38 @@ import {
 } from "../api/resources.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { renderHelp } from "../help/format.js";
+
+const RESOURCE_HELP = renderHelp({
+  tagline: "Resources — list, find, get, query, delete (vega-backend)",
+  usage: "kweaver resource <subcommand> [flags]",
+  sections: [
+    {
+      title: "AVAILABLE COMMANDS",
+      items: [
+        { name: "list", desc: "List resources under a catalog/datasource (default limit: 30)" },
+        { name: "find", desc: "Search by name; default fuzzy, --exact for strict, --wait to poll" },
+        { name: "get", desc: "Get resource details" },
+        { name: "query", desc: "Fetch data rows from a vega-backend resource" },
+        { name: "delete", desc: "Delete a resource" },
+      ],
+    },
+  ],
+  flags: [
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty / --compact", desc: "JSON output style (default: pretty)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver resource list --datasource-id <id> --type table",
+    "kweaver resource find --name customers --exact",
+    "kweaver resource query <id> --limit 100",
+  ],
+  learnMore: [
+    "Alias: `kweaver res ...`",
+    "Use `kweaver resource <subcommand> --help` for flag details",
+  ],
+});
 
 function confirmYes(prompt: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -26,18 +58,7 @@ export async function runResourceCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;
 
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(`kweaver resource
-
-Subcommands:
-  list   [--datasource-id <id>] [--type <table|logicview>] [--limit <n>] [-bd value] [--pretty]
-  find   --name <name> [--exact] [--datasource-id <id>] [--wait] [--no-wait] [--timeout <ms>] [-bd value] [--pretty]
-  get    <id> [-bd value] [--pretty]
-  query  <id> [--limit <n>] [--offset <n>] [--need-total] [-bd value] [--pretty]
-  delete <id> [-y] [-bd value]
-
-  list   — list resources under a catalog/datasource (default limit: 30)
-  find   — search by name; default fuzzy, --exact for strict match, --wait to poll
-  query  — fetch data rows from a vega-backend resource`);
+    console.log(RESOURCE_HELP);
     return 0;
   }
 

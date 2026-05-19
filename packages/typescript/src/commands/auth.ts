@@ -1,5 +1,77 @@
 import { isNoAuth } from "../config/no-auth.js";
 import { assertNotStatelessForWrite } from "../config/stateless.js";
+import { renderHelp } from "../help/format.js";
+
+const AUTH_HELP = renderHelp({
+  tagline: "Login, list, inspect, and switch saved platform auth profiles",
+  usage: [
+    "kweaver auth <platform-url> [flags]                 (shorthand for `login`)",
+    "kweaver auth <subcommand> [args] [flags]",
+  ],
+  sections: [
+    {
+      title: "AVAILABLE COMMANDS",
+      items: [
+        { name: "login", desc: "Login to a platform (browser OAuth2 by default)" },
+        { name: "whoami", desc: "Show current user identity (from id_token)" },
+        { name: "status", desc: "Show current auth status" },
+        { name: "list", desc: "List all platforms and users (tree view)" },
+        { name: "use", desc: "Switch active platform" },
+        { name: "users", desc: "List user profiles for a platform" },
+        { name: "switch", desc: "Switch active user for a platform" },
+        { name: "logout", desc: "Logout — clear local token" },
+        { name: "delete", desc: "Delete saved credentials" },
+        { name: "export", desc: "Export credentials (run printed command on headless host)" },
+        { name: "change-password", desc: "Change password (interactive or with -u/-o/-n)" },
+      ],
+    },
+  ],
+  flags: [
+    {
+      title: "Login",
+      flags: [
+        { name: "--alias <name>", desc: "Save platform with a short alias" },
+        { name: "--no-browser", desc: "Print auth URL, prompt for callback URL / code on stdin" },
+        { name: "--no-auth", desc: "Save platform without OAuth (servers with no auth)" },
+        { name: "--http-signin", desc: "Force HTTP /oauth2/signin (no browser)" },
+        { name: "-u, --username <name>", desc: "Username for HTTP signin (prompts for missing pass)" },
+        { name: "-p, --password <pwd>", desc: "Password for HTTP signin (prompts if -u given but -p omitted)" },
+        { name: "--new-password <pwd>", desc: "Initial-password reset after 401001017, then retry login" },
+        { name: "--client-id ID", desc: "Use existing OAuth2 client ID (skip dynamic registration)" },
+        { name: "--client-secret S", desc: "Client secret (omit for public/PKCE clients)" },
+        { name: "--refresh-token T", desc: "Headless: exchange refresh token for access token" },
+        { name: "--port <n>", desc: "Local callback port (default: 9010)" },
+      ],
+    },
+    {
+      title: "TLS",
+      flags: [
+        { name: "--insecure, -k", desc: "Skip TLS certificate verification (dev / self-signed only)" },
+      ],
+    },
+    {
+      title: "Scope",
+      flags: [
+        { name: "--global", desc: "Override profile requirement for `switch`/`use` (CI / single-user setup)" },
+      ],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  environment: [
+    { name: "KWEAVER_PROFILE", desc: "Scope state.json (active platform/user) to a named profile" },
+    { name: "KWEAVERC_CONFIG_DIR", desc: "Override config root (~/.kweaver) — hard isolation per shell" },
+  ],
+  examples: [
+    "kweaver auth https://platform.example.com",
+    "kweaver auth login https://platform.example.com --client-id <id> --refresh-token <t>",
+    "kweaver auth switch --user alice",
+    "kweaver auth whoami --json",
+  ],
+  learnMore: [
+    "For agents / multi-terminal scripts: prefer `--user <id>` over `auth switch`",
+    "Use `kweaver auth <subcommand> --help` for action-level details",
+  ],
+});
 import {
   autoSelectBusinessDomain,
   clearPlatformSession,
@@ -69,45 +141,65 @@ export async function runAuthCommand(args: string[]): Promise<number> {
   const rest = args.slice(1);
 
   if (!target || target === "--help" || target === "-h") {
-    console.log(`kweaver auth login <url> [options]   Login to a platform (browser OAuth2 by default)
-kweaver auth <url>                   Login (shorthand; same options as login)
-kweaver auth whoami [url|alias] [--json]  Show current user identity (from id_token)
-kweaver auth export [url|alias] [--json]   Export credentials; run printed command on a headless host
-kweaver auth status [url|alias]      Show current auth status
-kweaver auth list                    List all platforms and users (tree view)
-kweaver auth use <url|alias>         Switch active platform
-kweaver auth users [url|alias]       List all user profiles (with usernames) for a platform
-kweaver auth switch [url|alias] --user <id|username>  Switch active user for a platform
-kweaver auth logout [url|alias] [--user <id>]  Logout (clear local token)
-kweaver auth delete <url|alias> [--user <id>]  Delete saved credentials
-kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>]  Change password
-
-Login options:
-  --alias <name>         Save platform with a short alias (use with use / status / logout)
-  --client-id <id>       Use an existing OAuth2 client ID instead of registering a new one.
-                         Use the platform's web app client ID to get the same permissions
-                         as the browser. Find it in DevTools: /oauth2/auth?client_id=<id>
-  --client-secret <s>    Client secret (omit for public/PKCE clients)
-  --refresh-token <t>    Use on a machine without a browser: exchange refresh token for access token.
-                         Requires --client-id and --client-secret.
-                         Get these from the callback page after browser login or \`auth export\`.
-  --port <n>             Local callback port (default: 9010). Use when 9010 is occupied.
-  --no-browser           Do not open a browser. Without -u/-p: print the auth URL and prompt for the
-                         callback URL or code (stdin). With -u and/or -p: route through HTTP sign-in
-                         (any missing credential is prompted; password is hidden when stdin is a TTY).
-  -u, --username         Username for HTTP /oauth2/signin (POST). If -p is omitted, password is prompted.
-  -p, --password         Password for HTTP /oauth2/signin (POST). If -u is omitted, username is prompted.
-  --http-signin          Force HTTP /oauth2/signin (no browser). Missing -u/-p are prompted from stdin.
-  --new-password <pwd>   After HTTP sign-in error 401001017 (initial password), set the new password non-interactively, then retry login.
-  --insecure, -k         Skip TLS certificate verification (self-signed / dev HTTPS only)
-  --no-auth              Save platform without OAuth (servers with no authentication). Same as detecting OAuth 404 during login.`);
-
+    console.log(AUTH_HELP);
     return 0;
   }
 
   if (target === "login") {
     if (rest[0] === "--help" || rest[0] === "-h") {
-      console.log(`kweaver auth login <platform-url> [--alias <name>] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--refresh-token T --client-id ID --client-secret S]`);
+      console.log(
+        renderHelp({
+          tagline: "Log in to a platform (browser OAuth2 by default)",
+          usage: [
+            "kweaver auth login <platform-url> [flags]",
+            "kweaver auth <platform-url> [flags]    (shorthand)",
+          ],
+          flags: [
+            {
+              title: "Save",
+              flags: [
+                { name: "--alias <name>", desc: "Save platform with a short alias" },
+                { name: "--no-auth", desc: "Save platform without OAuth (no-auth servers)" },
+              ],
+            },
+            {
+              title: "Browser-less login",
+              flags: [
+                { name: "--no-browser", desc: "Print auth URL, prompt for callback URL / code on stdin" },
+                { name: "--http-signin", desc: "Force HTTP /oauth2/signin (no browser)" },
+                { name: "-u, --username <name>", desc: "Username for HTTP signin" },
+                { name: "-p, --password <pwd>", desc: "Password for HTTP signin (prompts if omitted but -u given)" },
+                { name: "--new-password <pwd>", desc: "Reset initial password after 401001017, then retry login" },
+              ],
+            },
+            {
+              title: "Headless (CI / servers)",
+              flags: [
+                { name: "--client-id <id>", desc: "Use existing OAuth2 client ID (skip dynamic registration)" },
+                { name: "--client-secret <s>", desc: "Client secret (omit for public/PKCE clients)" },
+                { name: "--refresh-token <t>", desc: "Exchange refresh token for access token (with --client-id/--client-secret)" },
+                { name: "--port <n>", desc: "Local callback port (default: 9010)" },
+              ],
+            },
+            {
+              title: "TLS",
+              flags: [
+                { name: "--insecure, -k", desc: "Skip TLS certificate verification (dev / self-signed only)" },
+              ],
+            },
+          ],
+          inheritedFlags: "--base-url, --token, --user, --help",
+          examples: [
+            "kweaver auth login https://platform.example.com",
+            "kweaver auth login https://platform.example.com --alias prod -u alice",
+            "kweaver auth login https://platform.example.com --client-id <id> --client-secret <s> --refresh-token <t>",
+          ],
+          learnMore: [
+            "Find --client-id in DevTools: /oauth2/auth?client_id=<id>",
+            "Get --refresh-token from callback page after browser login or `auth export`",
+          ],
+        }),
+      );
       return 0;
     }
     const url = rest[0];
@@ -565,11 +657,15 @@ function resolvePlatformArg(args: string[]): string | null {
 
 function runAuthUsersCommand(args: string[]): number {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth users [platform-url|alias]
-
-List all user profiles stored for a platform.
-Each line shows: userId (username) where username is decoded from the id_token.
-You can use either userId or username with --user in switch/logout/delete.`);
+    console.log(renderHelp({
+      tagline: "List all user profiles stored for a platform. Each line shows: userId (username) where username is decoded from the id_token. You can use either userId or username with --user in switch/logout/delete.",
+      usage: "kweaver auth users [platform-url|alias]",
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth users",
+        "kweaver auth users my-platform",
+      ],
+    }));
     return 0;
   }
 
@@ -597,10 +693,19 @@ You can use either userId or username with --user in switch/logout/delete.`);
 
 function runAuthSwitchCommand(args: string[]): number {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth switch [--global] [platform-url|alias] --user <userId|username>
-
-Switch the active user for a platform.
-You can specify either the userId (sub claim) or the username (preferred_username from id_token).`);
+    console.log(renderHelp({
+      tagline: "Switch the active user for a platform. You can specify either the userId (sub claim) or the username (preferred_username from id_token).",
+      usage: "kweaver auth switch [--global] [platform-url|alias] --user <userId|username>",
+      flags: [
+        { name: "--global", desc: "Apply switch to the global profile" },
+        { name: "--user <userId|username>", desc: "Target user (userId or username)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth switch --user alice",
+        "kweaver auth switch --global my-platform --user alice",
+      ],
+    }));
     return 0;
   }
 
@@ -653,14 +758,18 @@ You can specify either the userId (sub claim) or the username (preferred_usernam
 
 async function runAuthWhoamiCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth whoami [platform-url|alias] [--json]
-
-Show current user identity. For env-token mode (KWEAVER_TOKEN), the bound
-identity is resolved live from EACP /api/eacp/v1/user/get; for saved sessions
-it is decoded from the local id_token.
-
-Options:
-  --json   Output as JSON (machine-readable)`);
+    console.log(renderHelp({
+      tagline: "Show current user identity. For env-token mode (KWEAVER_TOKEN), the bound identity is resolved live from EACP /api/eacp/v1/user/get; for saved sessions it is decoded from the local id_token.",
+      usage: "kweaver auth whoami [platform-url|alias] [--json]",
+      flags: [
+        { name: "--json", desc: "Output as JSON (machine-readable)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth whoami",
+        "kweaver auth whoami my-platform --json",
+      ],
+    }));
     return 0;
   }
 
@@ -774,13 +883,18 @@ Options:
 
 async function runAuthExportCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth export [platform-url|alias] [--json]
-
-Export OAuth2 credentials for copying to a headless host (no browser there).
-Prints clientId, clientSecret, refreshToken, and a command to run on that machine.
-
-Options:
-  --json   Output as JSON (machine-readable)`);
+    console.log(renderHelp({
+      tagline: "Export OAuth2 credentials for copying to a headless host (no browser there). Prints clientId, clientSecret, refreshToken, and a command to run on that machine.",
+      usage: "kweaver auth export [platform-url|alias] [--json]",
+      flags: [
+        { name: "--json", desc: "Output as JSON (machine-readable)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth export",
+        "kweaver auth export my-platform --json",
+      ],
+    }));
     return 0;
   }
 
@@ -949,20 +1063,21 @@ async function loginWithInitialPasswordRecovery(
 
 async function runAuthChangePasswordCommand(args: string[]): Promise<number> {
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(`kweaver auth change-password [<platform-url>] [options]
-
-Change the EACP account password via POST /api/eacp/v1/auth1/modifypassword.
-No saved OAuth token is required.
-
-Options:
-  -u, --account <name>       Account / login name. On TTY, defaults to the current active user
-                             after a confirmation prompt. Required in non-interactive mode.
-  -o, --old-password <pwd>   Current password (omit on TTY to be prompted)
-  -n, --new-password <pwd>   New password, 6-100 characters (omit on TTY to be prompted)
-  --insecure, -k             Skip TLS certificate verification (defaults to the platform's saved
-                             preference set at login with -k; pass to override per-call)
-
-Platform URL is optional; defaults to the current active platform (kweaver auth use).`);
+    console.log(renderHelp({
+      tagline: "Change the EACP account password via POST /api/eacp/v1/auth1/modifypassword. No saved OAuth token is required. Platform URL is optional; defaults to the current active platform (kweaver auth use).",
+      usage: "kweaver auth change-password [<platform-url>] [options]",
+      flags: [
+        { name: "-u, --account <name>", desc: "Account / login name. On TTY, defaults to the current active user after a confirmation prompt. Required in non-interactive mode." },
+        { name: "-o, --old-password <pwd>", desc: "Current password (omit on TTY to be prompted)" },
+        { name: "-n, --new-password <pwd>", desc: "New password, 6-100 characters (omit on TTY to be prompted)" },
+        { name: "--insecure, -k", desc: "Skip TLS certificate verification (defaults to the platform's saved preference set at login with -k; pass to override per-call)" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver auth change-password",
+        "kweaver auth change-password https://example.com -u alice -o old -n new",
+      ],
+    }));
     return 0;
   }
 

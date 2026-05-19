@@ -257,52 +257,27 @@ result = client.dataflows.execute(
 
 ## 命令速查
 
+`kweaver` 采用 `gh` 风格 help 布局（详见 [docs/cli_conventions.md §8](docs/cli_conventions.md#8-help-文本格式must)）：
+
 ```bash
-kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
-# -u/-p（无论是否带 --http-signin）：HTTP POST /oauth2/signin（可拿 refresh_token）；缺失的用户名/密码会从 stdin 提示输入（TTY 下密码隐藏）
-# 初始密码 401001017：TTY 会提示修改；脚本请加 --new-password <pwd>。
-kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
-kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   （无浏览器主机）
-kweaver auth export [url|alias] [--json]
-kweaver auth status / whoami [url|alias] [--json]   # 无 ~/.kweaver/ 当前平台时可配 KWEAVER_BASE_URL+KWEAVER_TOKEN
-kweaver auth list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # 业务域；show/list-bd 可配合 KWEAVER_BASE_URL（list-bd 还需 KWEAVER_TOKEN）
-kweaver token
-kweaver ds list/get/delete/tables/connect
-kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
-kweaver dataflow templates/create-dataset/create-bkn/create/list/run/runs/logs
-kweaver model llm list/get/add/edit/delete/test/chat/--template
-kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
-kweaver resource|res list/find/get/query/delete
-kweaver bkn list/get/stats/export/create/update/delete
-kweaver bkn build [--wait] [--timeout 300]
-kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
-kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]
-kweaver bkn validate/push/pull
-kweaver bkn object-type list/get/create/update/delete/query/properties
-kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run
-kweaver bkn relation-type list/get/create/update/delete
-kweaver bkn action-type list/query/inputs/execute
-kweaver bkn subgraph / search
-kweaver bkn action-execution get
-kweaver bkn action-log list/get/cancel
-kweaver agent list/get/get-by-key/create/update/delete/chat/sessions/history/publish/unpublish
-kweaver trace diagnose <conversation_id> [flags]      # 单 trace 诊断
-kweaver trace diagnose --traces=<list> --out=<dir>    # 批量诊断（单 agent）
-kweaver trace diagnose rules validate <rule.yaml>     # 校验规则
-kweaver trace eval-set build --diagnosis=<dir>|--queries=<file> --out=<dir>  # 构建 eval-set yaml 目录
-kweaver trace schema validate <file> [--kind=<kind>]  # 校验 yaml 是否符合 M5/M4 zod schema
-kweaver skill list/market/get/market-get/register/status/delete/update-metadata/update-package/history/republish/publish-history/content/read-file/download/install/management-content/management-read-file/management-download
-kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
-kweaver context-loader help <subcommand>
-kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
-kweaver context-loader tool-call <kn-id> <name> --args '<json>'
-kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  （deprecated；请使用 search-schema）
-kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
-kweaver context-loader config set/use/list/show                       （deprecated；省略 <kn-id> 时回退到已保存配置）
-kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
+kweaver --help                            # gh 风格顶层概览
+kweaver help <command>                    # 转发到 `<command> --help`
+kweaver help all                          # 完整 per-action 签名（迁移期兜底）
+kweaver <command> --help                  # 子命令概览 + 动作列表
+kweaver <command> <subcommand> --help     # 动作级 flag + 示例
 ```
+
+顶层命令分组：
+
+```text
+AUTHENTICATION & CONFIG  auth · token · config
+DECISION AGENT           agent · toolbox · tool
+AI DATA PLATFORM         bkn · ds · resource · dataflow · vega · context-loader
+TRACE AI                 trace
+FOUNDATION               call · explore · model · skill · help
+```
+
+需要查阅每个动作的完整签名（可浏览 / 可 grep）时，运行 `kweaver help all`。
 
 两套 CLI 顶层命令名不完全一致，下表为 **Python CLI**（`pip install kweaver-sdk[cli]`）与 **TypeScript CLI**（`npm install -g @kweaver-ai/kweaver-sdk`）的对应关系。
 

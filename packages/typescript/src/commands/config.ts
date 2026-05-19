@@ -7,19 +7,29 @@ import {
   savePlatformBusinessDomain,
 } from "../config/store.js";
 import { assertNotStatelessForWrite } from "../config/stateless.js";
+import { renderHelp } from "../help/format.js";
 
-const HELP = `kweaver config
-
-Subcommands:
-  set-bd <value>    Set the default business domain for the current platform
-  list-bd           List business domains as JSON (requires login)
-  show              Show current config (platform, business domain)
-  --help            Show this message
-
-Examples:
-  kweaver config set-bd 54308785-4438-43df-9490-a7fd11df5765
-  kweaver config list-bd
-  kweaver config show`;
+const HELP = renderHelp({
+  tagline: "Per-platform business-domain config",
+  usage: "kweaver config <subcommand> [flags]",
+  sections: [
+    {
+      title: "AVAILABLE COMMANDS",
+      items: [
+        { name: "set-bd", desc: "Set default business domain for current platform" },
+        { name: "list-bd", desc: "List business domains as JSON (requires login)" },
+        { name: "show", desc: "Show current config (platform, business domain)" },
+      ],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver config set-bd 54308785-4438-43df-9490-a7fd11df5765",
+    "kweaver config list-bd",
+    "kweaver config show",
+  ],
+  learnMore: ["Use `kweaver config <subcommand> --help` for flag details"],
+});
 
 export async function runConfigCommand(args: string[]): Promise<number> {
   const [sub, ...rest] = args;

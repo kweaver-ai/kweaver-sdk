@@ -339,7 +339,7 @@ test("renderHelp section titles present across ALL --help paths", async () => {
   }
 });
 
-test("help text shows dv alias", async () => {
+test("help text shows resource/res alias", async () => {
   const lines: string[] = [];
   const orig = console.log;
   console.log = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };

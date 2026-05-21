@@ -290,3 +290,52 @@ test("coordinator: fetchAgentConfig provided but candidate missing agent_id → 
   assert.match(String(stepFailed!["error"] ?? ""), /agent_id/);
   assert.equal(runEvalCalls, 0, "runEval must NOT run when preflight cannot resolve agent_id");
 });
+
+test("coordinator: mechanism failure (agent retrieved no KN data) → step_failed, triage skipped", async () => {
+  const dir = await makeExpDir();
+  // The trace shows every KN tool call erroring — the agent retrieved no data.
+  // Triage must be skipped: the round measured a wiring failure, not the prompt.
+  let triageCalled = false;
+  const spyTriage: TriageClient = {
+    async triage(): Promise<TriageResult> {
+      triageCalled = true;
+      return {
+        verdict: "continue", summary: "x", failure_attribution: [], diagnoses: [], hints: [],
+        new_memory_token: "m",
+        next_change: { target: "agent.system_prompt", hypothesis: "h", patch: "{}" },
+      };
+    },
+  };
+  const failing = ["Q1", "Q2", "Q3"].map(id => ({
+    query_id: id,
+    assertion_results: [{ type: "semantic_match", verdict: "fail" as const, reason: "wrong answer" }],
+    trajectory_summary: { tool_call_sequence: [], retry_count: 0, latency_ms: 0, error_codes: [] },
+    conversation_id: `conv-${id}`,
+  }));
+  const errorResult = '{"answer": "data: {\\"error_code\\":\\"ObjectTypeNotFound\\"}\\n\\n"}';
+  const coord = new ExperimentCoordinator({
+    expDir: dir,
+    triage: spyTriage,
+    runEval: async () => ({ queryResults: failing }),
+    fetchTrace: async () => ({
+      spans: [{
+        traceId: "t", spanId: "s", name: "execute_tool query_object_instance", startTime: "",
+        status: { code: "Ok" },
+        attributes: {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "query_object_instance",
+          "gen_ai.tool.call.result": errorResult,
+        },
+      }],
+    }),
+  });
+
+  await coord.run();
+
+  const { readAllEvents } = await import("../src/trace-ai/exp/exp-store/events-jsonl.js");
+  const events = await readAllEvents(dir);
+  const stepFailed = events.find(e => e["type"] === "step_failed");
+  assert.ok(stepFailed, "expected a mechanism step_failed event");
+  assert.match(String(stepFailed!["error"] ?? ""), /mechanism/i);
+  assert.equal(triageCalled, false, "triage LLM must be skipped when the mechanism is broken");
+});

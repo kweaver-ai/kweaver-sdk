@@ -10,6 +10,7 @@ import { computeScores } from "./scoring.js";
 import { writeBundles } from "./bundle-writer.js";
 import { ContextAssembler } from "./context/context-assembler.js";
 import { analyzeFailures } from "./context/failure-analyzer.js";
+import { diagnoseMechanism } from "./context/retrieval-health.js";
 import type { TriageClient, TriageResult } from "./providers/triage-client.js";
 import { runPreflight } from "./run-preflight.js";
 import type { AgentConfigFetcher } from "./capture-fingerprint.js";
@@ -321,6 +322,23 @@ export class ExperimentCoordinator {
       currentRoundData.per_query_results ?? [],
       this.opts.fetchTrace,
     );
+
+    // Fail-fast on a mechanism failure: if the trace shows the agent retrieved
+    // no KN data across the failing queries, this round measured a wiring
+    // failure, not the prompt. Running triage would only burn an LLM call
+    // proposing prompt patches that cannot fix it — stop and report the root
+    // cause instead.
+    const mechanism = diagnoseMechanism(failureAnalysis);
+    if (mechanism.broken) {
+      await this.store.appendEvent({
+        type: "step_failed",
+        state: "Triaging",
+        error: `mechanism: ${mechanism.reason}`,
+        retryable: false,
+      });
+      process.stderr.write(`\nMechanism failure — triage skipped, round halted:\n${mechanism.reason}\n`);
+      return;
+    }
 
     // Pre-fetch all available context so the merged planner LLM can see KN schema
     // + bound skill content + data probes before deciding both verdict AND next_change.

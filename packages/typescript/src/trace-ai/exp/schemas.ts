@@ -77,8 +77,16 @@ export interface QueryFailureAnalysis {
   verdict: "fail" | "skip";
   /** Assertion failure reason, truncated to 200 chars. */
   assertion_reason: string;
-  /** Tool calls extracted from trace, e.g. ["kn_search(激光雷达)→8 records"]. Max 3 entries. */
+  /** Tool calls extracted from trace, e.g. ["kn_search(激光雷达)→data"]. Max 3 entries. */
   tool_call_summary: string[];
+  /**
+   * Whether the agent actually retrieved KN data on this query, derived from the
+   * trace. "retrieved" = at least one KN tool call returned data; "errored"/
+   * "empty" = KN tool calls were made but none returned data; "no_kn_calls" =
+   * no KN tool was called; "no_trace" = trace unavailable. Lets triage see a
+   * mechanism failure (agent not retrieving data) instead of guessing at prompts.
+   */
+  retrieval_health: "retrieved" | "empty" | "errored" | "no_kn_calls" | "no_trace";
 }
 
 // round.yaml content

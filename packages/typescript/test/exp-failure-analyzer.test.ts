@@ -54,6 +54,21 @@ describe("analyzeFailures", () => {
     assert.strictEqual(analysis.verdict, "skip");
   });
 
+  // Trace spans use the real agent-executor schema: name "execute_tool <name>",
+  // result payload as a JSON string in gen_ai.tool.call.result.
+  const toolSpan = (toolName: string, result: string) => ({
+    traceId: "t1",
+    spanId: `s-${toolName}-${Math.random()}`,
+    name: `execute_tool ${toolName}`,
+    startTime: "",
+    status: { code: "Ok" },
+    attributes: {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": toolName,
+      "gen_ai.tool.call.result": result,
+    },
+  });
+
   it("extracts tool_call_summary from trace spans", async () => {
     const results = [
       baseResult({
@@ -64,17 +79,39 @@ describe("analyzeFailures", () => {
     ];
     const mockFetch = async (_id: string) => ({
       spans: [
-        { traceId: "t1", spanId: "s1", name: "kn_search", attributes: { "input.query": "激光雷达", "output.count": 8 }, startTime: "", status: "ok" as const },
-        { traceId: "t1", spanId: "s2", name: "kn_search", attributes: { "input.query": "vehicle_sales" }, startTime: "", status: "ok" as const },
-        { traceId: "t1", spanId: "s3", name: "kn_search", attributes: { "input.query": "brand" }, startTime: "", status: "ok" as const },
-        // 4th call should be truncated (max 3)
-        { traceId: "t1", spanId: "s4", name: "kn_search", attributes: { "input.query": "extra" }, startTime: "", status: "ok" as const },
+        toolSpan("kn_search", '{"answer": {"object_types": [{"id": "x"}]}}'),
+        toolSpan("query_object_instance", '{"answer": {"datas": [{"r": 1}]}}'),
       ],
     });
     const [analysis] = await analyzeFailures(results, mockFetch);
-    assert.strictEqual(analysis.tool_call_summary.length, 3);
-    assert.ok(analysis.tool_call_summary[0].includes("kn_search"));
-    assert.ok(analysis.tool_call_summary[0].includes("激光雷达"));
+    assert.deepStrictEqual(analysis.tool_call_summary, ["kn_search→data", "query_object_instance→data"]);
+  });
+
+  it("reports retrieval_health 'retrieved' when a KN tool returned data", async () => {
+    const results = [
+      baseResult({ query_id: "Q1", assertion_results: [{ type: "semantic_match", verdict: "fail", reason: "x" }], conversation_id: "c1" }),
+    ];
+    const mockFetch = async () => ({ spans: [toolSpan("query_object_instance", '{"answer": {"datas": [{"r": 1}]}}')] });
+    const [analysis] = await analyzeFailures(results, mockFetch);
+    assert.strictEqual(analysis.retrieval_health, "retrieved");
+  });
+
+  it("reports retrieval_health 'errored' when KN tool calls all errored", async () => {
+    const errorResult = '{"answer": "data: {\\"error_code\\":\\"ObjectTypeNotFound\\"}\\n\\n"}';
+    const results = [
+      baseResult({ query_id: "Q1", assertion_results: [{ type: "semantic_match", verdict: "fail", reason: "x" }], conversation_id: "c1" }),
+    ];
+    const mockFetch = async () => ({ spans: [toolSpan("query_object_instance", errorResult)] });
+    const [analysis] = await analyzeFailures(results, mockFetch);
+    assert.strictEqual(analysis.retrieval_health, "errored");
+  });
+
+  it("reports retrieval_health 'no_trace' when no fetcher is provided", async () => {
+    const results = [
+      baseResult({ assertion_results: [{ type: "semantic_match", verdict: "fail", reason: "x" }] }),
+    ];
+    const [analysis] = await analyzeFailures(results);
+    assert.strictEqual(analysis.retrieval_health, "no_trace");
   });
 
   it("skips trace fetch when no conversation_id", async () => {

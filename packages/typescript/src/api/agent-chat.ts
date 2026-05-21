@@ -79,13 +79,21 @@ function applyConversationOptions(body: Record<string, unknown>, conversationId?
   body.chat_option = { is_need_history: true };
 }
 
-export async function fetchAgentInfo(options: {
+/** Options for fetching agent data from the agent-factory API. */
+export interface AgentFetchOptions {
   baseUrl: string;
   accessToken: string;
   agentId: string;
   version: string;
   businessDomain?: string;
-}): Promise<AgentInfo> {
+}
+
+/**
+ * Fetch the full agent configuration body (system_prompt, llms, skills, …) from
+ * the agent-factory API. Returns the raw parsed JSON object unchanged — callers
+ * narrow it as needed (see fetchAgentInfo).
+ */
+export async function fetchAgentConfig(options: AgentFetchOptions): Promise<Record<string, unknown>> {
   const { baseUrl, accessToken, agentId, version, businessDomain = "bd_public" } = options;
   const url = buildAgentInfoUrl(baseUrl, agentId, version);
   const agentHeaders: Record<string, string> = {
@@ -102,16 +110,24 @@ export async function fetchAgentInfo(options: {
     method: "GET",
     headers: agentHeaders,
   });
+  const data = JSON.parse(body) as unknown;
+  if (data === null || typeof data !== "object") {
+    throw new Error("Agent config response was not a JSON object.");
+  }
+  return data as Record<string, unknown>;
+}
 
-  const data = JSON.parse(body) as Partial<AgentInfo>;
-  if (!data.id || !data.key) {
+export async function fetchAgentInfo(options: AgentFetchOptions): Promise<AgentInfo> {
+  const data = await fetchAgentConfig(options);
+  const id = data["id"];
+  const key = data["key"];
+  if (typeof id !== "string" || !id || typeof key !== "string" || !key) {
     throw new Error("Agent info response did not include id and key.");
   }
-
   return {
-    id: data.id,
-    key: data.key,
-    version: typeof data.version === "string" ? data.version : version,
+    id,
+    key,
+    version: typeof data["version"] === "string" ? data["version"] : options.version,
   };
 }
 

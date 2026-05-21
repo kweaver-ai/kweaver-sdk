@@ -1,31 +1,197 @@
 // src/trace-ai/exp/providers/triage-client.ts
+import yaml from "js-yaml";
 import { z } from "zod";
 import { defaultRegistry } from "../../../agent-providers/registry.js";
-import type { RoundData } from "../schemas.js";
+import type {
+  RoundData,
+  FailureAttribution,
+  QueryFailureAnalysis,
+  Mission,
+  NextChange,
+  KnContext,
+  SkillContext,
+} from "../schemas.js";
+import { FailureAttributionSchema, NextChangeSchema } from "../schemas.js";
+import { buildKnContextPrompt, buildSkillContextPrompt } from "./synthesizer-client.js";
 
 export interface TriageInput {
   currentRound: RoundData;
   prevRounds: RoundData[];
   candidateConfig: Record<string, unknown>;
   crossRoundMemoryRef?: string;
+  failureAnalysis?: QueryFailureAnalysis[];
+  // Merged planner inputs (formerly SynthesizerInput):
+  mission: Mission;
+  kn_context?: KnContext;
+  skill_context?: SkillContext;
 }
 
 export interface TriageResult {
+  verdict: "continue" | "publish" | "abort";
+  summary: string;
+  failure_attribution: FailureAttribution[];
+  /** Next change to apply. Present when verdict === "continue"; null/undefined otherwise. */
+  next_change?: NextChange;
+  /** Diagnoses extracted from the LLM response (defaults to [summary]) */
   diagnoses: string[];
+  /** Hints extracted from the LLM response */
   hints: string[];
-  verdict: "continue" | "publish";
+  /** Opaque memory token passed across rounds */
   new_memory_token: string;
 }
 
-const TriageOutputSchema = z.object({
-  diagnoses: z.array(z.string()),
-  hints: z.array(z.string()),
-  verdict: z.enum(["continue", "publish"]),
-  new_memory_token: z.string(),
-});
-
 export interface TriageClient {
   triage(input: TriageInput): Promise<TriageResult>;
+}
+
+/**
+ * Unwrap a Markdown code fence the LLM commonly puts around its JSON
+ * (```json … ``` or bare ``` … ```), tolerating prose before/after it.
+ * Falls back to the trimmed input when no fence is present.
+ */
+function unwrapJson(raw: string): string {
+  const fence = raw.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  return (fence ? fence[1] : raw).trim();
+}
+
+export function parseTriageOutput(raw: string): TriageResult {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(unwrapJson(raw));
+  } catch {
+    throw new Error(`Triage output is not valid JSON: ${raw.slice(0, 200)}`);
+  }
+  const data = obj as Record<string, unknown>;
+  const verdict = data["verdict"];
+  if (verdict !== "continue" && verdict !== "publish" && verdict !== "abort") {
+    throw new Error(`Invalid verdict in triage output: ${String(verdict)}`);
+  }
+  const summary = typeof data["summary"] === "string" ? data["summary"] : "";
+  const rawAttribution = Array.isArray(data["failure_attribution"]) ? data["failure_attribution"] : [];
+  const failure_attribution: FailureAttribution[] = rawAttribution.map((item) => {
+    const parsed = FailureAttributionSchema.safeParse(item);
+    if (!parsed.success) throw new Error(`Invalid failure_attribution item: ${JSON.stringify(item)}`);
+    return parsed.data;
+  });
+
+  let next_change: NextChange | undefined;
+  if (verdict === "continue") {
+    if (data["next_change"] === undefined || data["next_change"] === null) {
+      throw new Error(`verdict=continue requires next_change in triage output`);
+    }
+    const parsed = NextChangeSchema.safeParse(data["next_change"]);
+    if (!parsed.success) {
+      throw new Error(`Invalid next_change in triage output: ${parsed.error.message}`);
+    }
+    next_change = parsed.data;
+  }
+
+  const diagnoses = Array.isArray(data["diagnoses"])
+    ? (data["diagnoses"] as unknown[]).filter((d): d is string => typeof d === "string")
+    : [summary];
+  const hints = Array.isArray(data["hints"])
+    ? (data["hints"] as unknown[]).filter((h): h is string => typeof h === "string")
+    : [];
+  const new_memory_token = typeof data["new_memory_token"] === "string" ? data["new_memory_token"] : summary;
+  return { verdict, summary, failure_attribution, next_change, diagnoses, hints, new_memory_token };
+}
+
+export function buildTriagePrompt(input: TriageInput): string {
+  const r = input.currentRound;
+  const scoresSummary = r.scores
+    ? `outcome=${r.scores.outcome.toFixed(2)}, trajectory=${r.scores.trajectory.toFixed(2)}, guardrail=${r.scores.guardrail.toFixed(2)}`
+    : "no scores";
+
+  let failureSection: string;
+  if (input.failureAnalysis && input.failureAnalysis.length > 0) {
+    const lines = input.failureAnalysis.map(fa => {
+      let entry = `${fa.query_id} [${fa.verdict}]: ${fa.assertion_reason}`;
+      if (fa.tool_call_summary.length > 0) {
+        entry += `\n  Tools: ${fa.tool_call_summary.join("; ")}`;
+      }
+      return entry;
+    }).join("\n");
+    failureSection = `FAILURE ANALYSIS:\n${lines}`;
+  } else {
+    const failedQueries = (r.per_query_results ?? [])
+      .filter(q => q.assertion_results.some(a => a.verdict === "fail"))
+      .map(q => `${q.query_id}: ${q.assertion_results.filter(a => a.verdict === "fail").map(a => a.type).join(", ")}`)
+      .join("\n");
+    failureSection = `FAILED QUERIES:\n${failedQueries || "None"}`;
+  }
+
+  let contextSection = "";
+  if (input.kn_context) contextSection += "\n\n" + buildKnContextPrompt(input.kn_context);
+  if (input.skill_context) contextSection += "\n\n" + buildSkillContextPrompt(input.skill_context);
+
+  // Restrict suggested_target choices + output examples to layers this mission opted into.
+  // Empty / missing enabled_targets defaults to ["agent.system_prompt"] (handled by MissionSchema).
+  const enabled = new Set(input.mission.enabled_targets);
+  const targetEnumLine = [...enabled].map(t => `"${t}"`).join(" | ");
+  const allExamples: Array<[string, string]> = [
+    ["agent.system_prompt", `# agent.system_prompt — patch is a JSON string (escaped) or object with {agent:{system_prompt}}
+{"target":"agent.system_prompt","hypothesis":"Add explicit stop condition","patch":"{\\"agent\\":{\\"system_prompt\\":\\"New prompt here\\"}}"}`],
+    ["agent.skills", `# agent.skills — patch is structured {unbind:[skill_id...], bind:[{id,version}...]}
+{"target":"agent.skills","hypothesis":"Swap retrieval skill to v2","patch":{"unbind":["retrieval-v1"],"bind":[{"id":"retrieval-v2","version":"v2"}]}}`],
+    ["kn.object_type", `# kn.object_type — patch is {kn_id, add_object_types:[{concept_name, dataview_id, primary_keys, data_properties}], add_relation_types:[]}
+{"target":"kn.object_type","hypothesis":"Add vehicle_sales concept","patch":{"kn_id":"kn-x","add_object_types":[{"concept_name":"vehicle_sales","dataview_id":"dv-001","primary_keys":["vehicle_sales_id"],"data_properties":[{"name":"sales","type":"integer"},{"name":"month","type":"string"}]}],"add_relation_types":[]}}`],
+    ["kn.relation_type", `# kn.relation_type — patch is {kn_id, add_object_types:[], add_relation_types:[{concept_name, source_object_type, target_object_type, join_key}]}
+{"target":"kn.relation_type","hypothesis":"Link sales to vehicle","patch":{"kn_id":"kn-x","add_object_types":[],"add_relation_types":[{"concept_name":"sold_for","source_object_type":"vehicle_sales","target_object_type":"vehicle","join_key":"vehicle_id"}]}}`],
+    ["skill.content", `# skill.content — patch is {skill_id, append_section}
+{"target":"skill.content","hypothesis":"Document sort_by usage","patch":{"skill_id":"query-sop","append_section":"## Sort_by usage\\nPass sort_by=[{field, order}] to query_object_instance for ordering."}}`],
+  ];
+  const examplesBlock = allExamples
+    .filter(([target]) => enabled.has(target as never))
+    .map(([, body]) => body)
+    .join("\n\n");
+
+  return `You are an agent evaluation planner. Analyze the current round results, decide whether to continue/publish/abort, and (if continuing) propose the next change to try in one pass.
+
+GOAL: ${input.mission.goal}
+
+CURRENT CANDIDATE CONFIG:
+${yaml.dump(input.candidateConfig, { lineWidth: 80 })}
+
+ROUND ${r.round} SCORES: ${scoresSummary}
+
+${failureSection}
+
+TRAJECTORY ISSUES:
+${(r.per_query_results ?? []).filter(q => q.trajectory_summary.retry_count > 1).map(q => `${q.query_id}: ${q.trajectory_summary.retry_count} retries`).join("\n") || "None"}
+
+PREVIOUS ROUND HISTORY:
+${input.prevRounds.map(pr => `Round ${pr.round}: outcome=${pr.scores?.outcome.toFixed(2) ?? "?"}, verdict=${pr.triage_conclusion?.verdict ?? "?"}, hints=${pr.triage_conclusion?.hints?.join("; ") || "none"}`).join("\n") || "None"}
+
+${input.crossRoundMemoryRef ? `CROSS-ROUND CONTEXT: ${input.crossRoundMemoryRef}` : ""}${contextSection}
+
+Respond with a single JSON object containing these fields:
+- "verdict": "continue" | "publish" | "abort"
+    * continue = more rounds needed, you must also provide next_change
+    * publish = current candidate is good enough
+    * abort = experiment cannot improve further
+- "summary": one-sentence summary of key findings
+- "failure_attribution": array of root-cause attributions (sorted by affected_queries count desc),
+  empty array when verdict is publish or abort.
+  Each entry shape:
+  {
+    "layer": "kn" | "skill" | "agent",
+    "evidence": "<one sentence citing specific tool call or return value>",
+    "affected_queries": ["<query_id>", ...],
+    "suggested_target": ${targetEnumLine}
+  }
+- "next_change": REQUIRED when verdict=continue, omit/null otherwise. Use failure_attribution[0].suggested_target.
+  This mission has enabled_targets = [${[...enabled].join(", ")}]; do NOT propose any other target.
+- "hints": array of short actionable hints for the next round (carried forward to future PREVIOUS ROUND HISTORY); use [] if none.
+- "new_memory_token": short string (≤ 200 chars) summarizing what to remember across rounds; will appear as CROSS-ROUND CONTEXT next round.
+
+Attribution rules:
+- "kn":    agent queried KN but concept/relation was missing or returned empty unexpectedly
+- "skill": agent had the right intent but the tool usage pattern was wrong (no pagination, no sort_by, wrong filter)
+- "agent": agent misidentified the concept to query, or made an orchestration error
+
+NEXT_CHANGE OUTPUT EXAMPLES (pick the one matching your chosen target):
+
+${examplesBlock}`;
 }
 
 export class ClaudeCodeTriageClient implements TriageClient {
@@ -33,43 +199,13 @@ export class ClaudeCodeTriageClient implements TriageClient {
     const provider = defaultRegistry.resolve({ preferred: "claude-code" });
     if (!provider) throw new Error("claude-code provider not available");
 
-    const r = input.currentRound;
-    const scoresSummary = r.scores
-      ? `outcome=${r.scores.outcome.toFixed(2)}, trajectory=${r.scores.trajectory.toFixed(2)}, guardrail=${r.scores.guardrail.toFixed(2)}`
-      : "no scores";
-
-    const failedQueries = (r.per_query_results ?? [])
-      .filter(q => q.assertion_results.some(a => a.verdict === "fail"))
-      .map(q => `${q.query_id}: ${q.assertion_results.filter(a => a.verdict === "fail").map(a => a.type).join(", ")}`)
-      .join("\n");
-
-    // candidateConfig is available for future prompt enrichment; omitted here to keep the prompt focused on scores.
-    const prompt = `You are an agent evaluation triager. Analyze the current round results and recommend next steps.
-
-ROUND ${r.round} SCORES: ${scoresSummary}
-
-FAILED QUERIES:
-${failedQueries || "None"}
-
-TRAJECTORY ISSUES:
-${(r.per_query_results ?? []).filter(q => q.trajectory_summary.retry_count > 1).map(q => `${q.query_id}: ${q.trajectory_summary.retry_count} retries`).join("\n") || "None"}
-
-PREVIOUS ROUND HISTORY:
-${input.prevRounds.map(pr => `Round ${pr.round}: outcome=${pr.scores?.outcome.toFixed(2) ?? "?"}, verdict=${pr.triage_conclusion?.verdict ?? "?"}`).join("\n") || "None"}
-
-${input.crossRoundMemoryRef ? `CONTEXT FROM PREVIOUS TRIAGE: ${input.crossRoundMemoryRef}` : ""}
-
-Respond with JSON:
-- "diagnoses": list of root cause observations
-- "hints": list of specific suggestions for next change
-- "verdict": "continue" if more rounds needed, "publish" if this candidate is good enough
-- "new_memory_token": brief summary of key findings to carry forward (1-2 sentences)`;
+    const prompt = buildTriagePrompt(input);
 
     const response = await provider.invoke({
       prompt,
-      outputSchema: TriageOutputSchema,
+      outputSchema: z.unknown(),
       correlationId: `triage-${Date.now()}`,
     });
-    return response.output;
+    return parseTriageOutput(response.rawText);
   }
 }

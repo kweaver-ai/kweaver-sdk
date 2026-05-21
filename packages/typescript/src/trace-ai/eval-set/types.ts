@@ -45,6 +45,8 @@ export interface EvalSetIndex {
   schema_version: "trace-eval-set-index/v1";
   eval_set_id: string;
   shards: EvalSetIndexShard[];
+  /** KN id the reference answers were authored against (see EvalSetIndexSchema). */
+  target_kn?: string;
 }
 
 export interface BuildResult {

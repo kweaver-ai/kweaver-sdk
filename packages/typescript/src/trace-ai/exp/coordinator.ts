@@ -3,36 +3,37 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import yaml from "js-yaml";
 import { ExpStore } from "./exp-store/index.js";
-import { applyPatch } from "./patch/index.js";
+import { PatchApplier } from "./patch/index.js";
+import type { KnApiClient } from "./patch/kn-api-client.js";
+import type { SkillApiClient } from "./patch/skill-api-client.js";
 import { computeScores } from "./scoring.js";
 import { writeBundles } from "./bundle-writer.js";
-import type { ExpFsmState, Mission, NextChange, QueryResult, RoundData } from "./schemas.js";
+import { ContextAssembler } from "./context/context-assembler.js";
+import { analyzeFailures, roundRetrievedAnyData } from "./context/failure-analyzer.js";
+import { diagnoseMechanism } from "./context/retrieval-health.js";
+import type { TriageClient, TriageResult } from "./providers/triage-client.js";
+import { runPreflight } from "./run-preflight.js";
+import type { AgentConfigFetcher } from "./capture-fingerprint.js";
+import type { ExpFsmState, KnContext, Mission, QueryResult, SkillBinding, SkillContext } from "./schemas.js";
+import type { TraceSpan } from "../../api/conversations.js";
 
-export interface SynthesizerClient {
-  generate(input: {
-    mission: Mission;
-    candidateConfig: Record<string, unknown>;
-    prevRound?: RoundData;
-    prevRounds: RoundData[];
-    crossRoundMemoryRef?: string;
-  }): Promise<NextChange>;
-}
-
-export interface TriageClient {
-  triage(input: {
-    currentRound: RoundData;
-    prevRounds: RoundData[];
-    candidateConfig: Record<string, unknown>;
-    crossRoundMemoryRef?: string;
-  }): Promise<RoundData["triage_conclusion"] & { new_memory_token: string }>;
-}
+export type { TriageClient, TriageResult };
 
 export interface CoordinatorOpts {
   expDir: string;
-  synthesizer: SynthesizerClient;
   triage: TriageClient;
   runEval: (opts: { evalSetPaths: string[]; candidatePath: string; expDir: string; round: number }) => Promise<{ queryResults: QueryResult[] }>;
   experimentId?: string;
+  contextAssembler?: ContextAssembler;
+  fetchTrace?: (conversationId: string) => Promise<{ spans: TraceSpan[] }>;
+  knClient?: KnApiClient;
+  skillClient?: SkillApiClient;
+  /**
+   * When provided, a preflight reconciliation runs before each eval round —
+   * verifying the live agent matches expectation and is bound to the eval set's
+   * target KN. A mismatch fails the round fast, before any eval chat is sent.
+   */
+  fetchAgentConfig?: AgentConfigFetcher;
 }
 
 export class ExperimentCoordinator {
@@ -46,8 +47,11 @@ export class ExperimentCoordinator {
   async run(): Promise<void> {
     const replayed = await this.store.replayState();
 
-    if (replayed.isTerminal && !replayed.currentState.includes("Aborted")) {
-      throw new Error(`Experiment is in terminal state ${replayed.currentState}. Use --new-run to start fresh.`);
+    if (replayed.isTerminal) {
+      throw new Error(
+        `Experiment is in terminal state ${replayed.currentState}. ` +
+        `Use --new-run to start a fresh experiment in this directory.`
+      );
     }
 
     const mission = await this.store.readMission();
@@ -59,16 +63,38 @@ export class ExperimentCoordinator {
 
     await this.store.acquireLock();
     this.heartbeatTimer = setInterval(() => { void this.store.updateHeartbeat(); }, 10_000);
+    const uninstallSignals = this.installSignalHandlers();
 
-    // If previous run failed mid-round, retry that round (startRound = currentRound - 1)
-    const startRound = replayed.lastFailure && replayed.currentRound > 0
+    // Layer 2 auto-recovery: prior holder died mid-round without writing step_failed
+    // (typically SIGKILL/OOM/power — signal handlers can't help with these). FSM is
+    // stuck in an executing-side phase with no lastFailure. Synthesize step_failed so
+    // the startRound calc below rewinds to redo the round.
+    const stuckMidRound = !replayed.lastFailure
+      && replayed.currentRound > 0
+      && replayed.currentState !== "Init"
+      && replayed.currentState !== "Deciding"
+      && !replayed.isTerminal;
+    if (stuckMidRound) {
+      await this.store.appendEvent({
+        type: "step_failed",
+        state: replayed.currentState,
+        error: `auto-recovered: prior holder died mid-${replayed.currentState} at round ${replayed.currentRound}`,
+        retryable: true,
+      });
+      process.stderr.write(
+        `Recovered stale ${replayed.currentState} at round ${replayed.currentRound}; redoing round.\n`
+      );
+    }
+
+    // If previous run failed mid-round (real failure OR auto-recovered above), retry that round.
+    const startRound = (replayed.lastFailure || stuckMidRound) && replayed.currentRound > 0
       ? replayed.currentRound - 1
       : replayed.currentRound;
 
     try {
-
       await this.runLoop(mission, startRound, expId);
     } finally {
+      uninstallSignals();
       clearInterval(this.heartbeatTimer);
       await this.store.releaseLock();
     }
@@ -81,14 +107,82 @@ export class ExperimentCoordinator {
     }
     await this.store.acquireLock();
     this.heartbeatTimer = setInterval(() => { void this.store.updateHeartbeat(); }, 10_000);
+    const uninstallSignals = this.installSignalHandlers();
     try {
       const mission = await this.store.readMission();
       const expId = `exp_${replayed.currentRound}`;
       await this.runLoop(mission, replayed.currentRound, expId);
     } finally {
+      uninstallSignals();
       clearInterval(this.heartbeatTimer);
       await this.store.releaseLock();
     }
+  }
+
+  /**
+   * Install SIGINT/SIGHUP/SIGTERM handlers that flush a final event and release
+   * the lock before exit. Returns an uninstaller that MUST be called in the
+   * caller's finally block (otherwise normal exit would still fire the handler).
+   *
+   * Semantics:
+   *   SIGINT  → user-intent abort       → emit `aborted` event (terminal)
+   *   SIGHUP  → terminal closed         → emit `step_failed` retryable
+   *   SIGTERM → external kill (ambig.)  → emit `step_failed` retryable
+   *
+   * SIGKILL / OOM / power loss can't be caught here — Layer 2 auto-recovery in
+   * run() handles that case on the next start.
+   */
+  private installSignalHandlers(): () => void {
+    let firing = false;
+    const handler = (signal: NodeJS.Signals) => {
+      if (firing) return;
+      firing = true;
+      // Process exits in the IIFE — Node won't await the handler itself, so we
+      // must drive the async flow and then `process.exit` ourselves.
+      void (async () => {
+        try {
+          const replayed = await this.store.replayState();
+          if (signal === "SIGINT") {
+            await this.store.appendEvent({
+              type: "aborted",
+              round: replayed.currentRound,
+              reason: `interrupted by ${signal}`,
+            });
+          } else {
+            // For non-terminal states only — if FSM was already Deciding/Init/terminal,
+            // a step_failed would be a lie. Skip the event but still release the lock.
+            const recoverable = !replayed.isTerminal
+              && replayed.currentState !== "Init"
+              && replayed.currentState !== "Deciding";
+            if (recoverable) {
+              await this.store.appendEvent({
+                type: "step_failed",
+                state: replayed.currentState,
+                error: `process interrupted by ${signal}`,
+                retryable: true,
+              });
+            }
+          }
+        } catch (err) {
+          process.stderr.write(`signal handler: failed to append event: ${String(err)}\n`);
+        }
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        try { await this.store.releaseLock(); } catch { /* best-effort */ }
+        // Exit codes per shell convention (128 + signal number).
+        const code = signal === "SIGINT" ? 130 : signal === "SIGHUP" ? 129 : 143;
+        process.exit(code);
+      })();
+    };
+
+    process.on("SIGINT", handler);
+    process.on("SIGHUP", handler);
+    process.on("SIGTERM", handler);
+
+    return () => {
+      process.off("SIGINT", handler);
+      process.off("SIGHUP", handler);
+      process.off("SIGTERM", handler);
+    };
   }
 
   private async runLoop(mission: Mission, startRound: number, expId: string): Promise<void> {
@@ -100,14 +194,39 @@ export class ExperimentCoordinator {
     // === Generating (Apply Phase) ===
     await this.store.appendEvent({ type: "state_transition", from: "Deciding", to: "Generating", round });
     const nextChange = mission.next_change;
-    if (!nextChange) throw new Error("mission.md has no next_change — add one or let Synthesizer suggest");
+    if (!nextChange) throw new Error("mission.md has no next_change — add one or let the planner suggest");
+
+    if (!mission.enabled_targets.includes(nextChange.target)) {
+      throw new Error(
+        `next_change.target=${nextChange.target} is not in mission.enabled_targets=[${mission.enabled_targets.join(", ")}]. ` +
+        `Either add the target to enabled_targets in mission.md, or change next_change to use an enabled target.`
+      );
+    }
 
     const prevRounds = await this.store.readAllRounds();
 
-    // Load current candidate and apply patch
+    // Load current candidate and apply patch via PatchApplier (handles agent.*/kn.*/skill.content).
+    // PatchApplier may call external APIs (KN/skill) that throw on stubs or transient failures;
+    // surface those as Generating-phase step_failed so the FSM stays observable and lineage
+    // doesn't get stuck in "running". No auto-retry: patch side-effects (KN writes, skill version
+    // publish) are not safe to blindly retry — user inspects step_failed and resumes manually.
     const currentCandidatePath = path.join(this.opts.expDir, mission.current_candidate.path);
     const currentCandidate = yaml.load(await fs.readFile(currentCandidatePath, "utf8")) as Record<string, unknown>;
-    const patched = applyPatch(currentCandidate, nextChange);
+    const patchApplier = new PatchApplier(this.opts.expDir, this.opts.knClient, this.opts.skillClient);
+    let patched: Record<string, unknown>;
+    try {
+      const result = await patchApplier.apply(currentCandidate, nextChange);
+      patched = result.candidate;
+    } catch (err) {
+      await this.store.appendEvent({
+        type: "step_failed",
+        state: "Generating",
+        error: String(err),
+        retryable: false,
+      });
+      process.stderr.write(`\nGenerating failed for target ${nextChange.target}: ${String(err)}\n`);
+      return;
+    }
     patched["candidate_version"] = `v${round}`;
 
     const newCandidatePath = path.join(this.opts.expDir, "candidates", `candidate-v${round}.yaml`);
@@ -125,6 +244,44 @@ export class ExperimentCoordinator {
     // === Executing ===
     await this.store.appendEvent({ type: "state_transition", from: "Generating", to: "Executing", round });
     const evalSetPaths = mission.eval_sets.map(e => path.join(this.opts.expDir, e.path));
+
+    // Preflight: reconcile the live agent against expectation before any eval
+    // chat is sent. A mismatch (wrong KN binding) fails the round fast —
+    // non-retryable, since it will not fix itself.
+    if (this.opts.fetchAgentConfig) {
+      const agentId = patched["agent_id"];
+      if (typeof agentId !== "string" || !agentId) {
+        // fetchAgentConfig is wired but the agent can't be identified — fail
+        // loudly rather than silently skipping the guard.
+        await this.store.appendEvent({
+          type: "step_failed",
+          state: "Executing",
+          error: "preflight: candidate has no agent_id — cannot verify the agent under test",
+          retryable: false,
+        });
+        process.stderr.write("\nPreflight check failed — candidate has no agent_id.\n");
+        return;
+      }
+      try {
+        await runPreflight({
+          expDir: this.opts.expDir,
+          agentId,
+          fetchConfig: this.opts.fetchAgentConfig,
+          evalSetPaths,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await this.store.appendEvent({
+          type: "step_failed",
+          state: "Executing",
+          error: `preflight: ${message}`,
+          retryable: false,
+        });
+        process.stderr.write(`\nPreflight check failed — eval not run:\n${message}\n`);
+        return;
+      }
+    }
+
     let queryResults: QueryResult[];
     try {
       const result = await this.withRetry(
@@ -156,12 +313,66 @@ export class ExperimentCoordinator {
 
     if (await this.checkAbort(round)) return;
 
-    // === Triaging ===
+    // === Triaging (merged: diagnose + propose in one LLM call) ===
     await this.store.appendEvent({ type: "state_transition", from: "Scoring", to: "Triaging", round });
     const currentRoundData = (await this.store.readAllRounds()).find(r => r.round === round) ?? { round, trial_version: round };
     const prevMemory = prevRounds.at(-1)?.triage_conclusion?.cross_round_memory_ref;
 
-    let triageResult: RoundData["triage_conclusion"] & { new_memory_token: string };
+    const failureAnalysis = await analyzeFailures(
+      currentRoundData.per_query_results ?? [],
+      this.opts.fetchTrace,
+    );
+
+    // Fail-fast on a mechanism failure: if the trace shows the agent retrieved
+    // no KN data across the failing queries, this round measured a wiring
+    // failure, not the prompt. Running triage would only burn an LLM call
+    // proposing prompt patches that cannot fix it — stop and report the root
+    // cause instead.
+    //
+    // diagnoseMechanism only sees failing queries, so confirm against the whole
+    // round: if any query (passing or failing) did retrieve KN data, the no-data
+    // failures are localized, not a global break — let triage handle them.
+    let mechanism = diagnoseMechanism(failureAnalysis);
+    if (mechanism.broken
+      && await roundRetrievedAnyData(currentRoundData.per_query_results ?? [], this.opts.fetchTrace)) {
+      mechanism = { broken: false, reason: "" };
+    }
+    if (mechanism.broken) {
+      await this.store.appendEvent({
+        type: "step_failed",
+        state: "Triaging",
+        error: `mechanism: ${mechanism.reason}`,
+        retryable: false,
+      });
+      process.stderr.write(`\nMechanism failure — triage skipped, round halted:\n${mechanism.reason}\n`);
+      return;
+    }
+
+    // Pre-fetch all available context so the merged planner LLM can see KN schema
+    // + bound skill content + data probes before deciding both verdict AND next_change.
+    // We call assemble() twice (kn target + skill target) since each path fetches
+    // distinct artifacts; total cost dominated by the LLM call that follows.
+    const knId = (patched["kn"] as Record<string, unknown> | undefined)?.["id"] as string | undefined;
+    const boundSkills = ((patched["agent"] as Record<string, unknown> | undefined)?.["skills"] as SkillBinding[] | undefined) ?? [];
+    let kn_context: KnContext | undefined;
+    let skill_context: SkillContext | undefined;
+    if (this.opts.contextAssembler) {
+      const assembler = this.opts.contextAssembler;
+      const empty: { kn_context?: KnContext; skill_context?: SkillContext } = {};
+      const [knRes, skillRes] = await Promise.all([
+        knId
+          ? assembler.assemble("kn.object_type", knId, boundSkills, failureAnalysis)
+          : Promise.resolve(empty),
+        boundSkills.length > 0
+          ? assembler.assemble("skill.content", knId, boundSkills, failureAnalysis)
+          : Promise.resolve(empty),
+      ]);
+      kn_context = knRes.kn_context;
+      skill_context = skillRes.skill_context;
+    }
+
+    const updatedMission = await this.store.readMission();
+    let triageResult: TriageResult;
     try {
       triageResult = await this.withRetry(
         () => this.opts.triage.triage({
@@ -169,6 +380,10 @@ export class ExperimentCoordinator {
           prevRounds,
           candidateConfig: patched,
           crossRoundMemoryRef: prevMemory,
+          failureAnalysis,
+          mission: updatedMission,
+          kn_context,
+          skill_context,
         }),
         "Triaging"
       );
@@ -176,34 +391,48 @@ export class ExperimentCoordinator {
       return;
     }
 
+    // Persist triage_conclusion. Only "continue"/"publish" are valid in the typed schema;
+    // "abort" is a runtime verdict mapped to "publish" for storage but routed to Aborted below.
+    const storedVerdict: "continue" | "publish" = triageResult.verdict === "continue" ? "continue" : "publish";
     await this.store.writeRound(round, {
       triage_conclusion: {
         diagnoses: triageResult.diagnoses,
         hints: triageResult.hints,
-        verdict: triageResult.verdict,
+        verdict: storedVerdict,
         cross_round_memory_ref: triageResult.new_memory_token,
       },
     });
-    await this.store.appendEvent({ type: "round_completed", round, verdict: triageResult.verdict });
+    await this.store.appendEvent({ type: "round_completed", round, verdict: storedVerdict });
 
-    // Generate next suggestion if continuing
+    // Persist failure_attribution in a TriageComplete event for downstream consumers (exp show, etc.)
+    await this.store.appendEvent({
+      type: "TriageComplete",
+      round,
+      verdict: triageResult.verdict,
+      summary: triageResult.summary,
+      failure_attribution: triageResult.failure_attribution,
+    });
+
+    // Abort: terminal state — no suggestion, no Deciding pause.
+    if (triageResult.verdict === "abort") {
+      await this.store.appendEvent({ type: "aborted", round, reason: `triage_abort: ${triageResult.summary ?? "no summary"}` });
+      process.stdout.write(`\nExperiment aborted by triage: ${triageResult.summary ?? "(no reason)"}\n`);
+      return;
+    }
+
+    // Continue: triageResult.next_change was produced in the same LLM call; write it as suggestion.
     if (triageResult.verdict === "continue" && round < maxRounds) {
-      const updatedMission = await this.store.readMission();
-      try {
-        const suggestion = await this.withRetry(
-          () => this.opts.synthesizer.generate({
-            mission: updatedMission,
-            candidateConfig: patched,
-            prevRound: currentRoundData,
-            prevRounds,
-            crossRoundMemoryRef: triageResult.new_memory_token,
-          }),
-          "Triaging"
-        );
-        await this.store.writeSuggestedChange(suggestion);
-      } catch {
+      if (!triageResult.next_change) {
+        // Parser already enforces presence when verdict=continue, but guard belt-and-braces.
+        await this.store.appendEvent({
+          type: "step_failed",
+          state: "Triaging",
+          error: "verdict=continue but next_change missing in triage output",
+          retryable: true,
+        });
         return;
       }
+      await this.store.writeSuggestedChange(triageResult.next_change);
     }
 
     // === Deciding ===

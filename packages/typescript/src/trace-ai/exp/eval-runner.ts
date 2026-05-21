@@ -22,7 +22,9 @@ export interface EvalRunResult {
 export async function runEval(opts: EvalRunnerOpts): Promise<EvalRunResult> {
   const candidateRaw = yaml.load(await fs.readFile(opts.candidatePath, "utf8")) as Record<string, unknown>;
   const agentId = (candidateRaw["agent_id"] as string | undefined) ?? "candidate";
-  const agentVersion = (candidateRaw["candidate_version"] as string | undefined);
+  // candidate_version ("v1", "v2", …) is the experiment's own round numbering,
+  // NOT a platform agent version. The eval always measures the current live
+  // agent, which fetchAgent resolves at "latest" — never conflate the two.
 
   const roundEvalBase = path.join(opts.expDir, ".trace-state", "rounds", `round-${opts.round}-eval`);
 
@@ -36,7 +38,6 @@ export async function runEval(opts: EvalRunnerOpts): Promise<EvalRunResult> {
     await evalSetRun({
       evalSetDir,
       candidateAgentId: agentId,
-      candidateAgentVersion: agentVersion,
       outDir,
       maxParallel: opts.maxParallel ?? 4,
       deps: opts.deps,
@@ -50,6 +51,7 @@ export async function runEval(opts: EvalRunnerOpts): Promise<EvalRunResult> {
         assertion_results: Array<{ assertion: { type: string }; verdict: string; actual?: unknown }>;
         duration_ms?: number;
         trace_id?: string | null;
+        conversation_id?: string;
       }>;
     };
 
@@ -72,6 +74,7 @@ export async function runEval(opts: EvalRunnerOpts): Promise<EvalRunResult> {
           error_codes: [],
         },
         raw_trace_id: c.trace_id ?? undefined,
+        conversation_id: c.conversation_id ?? undefined,
       });
     }
   }

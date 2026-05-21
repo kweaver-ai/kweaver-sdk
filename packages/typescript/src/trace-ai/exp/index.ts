@@ -4,7 +4,6 @@ import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { ExpStore } from "./exp-store/index.js";
 import { ExperimentCoordinator } from "./coordinator.js";
-import { ClaudeCodeSynthesizer } from "./providers/synthesizer-client.js";
 import { ClaudeCodeTriageClient } from "./providers/triage-client.js";
 import { runEval } from "./eval-runner.js";
 import { defaultRegistry } from "../../agent-providers/registry.js";
@@ -14,19 +13,44 @@ import { createBuiltinSemanticMatchProvider } from "../eval-set/semantic-match-p
 import type { SemanticMatchProvider } from "../eval-set/assertion-evaluator.js";
 import { ensureValidToken } from "../../auth/oauth.js";
 import { fetchAgentInfo, sendChatRequest } from "../../api/agent-chat.js";
+import { getAgent } from "../../api/agent-list.js";
 import { getTracesByConversation } from "../../api/conversations.js";
 import { upsertRegistry, listRegistry } from "./exp-store/exp-registry.js";
 import { runInfo, runList, getHealthChecks } from "./info.js";
 import { resolveClaudeBinary } from "./claude-binary.js";
+import type { FailureAttribution } from "./schemas.js";
+import { KweaverKnSchemaClient } from "./context/kn-schema-client.js";
+import { ContextAssembler } from "./context/context-assembler.js";
+import { probeObjectTypes } from "./context/kn-data-prober.js";
+import { queryResource } from "../../api/resources.js";
+import { KweaverVegaCatalogClient } from "./context/vega-catalog-client.js";
+import { KweaverKnApiClient } from "./patch/kn-api-client.js";
+import { KweaverSkillApiClient, type SkillApiClient } from "./patch/skill-api-client.js";
+
+const MCP_PATH = "/api/agent-retrieval/v1/mcp";
 
 const __expIndexDir = path.dirname(fileURLToPath(import.meta.url));
+
+export function formatFailureAttribution(attribution: FailureAttribution[]): string {
+  if (attribution.length === 0) return "";
+  const lines = attribution.map((a) => {
+    const queries = a.affected_queries.join(", ");
+    const evidence = a.evidence.length > 55 ? a.evidence.slice(0, 52) + "..." : a.evidence;
+    const layerTag = `[${a.layer}]`.padEnd(7);
+    return `  ${layerTag} ${evidence.padEnd(55)}  → ${a.suggested_target}  (${queries})`;
+  });
+  return "Failure attribution:\n" + lines.join("\n");
+}
 const EVAL_SET_RUBRIC_DIR = path.join(__expIndexDir, "..", "eval-set", "rubric-templates");
 
 function ensureProvider() {
   if (!defaultRegistry.has("claude-code")) {
     defaultRegistry.register(new ClaudeCodeSubprocessProvider({
       binary: resolveClaudeBinary(),
-      defaultTimeoutMs: 120_000,
+      // 10 min: the merged Triage+Synthesizer call carries a whole round of
+      // eval context (per-query failures, KN schema, skill content) and the
+      // semantic-match evaluator runs on every case — 120s timed both out.
+      defaultTimeoutMs: 600_000,
     }), { setAsDefault: true });
   }
 }
@@ -126,6 +150,7 @@ export async function runExpCommand(argv: string[]): Promise<number> {
       const rounds = await store.readAllRounds();
       const lineage = await store.readLineage();
       const mission = await store.readMission().catch(() => null);
+      const events = await store.readAllEvents().catch(() => [] as Record<string, unknown>[]);
       process.stdout.write(`State: ${replayed.currentState}  Round: ${replayed.currentRound}\n`);
       if (mission?.next_change) {
         process.stdout.write(`Suggested next change:\n  target: ${mission.next_change.target}\n  hypothesis: ${mission.next_change.hypothesis}\n`);
@@ -136,6 +161,15 @@ export async function runExpCommand(argv: string[]): Promise<number> {
         if (last.triage_conclusion) {
           process.stdout.write(`Triage: ${last.triage_conclusion.diagnoses.join("; ")}\n`);
         }
+      }
+      // Read last TriageComplete event for failure_attribution
+      const lastTriage = events.filter((e) => e["type"] === "TriageComplete").at(-1) as Record<string, unknown> | undefined;
+      const attribution = Array.isArray(lastTriage?.["failure_attribution"])
+        ? lastTriage["failure_attribution"] as FailureAttribution[]
+        : [];
+      const attrText = formatFailureAttribution(attribution);
+      if (attrText) {
+        process.stdout.write(`${attrText}\n`);
       }
       process.stdout.write(`Lineage: ${lineage.length} versions\n`);
       return 0;
@@ -221,10 +255,56 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     process.stderr.write("warn: could not create semantic-match provider — semantic_match assertions will be skipped\n");
   }
 
+  // Read mission upfront so KN/Skill clients are only constructed when the
+  // experiment actually enables those layers. Avoids exposing stub clients
+  // (KweaverKnApiClient, KweaverSkillApiClient — both throw "not yet implemented")
+  // to missions that don't need them.
+  const mission = await new ExpStore(expDir).readMission();
+  const enabled = new Set(mission.enabled_targets);
+  const needsKn = enabled.has("kn.object_type") || enabled.has("kn.relation_type");
+  const needsSkill = enabled.has("skill.content");
+
+  const mcpUrl = baseUrl.replace(/\/+$/, "") + MCP_PATH;
+  const knSchemaClient = new KweaverKnSchemaClient(mcpUrl, token);
+  const vegaCatalogClient = new KweaverVegaCatalogClient(baseUrl, token);
+
+  // Wire probeObjectTypes with auth + businessDomain
+  const boundProbe = (
+    schema: Parameters<typeof probeObjectTypes>[0],
+    failures: Parameters<typeof probeObjectTypes>[1],
+  ) => probeObjectTypes(schema, failures, queryResource, { baseUrl, accessToken: token });
+
+  // No-op SkillApiClient lets ContextAssembler pre-fetch bound_skill stubs even when
+  // skill.content isn't enabled (the bound list is informational for the planner).
+  const noopSkillContextClient: SkillApiClient = {
+    async getSkillContent(_id: string) { return ""; },
+    async publishSkillVersion(_id: string, _content: string) { return { version: "noop", content: "" }; },
+  };
+
+  const contextAssembler = new ContextAssembler(
+    knSchemaClient,
+    vegaCatalogClient,
+    noopSkillContextClient,
+    boundProbe,
+  );
+
   return new ExperimentCoordinator({
     expDir,
-    synthesizer: new ClaudeCodeSynthesizer(),
     triage: new ClaudeCodeTriageClient(),
+    contextAssembler,
+    // Full agent config (system_prompt / llms / skills.tools) comes from
+    // GET /v3/agent/{id}, which wraps the config object under a `config` key.
+    fetchAgentConfig: async (agentId) => {
+      const body = await getAgent({ baseUrl, accessToken: token, agentId, businessDomain: bd });
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      return (parsed["config"] ?? parsed) as Record<string, unknown>;
+    },
+    knClient: needsKn ? new KweaverKnApiClient(baseUrl, token) : undefined,
+    skillClient: needsSkill ? new KweaverSkillApiClient(baseUrl, token) : undefined,
+    fetchTrace: async (conversationId) => {
+      const r = await getTracesByConversation({ baseUrl, accessToken: token, conversationId, businessDomain: bd });
+      return { spans: r.spans };
+    },
     runEval: ({ evalSetPaths, candidatePath, round }) => runEval({
       evalSetPaths,
       candidatePath,

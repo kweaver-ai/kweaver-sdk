@@ -37,6 +37,27 @@ test("EvalSetIndexSchema rejects empty shards array", () => {
   assert.equal(bad.success, false);
 });
 
+test("EvalSetIndexSchema accepts and exposes target_kn", () => {
+  const ok = EvalSetIndexSchema.safeParse({
+    schema_version: "trace-eval-set-index/v1",
+    eval_set_id: "cs-v1",
+    shards: [{ path: "cases.yaml" }],
+    target_kn: "d86oj8na2s1et30t7jag",
+  });
+  assert.equal(ok.success, true);
+  assert.equal(ok.success && ok.data.target_kn, "d86oj8na2s1et30t7jag");
+});
+
+test("EvalSetIndexSchema rejects empty target_kn", () => {
+  const bad = EvalSetIndexSchema.safeParse({
+    schema_version: "trace-eval-set-index/v1",
+    eval_set_id: "cs-v1",
+    shards: [{ path: "cases.yaml" }],
+    target_kn: "",
+  });
+  assert.equal(bad.success, false);
+});
+
 // ── EvalSetShardSchema (trace-eval-set/v1) ──────────────────────────────────
 
 test("EvalSetShardSchema accepts a case with reference only", () => {

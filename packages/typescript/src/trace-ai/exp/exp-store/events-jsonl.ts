@@ -4,6 +4,19 @@ import type { ExpEvent, ExpFsmState } from "../schemas.js";
 
 export type EventInput = ExpEvent extends infer T ? T extends { ts: string } ? Omit<T, "ts"> : never : never;
 
+export async function readAllEvents(expDir: string): Promise<Record<string, unknown>[]> {
+  const filePath = path.join(expDir, ".trace-state", "events.jsonl");
+  let raw: string;
+  try {
+    raw = await fs.readFile(filePath, "utf8");
+  } catch {
+    return [];
+  }
+  return raw.split("\n").filter(Boolean).map(line => {
+    try { return JSON.parse(line) as Record<string, unknown>; } catch { return null; }
+  }).filter((e): e is Record<string, unknown> => e !== null);
+}
+
 export async function appendEvent(expDir: string, event: EventInput): Promise<void> {
   const filePath = path.join(expDir, ".trace-state", "events.jsonl");
   const line = JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n";

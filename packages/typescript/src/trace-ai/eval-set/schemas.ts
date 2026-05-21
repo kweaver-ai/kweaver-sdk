@@ -53,6 +53,10 @@ export const EvalSetIndexSchema = z.object({
   schema_version: z.literal("trace-eval-set-index/v1"),
   eval_set_id: z.string().min(1),
   shards: z.array(ShardRefSchema).min(1),
+  // KN id the reference answers were authored against. Optional for backward
+  // compatibility; when present, the exp loop's preflight check verifies the
+  // agent under test is bound to exactly this KN before running the round.
+  target_kn: z.string().min(1).optional(),
 });
 
 // ── trace-eval-set/v1 ────────────────────────────────────────────────────

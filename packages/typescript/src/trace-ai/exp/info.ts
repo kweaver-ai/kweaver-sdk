@@ -74,7 +74,7 @@ export async function buildExpSnapshot(expDir: string): Promise<ExpSnapshot> {
   const scores = lastRound?.scores ?? null;
   const triage_summary = lastRound?.triage_conclusion?.diagnoses.join("; ") ?? null;
   const suggested_next = mission?.next_change
-    ? { target: mission.next_change.target, hypothesis: mission.next_change.hypothesis }
+    ? { target: mission.next_change.target, hypothesis: mission.next_change.hypothesis ?? "" }
     : null;
 
   return {

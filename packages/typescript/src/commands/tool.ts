@@ -3,36 +3,53 @@ import { ensureValidToken, formatHttpError, with401RefreshRetry } from "../auth/
 import { debugTool, executeTool, listTools, setToolStatuses, uploadTool } from "../api/toolboxes.js";
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
+import { renderHelp } from "../help/format.js";
 
-const HELP = `kweaver tool
-
-Subcommands:
-  upload --toolbox <box-id> <openapi-spec-path> [--metadata-type openapi]
-                                              Upload an OpenAPI spec file as a tool
-  list --toolbox <box-id>                      List tools in a toolbox
-  enable --toolbox <box-id> <tool-id>...       Enable one or more tools
-  disable --toolbox <box-id> <tool-id>...      Disable one or more tools
-  execute --toolbox <box-id> <tool-id> [--body '<json>'|--body-file <path>]
-                                              [--header|--query|--path '<json>']
-                                              Invoke a published+enabled tool
-  debug   --toolbox <box-id> <tool-id> [--body '<json>'|--body-file <path>]
-                                              [--header|--query|--path '<json>']
-                                              Invoke a tool (works on draft/disabled too)
-
-Options for execute/debug:
-  --header '<json>'       Headers map forwarded to the downstream tool
-                          (Authorization is auto-injected from current session
-                          when --header omits it; pass {} to send none)
-  --query  '<json>'       Query params map forwarded to the downstream tool
-  --path   '<json>'       Path parameter map for OpenAPI path placeholders (e.g. {id})
-                          (JSON object: quote id and UUID, e.g. key id for get_dataview_detail /
-                          query_dataview_sql)
-  --timeout <seconds>     Per-call timeout (backend default applies when omitted)
-
-Common options:
-  -bd, --biz-domain <s>   Business domain (default: bd_public)
-  --pretty                Pretty-print JSON (default)
-  --compact               Single-line JSON (pipeline-friendly)`;
+const HELP = renderHelp({
+  tagline: "Tools inside a toolbox — upload OpenAPI specs, enable/disable, execute",
+  usage: "kweaver tool <subcommand> --toolbox <box-id> [flags]",
+  sections: [
+    {
+      title: "AVAILABLE COMMANDS",
+      items: [
+        { name: "upload", desc: "Upload an OpenAPI spec file as a tool" },
+        { name: "list", desc: "List tools in a toolbox" },
+        { name: "enable", desc: "Enable one or more tools" },
+        { name: "disable", desc: "Disable one or more tools" },
+        { name: "execute", desc: "Invoke a published+enabled tool" },
+        { name: "debug", desc: "Invoke a tool (works on draft/disabled too)" },
+      ],
+    },
+  ],
+  flags: [
+    {
+      title: "Execute / debug",
+      flags: [
+        { name: "--body '<json>'", desc: "Request body" },
+        { name: "--body-file <path>", desc: "Request body from file" },
+        { name: "--header '<json>'", desc: "Headers map (Authorization auto-injected if omitted; pass {} to send none)" },
+        { name: "--query '<json>'", desc: "Query params map" },
+        { name: "--path '<json>'", desc: "Path params for OpenAPI placeholders, e.g. {\"id\":\"...\"}" },
+        { name: "--timeout <seconds>", desc: "Per-call timeout (backend default applies when omitted)" },
+      ],
+    },
+    {
+      title: "Common",
+      flags: [
+        { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+        { name: "--pretty", desc: "Pretty-print JSON (default)" },
+        { name: "--compact", desc: "Single-line JSON (pipeline-friendly)" },
+      ],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver tool upload --toolbox <box-id> spec.yaml",
+    "kweaver tool list --toolbox <box-id>",
+    "kweaver tool execute --toolbox <box-id> <tool-id> --body '{\"key\":\"value\"}'",
+  ],
+  learnMore: ["Use `kweaver tool <subcommand> --help` for flag details"],
+});
 
 export async function runToolCommand(args: string[]): Promise<number> {
   const [subcommand, ...rest] = args;

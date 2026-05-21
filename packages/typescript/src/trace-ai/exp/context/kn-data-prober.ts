@@ -1,7 +1,7 @@
 import type { KnSchemaSnapshot, QueryFailureAnalysis } from "../schemas.js";
-import type { QueryDataViewOptions, DataViewQueryResult } from "../../../api/dataviews.js";
+import type { QueryResourceOptions, ResourceQueryResult } from "../../../api/resources.js";
 
-type QueryDataViewFn = (opts: Pick<QueryDataViewOptions, "baseUrl" | "accessToken" | "id" | "needTotal" | "limit">) => Promise<DataViewQueryResult>;
+type QueryResourceFn = (opts: Pick<QueryResourceOptions, "baseUrl" | "accessToken" | "id" | "needTotal" | "limit">) => Promise<ResourceQueryResult>;
 
 export interface DataProbe {
   concept_name: string;
@@ -23,7 +23,7 @@ function extractConceptNames(failures: QueryFailureAnalysis[]): Set<string> {
 export async function probeObjectTypes(
   schema: KnSchemaSnapshot,
   failures: QueryFailureAnalysis[],
-  queryDataView: QueryDataViewFn,
+  queryResource: QueryResourceFn,
   opts: { baseUrl?: string; accessToken?: string } = {},
 ): Promise<DataProbe[]> {
   const mentionedConcepts = extractConceptNames(failures);
@@ -41,7 +41,7 @@ export async function probeObjectTypes(
   const results = await Promise.all(
     unique.map(async ot => {
       try {
-        const result = await queryDataView({
+        const result = await queryResource({
           baseUrl: opts.baseUrl ?? "",
           accessToken: opts.accessToken ?? "",
           id: ot.data_view_id!,

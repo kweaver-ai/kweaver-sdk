@@ -72,3 +72,151 @@
 1. **解析器单测**（`test/<cmd>-cmd.test.ts`）：覆盖每个 flag 的 happy path 与至少一个错误路径
 2. **API 客户端单测**（`test/<resource>.test.ts`）：mock `fetch`，断言 URL、method、headers、body
 3. **e2e smoke**（`test/e2e/<resource>.test.ts`）：跑通完整链路，环境变量缺失时跳过
+
+## 8 Help 文本格式（MUST）
+
+所有 `--help` / `-h` 输出必须通过 `packages/typescript/src/help/format.ts` 提供的 formatter 渲染，输出统一 gh CLI 风格。**禁止再硬编码大段 help 字符串。**
+
+参考风格：`gh --help` / `gh <command> --help`（[GitHub CLI](https://cli.github.com/manual/)）。
+
+### 8.1 顶层 (`kweaver --help`)
+
+固定结构：
+
+```text
+KWeaver SDK — operate KWeaver platform from CLI
+
+USAGE
+  kweaver <command> <subcommand> [flags]
+
+AUTHENTICATION & CONFIG
+  auth:        一行简介
+  token:       一行简介
+  config:      一行简介
+
+DECISION AGENT
+  agent:       一行简介
+  toolbox:     一行简介
+  ...
+
+AI DATA PLATFORM
+  bkn:         一行简介
+  ...
+
+TRACE AI
+  trace:       一行简介
+
+FOUNDATION
+  call:        一行简介
+  ...
+
+FLAGS
+  --base-url <url>   Override platform URL  (env: KWEAVER_BASE_URL)
+  --token <value>    Override access token  (env: KWEAVER_TOKEN)
+  ...
+
+ENVIRONMENT
+  KWEAVER_PROFILE     Isolate active-platform/user state per shell
+  ...
+
+EXAMPLES
+  $ kweaver auth https://platform.example.com
+  $ kweaver agent chat <agent_id> -m "hello"
+  $ kweaver bkn build <kn-id> --wait
+
+LEARN MORE
+  Use `kweaver <command> --help` for more info
+```
+
+要求：
+
+- 顶层**只列 command 名 + 一行简介**，禁止列子命令签名 / flag 细节（下钻到二级）
+- 分组语义化：`CORE` / `PLATFORM` / `ADDITIONAL`，新增顶层命令时必须明确归属
+- `EXAMPLES` 控制在 3 行，必须是真实可运行命令
+- `LEARN MORE` 指向下钻入口
+
+### 8.2 二级 (`kweaver <command> --help`)
+
+固定结构：
+
+```text
+<一句话 tagline>
+
+USAGE
+  kweaver <command> <subcommand> [flags]
+
+AVAILABLE COMMANDS
+  list:    一行说明
+  get:     一行说明
+  ...
+
+INHERITED FLAGS
+  --base-url, --token, --user, --help
+
+EXAMPLES
+  $ kweaver <command> list --limit 10
+
+LEARN MORE
+  Use `kweaver <command> <subcommand> --help` for flag details
+```
+
+要求：
+
+- 子命令列表两列对齐，左列 `name:`，右列描述 ≤ 60 字符
+- 子命令数 > 8 时**必须进一步分组**（参考 `skill` 的 Registry / Market / Content / Lifecycle 四组）
+- `INHERITED FLAGS` 只列继承自顶层的；本命令独有 flag 下沉到三级
+
+### 8.3 三级 (`kweaver <command> <subcommand> --help`)
+
+固定结构：
+
+```text
+<一句话 tagline>
+
+USAGE
+  kweaver <command> <subcommand> [args] [flags]
+
+FLAGS
+  --foo <value>      Description
+  --bar              Boolean flag
+
+EXAMPLES
+  $ kweaver <command> <subcommand> --foo bar
+```
+
+要求：
+
+- 以下"高频"命令**必须**有完整三级 help：
+  - `auth login`
+  - `agent chat`
+  - `bkn build` / `bkn push` / `bkn pull`
+  - `dataflow run`
+  - `call`
+- 其他三级命令至少打印 `USAGE` 一行
+- FLAG 按语义分组渲染（如 `auth login` 分 "Login options" / "TLS options"），调用 `block()` formatter
+- EXAMPLES 至少 1 条，覆盖最常见用法
+
+### 8.4 实现规则
+
+新增 / 修改 CLI 命令时必须遵守：
+
+1. **调用 formatter**：`renderHelp({ tagline, usage, sections, flags, environment?, examples, learnMore })`，不准 `console.log("...大字符串...")`
+2. **字段缺省传 `undefined`** 而非空字符串
+3. **`kweaver help all`** 输出完整签名作迁移期兜底；新增命令时同步追加
+4. **行宽 80 列**：formatter 默认 80 列换行；超长描述写多段而不是堆一行
+5. **单测**：断言关键 section 标题（`USAGE` / `AVAILABLE COMMANDS` / `FLAGS`）存在，防格式回归
+
+### 8.5 已知例外
+
+- `kweaver dataflow` 用 yargs：必须通过 `.usage()` / `.epilog()` 贴近本规范的视觉，文案保持一致；不强制走 formatter
+- `kweaver token`：无 flag，输出 `USAGE` + 一行说明即可
+- `kweaver call` / `kweaver curl` 别名：EXAMPLES 段强调 curl-style 用法
+
+### 8.6 PR 自检（CLI 相关 PR 必查）
+
+- [ ] 顶层 / 二级 / 三级 help 均通过 formatter 渲染
+- [ ] 顶层无子命令签名泄漏
+- [ ] 子命令数 > 8 已分组
+- [ ] 高频三级命令有 FLAGS + EXAMPLES
+- [ ] `kweaver help all` 已同步
+- [ ] 单测断言关键 section 标题

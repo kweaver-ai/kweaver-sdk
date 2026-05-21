@@ -72,7 +72,7 @@ kweaver vega resource preview <id> [--limit N]
 
 Vega Resource 可直接用于绑定 BKN 对象类：在 `object-type create` 或 `.bkn` 文件中设置 `data_source: { type: "resource", id: "<resource-id>" }`。`create-from-ds` 内部就是使用此路径。绑定 `resource` 类型的对象类数据通过 Vega 实时查询，**不需要也不支持 `bkn build`**。
 
-`vega resource list` 返回的 ID 与 `dataview list` 返回的 mdl UUID **不同**——前者是 Vega 资源 ID，后者是 mdl 数据视图 UUID，分属不同的后端服务。两种 ID 均可用于 BKN 绑定（对应不同的 `data_source.type`：`resource` 实时查询 / `data_view` 需构建索引）。
+`vega resource list` 返回的 ID 是 Vega 资源 ID，可直接用于 BKN 绑定（`data_source.type: "resource"`，实时查询，无需 `bkn build`）。
 
 获取 Resource 列信息：`resource get` 不返回列元数据，需通过 `resource query <id> -d '{"limit":1}'` 查询一条数据来推断字段名和类型。
 
@@ -192,7 +192,6 @@ kweaver vega sql -d '{
 | 结构化查询 | `vega query execute` | 单 Catalog 内表/JOIN、统一 filter DSL、offset 分页 |
 | 直连 SQL | `vega sql` | 复杂 SQL、聚合、或 `{{.<资源ID>}}` / `{{<资源ID>}}` 占位符 |
 | 资源数据 API | `vega resource query <id> -d {...}` | 按单个 resource 拉数（filter、sort、search_after） |
-| Dataview + `--sql` | `dataview query ... --sql` | 走 **mdl-uniquery + Trino**，需 Etrino / coordinator |
 
 ## Connector Type
 

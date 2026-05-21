@@ -84,8 +84,7 @@ tags: [tag1, tag2]               # 可选
   - Source 值：`property`（对象属性）/ `input`（用户输入）/ `const`（常量）
   - Binding：Source 为 property 时填属性名，const 时填常量值，input 时填 `-`
 - `### Data Source`（可选）：表格，列 Type | ID | Name；无数据视图绑定时可省略整节
-  - Type 为 `data_view` 时，ID 填 mdl 数据视图 UUID（来自 `dataview list`），需 `bkn build` 构建索引后才可查询
-  - Type 为 `resource` 时，ID 填 Vega 资源 ID（来自 `vega resource list`），数据通过 Vega 实时查询，无需也不支持 `bkn build`
+  - Type 为 `resource` 时，ID 填 Vega 资源 ID（来自 `resource list` 或 `vega resource list`），数据通过 Vega 实时查询，无需也不支持 `bkn build`
 
 ### 数据类型
 

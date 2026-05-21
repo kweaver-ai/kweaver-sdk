@@ -1,15 +1,16 @@
 import {
-  createDataView,
-  deleteDataView,
-  findDataView,
-  getDataView,
-  listDataViews,
-  queryDataView,
-} from "../api/dataviews.js";
-import type { DataView, DataViewQueryResult } from "../api/dataviews.js";
+  RESOURCE_LIST_DEFAULT_LIMIT,
+  createResource,
+  deleteResource,
+  findResource,
+  getResource,
+  listResources,
+  queryResource,
+} from "../api/resources.js";
+import type { Resource, ResourceQueryResult } from "../api/resources.js";
 import type { ClientContext } from "../client.js";
 
-export class DataViewsResource {
+export class ResourcesResource {
   constructor(private readonly ctx: ClientContext) {}
 
   async create(opts: {
@@ -18,27 +19,27 @@ export class DataViewsResource {
     table: string;
     fields?: Array<{ name: string; type: string }>;
   }): Promise<string> {
-    return createDataView({ ...this.ctx.base(), ...opts });
+    return createResource({ ...this.ctx.base(), ...opts });
   }
 
-  async get(id: string): Promise<DataView> {
-    return getDataView({ ...this.ctx.base(), id });
+  async get(id: string): Promise<Resource> {
+    return getResource({ ...this.ctx.base(), id });
   }
 
-  async list(opts: { datasourceId?: string; type?: string; limit?: number } = {}): Promise<DataView[]> {
-    return listDataViews({
+  async list(opts: { datasourceId?: string; category?: string; limit?: number } = {}): Promise<Resource[]> {
+    return listResources({
       ...this.ctx.base(),
       datasourceId: opts.datasourceId,
-      type: opts.type,
-      limit: opts.limit,
+      category: opts.category,
+      limit: opts.limit ?? RESOURCE_LIST_DEFAULT_LIMIT,
     });
   }
 
   async find(
     name: string,
     opts?: { datasourceId?: string; exact?: boolean; wait?: boolean; timeoutMs?: number },
-  ): Promise<DataView[]> {
-    return findDataView({
+  ): Promise<Resource[]> {
+    return findResource({
       ...this.ctx.base(),
       name,
       datasourceId: opts?.datasourceId,
@@ -49,31 +50,29 @@ export class DataViewsResource {
   }
 
   async delete(id: string): Promise<void> {
-    await deleteDataView({ ...this.ctx.base(), id });
+    await deleteResource({ ...this.ctx.base(), id });
   }
 
   async query(
     id: string,
     opts?: {
-      sql?: string;
       offset?: number;
       limit?: number;
       needTotal?: boolean;
-      outputFields?: string[];
-      filters?: Record<string, unknown>;
-      sort?: Array<Record<string, unknown>>;
+      filterCondition?: unknown;
+      sort?: string;
+      direction?: "asc" | "desc";
     },
-  ): Promise<DataViewQueryResult> {
-    return queryDataView({
+  ): Promise<ResourceQueryResult> {
+    return queryResource({
       ...this.ctx.base(),
       id,
-      sql: opts?.sql,
       offset: opts?.offset,
       limit: opts?.limit,
       needTotal: opts?.needTotal,
-      outputFields: opts?.outputFields,
-      filters: opts?.filters,
+      filterCondition: opts?.filterCondition,
       sort: opts?.sort,
+      direction: opts?.direction,
     });
   }
 }

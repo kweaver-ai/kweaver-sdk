@@ -9,13 +9,14 @@ const SKILL_API_PREFIX = "/api/agent-operator-integration/v1";
 
 export type SkillStatus = "unpublish" | "published" | "offline";
 export type SkillFileType = "zip" | "content";
-
+export type SkillEditableStatus = SkillStatus | "editing";
+export type SkillCategory = "other_category" | "system";
 export interface SkillSummary {
   id: string;
   name: string;
   description?: string;
   version?: string;
-  status?: SkillStatus;
+  status?: SkillEditableStatus;
   source?: string;
   create_user?: string;
   create_time?: number;
@@ -42,7 +43,7 @@ export interface SkillContentIndex {
   id: string;
   url: string;
   files: SkillFileSummary[];
-  status?: SkillStatus;
+  status?: SkillEditableStatus;
 }
 
 export interface SkillFileReadResult {
@@ -70,6 +71,25 @@ export interface DeleteSkillResult {
 export interface UpdateSkillStatusResult {
   id: string;
   status: SkillStatus;
+}
+
+export interface UpdateSkillMetadataResult {
+  id: string;
+  version?: string;
+  status?: SkillEditableStatus;
+}
+
+export interface UpdateSkillPackageResult {
+  id: string;
+  version?: string;
+  status?: SkillEditableStatus;
+}
+
+export interface SkillReleaseHistoryInfo extends SkillSummary {
+  category?: SkillCategory;
+  release_desc?: string;
+  release_user?: string;
+  release_time?: number;
 }
 
 export interface SkillListResult {
@@ -129,6 +149,26 @@ export interface RegisterSkillZipOptions extends SkillApiBaseOptions {
   extendInfo?: Record<string, unknown>;
 }
 
+export interface UpdateSkillMetadataOptions extends SkillApiBaseOptions {
+  skillId: string;
+  name: string;
+  description: string;
+  category: SkillCategory;
+  source?: string;
+  extendInfo?: Record<string, unknown>;
+}
+
+export interface UpdateSkillPackageContentOptions extends SkillApiBaseOptions {
+  skillId: string;
+  content: string;
+}
+
+export interface UpdateSkillPackageZipOptions extends SkillApiBaseOptions {
+  skillId: string;
+  filename: string;
+  bytes: Uint8Array;
+}
+
 export interface UpdateSkillStatusOptions extends SkillApiBaseOptions {
   skillId: string;
   status: SkillStatus;
@@ -148,10 +188,43 @@ export interface DownloadedSkillArchive {
   bytes: Uint8Array;
 }
 
+export interface SkillHistoryVersionOptions extends SkillApiBaseOptions {
+  skillId: string;
+  version: string;
+}
+
 export interface InstallSkillArchiveOptions {
   bytes: Uint8Array;
   directory: string;
   force?: boolean;
+}
+
+export interface SkillManagementContentData {
+  skill_id: string;
+  name: string;
+  description: string;
+  version: string;
+  status: SkillEditableStatus;
+  source: string;
+  file_type: "zip" | "content";
+  url?: string;
+  content?: string;
+  files: SkillFileSummary[];
+}
+
+export interface GetSkillManagementContentOptions extends SkillApiBaseOptions {
+  skillId: string;
+  responseMode?: "url" | "content";
+}
+
+export interface ReadSkillManagementFileOptions extends SkillApiBaseOptions {
+  skillId: string;
+  relPath: string;
+}
+
+export interface DownloadSkillManagementOptions extends SkillApiBaseOptions {
+  skillId: string;
+  responseMode?: "url" | "content";
 }
 
 function baseHeaders(opts: SkillApiBaseOptions): Record<string, string> {
@@ -245,6 +318,12 @@ export async function getSkill(options: GetSkillOptions): Promise<SkillInfo> {
   return normalizeSkillId(unwrapEnvelope<SkillInfo>(body));
 }
 
+export async function getSkillMarketDetail(options: GetSkillOptions): Promise<SkillInfo> {
+  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/market/${encodeURIComponent(options.skillId)}`);
+  const { body } = await fetchTextOrThrow(url, { headers: baseHeaders(options) });
+  return normalizeSkillId(unwrapEnvelope<SkillInfo>(body));
+}
+
 export async function deleteSkill(options: GetSkillOptions): Promise<DeleteSkillResult> {
   const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}`);
   const { body } = await fetchTextOrThrow(url, { method: "DELETE", headers: baseHeaders(options) });
@@ -261,27 +340,42 @@ export async function updateSkillStatus(options: UpdateSkillStatusOptions): Prom
   return normalizeSkillId(unwrapEnvelope<UpdateSkillStatusResult>(body));
 }
 
-export async function registerSkillContent(options: RegisterSkillContentOptions): Promise<RegisterSkillResult> {
-  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills`);
-  const form = new FormData();
-  form.set("file_type", "content");
-  // Backend's gin form-binder rejects plain string field for `file`
-  // (typed json.RawMessage); needs an actual multipart file part with
-  // filename. See utils/gin.go GetBindMultipartFormRaw.
-  form.set(
-    "file",
-    new Blob([options.content], { type: "text/markdown" }),
-    "SKILL.md",
-  );
-  if (options.source) form.set("source", options.source);
-  if (options.extendInfo) form.set("extend_info", JSON.stringify(options.extendInfo));
-
+export async function updateSkillMetadata(options: UpdateSkillMetadataOptions): Promise<UpdateSkillMetadataResult> {
+  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/metadata`);
+  const payload: Record<string, unknown> = {
+    name: options.name,
+    description: options.description,
+    category: options.category,
+  };
+  if (options.source) payload.source = options.source;
+  if (options.extendInfo) payload.extend_info = options.extendInfo;
   const { body } = await fetchTextOrThrow(url, {
-    method: "POST",
-    headers: baseHeaders(options),
-    body: form,
+    method: "PUT",
+    headers: { ...baseHeaders(options), "content-type": "application/json" },
+    body: JSON.stringify(payload),
   });
-  return normalizeSkillId(unwrapEnvelope<RegisterSkillResult>(body));
+  return normalizeSkillId(unwrapEnvelope<UpdateSkillMetadataResult>(body));
+}
+
+export async function registerSkillContent(options: RegisterSkillContentOptions): Promise<RegisterSkillResult> {
+  // Backend's file_type=content path is half-implemented: it stores
+  // the markdown body but skips skill_file_index, so the skill is
+  // unreadable after publish (GET /skills/:id/content -> 404).
+  // Bundle the content into a 1-file SKILL.md zip and route through
+  // the zip path, which writes skill_file_index correctly.
+  const { default: JSZip } = await import("jszip");
+  const zip = new JSZip();
+  zip.file("SKILL.md", options.content);
+  const bytes = new Uint8Array(await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" }));
+  return registerSkillZip({
+    baseUrl: options.baseUrl,
+    accessToken: options.accessToken,
+    businessDomain: options.businessDomain,
+    filename: "SKILL.md.zip",
+    bytes,
+    source: options.source,
+    extendInfo: options.extendInfo,
+  });
 }
 
 export async function registerSkillZip(options: RegisterSkillZipOptions): Promise<RegisterSkillResult> {
@@ -298,6 +392,31 @@ export async function registerSkillZip(options: RegisterSkillZipOptions): Promis
     body: form,
   });
   return normalizeSkillId(unwrapEnvelope<RegisterSkillResult>(body));
+}
+
+export async function updateSkillPackageContent(
+  options: UpdateSkillPackageContentOptions
+): Promise<UpdateSkillPackageResult> {
+  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/package`);
+  const { body } = await fetchTextOrThrow(url, {
+    method: "PUT",
+    headers: { ...baseHeaders(options), "content-type": "application/json" },
+    body: JSON.stringify({ file_type: "content", file: options.content }),
+  });
+  return normalizeSkillId(unwrapEnvelope<UpdateSkillPackageResult>(body));
+}
+
+export async function updateSkillPackageZip(options: UpdateSkillPackageZipOptions): Promise<UpdateSkillPackageResult> {
+  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/package`);
+  const form = new FormData();
+  form.set("file_type", "zip");
+  form.set("file", new Blob([Buffer.from(options.bytes)]), options.filename);
+  const { body } = await fetchTextOrThrow(url, {
+    method: "PUT",
+    headers: baseHeaders(options),
+    body: form,
+  });
+  return normalizeSkillId(unwrapEnvelope<UpdateSkillPackageResult>(body));
 }
 
 export async function getSkillContentIndex(options: GetSkillOptions): Promise<SkillContentIndex> {
@@ -333,6 +452,78 @@ export async function fetchSkillFile(options: ReadSkillFileOptions): Promise<Uin
 
 export async function downloadSkill(options: DownloadSkillOptions): Promise<DownloadedSkillArchive> {
   const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/download`);
+  const { response, body } = await fetchBytesOrThrow(url, { headers: baseHeaders(options) });
+  const serverName = parseContentDisposition(response.headers.get("content-disposition"));
+  return {
+    fileName: basename(serverName || `${options.skillId}.zip`),
+    bytes: body,
+  };
+}
+
+export async function listSkillHistory(options: GetSkillOptions): Promise<SkillReleaseHistoryInfo[]> {
+  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/history`);
+  const { body } = await fetchTextOrThrow(url, { headers: baseHeaders(options) });
+  return normalizeSkillId(unwrapEnvelope<SkillReleaseHistoryInfo[]>(body));
+}
+
+export async function republishSkillHistory(
+  options: SkillHistoryVersionOptions
+): Promise<UpdateSkillPackageResult> {
+  const url = buildUrl(
+    options.baseUrl,
+    `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/history/republish`
+  );
+  const { body } = await fetchTextOrThrow(url, {
+    method: "POST",
+    headers: { ...baseHeaders(options), "content-type": "application/json" },
+    body: JSON.stringify({ version: options.version }),
+  });
+  return normalizeSkillId(unwrapEnvelope<UpdateSkillPackageResult>(body));
+}
+
+export async function publishSkillHistory(
+  options: SkillHistoryVersionOptions
+): Promise<UpdateSkillPackageResult> {
+  const url = buildUrl(
+    options.baseUrl,
+    `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/history/publish`
+  );
+  const { body } = await fetchTextOrThrow(url, {
+    method: "POST",
+    headers: { ...baseHeaders(options), "content-type": "application/json" },
+    body: JSON.stringify({ version: options.version }),
+  });
+  return normalizeSkillId(unwrapEnvelope<UpdateSkillPackageResult>(body));
+}
+
+// ── Management Content (editing-state) API ───────────────────────────────────
+
+export async function getSkillManagementContent(
+  options: GetSkillManagementContentOptions
+): Promise<SkillManagementContentData> {
+  const url = new URL(buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/management/content`));
+  if (options.responseMode) url.searchParams.set("response_mode", options.responseMode);
+  const { body } = await fetchTextOrThrow(url, { headers: baseHeaders(options) });
+  return unwrapEnvelope<SkillManagementContentData>(body);
+}
+
+export async function readSkillManagementFile(
+  options: ReadSkillManagementFileOptions
+): Promise<SkillFileReadResult> {
+  const url = buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/management/files/read`);
+  const { body } = await fetchTextOrThrow(url, {
+    method: "POST",
+    headers: { ...baseHeaders(options), "content-type": "application/json" },
+    body: JSON.stringify({ rel_path: options.relPath }),
+  });
+  return normalizeSkillId(unwrapEnvelope<SkillFileReadResult>(body));
+}
+
+export async function downloadSkillManagementArchive(
+  options: DownloadSkillManagementOptions
+): Promise<DownloadedSkillArchive> {
+  const url = new URL(buildUrl(options.baseUrl, `${SKILL_API_PREFIX}/skills/${encodeURIComponent(options.skillId)}/management/download`));
+  if (options.responseMode) url.searchParams.set("response_mode", options.responseMode);
   const { response, body } = await fetchBytesOrThrow(url, { headers: baseHeaders(options) });
   const serverName = parseContentDisposition(response.headers.get("content-disposition"));
   return {

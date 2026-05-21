@@ -163,10 +163,10 @@ const graph     = await client.bkn.querySubgraph("bkn-id", { /* path spec */ });
 await client.bkn.executeAction("bkn-id", "at-id", { /* params */ });
 const logs      = await client.bkn.listActionLogs("bkn-id");
 
-// Data sources & data views
+// Data sources & vega-backend resources
 const dsList = await client.datasources.list();
 const tables = await client.datasources.listTables("ds-id");
-const viewId = await client.dataviews.create({ name: "v", datasourceId: "ds-id", table: "orders" });
+const resId  = await client.resources.create({ name: "v", datasourceId: "ds-id", table: "orders" });
 
 // Dataflow automation (CSV import pipeline, etc.)
 const result = await client.dataflows.execute({
@@ -257,52 +257,27 @@ result = client.dataflows.execute(
 
 ## CLI Quick Reference
 
+`kweaver` follows a `gh`-style help layout (see [docs/cli_conventions.md §8](docs/cli_conventions.md#8-help-文本格式must)):
+
 ```bash
-kweaver auth login <url> [--alias name] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
-# -u/-p (with or without --http-signin): HTTP POST /oauth2/signin (yields refresh_token). Missing -u/-p are prompted from stdin (password hidden on TTY).
-# Initial-password lockout (401001017): TTY prompts to change password; scripts use --new-password <pwd>.
-kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
-kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (headless host)
-kweaver auth export [url|alias] [--json]
-kweaver auth status / whoami [url|alias] [--json]   # with KWEAVER_BASE_URL+KWEAVER_TOKEN when no ~/.kweaver/ platform
-kweaver auth list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # business domain; show/list-bd work with KWEAVER_BASE_URL (+ KWEAVER_TOKEN for list-bd)
-kweaver token
-kweaver ds list/get/delete/tables/connect
-kweaver ds import-csv <ds_id> --files <glob> [--table-prefix <p>] [--batch-size 500] [--recreate]
-kweaver dataflow templates/create-dataset/create-bkn/create/list/run/runs/logs
-kweaver model llm list/get/add/edit/delete/test/chat/--template
-kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
-kweaver dataview|dv list/find/get/query/delete
-kweaver bkn list/get/stats/export/create/update/delete
-kweaver bkn build [--wait] [--timeout 300]
-kweaver bkn create-from-ds <ds_id> --name <name> [--tables t1,t2] [--build]
-kweaver bkn create-from-csv <ds_id> --files <glob> --name <name> [--build]
-kweaver bkn validate/push/pull
-kweaver bkn object-type list/get/create/update/delete/query/properties
-kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run
-kweaver bkn relation-type list/get/create/update/delete
-kweaver bkn action-type list/query/inputs/execute
-kweaver bkn subgraph / search
-kweaver bkn action-execution get
-kweaver bkn action-log list/get/cancel
-kweaver agent list/get/create/update/delete/chat/sessions/history/publish/unpublish
-kweaver trace diagnose <conversation_id> [flags]      # single trace
-kweaver trace diagnose --traces=<list> --out=<dir>    # batch (single agent)
-kweaver trace diagnose rules validate <rule.yaml>     # validate a rule
-kweaver trace eval-set build --diagnosis=<dir>|--queries=<file> --out=<dir>  # build eval-set yaml dir
-kweaver trace schema validate <file> [--kind=<kind>]  # validate yaml against M5/M4 zod schema
-kweaver skill list/market/get/register/status/delete/content/read-file/download/install
-kweaver vega health/stats/inspect/sql/catalog/resource/connector-type
-kweaver context-loader help <subcommand>
-kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
-kweaver context-loader tool-call <kn-id> <name> --args '<json>'
-kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  (deprecated; use search-schema)
-kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
-kweaver context-loader config set/use/list/show                       (deprecated; <kn-id> may be omitted to fall back to saved config)
-kweaver call <path> [-X METHOD] [-d BODY] [-H header] [-bd domain]
+kweaver --help                            # gh-style top-level overview
+kweaver help <command>                    # forward to `<command> --help`
+kweaver help all                          # full per-action signatures (migration fallback)
+kweaver <command> --help                  # subcommand overview + actions
+kweaver <command> <subcommand> --help     # action-level flags + examples
 ```
+
+Top-level command groups:
+
+```text
+AUTHENTICATION & CONFIG  auth · token · config
+DECISION AGENT           agent · toolbox · tool
+AI DATA PLATFORM         bkn · ds · resource · dataflow · vega · context-loader
+TRACE AI                 trace
+FOUNDATION               call · explore · model · skill · help
+```
+
+Run `kweaver help all` for the full per-action signature index (browseable / greppable).
 
 The two CLIs use different top-level command names for some features. The table below maps **Python CLI** (`pip install kweaver-sdk[cli]`) to **TypeScript CLI** (`npm install -g @kweaver-ai/kweaver-sdk`).
 
@@ -314,7 +289,7 @@ The two CLIs use different top-level command names for some features. The table 
 | `kweaver query kn-search <kn_id> <query>` (REST, deprecated for schema discovery) | `kweaver context-loader search-schema <kn-id> <query>` for MCP `search_schema`; `kweaver context-loader kn-search <kn-id> <query>` is deprecated compatibility only |
 | `kweaver action query …` / `execute` / `logs` … | `kweaver bkn action-type query|execute …`, `kweaver bkn action-log list|get|…` |
 
-**Only on TypeScript CLI:** `kweaver vega`, `kweaver dataview list|find|get|delete`, `kweaver ds import-csv`, `kweaver bkn create-from-csv`, and full `kweaver agent` create/update/delete/publish (see `kweaver agent --help`). Both CLIs support `kweaver config show|list-bd|set-bd` and `kweaver dataview query` (SQL via mdl-uniquery; Python requires `pip install kweaver-sdk[cli]`).
+**Only on TypeScript CLI:** `kweaver vega`, `kweaver resource list|find|get|query|delete`, `kweaver ds import-csv`, `kweaver bkn create-from-csv`, and full `kweaver agent` create/update/delete/publish (see `kweaver agent --help`). Both CLIs support `kweaver config show|list-bd|set-bd` and `kweaver resource query` (Python requires `pip install kweaver-sdk[cli]`).
 
 ## Repository Structure (Monorepo)
 

@@ -124,22 +124,18 @@ const graph     = await client.bkn.querySubgraph("bkn-id", { /* 路径规格 */ 
 await client.bkn.executeAction("bkn-id", "at-id", { /* 参数 */ });
 const logs      = await client.bkn.listActionLogs("bkn-id");
 
-// 数据源与数据视图
-const dsList = await client.datasources.list();
-const viewId = await client.dataviews.create({ name: "v", datasourceId: "ds-id", table: "orders" });
-const views = await client.dataviews.list({ datasourceId: "ds-id" });
-const fuzzy = await client.dataviews.find("BOM", { wait: false });
-const exact = await client.dataviews.find("orders", {
+// 数据源 & vega-backend 资源
+const dsList    = await client.datasources.list();
+const resId     = await client.resources.create({ name: "v", datasourceId: "ds-id", table: "orders" });
+const resList   = await client.resources.list({ datasourceId: "ds-id" });
+const fuzzy     = await client.resources.find("BOM", { wait: false });
+const exact     = await client.resources.find("orders", {
   datasourceId: "ds-id",
   exact: true,
   wait: true,
 });
-const dv = await client.dataviews.get(viewId);
-const queryRows = await client.dataviews.query(viewId, {
-  sql: "SELECT id, name FROM orders LIMIT 10",
-  limit: 10,
-  needTotal: true,
-});
+const res       = await client.resources.get(resId);
+const queryRows = await client.resources.query(resId, { limit: 10, needTotal: true });
 
 // Vega — 可观测性与查询
 const catalogs = await client.vega.listCatalogs();
@@ -165,6 +161,12 @@ const rawTool = await cl.callTool("search_schema", { query: "高血压 治疗" }
 // Skill（注册表/市场/渐进式读取）
 const skills = await client.skills.market({ name: "kweaver" });
 const skillMd = await client.skills.fetchContent("skill-id");
+const draft = await client.skills.updateMetadata("skill-id", {
+  name: "Demo",
+  description: "Demo skill",
+  category: "system",
+});
+const history = await client.skills.history("skill-id");
 ```
 
 `searchSchema()` 是 Context Loader MCP `search_schema` 的类型化封装，默认 `response_format` 为 `json`，支持 `query`、`response_format`、`search_scope`、`max_concepts`、`schema_brief`、`enable_rerank`。`search_scope.concept_groups` 用于按 BKN 概念分组 ID 限定 Schema 发现范围，不是实例数据过滤条件。解析后的返回结果可能包含 `object_types`、`relation_types`、`action_types`、`metric_types`。
@@ -175,42 +177,27 @@ const skillMd = await client.skills.fetchContent("skill-id");
 
 ## 命令速查
 
+`kweaver` 采用 `gh` 风格 help 布局（详见 [docs/cli_conventions.md §8](../../docs/cli_conventions.md#8-help-文本格式must)）：
+
+```text
+kweaver --help                            # gh 风格顶层概览
+kweaver help <command>                    # 转发到 `<command> --help`
+kweaver help all                          # 完整 per-action 签名（迁移期兜底）
+kweaver <command> --help                  # 子命令概览 + 动作列表
+kweaver <command> <subcommand> --help     # 动作级 flag + 示例
 ```
-kweaver auth login <url> [--alias name] [--no-auth] [--no-browser] [-u user] [-p pass] [--new-password <pwd>] [--http-signin] [--insecure|-k]
-# -u/-p（无论是否带 --http-signin）：HTTP POST /oauth2/signin（可拿 refresh_token）；缺失的用户名/密码会从 stdin 提示输入（TTY 下密码隐藏）
-# 若服务端返回 401001017（初始密码），交互终端会引导修改；非交互请使用 --new-password <pwd>。
-kweaver auth change-password [<url>] [-u <account>] [-o <old>] [-n <new>] [--insecure|-k]
-kweaver auth login <url> --client-id ID --client-secret S --refresh-token T   (无浏览器登录)
-kweaver auth export [url|alias] [--json]   (导出在无浏览器机器上运行的命令)
-kweaver auth status / whoami [url|alias] [--json]   # whoami 支持 --json；无 ~/.kweaver/ 当前平台时可配 KWEAVER_BASE_URL+KWEAVER_TOKEN
-kweaver auth list/use/delete/logout
-kweaver config show / list-bd / set-bd <value>   # 业务域；show/list-bd 在无已保存平台时可与 env 配对
-kweaver token
-kweaver ds list/get/delete/tables/connect
-kweaver dataflow list/run/runs/logs
-kweaver model llm list/get/add/edit/delete/test/chat/--template
-kweaver model small list/get/add/edit/delete/test/embeddings/rerank/--template
-kweaver dataview list/find/get/query/delete
-kweaver bkn list/get/stats/export/create/update/delete
-kweaver bkn object-type list/get/create/update/delete/query/properties
-kweaver bkn metric list/get/create/search/validate/update/delete/query/dry-run
-kweaver bkn relation-type list/get/create/update/delete
-kweaver bkn action-type list/query/execute
-kweaver bkn subgraph
-kweaver bkn action-execution get
-kweaver bkn action-log list/get/cancel
-kweaver agent list/get/chat/sessions/history
-kweaver skill list/market/get/register/status/delete/content/read-file/download/install
-kweaver vega health|stats|inspect|sql|catalog|resource|connector-type
-kweaver context-loader help <subcommand>
-kweaver context-loader tools|resources|templates|prompts <kn-id>
-kweaver context-loader search-schema <kn-id> <query> [--scope object,relation,action,metric] [--concept-groups ids]
-kweaver context-loader tool-call <kn-id> <name> --args '<json>'
-kweaver context-loader kn-search|kn-schema-search <kn-id> <query> [...]  （deprecated；请使用 search-schema）
-kweaver context-loader query-object-instance|query-instance-subgraph|get-logic-properties|get-action-info|find-skills <kn-id> ...
-kweaver context-loader config set/use/list/show                       （deprecated；省略 <kn-id> 时回退到已保存配置）
-kweaver call <path> [-X METHOD] [-d BODY] [-H header]
+
+顶层命令分组：
+
+```text
+AUTHENTICATION & CONFIG  auth · token · config
+DECISION AGENT           agent · toolbox · tool
+AI DATA PLATFORM         bkn · ds · resource · dataflow · vega · context-loader
+TRACE AI                 trace
+FOUNDATION               call · explore · model · skill · help
 ```
+
+需要查阅每个动作的完整签名（可浏览 / 可 grep）时，运行 `kweaver help all`。
 
 ### Dataflow CLI 示例
 

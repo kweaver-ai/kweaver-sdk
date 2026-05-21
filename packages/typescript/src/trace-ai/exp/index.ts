@@ -21,7 +21,7 @@ import type { FailureAttribution } from "./schemas.js";
 import { KweaverKnSchemaClient } from "./context/kn-schema-client.js";
 import { ContextAssembler } from "./context/context-assembler.js";
 import { probeObjectTypes } from "./context/kn-data-prober.js";
-import { queryDataView } from "../../api/dataviews.js";
+import { queryResource } from "../../api/resources.js";
 import { KweaverVegaCatalogClient } from "./context/vega-catalog-client.js";
 import { KweaverKnApiClient } from "./patch/kn-api-client.js";
 import { KweaverSkillApiClient, type SkillApiClient } from "./patch/skill-api-client.js";
@@ -268,7 +268,7 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
   const boundProbe = (
     schema: Parameters<typeof probeObjectTypes>[0],
     failures: Parameters<typeof probeObjectTypes>[1],
-  ) => probeObjectTypes(schema, failures, queryDataView, { baseUrl, accessToken: token });
+  ) => probeObjectTypes(schema, failures, queryResource, { baseUrl, accessToken: token });
 
   // No-op SkillApiClient lets ContextAssembler pre-fetch bound_skill stubs even when
   // skill.content isn't enabled (the bound list is informational for the planner).

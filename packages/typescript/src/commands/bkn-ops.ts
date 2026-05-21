@@ -18,7 +18,7 @@ import {
   getBuildStatus,
 } from "../api/knowledge-networks.js";
 import { listTablesWithColumns, scanDatasourceMetadata } from "../api/vega.js";
-import { createDataView, findDataView } from "../api/dataviews.js";
+import { createResource, findResource } from "../api/resources.js";
 import { resolveFiles } from "./ds.js";
 import { buildTableName } from "./import-csv.js";
 import {
@@ -38,6 +38,7 @@ import {
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { runDsImportCsv } from "./ds.js";
+import { renderHelp } from "../help/format.js";
 import {
   pollWithBackoff,
   detectDisplayKey,
@@ -75,15 +76,22 @@ export function assertValidBknObjectNames(names: string[], context: string): voi
 
 // ── Build ───────────────────────────────────────────────────────────────────
 
-const KN_BUILD_HELP = `kweaver bkn build <kn-id> [options]
-
-Trigger a full build for a knowledge network.
-
-Options:
-  --wait (default)     Poll until build completes
-  --no-wait            Return immediately after triggering
-  --timeout <seconds>  Max wait time when --wait (default: 300)
-  -bd, --biz-domain    Business domain (default: bd_public)`;
+const KN_BUILD_HELP = renderHelp({
+  tagline: "Trigger a full build for a knowledge network",
+  usage: "kweaver bkn build <kn-id> [flags]",
+  flags: [
+    { name: "--wait", desc: "Poll until build completes (default)" },
+    { name: "--no-wait", desc: "Return immediately after triggering" },
+    { name: "--timeout <seconds>", desc: "Max wait time when --wait (default: 300)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn build kn-123",
+    "kweaver bkn build kn-123 --no-wait",
+    "kweaver bkn build kn-123 --wait --timeout 600",
+  ],
+});
 
 export function parseKnBuildArgs(args: string[]): {
   knId: string;
@@ -441,26 +449,53 @@ export function extractTarToDirectory(tarBuffer: Buffer, dirPath: string): void 
   }
 }
 
-const KN_PUSH_HELP = `kweaver bkn push <directory> [options]
+const KN_PUSH_HELP = renderHelp({
+  tagline: "Pack a BKN directory into a tar and upload to import as a knowledge network",
+  usage: "kweaver bkn push <directory> [flags]",
+  flags: [
+    {
+      title: "Target",
+      flags: [
+        { name: "--branch <s>", desc: "Branch name (default: main)" },
+        { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+      ],
+    },
+    {
+      title: "Encoding",
+      flags: [
+        { name: "--detect-encoding", desc: "Detect .bkn encoding and normalize to UTF-8 (default: on)" },
+        { name: "--no-detect-encoding", desc: "Do not detect; require UTF-8 .bkn files" },
+        { name: "--source-encoding <name>", desc: "Decode all .bkn files with this encoding, e.g. gb18030 (overrides detection)" },
+      ],
+    },
+    {
+      title: "Output",
+      flags: [{ name: "--pretty", desc: "Pretty-print JSON output" }],
+    },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn push ./my-network",
+    "kweaver bkn push ./my-network --branch feature/v2",
+    "kweaver bkn push ./legacy --source-encoding gb18030",
+  ],
+});
 
-Pack a BKN directory into a tar and upload to import as a knowledge network.
-
-Options:
-  --branch <s>       Branch name (default: main)
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty           Pretty-print JSON output
-  --detect-encoding  Detect .bkn encoding and normalize to UTF-8 (default: on)
-  --no-detect-encoding  Do not detect; require UTF-8 .bkn files
-  --source-encoding <name>  Decode all .bkn files with this encoding (e.g. gb18030); overrides detection`;
-
-const KN_PULL_HELP = `kweaver bkn pull <kn-id> [<directory>] [options]
-
-Download a BKN tar from a knowledge network and extract to a local directory.
-
-Options:
-  <directory>        Output directory (default: <kn-id>)
-  --branch <s>       Branch name (default: main)
-  -bd, --biz-domain  Business domain (default: bd_public)`;
+const KN_PULL_HELP = renderHelp({
+  tagline: "Download a BKN tar from a knowledge network and extract to a local directory",
+  usage: "kweaver bkn pull <kn-id> [<directory>] [flags]",
+  flags: [
+    { name: "<directory>", desc: "Output directory (default: <kn-id>)" },
+    { name: "--branch <s>", desc: "Branch name (default: main)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn pull kn-123",
+    "kweaver bkn pull kn-123 ./out",
+    "kweaver bkn pull kn-123 ./out --branch feature/v2",
+  ],
+});
 
 export async function runKnPushCommand(args: string[]): Promise<number> {
   let options: KnPushOptions;
@@ -569,23 +604,30 @@ export async function runKnPullCommand(args: string[]): Promise<number> {
 
 // ── Create from datasource ──────────────────────────────────────────────────
 
-const KN_CREATE_FROM_DS_HELP = `kweaver bkn create-from-ds <vega-catalog-id> --name X [options]
-
-Create a knowledge network from a vega catalog datasource (dataviews + object types + optional build).
-<vega-catalog-id> is a vega catalog id (use \`kweaver vega catalog list\` to find one;
-legacy data-connection datasource UUIDs are no longer accepted).
-
-Options:
-  --name <s>       Knowledge network name (required)
-  --tables <a,b>   Comma-separated table names (default: all)
-  --pk-map <s>     Explicit primary keys: <table>:<field>[,<table>:<field>...]
-                   Required when auto-detection fails (no unique column in sample)
-  --build (default)  Build after creation
-  --no-build       Skip build after creation
-  --timeout <n>    Build timeout in seconds (default: 300)
-  --no-rollback    Keep partially-created KN on failure (debug; default: rollback)
-  -bd, --biz-domain  Business domain (default: bd_public)
-  --pretty         Pretty-print output (default)`;
+const KN_CREATE_FROM_DS_HELP = renderHelp({
+  tagline: "Create a knowledge network from a vega catalog datasource (resources + object types + optional build)",
+  usage: "kweaver bkn create-from-ds <vega-catalog-id> --name X [flags]",
+  flags: [
+    { name: "--name <s>", desc: "Knowledge network name (required)" },
+    { name: "--tables <a,b>", desc: "Comma-separated table names (default: all)" },
+    { name: "--pk-map <s>", desc: "Explicit primary keys <table>:<field>[,...]; required when auto-detection fails" },
+    { name: "--build", desc: "Build after creation (default)" },
+    { name: "--no-build", desc: "Skip build after creation" },
+    { name: "--timeout <n>", desc: "Build timeout in seconds (default: 300)" },
+    { name: "--no-rollback", desc: "Keep partially-created KN on failure (debug; default: rollback)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty", desc: "Pretty-print output (default)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn create-from-ds vcat-123 --name customers",
+    "kweaver bkn create-from-ds vcat-123 --name orders --tables orders,items --no-build",
+  ],
+  learnMore: [
+    "<vega-catalog-id> is a vega catalog id (use `kweaver vega catalog list` to find one)",
+    "Legacy data-connection datasource UUIDs are no longer accepted",
+  ],
+});
 
 export function parseKnCreateFromDsArgs(args: string[]): {
   dsId: string;
@@ -679,7 +721,7 @@ export function generateObjectTypeBkn(
   const safeId = sanitizeBknId(tableName);
   const header = `## ObjectType: ${safeId}\n\n**${tableName}**\n`;
 
-  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| data_view | ${dvId} | ${tableName} |\n`;
+  const dsTable = `### Data Source\n\n| Type | ID | Name |\n|------|-----|------|\n| resource | ${dvId} | ${tableName} |\n`;
 
   const dpHeader = `### Data Properties\n\n| Property | Display Name | Type | Primary Key | Display Key |\n|----------|-------------|------|-------------|-------------|\n`;
   const dpRows = columns.map((c) => {
@@ -818,12 +860,12 @@ export async function runKnCreateFromDsCommand(
       );
     }
 
-    // Phase 1: Create DataViews for each table. findDataView is idempotent;
+    // Phase 1: Create vega-backend Resources for each table. findResource is idempotent;
     // not tracked for rollback so a retry can reuse what's already there.
-    console.error(`Creating data views for ${targetTables.length} table(s) ...`);
+    console.error(`Creating resources for ${targetTables.length} table(s) ...`);
     const viewMap: Record<string, string> = {};
     for (const t of targetTables) {
-      const found = await findDataView({
+      const found = await findResource({
         ...base,
         name: t.name,
         datasourceId: options.dsId,
@@ -832,7 +874,7 @@ export async function runKnCreateFromDsCommand(
       });
       const dvId =
         found[0]?.id ??
-        (await createDataView({
+        (await createResource({
           ...base,
           name: t.name,
           datasourceId: options.dsId,
@@ -872,7 +914,7 @@ export async function runKnCreateFromDsCommand(
         return {
           branch: "main",
           name: t.name,
-          data_source: { type: "data_view", id: viewMap[t.name] },
+          data_source: { type: "resource", id: viewMap[t.name] },
           primary_keys: [pk],
           display_key: dk,
           data_properties: t.columns.map((c) => ({
@@ -968,24 +1010,32 @@ export async function runKnCreateFromDsCommand(
 
 // ── Create from CSV ─────────────────────────────────────────────────────────
 
-const KN_CREATE_FROM_CSV_HELP = `kweaver bkn create-from-csv <vega-catalog-id> --files <glob> --name X [options]
-
-Import CSV files into a vega catalog datasource, then create a knowledge network.
-<vega-catalog-id> is a vega catalog id (use \`kweaver vega catalog list\` to find one;
-legacy data-connection datasource UUIDs are no longer accepted).
-
-Options:
-  --files <s>          CSV file paths (comma-separated or glob, required)
-  --name <s>           Knowledge network name (required)
-  --table-prefix <s>   Table name prefix (default: none)
-  --batch-size <n>     Rows per batch (default: 500)
-  --tables <a,b>       Tables to include in KN (default: all imported)
-  --build (default)    Build after creation
-  --no-build           Skip build
-  --pk-map <s>         Explicit primary keys: <table>:<field>[,<table>:<field>...]
-  --timeout <n>        Build timeout in seconds (default: 300)
-  --no-rollback        Keep partially-created KN on failure (debug; default: rollback)
-  -bd, --biz-domain    Business domain (default: bd_public)`;
+const KN_CREATE_FROM_CSV_HELP = renderHelp({
+  tagline: "Import CSV files into a vega catalog datasource, then create a knowledge network",
+  usage: "kweaver bkn create-from-csv <vega-catalog-id> --files <glob> --name X [flags]",
+  flags: [
+    { name: "--files <s>", desc: "CSV file paths (comma-separated or glob, required)" },
+    { name: "--name <s>", desc: "Knowledge network name (required)" },
+    { name: "--table-prefix <s>", desc: "Table name prefix (default: none)" },
+    { name: "--batch-size <n>", desc: "Rows per batch (default: 500)" },
+    { name: "--tables <a,b>", desc: "Tables to include in KN (default: all imported)" },
+    { name: "--build", desc: "Build after creation (default)" },
+    { name: "--no-build", desc: "Skip build" },
+    { name: "--pk-map <s>", desc: "Explicit primary keys <table>:<field>[,...]" },
+    { name: "--timeout <n>", desc: "Build timeout in seconds (default: 300)" },
+    { name: "--no-rollback", desc: "Keep partially-created KN on failure (debug; default: rollback)" },
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn create-from-csv vcat-123 --files './data/*.csv' --name imports",
+    "kweaver bkn create-from-csv vcat-123 --files ./a.csv,./b.csv --name two --table-prefix raw_",
+  ],
+  learnMore: [
+    "<vega-catalog-id> is a vega catalog id (use `kweaver vega catalog list` to find one)",
+    "Legacy data-connection datasource UUIDs are no longer accepted",
+  ],
+});
 
 export function parseKnCreateFromCsvArgs(args: string[]): {
   dsId: string;
@@ -1192,15 +1242,30 @@ export async function runKnActionScheduleCommand(args: string[]): Promise<number
     parsed = parseActionScheduleArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn action-schedule <action> <kn-id> [args] [--pretty] [-bd value]
-
-Actions:
-  list <kn-id>                                    List action schedules
-  get <kn-id> <schedule-id>                       Get schedule details
-  create <kn-id> '<json>'                         Create schedule
-  update <kn-id> <schedule-id> '<json>'           Update schedule
-  set-status <kn-id> <schedule-id> <status>       Enable/disable schedule (enabled|disabled)
-  delete <kn-id> <schedule-ids> [-y]              Delete schedule(s) (comma-separated)`);
+      console.log(renderHelp({
+        tagline: "Manage action schedules for a KN",
+        usage: "kweaver bkn action-schedule <action> <kn-id> [args] [--pretty] [-bd value]",
+        sections: [{
+          title: "AVAILABLE COMMANDS",
+          items: [
+            { name: "list", desc: "List action schedules" },
+            { name: "get", desc: "Get schedule details" },
+            { name: "create", desc: "Create schedule" },
+            { name: "update", desc: "Update schedule" },
+            { name: "set-status", desc: "Enable/disable schedule (enabled|disabled)" },
+            { name: "delete", desc: "Delete schedule(s) (comma-separated)" },
+          ],
+        }],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver bkn action-schedule list <kn-id>",
+          "kweaver bkn action-schedule get <kn-id> <schedule-id>",
+          "kweaver bkn action-schedule create <kn-id> '<json>'",
+          "kweaver bkn action-schedule update <kn-id> <schedule-id> '<json>'",
+          "kweaver bkn action-schedule set-status <kn-id> <schedule-id> <status>",
+          "kweaver bkn action-schedule delete <kn-id> <schedule-ids> [-y]",
+        ],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));
@@ -1295,13 +1360,26 @@ export async function runKnJobCommand(args: string[]): Promise<number> {
     parsed = parseJobArgs(args);
   } catch (error) {
     if (error instanceof Error && error.message === "help") {
-      console.log(`kweaver bkn job <action> <kn-id> [args] [--pretty] [-bd value]
-
-Actions:
-  list <kn-id>                    List jobs
-  get <kn-id> <job-id>            Get job details
-  tasks <kn-id> <job-id>          List tasks within a job
-  delete <kn-id> <job-ids> [-y]   Delete job(s) (comma-separated)`);
+      console.log(renderHelp({
+        tagline: "Manage jobs for a KN",
+        usage: "kweaver bkn job <action> <kn-id> [args] [--pretty] [-bd value]",
+        sections: [{
+          title: "AVAILABLE COMMANDS",
+          items: [
+            { name: "list", desc: "List jobs" },
+            { name: "get", desc: "Get job details" },
+            { name: "tasks", desc: "List tasks within a job" },
+            { name: "delete", desc: "Delete job(s) (comma-separated)" },
+          ],
+        }],
+        inheritedFlags: "--base-url, --token, --user, --help",
+        examples: [
+          "kweaver bkn job list <kn-id>",
+          "kweaver bkn job get <kn-id> <job-id>",
+          "kweaver bkn job tasks <kn-id> <job-id>",
+          "kweaver bkn job delete <kn-id> <job-ids> [-y]",
+        ],
+      }));
       return 0;
     }
     console.error(formatHttpError(error));

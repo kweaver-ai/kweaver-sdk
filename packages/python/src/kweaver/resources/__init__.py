@@ -2,7 +2,7 @@ from kweaver.resources.context_loader import ContextLoaderResource
 from kweaver.resources.dataflows import DataflowsResource
 from kweaver.resources.dataflow_v2 import DataflowV2Resource
 from kweaver.resources.datasources import DataSourcesResource
-from kweaver.resources.dataviews import DataViewsResource
+from kweaver.resources.resources import ResourcesResource
 from kweaver.resources.knowledge_networks import KnowledgeNetworksResource
 from kweaver.resources.bkn_metrics import BknMetricsResource
 from kweaver.resources.metric_query import MetricQueryResource
@@ -17,7 +17,7 @@ __all__ = [
     "DataflowsResource",
     "DataflowV2Resource",
     "DataSourcesResource",
-    "DataViewsResource",
+    "ResourcesResource",
     "KnowledgeNetworksResource",
     "MetricQueryResource",
     "ObjectTypesResource",

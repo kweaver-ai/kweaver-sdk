@@ -9,15 +9,97 @@ import { runContextLoaderCommand } from "./commands/context-loader.js";
 import { runDataflowCommand } from "./commands/dataflow.js";
 import { runDsCommand } from "./commands/ds.js";
 import { runExploreCommand } from "./commands/explore.js";
-import { runDataviewCommand } from "./commands/dataview.js";
+import { runResourceCommand } from "./commands/resource.js";
 import { runModelCommand } from "./commands/model.js";
 import { runSkillCommand } from "./commands/skill.js";
 import { runTokenCommand } from "./commands/token.js";
 import { runToolboxCommand } from "./commands/toolbox.js";
 import { runToolCommand } from "./commands/tool.js";
 import { runVegaCommand } from "./commands/vega.js";
+import { renderHelp } from "./help/format.js";
 
 function printHelp(): void {
+  console.log(
+    renderHelp({
+      tagline: "KWeaver SDK — operate KWeaver platform from CLI",
+      usage: [
+        "kweaver [global flags] <command> <subcommand> [flags]",
+        "kweaver --version | -V",
+        "kweaver --help | -h",
+      ],
+      sections: [
+        {
+          title: "AUTHENTICATION & CONFIG",
+          items: [
+            { name: "auth", desc: "Login / switch / list saved platform credentials" },
+            { name: "token", desc: "Print current access token (auto-refresh)" },
+            { name: "config", desc: "Per-platform business-domain config" },
+          ],
+        },
+        {
+          title: "DECISION AGENT",
+          items: [
+            { name: "agent", desc: "Agent CRUD, chat, sessions, publish" },
+            { name: "toolbox", desc: "Agent toolbox lifecycle" },
+            { name: "tool", desc: "Tools inside toolbox" },
+          ],
+        },
+        {
+          title: "AI DATA PLATFORM",
+          items: [
+            { name: "bkn", desc: "Knowledge network — build, query, action, metric" },
+            { name: "ds", desc: "Datasource (list, get, connect, tables)" },
+            { name: "resource (res)", desc: "Resources — list, find, get, query, delete" },
+            { name: "dataflow", desc: "Dataflow document workflows (run, runs, logs)" },
+            { name: "vega", desc: "Vega observability — catalog, resource, query" },
+            { name: "context-loader (context)", desc: "MCP/HTTP context loader (reads BKN schema/instances)" },
+          ],
+        },
+        {
+          title: "TRACE AI",
+          items: [
+            { name: "trace", desc: "Diagnose conversations / build eval-sets / schema validate" },
+          ],
+        },
+        {
+          title: "FOUNDATION",
+          items: [
+            { name: "call (curl)", desc: "curl-style API call with auto-injected auth headers" },
+            { name: "explore", desc: "Interactive web UI" },
+            { name: "model", desc: "Model factory — LLM / small-model CRUD + chat" },
+            { name: "skill", desc: "Skill registry / market" },
+            { name: "help", desc: "Show help — use `help all` for full signatures" },
+          ],
+        },
+      ],
+      flags: [
+        { name: "--base-url <url>", desc: "Override platform URL  (env: KWEAVER_BASE_URL)" },
+        { name: "--token <value>", desc: "Override access token  (env: KWEAVER_TOKEN; disables write commands)" },
+        { name: "--user <id|name>", desc: "Use specific user credentials (env: KWEAVER_USER)" },
+        { name: "--pretty", desc: "Pretty-print JSON output (default)" },
+        { name: "--compact", desc: "Compact JSON output (pipeline-friendly)" },
+        { name: "--help, -h", desc: "Show help" },
+        { name: "--version, -V", desc: "Show version" },
+      ],
+      environment: [
+        { name: "KWEAVER_PROFILE", desc: "Isolate active-platform/user state per shell" },
+        { name: "KWEAVERC_CONFIG_DIR", desc: "Override config root (~/.kweaver)" },
+      ],
+      examples: [
+        "kweaver auth https://platform.example.com",
+        "kweaver agent chat <agent_id> -m \"hello\"",
+        "kweaver bkn build <kn-id> --wait",
+      ],
+      learnMore: [
+        "Use `kweaver <command> --help` for command-specific help",
+        "Use `kweaver help all` for full command signatures (migration fallback)",
+        "For agents/multi-terminal: prefer `--user <id>` over `auth switch`",
+      ],
+    }),
+  );
+}
+
+function printHelpFull(): void {
   console.log(`kweaver
 
 Usage:
@@ -77,11 +159,11 @@ Usage:
   kweaver model small list|get|add|edit|delete|test|embeddings|rerank|--template ...
   kweaver model --help
 
-  kweaver dataview list [--datasource-id id] [--type atomic|custom] [--limit n] [-bd value]
-  kweaver dataview find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value]
-  kweaver dataview get <id> [-bd value]
-  kweaver dataview query <id> [--sql sql] [--limit n] [--offset n] [--need-total] [--raw-sql] [-bd value]
-  kweaver dataview delete <id> [-y] [-bd value]
+  kweaver resource list [--datasource-id id] [--type table|logicview] [--limit n] [-bd value]
+  kweaver resource find --name <name> [--exact] [--datasource-id id] [--wait] [--timeout ms] [-bd value]
+  kweaver resource get <id> [-bd value]
+  kweaver resource query <id> [--limit n] [--offset n] [--need-total] [-bd value]
+  kweaver resource delete <id> [-y] [-bd value]
 
   kweaver bkn list [options]
   kweaver bkn get <kn-id> [options]
@@ -109,8 +191,9 @@ Usage:
   kweaver config list-bd
   kweaver config show
 
-  kweaver skill list|get|register|status|delete [options]
+  kweaver skill list|get|market-get|register|status|delete [options]
   kweaver skill market [options]
+  kweaver skill update-metadata|update-package|history|republish|publish-history [options]
   kweaver skill content <skill-id> [--raw] [--output file]
   kweaver skill read-file <skill-id> <rel-path> [--raw] [--output file]
   kweaver skill download|install <skill-id> [path] [options]
@@ -176,11 +259,11 @@ Commands:
   ds             Manage datasources (list, get, delete, tables, connect)
   dataflow       Dataflow document workflows (list, run, runs, logs)
   model          Model factory: LLM/small-model CRUD (manager) and llm chat (OpenAI-compatible API)
-  dataview|dv    List, find, get, query (SQL), delete data views (atomic / custom)
+  resource|res   List, find, get, query, delete vega-backend resources (table / logicview)
   bkn            Knowledge network (CRUD, build, validate, export, stats, push/pull,
                  object-type, relation-type, subgraph, action-type, action-execution, action-log)
   config         Per-platform configuration (business domain)
-  skill          Skill registry and market (register, search, progressive read, download/install)
+  skill          Skill registry and market (register, edit, history, progressive read, download/install)
   toolbox        Agent toolbox lifecycle (create, list, publish, delete, export, import)
   tool           Tools inside a toolbox (upload OpenAPI spec, list, enable/disable)
   vega           Vega observability (catalog, resource, query/sql, connector-type, health/stats/inspect)
@@ -251,9 +334,23 @@ export async function run(argv: string[]): Promise<number> {
     return 0;
   }
 
-  if (argv.length === 0 || !command || command === "--help" || command === "-h" || command === "help") {
+  if (argv.length === 0 || !command || command === "--help" || command === "-h") {
     printHelp();
     return 0;
+  }
+
+  if (command === "help") {
+    const topic = rest[0];
+    if (!topic) {
+      printHelp();
+      return 0;
+    }
+    if (topic === "all") {
+      printHelpFull();
+      return 0;
+    }
+    // `help <command>` → forward to `<command> --help`
+    return run([...rest, "--help"]);
   }
 
   if (command === "auth") {
@@ -276,8 +373,8 @@ export async function run(argv: string[]): Promise<number> {
     return runModelCommand(rest);
   }
 
-  if (command === "dataview" || command === "dv") {
-    return runDataviewCommand(rest);
+  if (command === "resource" || command === "res") {
+    return runResourceCommand(rest);
   }
 
   if (command === "token") {

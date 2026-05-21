@@ -127,6 +127,16 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
 
   const parser = yargs(args)
     .scriptName("kweaver dataflow")
+    .usage(
+      "Dataflow document workflows — list, run, runs, logs, templates, create*\n\n" +
+        "USAGE\n" +
+        "  kweaver dataflow <subcommand> [flags]",
+    )
+    .epilog(
+      "LEARN MORE\n" +
+        "  Use `kweaver dataflow <subcommand> --help` for flag details\n" +
+        "  See docs/cli_conventions.md §8 for help format spec",
+    )
     .exitProcess(false)
     .help()
     .version(false)
@@ -166,14 +176,16 @@ export async function runDataflowCommand(args: string[]): Promise<number> {
     )
     .command(
       "run <dagId>",
-      "Trigger one dataflow run",
+      "Trigger one dataflow run (provide --file or --url+--name)",
       (command: any) =>
         command
-          .positional("dagId", { type: "string" })
-          .option("file", { type: "string" })
-          .option("url", { type: "string" })
-          .option("name", { type: "string" })
-          .option("biz-domain", { alias: "bd", type: "string" })
+          .positional("dagId", { type: "string", describe: "Dataflow DAG id" })
+          .option("file", { type: "string", describe: "Path to local file to upload (multipart)" })
+          .option("url", { type: "string", describe: "Remote URL to fetch payload from (requires --name)" })
+          .option("name", { type: "string", describe: "Filename for --url payload" })
+          .option("biz-domain", { alias: "bd", type: "string", describe: "Business domain (default: bd_public)" })
+          .example("kweaver dataflow run dag-123 --file ./input.csv", "Upload local file")
+          .example("kweaver dataflow run dag-123 --url https://host/x.csv --name x.csv", "Fetch from remote URL")
           .check((argv: any) => {
             const hasFile = typeof argv.file === "string";
             const hasUrl = typeof argv.url === "string";

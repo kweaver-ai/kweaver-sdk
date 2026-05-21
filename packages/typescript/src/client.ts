@@ -11,7 +11,7 @@ import { ConversationsResource } from "./resources/conversations.js";
 import { ContextLoaderResource } from "./resources/context-loader.js";
 import { DataflowsResource } from "./resources/dataflows.js";
 import { DataSourcesResource } from "./resources/datasources.js";
-import { DataViewsResource } from "./resources/dataviews.js";
+import { ResourcesResource } from "./resources/resources.js";
 import { KnowledgeNetworksResource } from "./resources/knowledge-networks.js";
 import { BknResource } from "./resources/bkn.js";
 import { SkillsResource } from "./resources/skills.js";
@@ -122,8 +122,8 @@ export class KWeaverClient implements ClientContext {
   /** Data source management (connect, test, list tables). */
   readonly datasources: DataSourcesResource;
 
-  /** Data view creation and retrieval. */
-  readonly dataviews: DataViewsResource;
+  /** Vega-backend resource management (table/logicview resources under a catalog). */
+  readonly resources: ResourcesResource;
 
   /** Vega observability platform (catalogs, resources, connector types). */
   readonly vega: VegaResource;
@@ -173,7 +173,7 @@ export class KWeaverClient implements ClientContext {
       this.conversations = new ConversationsResource(this);
       this.dataflows = new DataflowsResource(this);
       this.datasources = new DataSourcesResource(this);
-      this.dataviews = new DataViewsResource(this);
+      this.resources = new ResourcesResource(this);
       this.vega = new VegaResource(this);
       this.skills = new SkillsResource(this);
       this.toolboxes = new ToolboxesResource(this);
@@ -235,7 +235,7 @@ export class KWeaverClient implements ClientContext {
     this.conversations = new ConversationsResource(this);
     this.dataflows = new DataflowsResource(this);
     this.datasources = new DataSourcesResource(this);
-    this.dataviews = new DataViewsResource(this);
+    this.resources = new ResourcesResource(this);
     this.vega = new VegaResource(this);
     this.skills = new SkillsResource(this);
     this.toolboxes = new ToolboxesResource(this);

@@ -8,7 +8,7 @@ from tests.conftest import RequestCapture, make_client
 _OT_RESPONSE = {
     "id": "ot_01",
     "name": "产品",
-    "data_source": {"type": "data_view", "id": "dv_01"},
+    "data_source": {"type": "resource", "id": "res_01"},
     "primary_keys": ["material_number"],
     "display_key": "product_name",
     "data_properties": [
@@ -44,7 +44,7 @@ def test_create_wraps_in_entries(capture: RequestCapture):
     ot = client.object_types.create(
         "kn_01",
         name="产品",
-        dataview_id="dv_01",
+        resource_id="res_01",
         primary_keys=["material_number"],
         display_key="product_name",
         properties=[
@@ -56,7 +56,8 @@ def test_create_wraps_in_entries(capture: RequestCapture):
     body = capture.last_body()
     assert "entries" in body
     entry = body["entries"][0]
-    assert entry["data_source"]["id"] == "dv_01"
+    assert entry["data_source"]["type"] == "resource"
+    assert entry["data_source"]["id"] == "res_01"
     assert entry["primary_keys"] == ["material_number"]
 
     # Check index_config transform
@@ -68,7 +69,7 @@ def test_create_wraps_in_entries(capture: RequestCapture):
     assert props[1]["index_config"]["vector_config"]["enabled"] is True
 
     assert ot.id == "ot_01"
-    assert ot.dataview_id == "dv_01"
+    assert ot.resource_id == "res_01"
 
 
 def test_primary_key_shortcut(capture: RequestCapture):
@@ -79,7 +80,7 @@ def test_primary_key_shortcut(capture: RequestCapture):
     client.object_types.create(
         "kn_01",
         name="产品",
-        dataview_id="dv_01",
+        resource_id="res_01",
         primary_key="material_number",
         display_key="product_name",
     )
@@ -108,7 +109,7 @@ def test_create_without_properties_sends_empty(capture: RequestCapture):
 
     client = make_client(handler, capture)
     client.object_types.create(
-        "kn_01", name="产品", dataview_id="dv_01",
+        "kn_01", name="产品", resource_id="res_01",
         primary_keys=["id"], display_key="name",
     )
     body = capture.last_body()
@@ -182,7 +183,7 @@ def test_create_existed_fallback_passes_keyword(capture: RequestCapture):
 
     client = make_client(handler, capture)
     ot = client.object_types.create(
-        "kn_01", name="产品", dataview_id="dv_01",
+        "kn_01", name="产品", resource_id="res_01",
         primary_keys=["material_number"], display_key="product_name",
     )
 

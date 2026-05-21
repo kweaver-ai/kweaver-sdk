@@ -36,17 +36,15 @@ class ViewField(BaseModel):
     comment: str | None = None
 
 
-class DataView(BaseModel):
+class Resource(BaseModel):
     id: str
     name: str
-    query_type: str
-    datasource_id: str = ""
-    type: str | None = None
-    data_source_type: str | None = None
-    data_source_name: str | None = None
-    sql_str: str | None = None
-    meta_table_name: str | None = None
-    fields: list[ViewField] | None = None
+    catalog_id: str = ""
+    category: str = ""
+    source_identifier: str | None = None
+    status: str | None = None
+    schema_definition: list[ViewField] | None = None
+    logic_definition: dict | None = None
 
 
 class KNStatistics(BaseModel):
@@ -85,7 +83,7 @@ class ObjectType(BaseModel):
     id: str
     name: str
     kn_id: str
-    dataview_id: str
+    resource_id: str
     primary_keys: list[str]
     display_key: str
     incremental_key: str | None = None

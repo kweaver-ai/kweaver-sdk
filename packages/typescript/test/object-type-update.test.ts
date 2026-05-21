@@ -67,11 +67,11 @@ test("applyObjectTypeMerge sets tags and comment", () => {
 
 // --- parseObjectTypeCreateArgs / parseRelationTypeCreateArgs ---
 
-test("parseObjectTypeCreateArgs without --property defers data_properties to dataview fetch", () => {
+test("parseObjectTypeCreateArgs without --property defers data_properties to resource fetch", () => {
   const opts = parseObjectTypeCreateArgs([
     "kn-001",
     "--name", "Player",
-    "--dataview-id", "dv-1",
+    "--resource-id", "dv-1",
     "--primary-key", "id",
     "--display-key", "name",
     "--branch", "dev",
@@ -79,7 +79,7 @@ test("parseObjectTypeCreateArgs without --property defers data_properties to dat
   assert.equal(opts.mode, "needsDataview");
   if (opts.mode !== "needsDataview") throw new Error("expected needsDataview");
   assert.equal(opts.entry.branch, "dev");
-  assert.equal(opts.dataviewId, "dv-1");
+  assert.equal(opts.resourceId, "dv-1");
   assert.equal("data_properties" in opts.entry, false);
 });
 
@@ -87,7 +87,7 @@ test("parseObjectTypeCreateArgs defaults branch to main (needsDataview)", () => 
   const opts = parseObjectTypeCreateArgs([
     "kn-001",
     "--name", "Player",
-    "--dataview-id", "dv-1",
+    "--resource-id", "dv-1",
     "--primary-key", "id",
     "--display-key", "name",
   ]);
@@ -101,7 +101,7 @@ test("parseObjectTypeCreateArgs adds mapped_field when --property omits it", () 
   const opts = parseObjectTypeCreateArgs([
     "kn-001",
     "--name", "Player",
-    "--dataview-id", "dv-1",
+    "--resource-id", "dv-1",
     "--primary-key", "id",
     "--display-key", "name",
     "--property",

@@ -62,7 +62,7 @@ async function main() {
     dsId = String(dsParsed?.id ?? dsParsed?.ds_id ?? "");
     console.log(`Created datasource: ${dsName} (${dsId})\n`);
 
-    // Step 2: Create BKN from datasource (creates DataViews, object types, etc.)
+    // Step 2: Create BKN from datasource (creates Resources, object types, etc.)
     console.log("=== Step 2: Create BKN from Datasource ===");
     const knResult = await runCli([
       "bkn", "create-from-ds", dsId,

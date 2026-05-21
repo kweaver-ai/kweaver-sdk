@@ -423,6 +423,41 @@ def test_resource_get():
     assert result.category == "table"
 
 
+def test_resource_build_default_mode():
+    import json as _json
+    def handler(req):
+        assert req.method == "POST"
+        assert req.url.path == "/api/vega-backend/v1/resources/res-1/build"
+        assert _json.loads(req.content) == {"mode": "full"}
+        return httpx.Response(200, json={"task_id": "task-1", "status": "queued"})
+    from kweaver.resources.vega import VegaNamespace
+    ns = VegaNamespace(_make_vega_http(handler))
+    result = ns.resources.build("res-1")
+    assert result == {"task_id": "task-1", "status": "queued"}
+
+
+def test_resource_build_with_mode():
+    import json as _json
+    def handler(req):
+        assert _json.loads(req.content) == {"mode": "incremental"}
+        return httpx.Response(200, json={"task_id": "task-2"})
+    from kweaver.resources.vega import VegaNamespace
+    ns = VegaNamespace(_make_vega_http(handler))
+    result = ns.resources.build("res-1", mode="incremental")
+    assert result["task_id"] == "task-2"
+
+
+def test_resource_build_status():
+    def handler(req):
+        assert req.method == "GET"
+        assert req.url.path == "/api/vega-backend/v1/resources/dataset/res-1/build/task-1"
+        return httpx.Response(200, json={"status": "running", "progress": 42})
+    from kweaver.resources.vega import VegaNamespace
+    ns = VegaNamespace(_make_vega_http(handler))
+    result = ns.resources.build_status("res-1", "task-1")
+    assert result == {"status": "running", "progress": 42}
+
+
 # -- ConnectorTypes tests ----------------------------------------------------
 
 _CONNECTOR_TYPE_SAMPLE = {

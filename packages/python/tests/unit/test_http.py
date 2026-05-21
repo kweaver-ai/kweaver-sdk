@@ -121,6 +121,21 @@ def test_post_multipart_returns_status_and_bytes():
     assert body == b'{"kn_id":"x"}'
 
 
+def test_put_multipart_returns_status_and_bytes():
+    """put_multipart does not raise on 4xx; returns raw body."""
+    def handler(req):
+        assert req.method == "PUT"
+        return httpx.Response(200, content=b'{"ok":true}')
+
+    client = _make_client(handler)
+    status, body = client.put_multipart(
+        "/api/agent-operator-integration/v1/skills/skill-1/package",
+        files={"file": ("skill.zip", b"PK", "application/zip")},
+    )
+    assert status == 200
+    assert body == b'{"ok":true}'
+
+
 def test_get_bytes_returns_status_and_body():
     def handler(req):
         return httpx.Response(200, content=b"\x00\x01")

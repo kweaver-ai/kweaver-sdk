@@ -18,6 +18,7 @@ import {
   testSmallModel,
 } from "../api/models.js";
 import { modelChatCompletions, modelEmbeddings, modelRerank } from "../api/model-invocation.js";
+import { renderHelp } from "../help/format.js";
 import { formatCallOutput } from "./call.js";
 
 const DEFAULT_LIST_LIMIT = 30;
@@ -78,48 +79,60 @@ export function parseModelGlobalFlags(args: string[]): ModelGlobalParse {
 }
 
 function printModelUsage(): void {
-  console.log(`kweaver model
-
-Usage:
-  kweaver model llm   list [--keyword X] [--type llm|rlm|vu] [--series S] [--api-model M] [--page N] [--limit N] [--json] [-bd value]
-  kweaver model llm   get <model_id> [--json] [-bd value]
-  kweaver model llm   add --body-file <path.json> [--upstream-url <url>] [--api-model <id>] [--api-key <secret>|--api-key-file <path>] [--json] [-bd value]
-  kweaver model llm   edit [<model_id>] --body-file <path.json> [--upstream-url <url>] [--api-model <id>] [--api-key <secret>|--api-key-file <path>] [--json] [-bd value]
-                        (optional leading model_id overrides body.model_id after merge)
-                        OR: kweaver model llm edit <model_id> [sparse flags] (GET /llm/get then merge only flags you pass)
-                        Sparse flags: --name, --series, --type|-t, --max-model-len, --quota, --model-config-file, upstream flags (same as --body-file)
-  kweaver model llm   delete <model_id> [<model_id> ...] [-y] [-bd value]
-  kweaver model llm   test --body-file <path.json> [--upstream-url <url>] [--api-model <id>] [--api-key <secret>|--api-key-file <path>] [--json] [-bd value]
-  kweaver model llm   chat <model_id> (-m|--message) "text" [--model-name <registry_model_name>] [--skip-model-name-resolve] [--stream] [--no-stream] [--verbose] [--temperature N] [--max-tokens N] [--mf-api-base-url url] [-bd value]
-  kweaver model llm   --template [--json]                     (offline: bundled llm registration JSON stub)
-
-  kweaver model small list [--name X] [--type embedding|reranker] [--series S] [--page N] [--limit N] [--json] [-bd value]
-  kweaver model small get <model_id> [--json] [-bd value]
-  kweaver model small add --name N --type embedding|reranker --batch-size N
-                        (--model-config-file <path.json> | --adapter --adapter-code-file <path.py>)
-                        [--upstream-url <url>] [--api-model <id>] [--api-key <secret>|--api-key-file <path>]
-                        [--max-tokens N] [--embedding-dim N] [--json] [-bd value]
-                        (embedding requires --max-tokens and --embedding-dim; upstream flags merge into model_config.api_* — not valid with --adapter)
-  kweaver model small edit <model_id> [--body-file <path.json> | partial flags]
-                        (without --body-file: loads current model via GET, then applies only the flags you pass)
-  kweaver model small delete <model_id> [<model_id> ...] [-y] [-bd value]
-  kweaver model small test [--body-file <path.json>|<model_id>] [--json] [-bd value]
-  kweaver model small embeddings <model_id> (-i|--input <text>) ... [--model-name <registry_model_name>] [--skip-model-name-resolve] [--mf-api-base-url url] [-bd value]
-                        (runtime: POST mf-model-api /small-model/embeddings — like llm chat for vectors)
-  kweaver model small rerank <model_id> (-q|--query) <text> (-d|--document <text>) ... [--model-name <registry_model_name>] [--skip-model-name-resolve] [--mf-api-base-url url] [-bd value]
-                        (runtime: POST mf-model-api /small-model/reranker)
-  kweaver model small --template [--json]                   (offline: bundled small model_config JSON stub)
-
-Global:
-  --mf-base-url <url>       Override origin for mf-model-manager (default: KWEAVER_BASE_URL or KWEAVER_MF_MODEL_MANAGER_URL)
-  --mf-api-base-url <url>   Override origin for mf-model-api / chat (default: KWEAVER_BASE_URL or KWEAVER_MF_MODEL_API_URL)
-  -bd, --biz-domain        Business domain (default from config)
-
-Upstream secrets:
-  Prefer --api-key-file over --api-key (shell history). For LLM add/edit/test, flags merge into body.model_config as api_url, api_model, api_key (creating model_config if missing). Small-model upstream flags merge into model_config the same way.
-
-Bundled templates:
-  model llm --template | model small --template — print offline JSON stub (no auth).`);
+  console.log(
+    renderHelp({
+      tagline: "Model factory — LLM / small-model CRUD (mf-model-manager) + runtime invocation (mf-model-api)",
+      usage: [
+        "kweaver model llm   <subcommand> [flags]",
+        "kweaver model small <subcommand> [flags]",
+      ],
+      sections: [
+        {
+          title: "LLM",
+          items: [
+            { name: "list", desc: "List LLM models" },
+            { name: "get", desc: "Get an LLM model by id" },
+            { name: "add", desc: "Register an LLM model (--body-file or sparse flags)" },
+            { name: "edit", desc: "Update an LLM model (merge mode by default)" },
+            { name: "delete", desc: "Delete one or more LLM models" },
+            { name: "test", desc: "Run model registration self-test (mf-model-manager)" },
+            { name: "chat", desc: "OpenAI-compatible chat completion (mf-model-api)" },
+            { name: "--template", desc: "Print bundled LLM registration JSON stub (offline)" },
+          ],
+        },
+        {
+          title: "SMALL MODEL",
+          items: [
+            { name: "list", desc: "List small models (embedding / reranker)" },
+            { name: "get", desc: "Get a small model by id" },
+            { name: "add", desc: "Register a small model (--model-config-file | --adapter)" },
+            { name: "edit", desc: "Update a small model (sparse-merge or --body-file)" },
+            { name: "delete", desc: "Delete one or more small models" },
+            { name: "test", desc: "Run small-model registration self-test" },
+            { name: "embeddings", desc: "Runtime: POST mf-model-api /small-model/embeddings" },
+            { name: "rerank", desc: "Runtime: POST mf-model-api /small-model/reranker" },
+            { name: "--template", desc: "Print bundled small-model config JSON stub (offline)" },
+          ],
+        },
+      ],
+      flags: [
+        { name: "--mf-base-url <url>", desc: "Override mf-model-manager origin (env: KWEAVER_MF_MODEL_MANAGER_URL)" },
+        { name: "--mf-api-base-url <url>", desc: "Override mf-model-api origin (env: KWEAVER_MF_MODEL_API_URL)" },
+        { name: "-bd, --biz-domain <s>", desc: "Business domain (default from config)" },
+        { name: "--json", desc: "Print raw API JSON output" },
+      ],
+      inheritedFlags: "--base-url, --token, --user, --help",
+      examples: [
+        "kweaver model llm list --type llm --limit 20",
+        "kweaver model llm chat <model_id> -m \"hello\" --stream",
+        "kweaver model small embeddings <model_id> -i \"text\"",
+      ],
+      learnMore: [
+        "Upstream secrets: prefer --api-key-file over --api-key (shell history)",
+        "Use `kweaver help all` for full per-subcommand signatures",
+      ],
+    }),
+  );
 }
 
 async function printBundledModelBranchTemplate(branch: "llm" | "small", g: ModelGlobalParse): Promise<number> {

@@ -14,6 +14,7 @@ import { metricQueryData, metricDryRun } from "../api/ontology-query-metrics.js"
 import { formatCallOutput } from "./call.js";
 import { resolveBusinessDomain } from "../config/store.js";
 import { parseJsonObject, parseSearchAfterArray, confirmYes } from "./bkn-utils.js";
+import { renderHelp } from "../help/format.js";
 
 function parseCommaSeparatedIds(raw: string): string[] {
   return raw
@@ -22,22 +23,42 @@ function parseCommaSeparatedIds(raw: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-const METRIC_HELP = `kweaver bkn metric <action> [args] [--pretty] [-bd <domain>]
-
-Management (bkn-backend):
-  list <kn-id> [--limit <n>] [--branch <b>] [--name-pattern <p>] [--sort update_time|name] [--direction asc|desc] [--offset <n>] [--tag <t>] [--group-id <id>]
-  get <kn-id> <metric-id(s)> [--branch <b>]   (comma-separated for multiple)
-  create <kn-id> '<json>'  [--branch] [--strict-mode true|false]
-  search <kn-id> '<json>'  [--branch] [--strict-mode] [--limit <n>] [--search-after '<json>']
-  validate <kn-id> '<json>'  [--branch] [--strict-mode] [--import-mode normal|ignore|overwrite]
-  update <kn-id> <metric-id> '<json>'  [--branch] [--strict-mode]
-  delete <kn-id> <metric-id(s)> [-y]   (comma-separated for multiple)
-
-Query (ontology-query):
-  query <kn-id> <metric-id> ['<json-body>']  [--branch] [--fill-null]
-  dry-run <kn-id> '<json>'  [--branch] [--fill-null]
-
-  list: default --limit 30. search/query JSON: default limit 50 in body when not set.`;
+const METRIC_HELP = renderHelp({
+  tagline: "BKN metrics — definitions (bkn-backend) + query (ontology-query)",
+  usage: "kweaver bkn metric <action> <kn-id> [args] [flags]",
+  sections: [
+    {
+      title: "MANAGEMENT (bkn-backend)",
+      items: [
+        { name: "list", desc: "List metrics (--limit / --branch / --name-pattern / --sort / --direction / --offset / --tag / --group-id)" },
+        { name: "get", desc: "Get metric(s) by id — comma-separated for multiple" },
+        { name: "create", desc: "Create metric from JSON (--branch / --strict-mode)" },
+        { name: "search", desc: "Search metrics (--branch / --strict-mode / --limit / --search-after)" },
+        { name: "validate", desc: "Validate metric JSON (--branch / --strict-mode / --import-mode)" },
+        { name: "update", desc: "Update metric by id (--branch / --strict-mode)" },
+        { name: "delete", desc: "Delete metric(s) — comma-separated for multiple (-y to skip confirm)" },
+      ],
+    },
+    {
+      title: "QUERY (ontology-query)",
+      items: [
+        { name: "query", desc: "Query metric data (--branch / --fill-null)" },
+        { name: "dry-run", desc: "Dry-run a metric JSON (--branch / --fill-null)" },
+      ],
+    },
+  ],
+  flags: [
+    { name: "-bd, --biz-domain <s>", desc: "Business domain (default: bd_public)" },
+    { name: "--pretty / --compact", desc: "JSON output style (default: pretty)" },
+  ],
+  inheritedFlags: "--base-url, --token, --user, --help",
+  examples: [
+    "kweaver bkn metric list kn-123",
+    "kweaver bkn metric query kn-123 metric-456 '{\"limit\":10}'",
+    "kweaver bkn metric dry-run kn-123 '{\"formula\":\"...\"}'",
+  ],
+  learnMore: ["list: default --limit 30. search/query JSON: default body limit 50 when unset."],
+});
 
 function parseListArgs(args: string[]): {
   knId: string;

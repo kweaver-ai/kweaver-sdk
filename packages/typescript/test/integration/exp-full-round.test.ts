@@ -6,7 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import { ExperimentCoordinator } from "../../src/trace-ai/exp/coordinator.js";
 import { replayState } from "../../src/trace-ai/exp/exp-store/events-jsonl.js";
-import type { NextChange, RoundData } from "../../src/trace-ai/exp/schemas.js";
+import type { TriageResult } from "../../src/trace-ai/exp/providers/triage-client.js";
 
 async function makeExpDir() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "exp-integration-"));
@@ -40,8 +40,20 @@ test("full round: Deciding pause after round 1", async () => {
   try {
     const coord = new ExperimentCoordinator({
       expDir: dir,
-      synthesizer: { async generate(): Promise<NextChange> { return { target: "agent.system_prompt", hypothesis: "mock", patch: '{"agent":{"system_prompt":"next"}}' }; } },
-      triage: { async triage() { return { diagnoses: ["ok"], hints: ["try x"], verdict: "continue", cross_round_memory_ref: "mem1", new_memory_token: "mem1" }; } },
+      // Merged Triage+Synthesizer: triage() produces next_change in the same call.
+      triage: {
+        async triage(): Promise<TriageResult> {
+          return {
+            verdict: "continue",
+            summary: "mock triage",
+            failure_attribution: [],
+            diagnoses: ["ok"],
+            hints: ["try x"],
+            new_memory_token: "mem1",
+            next_change: { target: "agent.system_prompt", hypothesis: "mock", patch: '{"agent":{"system_prompt":"next"}}' },
+          };
+        },
+      },
       runEval: async () => ({ queryResults: [] }),
     });
 
@@ -66,11 +78,23 @@ test("full round: publishes at max_rounds", async () => {
     // max_rounds: 2, set verdict to continue so max_rounds triggers publish
     const coord = new ExperimentCoordinator({
       expDir: dir,
-      synthesizer: { async generate(): Promise<NextChange> { return { target: "agent.system_prompt", hypothesis: "m", patch: '{"agent":{"system_prompt":"p"}}' }; } },
-      triage: { async triage(input): Promise<RoundData["triage_conclusion"] & { new_memory_token: string }> {
-        // Continue for first round, publish at second
-        return { diagnoses: [], hints: [], verdict: input.currentRound.round >= 2 ? "publish" : "continue", cross_round_memory_ref: "m", new_memory_token: "m" };
-      }},
+      // Merged Triage+Synthesizer: continue (with next_change) at round 1, publish at round 2.
+      triage: {
+        async triage(input): Promise<TriageResult> {
+          if (input.currentRound.round >= 2) {
+            return { verdict: "publish", summary: "done", failure_attribution: [], diagnoses: [], hints: [], new_memory_token: "m" };
+          }
+          return {
+            verdict: "continue",
+            summary: "round 1",
+            failure_attribution: [],
+            diagnoses: [],
+            hints: [],
+            new_memory_token: "m",
+            next_change: { target: "agent.system_prompt", hypothesis: "m", patch: '{"agent":{"system_prompt":"p"}}' },
+          };
+        },
+      },
       runEval: async () => ({ queryResults: [] }),
     });
 

@@ -11,6 +11,8 @@ import { writeBundles } from "./bundle-writer.js";
 import { ContextAssembler } from "./context/context-assembler.js";
 import { analyzeFailures } from "./context/failure-analyzer.js";
 import type { TriageClient, TriageResult } from "./providers/triage-client.js";
+import { runPreflight } from "./run-preflight.js";
+import type { AgentConfigFetcher } from "./capture-fingerprint.js";
 import type { ExpFsmState, KnContext, Mission, QueryResult, SkillBinding, SkillContext } from "./schemas.js";
 import type { TraceSpan } from "../../api/conversations.js";
 
@@ -25,6 +27,12 @@ export interface CoordinatorOpts {
   fetchTrace?: (conversationId: string) => Promise<{ spans: TraceSpan[] }>;
   knClient?: KnApiClient;
   skillClient?: SkillApiClient;
+  /**
+   * When provided, a preflight reconciliation runs before each eval round —
+   * verifying the live agent matches expectation and is bound to the eval set's
+   * target KN. A mismatch fails the round fast, before any eval chat is sent.
+   */
+  fetchAgentConfig?: AgentConfigFetcher;
 }
 
 export class ExperimentCoordinator {
@@ -235,6 +243,44 @@ export class ExperimentCoordinator {
     // === Executing ===
     await this.store.appendEvent({ type: "state_transition", from: "Generating", to: "Executing", round });
     const evalSetPaths = mission.eval_sets.map(e => path.join(this.opts.expDir, e.path));
+
+    // Preflight: reconcile the live agent against expectation before any eval
+    // chat is sent. A mismatch (wrong KN binding) fails the round fast —
+    // non-retryable, since it will not fix itself.
+    if (this.opts.fetchAgentConfig) {
+      const agentId = patched["agent_id"];
+      if (typeof agentId !== "string" || !agentId) {
+        // fetchAgentConfig is wired but the agent can't be identified — fail
+        // loudly rather than silently skipping the guard.
+        await this.store.appendEvent({
+          type: "step_failed",
+          state: "Executing",
+          error: "preflight: candidate has no agent_id — cannot verify the agent under test",
+          retryable: false,
+        });
+        process.stderr.write("\nPreflight check failed — candidate has no agent_id.\n");
+        return;
+      }
+      try {
+        await runPreflight({
+          expDir: this.opts.expDir,
+          agentId,
+          fetchConfig: this.opts.fetchAgentConfig,
+          evalSetPaths,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await this.store.appendEvent({
+          type: "step_failed",
+          state: "Executing",
+          error: `preflight: ${message}`,
+          retryable: false,
+        });
+        process.stderr.write(`\nPreflight check failed — eval not run:\n${message}\n`);
+        return;
+      }
+    }
+
     let queryResults: QueryResult[];
     try {
       const result = await this.withRetry(

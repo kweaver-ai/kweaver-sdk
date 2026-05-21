@@ -201,3 +201,92 @@ test("coordinator: Layer 1 — installs and uninstalls signal handlers across ru
     assert.equal(process.listenerCount(s), before[s], `${s} listener count should be restored after run()`);
   }
 });
+
+function agentConfigBoundTo(kn: string): Record<string, unknown> {
+  return {
+    id: "test",
+    key: "k",
+    version: "v1",
+    system_prompt: "x",
+    llms: [{ is_default: true, llm_config: { name: "m", temperature: 0 } }],
+    skills: {
+      tools: [
+        { tool_id: "t1", tool_box_id: "b1", tool_input: [{ input_name: "kn_id", map_value: kn }] },
+      ],
+    },
+  };
+}
+
+test("coordinator: preflight KN mismatch → step_failed, eval not run", async () => {
+  const dir = await makeExpDir();
+  await fs.writeFile(
+    path.join(dir, "eval-sets", "v1", "index.yaml"),
+    "schema_version: trace-eval-set-index/v1\neval_set_id: test\nshards:\n  - path: cases.yaml\ntarget_kn: kn-correct\n",
+  );
+  let runEvalCalls = 0;
+  const coord = new ExperimentCoordinator({
+    expDir: dir,
+    triage: mockTriage,
+    runEval: async () => { runEvalCalls++; return { queryResults: [] }; },
+    fetchAgentConfig: async () => agentConfigBoundTo("kn-wrong"),
+  });
+
+  await coord.run();
+
+  const { readAllEvents } = await import("../src/trace-ai/exp/exp-store/events-jsonl.js");
+  const events = await readAllEvents(dir);
+  const stepFailed = events.find(e => e["type"] === "step_failed");
+  assert.ok(stepFailed, "expected a preflight step_failed event");
+  assert.equal(stepFailed!["state"], "Executing");
+  assert.match(String(stepFailed!["error"] ?? ""), /preflight/);
+  assert.equal(runEvalCalls, 0, "runEval must NOT run when preflight fails");
+});
+
+test("coordinator: preflight pass → fetches live agent and proceeds to Deciding", async () => {
+  const dir = await makeExpDir();
+  await fs.writeFile(
+    path.join(dir, "eval-sets", "v1", "index.yaml"),
+    "schema_version: trace-eval-set-index/v1\neval_set_id: test\nshards:\n  - path: cases.yaml\ntarget_kn: kn-right\n",
+  );
+  let runEvalCalls = 0;
+  let fetchConfigCalls = 0;
+  const coord = new ExperimentCoordinator({
+    expDir: dir,
+    triage: mockTriage,
+    runEval: async () => { runEvalCalls++; return { queryResults: [] }; },
+    fetchAgentConfig: async () => { fetchConfigCalls++; return agentConfigBoundTo("kn-right"); },
+  });
+
+  await coord.run();
+
+  const { replayState } = await import("../src/trace-ai/exp/exp-store/events-jsonl.js");
+  const state = await replayState(dir);
+  assert.ok(fetchConfigCalls > 0, "preflight should have fetched the live agent config");
+  assert.equal(runEvalCalls, 1, "runEval should run when preflight passes");
+  assert.equal(state.currentState, "Deciding");
+});
+
+test("coordinator: fetchAgentConfig provided but candidate missing agent_id → step_failed", async () => {
+  const dir = await makeExpDir();
+  // candidate without a top-level agent_id — preflight cannot verify the agent
+  await fs.writeFile(
+    path.join(dir, "candidates", "baseline.yaml"),
+    "candidate_version: v0\nagent:\n  system_prompt: old prompt\nskills: []\n",
+  );
+  let runEvalCalls = 0;
+  const coord = new ExperimentCoordinator({
+    expDir: dir,
+    triage: mockTriage,
+    runEval: async () => { runEvalCalls++; return { queryResults: [] }; },
+    fetchAgentConfig: async () => agentConfigBoundTo("kn-x"),
+  });
+
+  await coord.run();
+
+  const { readAllEvents } = await import("../src/trace-ai/exp/exp-store/events-jsonl.js");
+  const events = await readAllEvents(dir);
+  const stepFailed = events.find(e => e["type"] === "step_failed");
+  assert.ok(stepFailed, "expected a step_failed when agent_id cannot be resolved");
+  assert.match(String(stepFailed!["error"] ?? ""), /agent_id/);
+  assert.equal(runEvalCalls, 0, "runEval must NOT run when preflight cannot resolve agent_id");
+});

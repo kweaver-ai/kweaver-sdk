@@ -12,7 +12,7 @@ import { PromptTemplateRegistry } from "../../agent-providers/prompt-template.js
 import { createBuiltinSemanticMatchProvider } from "../eval-set/semantic-match-provider.js";
 import type { SemanticMatchProvider } from "../eval-set/assertion-evaluator.js";
 import { ensureValidToken } from "../../auth/oauth.js";
-import { fetchAgentInfo, sendChatRequest } from "../../api/agent-chat.js";
+import { fetchAgentInfo, fetchAgentConfig as fetchAgentConfigApi, sendChatRequest } from "../../api/agent-chat.js";
 import { getTracesByConversation } from "../../api/conversations.js";
 import { upsertRegistry, listRegistry } from "./exp-store/exp-registry.js";
 import { runInfo, runList, getHealthChecks } from "./info.js";
@@ -288,6 +288,8 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     expDir,
     triage: new ClaudeCodeTriageClient(),
     contextAssembler,
+    fetchAgentConfig: (agentId, version) =>
+      fetchAgentConfigApi({ baseUrl, accessToken: token, agentId, version, businessDomain: bd }),
     knClient: needsKn ? new KweaverKnApiClient(baseUrl, token) : undefined,
     skillClient: needsSkill ? new KweaverSkillApiClient(baseUrl, token) : undefined,
     fetchTrace: async (conversationId) => {

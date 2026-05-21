@@ -10,6 +10,7 @@ import {
   buildChatUrl,
   extractText,
   fetchAgentInfo,
+  fetchAgentConfig,
   sendChatRequest,
   sendChatRequestStream,
 } from "../src/api/agent-chat.js";
@@ -545,6 +546,43 @@ test("fetchAgentInfo resolves id key and version", { concurrency: false }, async
     assert.equal(result.id, "agent-id");
     assert.equal(result.key, "agent-key");
     assert.equal(result.version, "v0");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchAgentConfig returns the full agent config body", { concurrency: false }, async () => {
+  const fullConfig = {
+    id: "agent-id",
+    key: "agent-key",
+    version: "v7",
+    system_prompt: "you are a data agent",
+    llms: [{ is_default: true, llm_config: { name: "deepseek-chat", temperature: 0.7 } }],
+    skills: { tools: [{ tool_id: "t1", tool_box_id: "b1", tool_input: [] }] },
+  };
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    assert.equal(
+      String(url),
+      "https://dip.aishu.cn/api/agent-factory/v3/agent-market/agent/agent-id/version/v7?is_visit=true"
+    );
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("x-business-domain"), "bd_public");
+    return new Response(JSON.stringify(fullConfig), {
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const result = await fetchAgentConfig({
+      baseUrl: "https://dip.aishu.cn",
+      accessToken: "token-abc",
+      agentId: "agent-id",
+      version: "v7",
+    });
+    assert.equal(result["system_prompt"], "you are a data agent");
+    assert.deepEqual(result["llms"], fullConfig.llms);
+    assert.deepEqual(result["skills"], fullConfig.skills);
+    assert.equal(result["version"], "v7");
   } finally {
     globalThis.fetch = originalFetch;
   }

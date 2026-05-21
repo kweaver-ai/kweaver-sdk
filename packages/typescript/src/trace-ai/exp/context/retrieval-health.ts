@@ -42,6 +42,10 @@ const KN_RETRIEVAL_TOOLS = new Set([
   "search_schema",
   "get_logic_properties_values",
   "dv_query",
+  // SQL aggregation over the KN's Vega resources — the agent's main data path
+  // for COUNT/SUM/GROUP BY/TOP-N. Omitting it makes the mechanism check blind to
+  // a SQL-capable agent and false-flag a healthy round as "retrieved no data".
+  "vega_sql_query",
 ]);
 
 const TOOL_SPAN_PREFIX = "execute_tool ";

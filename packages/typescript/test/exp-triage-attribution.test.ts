@@ -27,6 +27,19 @@ test("parseTriageOutput: parses verdict + summary + failure_attribution + next_c
   assert.equal(result.next_change!.target, "kn.object_type");
 });
 
+test("parseTriageOutput: strips a ```json markdown code fence the LLM wrapped around the JSON", () => {
+  const inner = JSON.stringify({ verdict: "publish", summary: "round looks healthy" });
+  const result = parseTriageOutput("```json\n" + inner + "\n```");
+  assert.equal(result.verdict, "publish");
+  assert.equal(result.summary, "round looks healthy");
+});
+
+test("parseTriageOutput: strips a bare ``` fence and tolerates surrounding prose", () => {
+  const inner = JSON.stringify({ verdict: "abort", summary: "stuck" });
+  const result = parseTriageOutput("Here is my analysis:\n```\n" + inner + "\n```\n");
+  assert.equal(result.verdict, "abort");
+});
+
 test("parseTriageOutput: throws when verdict=continue but next_change missing", () => {
   const raw = JSON.stringify({ verdict: "continue", summary: "x", failure_attribution: [] });
   assert.throws(() => parseTriageOutput(raw), /next_change/);

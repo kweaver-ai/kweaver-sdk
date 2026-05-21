@@ -133,6 +133,13 @@ describe("healthFromToolCalls", () => {
     );
   });
 
+  it("treats vega_sql_query as a KN retrieval tool", () => {
+    // the agent's main data path is SQL aggregation via vega_sql_query —
+    // a round that retrieves through it must count as retrieved, not no_kn_calls
+    assert.equal(healthFromToolCalls([rec("vega_sql_query", "data")]), "retrieved");
+    assert.equal(healthFromToolCalls([rec("vega_sql_query", "error")]), "errored");
+  });
+
   it("returns 'no_kn_calls' when only non-KN tools were called", () => {
     assert.equal(
       healthFromToolCalls([rec("search_memory", "empty"), rec("Execute_Code_Sync", "data")]),

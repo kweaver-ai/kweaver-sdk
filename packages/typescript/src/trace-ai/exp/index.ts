@@ -12,7 +12,8 @@ import { PromptTemplateRegistry } from "../../agent-providers/prompt-template.js
 import { createBuiltinSemanticMatchProvider } from "../eval-set/semantic-match-provider.js";
 import type { SemanticMatchProvider } from "../eval-set/assertion-evaluator.js";
 import { ensureValidToken } from "../../auth/oauth.js";
-import { fetchAgentInfo, fetchAgentConfig as fetchAgentConfigApi, sendChatRequest } from "../../api/agent-chat.js";
+import { fetchAgentInfo, sendChatRequest } from "../../api/agent-chat.js";
+import { getAgent } from "../../api/agent-list.js";
 import { getTracesByConversation } from "../../api/conversations.js";
 import { upsertRegistry, listRegistry } from "./exp-store/exp-registry.js";
 import { runInfo, runList, getHealthChecks } from "./info.js";
@@ -46,7 +47,10 @@ function ensureProvider() {
   if (!defaultRegistry.has("claude-code")) {
     defaultRegistry.register(new ClaudeCodeSubprocessProvider({
       binary: resolveClaudeBinary(),
-      defaultTimeoutMs: 120_000,
+      // 10 min: the merged Triage+Synthesizer call carries a whole round of
+      // eval context (per-query failures, KN schema, skill content) and the
+      // semantic-match evaluator runs on every case — 120s timed both out.
+      defaultTimeoutMs: 600_000,
     }), { setAsDefault: true });
   }
 }
@@ -288,8 +292,13 @@ async function makeCoordinator(expDir: string): Promise<ExperimentCoordinator> {
     expDir,
     triage: new ClaudeCodeTriageClient(),
     contextAssembler,
-    fetchAgentConfig: (agentId, version) =>
-      fetchAgentConfigApi({ baseUrl, accessToken: token, agentId, version, businessDomain: bd }),
+    // Full agent config (system_prompt / llms / skills.tools) comes from
+    // GET /v3/agent/{id}, which wraps the config object under a `config` key.
+    fetchAgentConfig: async (agentId) => {
+      const body = await getAgent({ baseUrl, accessToken: token, agentId, businessDomain: bd });
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      return (parsed["config"] ?? parsed) as Record<string, unknown>;
+    },
     knClient: needsKn ? new KweaverKnApiClient(baseUrl, token) : undefined,
     skillClient: needsSkill ? new KweaverSkillApiClient(baseUrl, token) : undefined,
     fetchTrace: async (conversationId) => {

@@ -44,10 +44,20 @@ export interface TriageClient {
   triage(input: TriageInput): Promise<TriageResult>;
 }
 
+/**
+ * Unwrap a Markdown code fence the LLM commonly puts around its JSON
+ * (```json … ``` or bare ``` … ```), tolerating prose before/after it.
+ * Falls back to the trimmed input when no fence is present.
+ */
+function unwrapJson(raw: string): string {
+  const fence = raw.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  return (fence ? fence[1] : raw).trim();
+}
+
 export function parseTriageOutput(raw: string): TriageResult {
   let obj: unknown;
   try {
-    obj = JSON.parse(raw);
+    obj = JSON.parse(unwrapJson(raw));
   } catch {
     throw new Error(`Triage output is not valid JSON: ${raw.slice(0, 200)}`);
   }

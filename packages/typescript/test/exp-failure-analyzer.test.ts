@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { analyzeFailures } from "../src/trace-ai/exp/context/failure-analyzer.js";
+import { analyzeFailures, roundRetrievedAnyData } from "../src/trace-ai/exp/context/failure-analyzer.js";
 import type { QueryResult } from "../src/trace-ai/exp/schemas.js";
 
 const baseResult = (overrides: Partial<QueryResult> = {}): QueryResult => ({
@@ -121,5 +121,46 @@ describe("analyzeFailures", () => {
     ];
     await analyzeFailures(results, async () => { fetchCalled = true; return { spans: [] }; });
     assert.strictEqual(fetchCalled, false);
+  });
+});
+
+describe("roundRetrievedAnyData", () => {
+  const span = (toolName: string, result: string) => ({
+    traceId: "t", spanId: `s-${Math.random()}`, name: `execute_tool ${toolName}`, startTime: "",
+    status: { code: "Ok" },
+    attributes: {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": toolName,
+      "gen_ai.tool.call.result": result,
+    },
+  });
+  const DATA = '{"answer": {"datas": [{"r": 1}]}}';
+  const ERROR = '{"answer": "data: {\\"error_code\\":\\"X\\"}\\n\\n"}';
+
+  it("returns true as soon as one query retrieved KN data", async () => {
+    const results = [
+      baseResult({ query_id: "Q1", conversation_id: "c1" }),
+      baseResult({ query_id: "Q2", conversation_id: "c2" }),
+    ];
+    const fetch = async (id: string) => ({ spans: [span("query_object_instance", id === "c2" ? DATA : ERROR)] });
+    assert.strictEqual(await roundRetrievedAnyData(results, fetch), true);
+  });
+
+  it("returns false when no query retrieved KN data", async () => {
+    const results = [
+      baseResult({ query_id: "Q1", conversation_id: "c1" }),
+      baseResult({ query_id: "Q2", conversation_id: "c2" }),
+    ];
+    const fetch = async () => ({ spans: [span("query_object_instance", ERROR)] });
+    assert.strictEqual(await roundRetrievedAnyData(results, fetch), false);
+  });
+
+  it("returns false when no fetcher is provided", async () => {
+    assert.strictEqual(await roundRetrievedAnyData([baseResult({ conversation_id: "c1" })]), false);
+  });
+
+  it("tolerates a trace fetch that throws", async () => {
+    const fetch = async () => { throw new Error("trace store down"); };
+    assert.strictEqual(await roundRetrievedAnyData([baseResult({ conversation_id: "c1" })], fetch), false);
   });
 });

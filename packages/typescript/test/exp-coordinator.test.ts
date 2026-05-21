@@ -339,3 +339,57 @@ test("coordinator: mechanism failure (agent retrieved no KN data) → step_faile
   assert.match(String(stepFailed!["error"] ?? ""), /mechanism/i);
   assert.equal(triageCalled, false, "triage LLM must be skipped when the mechanism is broken");
 });
+
+test("coordinator: a few no-data failures in an otherwise healthy round do NOT trip the mechanism guard", async () => {
+  const dir = await makeExpDir();
+  // 3 failing queries retrieved nothing, but a 4th query did retrieve KN data —
+  // the round is healthy, the 3 are localized failures for triage to handle.
+  let triageCalled = false;
+  const spyTriage: TriageClient = {
+    async triage(): Promise<TriageResult> {
+      triageCalled = true;
+      return {
+        verdict: "continue", summary: "x", failure_attribution: [], diagnoses: [], hints: [],
+        new_memory_token: "m",
+        next_change: { target: "agent.system_prompt", hypothesis: "h", patch: "{}" },
+      };
+    },
+  };
+  const failing = ["Q1", "Q2", "Q3"].map(id => ({
+    query_id: id,
+    assertion_results: [{ type: "semantic_match", verdict: "fail" as const, reason: "wrong answer" }],
+    trajectory_summary: { tool_call_sequence: [], retry_count: 0, latency_ms: 0, error_codes: [] },
+    conversation_id: `conv-${id}`,
+  }));
+  const passing = {
+    query_id: "Q4",
+    assertion_results: [{ type: "semantic_match", verdict: "pass" as const, reason: "ok" }],
+    trajectory_summary: { tool_call_sequence: [], retry_count: 0, latency_ms: 0, error_codes: [] },
+    conversation_id: "conv-Q4",
+  };
+  const errorResult = '{"answer": "data: {\\"error_code\\":\\"ObjectTypeNotFound\\"}\\n\\n"}';
+  const dataResult = '{"answer": {"datas": [{"r": 1}]}}';
+  const span = (result: string) => ({
+    traceId: "t", spanId: "s", name: "execute_tool query_object_instance", startTime: "",
+    status: { code: "Ok" },
+    attributes: {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "query_object_instance",
+      "gen_ai.tool.call.result": result,
+    },
+  });
+  const coord = new ExperimentCoordinator({
+    expDir: dir,
+    triage: spyTriage,
+    runEval: async () => ({ queryResults: [...failing, passing] }),
+    fetchTrace: async (id: string) => ({ spans: [span(id === "conv-Q4" ? dataResult : errorResult)] }),
+  });
+
+  await coord.run();
+
+  const { readAllEvents } = await import("../src/trace-ai/exp/exp-store/events-jsonl.js");
+  const events = await readAllEvents(dir);
+  const mechFail = events.find(e => e["type"] === "step_failed" && /mechanism/i.test(String(e["error"] ?? "")));
+  assert.equal(mechFail, undefined, "mechanism guard must not trip when the round did retrieve KN data");
+  assert.equal(triageCalled, true, "triage must run for a healthy round with localized failures");
+});

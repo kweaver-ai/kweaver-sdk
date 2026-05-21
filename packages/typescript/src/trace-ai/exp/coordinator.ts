@@ -9,7 +9,7 @@ import type { SkillApiClient } from "./patch/skill-api-client.js";
 import { computeScores } from "./scoring.js";
 import { writeBundles } from "./bundle-writer.js";
 import { ContextAssembler } from "./context/context-assembler.js";
-import { analyzeFailures } from "./context/failure-analyzer.js";
+import { analyzeFailures, roundRetrievedAnyData } from "./context/failure-analyzer.js";
 import { diagnoseMechanism } from "./context/retrieval-health.js";
 import type { TriageClient, TriageResult } from "./providers/triage-client.js";
 import { runPreflight } from "./run-preflight.js";
@@ -328,7 +328,15 @@ export class ExperimentCoordinator {
     // failure, not the prompt. Running triage would only burn an LLM call
     // proposing prompt patches that cannot fix it — stop and report the root
     // cause instead.
-    const mechanism = diagnoseMechanism(failureAnalysis);
+    //
+    // diagnoseMechanism only sees failing queries, so confirm against the whole
+    // round: if any query (passing or failing) did retrieve KN data, the no-data
+    // failures are localized, not a global break — let triage handle them.
+    let mechanism = diagnoseMechanism(failureAnalysis);
+    if (mechanism.broken
+      && await roundRetrievedAnyData(currentRoundData.per_query_results ?? [], this.opts.fetchTrace)) {
+      mechanism = { broken: false, reason: "" };
+    }
     if (mechanism.broken) {
       await this.store.appendEvent({
         type: "step_failed",

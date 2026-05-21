@@ -21,7 +21,13 @@ export async function writeExpectedFingerprint(expDir: string, fingerprint: Agen
 export async function readExpectedFingerprint(expDir: string): Promise<AgentFingerprint | undefined> {
   try {
     const raw = await fs.readFile(fingerprintPath(expDir), "utf8");
-    return yaml.load(raw) as AgentFingerprint;
+    const parsed = yaml.load(raw) as AgentFingerprint;
+    // Fingerprints written before non_fixed_kn_bindings existed lack the field;
+    // normalize so consumers can rely on it always being an array.
+    if (parsed && !Array.isArray(parsed.non_fixed_kn_bindings)) {
+      parsed.non_fixed_kn_bindings = [];
+    }
+    return parsed;
   } catch {
     return undefined;
   }

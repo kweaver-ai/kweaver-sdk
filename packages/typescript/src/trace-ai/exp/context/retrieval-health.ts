@@ -46,7 +46,14 @@ const KN_RETRIEVAL_TOOLS = new Set([
 
 const TOOL_SPAN_PREFIX = "execute_tool ";
 
-/** Below this many no-data queries there is not enough evidence to blame the mechanism. */
+/**
+ * Minimum no-data failing queries before the mechanism may be blamed. A handful
+ * of no-data failures can be legitimate (a genuinely hard question, or the agent
+ * building a bad query) — the guard needs enough of them to be confident. An
+ * eval set smaller than this can never trip the guard on count alone; that is
+ * acceptable because the round-level retrieval veto (roundRetrievedAnyData in
+ * failure-analyzer) is the real safety net against a false positive.
+ */
 const MIN_MECHANISM_EVIDENCE = 3;
 
 /**
@@ -63,6 +70,9 @@ function classifyAnswer(answer: unknown): ToolCallOutcome {
   if (typeof answer === "object") {
     const obj = answer as Record<string, unknown>;
     if (obj["error_code"]) return "error";
+    // Any non-empty array property counts as data — deliberately permissive per
+    // the bias-toward-"data" rationale above. A metadata array (e.g. warnings)
+    // could trip this; that is the acceptable direction to err.
     for (const v of Object.values(obj)) {
       if (Array.isArray(v) && v.length > 0) return "data";
     }

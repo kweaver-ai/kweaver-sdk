@@ -51,3 +51,27 @@ export async function analyzeFailures(
     return { query_id: r.query_id, verdict, assertion_reason, tool_call_summary, retrieval_health };
   }));
 }
+
+/**
+ * Did ANY query in the round show the agent retrieving KN data? Used to veto a
+ * mechanism-failure verdict: diagnoseMechanism only sees failing queries, so a
+ * mostly-healthy round (passing queries retrieved fine) that happens to have a
+ * few failing no-data queries must not be mistaken for a global wiring failure.
+ * Short-circuits on the first retrieval, so a healthy round costs ~one fetch.
+ */
+export async function roundRetrievedAnyData(
+  results: QueryResult[],
+  fetchTrace?: FetchTraceFn,
+): Promise<boolean> {
+  if (!fetchTrace) return false;
+  for (const r of results) {
+    if (!r.conversation_id) continue;
+    try {
+      const { spans } = await fetchTrace(r.conversation_id);
+      if (healthFromToolCalls(extractToolCalls(spans)) === "retrieved") return true;
+    } catch {
+      // trace fetch is best-effort
+    }
+  }
+  return false;
+}

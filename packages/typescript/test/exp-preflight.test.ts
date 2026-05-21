@@ -72,6 +72,70 @@ test("fingerprintFromAgentConfig: extracts kn_ids from tool kn_id bindings, dedu
   assert.deepEqual(fp.kn_ids, ["kn-a", "kn-z"]);
 });
 
+test("fingerprintFromAgentConfig: extracts knId (camelCase) bindings as well as kn_id", () => {
+  const raw = {
+    system_prompt: "x",
+    llms: [{ is_default: true, llm_config: { name: "m", temperature: 0 } }],
+    skills: {
+      tools: [
+        { tool_id: "t1", tool_box_id: "b", tool_input: [{ input_name: "kn_id", map_type: "fixedValue", map_value: "kn-snake" }] },
+        { tool_id: "t2", tool_box_id: "b", tool_input: [{ input_name: "knId", map_type: "fixedValue", map_value: "kn-camel" }] },
+      ],
+    },
+  };
+  const fp = fingerprintFromAgentConfig("a", "v1", raw);
+  assert.deepEqual(fp.kn_ids, ["kn-camel", "kn-snake"]);
+  assert.deepEqual(fp.non_fixed_kn_bindings, []);
+});
+
+test("fingerprintFromAgentConfig: a kn input with map_type!=fixedValue is recorded as non-fixed, not a kn_id", () => {
+  const raw = {
+    system_prompt: "x",
+    llms: [{ is_default: true, llm_config: { name: "m", temperature: 0 } }],
+    skills: {
+      tools: [
+        { tool_id: "t1", tool_box_id: "b", tool_input: [{ input_name: "kn_id", map_type: "auto", map_value: "kn-ignored" }] },
+      ],
+    },
+  };
+  const fp = fingerprintFromAgentConfig("a", "v1", raw);
+  // map_type "auto" = model-generated: the runtime ignores map_value, so it is not a real binding
+  assert.deepEqual(fp.kn_ids, []);
+  assert.deepEqual(fp.non_fixed_kn_bindings, [
+    { input_name: "kn_id", map_type: "auto", map_value: "kn-ignored" },
+  ]);
+});
+
+test("fingerprintFromAgentConfig: a kn input with no map_type is treated as a fixed binding (backward compat)", () => {
+  const raw = {
+    system_prompt: "x",
+    llms: [{ is_default: true, llm_config: { name: "m", temperature: 0 } }],
+    skills: {
+      tools: [
+        { tool_id: "t1", tool_box_id: "b", tool_input: [{ input_name: "kn_id", map_value: "kn-legacy" }] },
+      ],
+    },
+  };
+  const fp = fingerprintFromAgentConfig("a", "v1", raw);
+  assert.deepEqual(fp.kn_ids, ["kn-legacy"]);
+  assert.deepEqual(fp.non_fixed_kn_bindings, []);
+});
+
+test("fingerprintFromAgentConfig: dedupes identical non-fixed kn bindings across tools", () => {
+  const raw = {
+    system_prompt: "x",
+    llms: [{ is_default: true, llm_config: { name: "m", temperature: 0 } }],
+    skills: {
+      tools: [
+        { tool_id: "t1", tool_box_id: "b", tool_input: [{ input_name: "knId", map_type: "auto", map_value: "kn-x" }] },
+        { tool_id: "t2", tool_box_id: "b", tool_input: [{ input_name: "knId", map_type: "auto", map_value: "kn-x" }] },
+      ],
+    },
+  };
+  const fp = fingerprintFromAgentConfig("a", "v1", raw);
+  assert.deepEqual(fp.non_fixed_kn_bindings, [{ input_name: "knId", map_type: "auto", map_value: "kn-x" }]);
+});
+
 // ── preflightCheck (T4) ───────────────────────────────────────────────────
 
 function fp(overrides: Partial<AgentFingerprint> = {}): AgentFingerprint {
@@ -83,6 +147,7 @@ function fp(overrides: Partial<AgentFingerprint> = {}): AgentFingerprint {
     temperature: 0,
     tools: [{ tool_id: "t1", tool_box_id: "b1" }],
     kn_ids: ["kn-correct"],
+    non_fixed_kn_bindings: [],
     ...overrides,
   };
 }
@@ -147,6 +212,45 @@ test("preflightCheck: throws when agent KN binding != eval target_kn (question-p
 
 test("preflightCheck: skips KN check when evalTargetKn not provided", () => {
   assert.doesNotThrow(() => preflightCheck(fp({ kn_ids: ["kn-anything"] }), fp({ kn_ids: ["kn-anything"] })));
+});
+
+test("preflightCheck: throws when the agent's KN binding is model-generated (map_type=auto)", () => {
+  // config's map_value says kn-correct, but map_type=auto means the runtime ignores it
+  // and the LLM guesses the kn id at runtime — a false-positive trap for a map_value-only check
+  const actual = fp({
+    kn_ids: [],
+    non_fixed_kn_bindings: [{ input_name: "kn_id", map_type: "auto", map_value: "kn-correct" }],
+  });
+  assert.throws(
+    () => preflightCheck(fp(), actual, "kn-correct"),
+    (err: unknown) => err instanceof PreflightMismatchError && err.mismatches.some(m => m.field === "kn_binding"),
+  );
+});
+
+test("preflightCheck: model-generated KN binding error message names the input, map_type and the fix", () => {
+  const actual = fp({
+    kn_ids: [],
+    non_fixed_kn_bindings: [{ input_name: "knId", map_type: "auto", map_value: "kn-correct" }],
+  });
+  try {
+    preflightCheck(fp(), actual, "kn-correct");
+    assert.fail("expected PreflightMismatchError");
+  } catch (err) {
+    assert.ok(err instanceof PreflightMismatchError);
+    const m = err.mismatches.find(x => x.field === "kn_binding");
+    assert.ok(m, "expected a kn_binding mismatch");
+    assert.match(m.actual, /knId/);
+    assert.match(m.actual, /auto/);
+    assert.match(m.actual, /fixedValue/);
+  }
+});
+
+test("preflightCheck: non-fixed KN binding is not checked when evalTargetKn is absent", () => {
+  const actual = fp({
+    kn_ids: [],
+    non_fixed_kn_bindings: [{ input_name: "kn_id", map_type: "auto", map_value: "kn-x" }],
+  });
+  assert.doesNotThrow(() => preflightCheck(fp(), actual));
 });
 
 test("preflightCheck: reports all mismatches at once with a readable message", () => {

@@ -94,6 +94,7 @@ test("runPreflight re-baselines every round and does not gate on config drift", 
       temperature: 0,
       tools: [{ tool_id: "t1", tool_box_id: "b1" }],
       kn_ids: ["kn-bound"],
+      non_fixed_kn_bindings: [],
     };
     await writeExpectedFingerprint(dir, stale);
     // The live agent changed. Without an executor the loop cannot tell an

@@ -21,6 +21,7 @@ const sample: AgentFingerprint = {
     { tool_id: "t-b", tool_box_id: "box-2" },
   ],
   kn_ids: ["kn-a", "kn-b"],
+  non_fixed_kn_bindings: [],
 };
 
 async function tmpDir(): Promise<string> {
